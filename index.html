@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <link rel="icon" href="./icon.svg">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Writing</title>
+  <meta name="theme-color" content="#F6F1E7">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+  <script>
+    try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
+  </script>
+</head>
+<body>
+  <div class="edge edge-left" aria-hidden="true"></div>
+  <div class="edge edge-top" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <span class="crumb"><span id="project-title"></span> › <span id="chapter-title"></span></span>
+    <span class="spacer"></span>
+    <span id="words"></span>
+    <span id="status" role="status"></span>
+    <button type="button" class="pill" data-cmd="palette">⌘K</button>
+  </header>
+
+  <nav class="outline" aria-label="Outline">
+    <div class="panel-label">Outline</div>
+    <div id="outline-tree"></div>
+    <div class="outline-actions">
+      <button type="button" class="ghost-btn" data-cmd="new-chapter">+ Chapter</button>
+      <button type="button" class="ghost-btn" data-cmd="new-act">+ Act</button>
+    </div>
+    <div class="hint">Touch the left edge to open. ⌘1 keeps it open. Double-click a name to rename.</div>
+  </nav>
+
+  <main class="page">
+    <div class="sheet">
+      <article id="editor" aria-label="Chapter text"></article>
+      <div class="notes-layer" aria-label="Notes"></div>
+    </div>
+  </main>
+
+  <aside class="history" aria-label="Version history" hidden>
+    <div class="history-head">
+      <span class="panel-label">History · this chapter</span>
+      <button type="button" class="ghost-btn" data-cmd="history">Close</button>
+    </div>
+    <div class="history-body">
+      <ol id="history-list"></ol>
+      <div class="history-preview">
+        <div id="history-meta" class="hint">Pick a version to read it.</div>
+        <div id="history-doc"></div>
+        <div class="history-actions" hidden>
+          <button type="button" class="pill" id="history-restore">Restore this version</button>
+          <button type="button" class="ghost-btn" id="history-copy">Copy its text</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="palette-backdrop" hidden></div>
+  <div class="palette" role="dialog" aria-label="Command menu" hidden>
+    <input id="palette-input" placeholder="Type a command…" aria-label="Command" autocomplete="off">
+    <ul id="palette-list" role="listbox"></ul>
+  </div>
+
+  <div class="corner">
+    <button type="button" class="ghost-btn" data-cmd="notes" id="notes-toggle">Notes</button>
+    <button type="button" class="ghost-btn" data-cmd="palette">⌘K</button>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
