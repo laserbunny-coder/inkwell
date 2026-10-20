@@ -233,6 +233,41 @@ $('#history-copy').addEventListener('click', () => {
   if (historyPreview) navigator.clipboard.writeText(historyPreview.getText({ blockSeparator: '\n\n' }));
 });
 
+// ---------- page width and text size (per device) ----------
+
+const root = document.documentElement;
+const DEFAULT_WIDTH = 660;
+const defaultSize = () => (matchMedia('(max-width: 700px)').matches ? 18 : 21);
+const currentWidth = () => Number(localStorage.getItem('pageWidth')) || DEFAULT_WIDTH;
+const currentSize = () => Number(localStorage.getItem('textSize')) || defaultSize();
+
+function setPage(width, size) {
+  width = Math.max(420, Math.min(1100, width));
+  size = Math.max(14, Math.min(30, size));
+  root.style.setProperty('--page-width', `${width}px`);
+  root.style.setProperty('--text-size', `${size}px`);
+  localStorage.setItem('pageWidth', String(width));
+  localStorage.setItem('textSize', String(size));
+  $('#page-width').value = width;
+  $('#text-size').value = size;
+  $('#width-value').textContent = `${width}px`;
+  $('#size-value').textContent = `${size}px`;
+  notes.layout();
+}
+
+function togglePageSettings() {
+  const panel = $('.page-settings');
+  if (!panel.hidden) { panel.hidden = true; editor.commands.focus(); return; }
+  setPage(currentWidth(), currentSize());
+  panel.hidden = false;
+  $('#page-width').focus();
+}
+
+$('#page-width').addEventListener('input', (e) => setPage(Number(e.target.value), currentSize()));
+$('#text-size').addEventListener('input', (e) => setPage(currentWidth(), Number(e.target.value)));
+$('#page-reset').addEventListener('click', () => setPage(DEFAULT_WIDTH, defaultSize()));
+$('#page-done').addEventListener('click', togglePageSettings);
+
 // ---------- command menu ----------
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -272,6 +307,11 @@ const commands = [
   { label: 'New chapter', keys: '', run: newChapter },
   { label: 'New act', keys: '', run: newAct },
   { label: 'History: earlier versions of this chapter', keys: `${mod}⇧H`, run: openHistory },
+  { label: 'Page width and text size', keys: '', run: togglePageSettings },
+  { label: 'Wider page', keys: 'Alt+]', run: () => setPage(currentWidth() + 40, currentSize()) },
+  { label: 'Narrower page', keys: 'Alt+[', run: () => setPage(currentWidth() - 40, currentSize()) },
+  { label: 'Larger text', keys: 'Alt+=', run: () => setPage(currentWidth(), currentSize() + 1) },
+  { label: 'Smaller text', keys: 'Alt+−', run: () => setPage(currentWidth(), currentSize() - 1) },
   { label: 'Light / dark', keys: `${mod}⇧L`, run: toggleTheme },
   { label: 'Change the writing font', keys: '', run: cycleFont },
   { label: 'Export this chapter as Markdown', keys: '', run: exportChapter },
@@ -347,6 +387,7 @@ document.addEventListener('click', (e) => {
   const cmd = b.dataset.cmd;
   if (cmd === 'palette') openPalette();
   if (cmd === 'notes') toggleNotes();
+  if (cmd === 'page') togglePageSettings();
   if (cmd === 'history') openHistory();
   if (cmd === 'new-chapter') newChapter();
   if (cmd === 'new-act') newAct();
@@ -361,7 +402,12 @@ document.addEventListener('keydown', (e) => {
   else if (m && e.shiftKey && k === 'n') { e.preventDefault(); notes.add(); }
   else if (m && e.shiftKey && k === 'h') { e.preventDefault(); openHistory(); }
   else if (m && e.shiftKey && k === 'l') { e.preventDefault(); toggleTheme(); }
+  else if (e.altKey && !m && e.code === 'BracketRight') { e.preventDefault(); setPage(currentWidth() + 40, currentSize()); }
+  else if (e.altKey && !m && e.code === 'BracketLeft') { e.preventDefault(); setPage(currentWidth() - 40, currentSize()); }
+  else if (e.altKey && !m && e.code === 'Equal') { e.preventDefault(); setPage(currentWidth(), currentSize() + 1); }
+  else if (e.altKey && !m && e.code === 'Minus') { e.preventDefault(); setPage(currentWidth(), currentSize() - 1); }
   else if (e.key === 'Escape') {
+    if (!$('.page-settings').hidden) { $('.page-settings').hidden = true; editor.commands.focus(); }
     if (!$('.history').hidden) { $('.history').hidden = true; editor.commands.focus(); }
     body.classList.remove('show-outline', 'show-top');
   }

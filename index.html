@@ -5,13 +5,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Writing</title>
-  <meta name="theme-color" content="#F6F1E7">
+  <meta name="theme-color" content="#1C1A17">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
   <script>
-    try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
+    try {
+      const d = document.documentElement, t = localStorage.getItem('theme');
+      if (t) d.dataset.theme = t;
+      const w = localStorage.getItem('pageWidth'), z = localStorage.getItem('textSize');
+      if (w) d.style.setProperty('--page-width', w + 'px');
+      if (z) d.style.setProperty('--text-size', z + 'px');
+      else if (matchMedia('(max-width: 700px)').matches) d.style.setProperty('--text-size', '18px');
+    } catch {}
   </script>
 </head>
 <body>
@@ -23,6 +32,7 @@
     <span class="spacer"></span>
     <span id="words"></span>
     <span id="status" role="status"></span>
+    <button type="button" class="pill" data-cmd="page" aria-label="Page width and text size">Aa</button>
     <button type="button" class="pill" data-cmd="palette">⌘K</button>
   </header>
 
@@ -67,7 +77,20 @@
     <ul id="palette-list" role="listbox"></ul>
   </div>
 
+  <div class="page-settings" role="dialog" aria-label="Page width and text size" hidden>
+    <label><span class="row"><span>Page width</span><span id="width-value"></span></span>
+      <input type="range" id="page-width" min="420" max="1100" step="10"></label>
+    <label><span class="row"><span>Text size</span><span id="size-value"></span></span>
+      <input type="range" id="text-size" min="14" max="30" step="1"></label>
+    <div class="actions">
+      <button type="button" class="ghost-btn" id="page-reset">Reset</button>
+      <button type="button" class="pill" id="page-done">Done</button>
+    </div>
+    <div class="hint">Saved on this device only, so your phone and laptop can differ. Shortcuts: Alt+[ and Alt+] for width, Alt+− and Alt+= for size.</div>
+  </div>
+
   <div class="corner">
+    <button type="button" class="ghost-btn" data-cmd="page" aria-label="Page width and text size">Aa</button>
     <button type="button" class="ghost-btn" data-cmd="notes" id="notes-toggle">Notes</button>
     <button type="button" class="ghost-btn" data-cmd="palette">⌘K</button>
   </div>

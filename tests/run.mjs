@@ -155,6 +155,21 @@ try {
     assert.match(await p.locator('#editor .ProseMirror').innerText(), /First draft line\./);
   });
 
+  await check('page width and text size change and stick after reload', async () => {
+    await p.keyboard.press('Escape');
+    await p.locator('#editor .ProseMirror p').first().click();
+    const width = () => p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--page-width').trim() || '660px');
+    assert.equal(await width(), '660px');
+    await p.keyboard.press('Alt+BracketRight');
+    await p.keyboard.press('Alt+Equal');
+    await sleep(400);
+    assert.equal(await width(), '700px');
+    await p.reload();
+    await p.waitForSelector('#editor .ProseMirror');
+    assert.equal(await p.locator('#editor .ProseMirror').evaluate((el) => getComputedStyle(el).fontSize), '22px');
+    assert.equal(await width(), '700px');
+  });
+
   await check('no page errors', async () => assert.deepEqual(errors, []));
 } finally {
   await browser.close();
