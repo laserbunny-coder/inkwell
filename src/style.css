@@ -280,3 +280,27 @@ button.tree-area:hover { color: var(--ink); }
   #lib-path { text-align: left; }
   .lib-head h1, .ph-head h1 { font-size: 32px; flex-basis: 100%; }
 }
+
+/* #tags in the text */
+.tag { color: var(--accent); cursor: pointer; border-radius: 4px; }
+.tag:hover { background: var(--tint); }
+
+/* Note gutter: a dot where a paragraph has notes */
+.note-gutter { position: absolute; top: 0; left: calc(100% + 10px); width: 16px; }
+.note-dot { position: absolute; top: .65em; left: 0; width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: var(--accent); opacity: .55; font-size: var(--text-size, 21px); }
+.note-dot:hover { opacity: 1; }
+@media (max-width: 760px) { .note-gutter { left: auto; right: -14px; } }
+
+/* Six-dot handle beside each paragraph */
+.block-handle { position: absolute; left: -38px; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--faint); display: flex; align-items: center; justify-content: center; cursor: grab; opacity: 0; transition: opacity .15s; touch-action: none; z-index: 5; }
+.sheet:hover .block-handle, .block-handle.open, body.block-dragging .block-handle { opacity: 1; }
+.block-handle:hover, .block-handle.open { background: var(--tint); color: var(--ink); }
+body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-select: none; }
+.drop-line { position: absolute; left: -8px; right: -8px; height: 2px; border-radius: 2px; background: var(--accent); pointer-events: none; }
+.block-menu { position: absolute; left: -38px; z-index: 30; min-width: 220px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,.16); padding: 4px; display: flex; flex-direction: column; }
+.block-menu button { display: flex; justify-content: space-between; gap: 16px; border: 0; background: transparent; padding: 8px 10px; border-radius: 6px; text-align: left; }
+.block-menu button:hover, .block-menu button:focus { background: var(--tint); outline: none; }
+.block-menu .keys { color: var(--faint); font-size: 12px; }
+@media (hover: none) { .block-handle { opacity: .6; } }
+@media (max-width: 760px) { .block-handle { left: -30px; } .block-menu { left: -12px; } }
+@media (max-width: 700px) { .page { padding-left: 36px; } }

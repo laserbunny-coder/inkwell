@@ -1,6 +1,7 @@
 import { Node, Extension, InputRule, mergeAttributes } from '@tiptap/core';
 import Document from '@tiptap/extension-document';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { children, getEntry, putEntries } from './db.js';
 import { newId, tagsIn } from './model.js';
 
@@ -93,6 +94,46 @@ export const EntryRef = Node.create({
             if (!a) return false;
             event.preventDefault();
             open(a.getAttribute('data-ref'));
+            return true;
+          }
+        }
+      }
+    })];
+  }
+});
+
+// #tags show as tags in the text, and clicking one lists everything with it.
+const TAG = /(^|\s)(#[\p{L}\p{N}_-]+)/gu;
+export const TagMarks = Extension.create({
+  name: 'tagMarks',
+  addOptions() { return { onTag: () => {} }; },
+  addProseMirrorPlugins() {
+    const onTag = this.options.onTag;
+    const build = (doc) => {
+      const decos = [];
+      doc.descendants((node, pos) => {
+        if (!node.isText) return;
+        for (const m of node.text.matchAll(TAG)) {
+          const from = pos + m.index + m[1].length;
+          decos.push(Decoration.inline(from, from + m[2].length, { class: 'tag', 'data-tag': m[2].slice(1).toLowerCase() }));
+        }
+      });
+      return DecorationSet.create(doc, decos);
+    };
+    return [new Plugin({
+      key: new PluginKey('tagMarks'),
+      state: {
+        init: (_c, state) => build(state.doc),
+        apply: (tr, old) => (tr.docChanged ? build(tr.doc) : old)
+      },
+      props: {
+        decorations(state) { return this.getState(state); },
+        handleDOMEvents: {
+          click(_view, event) {
+            const t = event.target.closest?.('.tag[data-tag]');
+            if (!t || event.altKey) return false;
+            event.preventDefault();
+            onTag(t.dataset.tag);
             return true;
           }
         }

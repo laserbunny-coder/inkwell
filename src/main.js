@@ -4,11 +4,12 @@ import StarterKit from '@tiptap/starter-kit';
 import { EntryIds, SceneBreak } from './schema.js';
 import { ChapterStore } from './chapter.js';
 import { NotesLayer } from './notes.js';
+import { BlockHandle } from './blocks.js';
 import { getMeta, setMeta, putEntries, children, getEntry, snapshots, byKind, onLocalWrites } from './db.js';
 import { Sync } from './sync.js';
 import { ensureSeed, outline, entry, wordCount } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
-import { EntryRef } from './outline.js';
+import { EntryRef, TagMarks } from './outline.js';
 import { Notebook, rootOf, titleOf, dayId } from './notebook.js';
 import { openPicker } from './picker.js';
 import { ensureAreas, areas, books, bookType, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, stats, dailyMentions, ago } from './library.js';
@@ -18,7 +19,8 @@ const body = document.body;
 const root = document.documentElement;
 const extensions = [
   StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false }), EntryIds, SceneBreak,
-  EntryRef.configure({ onPick: openPicker, onOpen: openEntry })
+  EntryRef.configure({ onPick: openPicker, onOpen: openEntry }),
+  TagMarks.configure({ onTag: (t) => notebook.showTag(t) })
 ];
 
 // project: the book open in the manuscript view. bookId: the book whose home is shown.
@@ -47,6 +49,19 @@ window.__editor = editor;
 
 const notes = new NotesLayer($('.notes-layer'), editor);
 
+const isText = (n) => n.type.name === 'paragraph' || n.type.name === 'heading';
+const blocks = new BlockHandle(editor, $('.sheet'), {
+  actions: [
+    { label: 'Add a note', keys: '⌘⇧N', when: isText, run: ({ node }) => notes.add(node.attrs.eid) },
+    { label: 'Move up', keys: 'Alt+⇧↑', when: (_n, i) => i > 0, run: ({ index, handle }) => handle.move(index, index - 1) },
+    { label: 'Move down', keys: 'Alt+⇧↓', when: (_n, i, count) => i < count - 1, run: ({ index, handle }) => handle.move(index, index + 2) },
+    { label: 'Make it a heading', when: (n) => n.type.name === 'paragraph', run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().setTextSelection(from + 1).setNode('heading', { level: 2 }).focus().run(); } },
+    { label: 'Make it a paragraph', when: (n) => n.type.name === 'heading', run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().setTextSelection(from + 1).setNode('paragraph').focus().run(); } },
+    { label: 'Scene break above', run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().insertContentAt(from, { type: 'sceneBreak' }).focus().run(); } },
+    { label: 'Delete', run: ({ index, handle }) => { const { from, to } = handle.range(index); if (editor.state.doc.childCount > 1) editor.chain().deleteRange({ from, to }).focus().run(); else editor.chain().setContent({ type: 'doc', content: [{ type: 'paragraph' }] }).focus().run(); } }
+  ]
+});
+
 // ---------- notebook ----------
 
 let railTimer;
@@ -67,9 +82,21 @@ const currentEditor = () => (inNotebook() ? notebook.editor : editor);
 // ---------- getting around ----------
 
 // Where you are, kept per device so the app opens back there.
+// Each place also goes in the browser's history, so Back and Forward (mouse
+// buttons, Alt+← →, ⌘[ ]) step through where you've been.
+let historyMode = 'replace';
 function remember(place) {
   try { localStorage.setItem('place', JSON.stringify(place)); } catch { /* full */ }
+  if (JSON.stringify(history.state) === JSON.stringify(place)) return;
+  if (historyMode === 'push') history.pushState(place, '');
+  else history.replaceState(place, '');
 }
+
+window.addEventListener('popstate', async (e) => {
+  if (!e.state?.view) return;
+  historyMode = 'replace';
+  try { await go(e.state); } finally { historyMode = 'push'; }
+});
 
 async function go(place) {
   const from = view();
@@ -967,8 +994,8 @@ $('.palette-backdrop').addEventListener('click', () => closePalette());
 
 function toggleNotes() {
   notes.setVisible(!notes.visible);
-  $('#notes-toggle').textContent = notes.visible ? 'Hide notes' : 'Notes';
 }
+document.addEventListener('notes-visibility', () => { $('#notes-toggle').textContent = notes.visible ? 'Hide notes' : 'Notes'; });
 
 const toggleWriteToday = () => go(inNotebook() ? { view: 'write' } : { view: 'notebook', pageId: dayId(isoToday()) });
 
@@ -998,6 +1025,7 @@ document.addEventListener('keydown', (e) => {
   else if (m && k === '1') { e.preventDefault(); body.classList.toggle('pin-outline'); }
   else if (m && k === '2' && writing()) { e.preventDefault(); toggleNotes(); }
   else if (m && e.shiftKey && k === 'n' && writing()) { e.preventDefault(); notes.add(); }
+  else if (e.altKey && e.shiftKey && !m && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && writing() && editor.isFocused) { e.preventDefault(); blocks.moveCurrent(e.key === 'ArrowUp' ? -1 : 1); }
   else if (m && e.shiftKey && k === 'h' && writing()) { e.preventDefault(); openHistory(); }
   else if (m && e.shiftKey && k === 'l') { e.preventDefault(); toggleTheme(); }
   else if (e.altKey && !m && e.code === 'BracketRight') { e.preventDefault(); setPage(currentWidth() + 40, currentSize()); }
@@ -1033,6 +1061,7 @@ async function start() {
   if (place.view === 'write' && place.chapterId) { const c = await getEntry(place.chapterId); if (!c || c.deleted) place = { view: 'write' }; }
   if (place.view !== 'write') delete root.dataset.view;
   await go(place);
+  historyMode = 'push';
   sync.start();
   if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('./sw.js');
 }

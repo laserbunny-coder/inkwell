@@ -1,6 +1,6 @@
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import { OutlineDoc, LineIds, EntryRef, OutlineStore, descendants } from './outline.js';
+import { OutlineDoc, LineIds, EntryRef, TagMarks, OutlineStore, descendants } from './outline.js';
 import { getEntry, linkedFrom, byKind, putEntries } from './db.js';
 import { entry } from './model.js';
 import { newPage } from './library.js';
@@ -46,7 +46,7 @@ export class Notebook {
       element: $('#outline-editor'),
       extensions: [
         StarterKit.configure({ document: false, codeBlock: false, code: false, horizontalRule: false, heading: false, blockquote: false, trailingNode: false }),
-        OutlineDoc, LineIds, EntryRef.configure({ onPick, onOpen })
+        OutlineDoc, LineIds, EntryRef.configure({ onPick, onOpen }), TagMarks.configure({ onTag: (t) => this.showTag(t) })
       ],
       content: EMPTY,
       onUpdate: ({ editor }) => this.store.change(editor.state.doc)

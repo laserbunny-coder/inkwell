@@ -316,6 +316,64 @@ try {
     assert.match(await outlineText(), /Yesterday’s thought/);
   });
 
+  await check('Back and Forward step through where you have been', async () => {
+    await p.keyboard.press('Control+J');
+    await p.waitForSelector('.page', { state: 'visible' });
+    await sleep(300);
+    await p.keyboard.press('Control+J');
+    await p.waitForSelector('.notebook', { state: 'visible' });
+    await sleep(300);
+    await p.goBack();
+    await sleep(600);
+    assert.equal(await p.locator('.page').isVisible(), true, 'back to writing');
+    assert.match(await text2(), /Snow on the harbour wall\./);
+    await p.goForward();
+    await sleep(600);
+    assert.equal(await p.locator('.notebook').isVisible(), true, 'forward to the notebook');
+  });
+
+  await check('clicking a #tag lists everything with it', async () => {
+    await p.locator('#outline-editor .ProseMirror li').last().click();
+    await p.keyboard.press('Control+End');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('Ferry timetable #research');
+    await sleep(700);
+    await p.locator('#outline-editor .tag', { hasText: '#research' }).last().click();
+    await p.waitForSelector('.tag-results', { state: 'visible' });
+    const found = await p.locator('#tag-results-list').innerText();
+    assert.match(found, /Ferry timetable/);
+    assert.match(found, /Call the harbourmaster/);
+    await p.keyboard.press('Escape');
+  });
+
+  await check('the six-dot handle moves a paragraph and adds a note', async () => {
+    await p.keyboard.press('Control+J');
+    await p.waitForSelector('#editor .ProseMirror', { state: 'visible' });
+    await p.locator('#editor .ProseMirror p').last().click();
+    await p.keyboard.press('End');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('Second line.');
+    await sleep(700);
+    const paras = p.locator('#editor .ProseMirror > p');
+    await paras.nth(1).hover();
+    const h = await p.locator('.block-handle').boundingBox();
+    const first = await paras.nth(0).boundingBox();
+    await p.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
+    await p.mouse.down();
+    await p.mouse.move(h.x + 5, first.y + 4, { steps: 6 });
+    await p.mouse.up();
+    await sleep(700);
+    assert.match(await text2(), /^Second line\.\s+Snow on the harbour wall\./);
+    await paras.nth(1).hover();
+    await p.locator('.block-handle').click();
+    await p.locator('.block-menu button', { hasText: 'Add a note' }).click();
+    await sleep(300);
+    await p.keyboard.type('Check the tide tables');
+    await sleep(800);
+    const note = (await all()).find((e) => e.kind === 'note' && e.text === 'Check the tide tables');
+    assert.equal(note.parent_id, await paras.nth(1).getAttribute('data-eid'));
+  });
+
   await check('no page errors', async () => assert.deepEqual(errors, []));
 } finally {
   await browser.close();

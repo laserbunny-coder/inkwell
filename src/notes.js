@@ -15,6 +15,11 @@ export class NotesLayer {
     this.saveTimers = new Map();
     this.frame = 0;
     window.addEventListener('resize', () => this.layout());
+    // A quiet gutter just right of the text: a dot where a paragraph has notes.
+    this.gutter = document.createElement('div');
+    this.gutter.className = 'note-gutter';
+    this.gutter.setAttribute('aria-label', 'Notes');
+    layerEl.parentElement.append(this.gutter);
   }
 
   async load(chapterId) {
@@ -27,6 +32,7 @@ export class NotesLayer {
   setVisible(on) {
     this.visible = on;
     document.body.classList.toggle('notes-on', on);
+    document.dispatchEvent(new CustomEvent('notes-visibility'));
     this.render();
   }
 
@@ -77,8 +83,18 @@ export class NotesLayer {
 
   render() {
     this.el.replaceChildren();
-    if (!this.visible) return;
-    for (const note of this.notes) this.el.append(this.card(note));
+    this.gutter.replaceChildren();
+    if (!this.visible) {
+      for (const eid of new Set(this.notes.filter((n) => n.text).map((n) => n.parent_id))) {
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = 'note-dot';
+        dot.dataset.for = eid;
+        dot.title = 'This paragraph has notes. Show notes';
+        dot.addEventListener('click', () => this.setVisible(true));
+        this.gutter.append(dot);
+      }
+    } else for (const note of this.notes) this.el.append(this.card(note));
     this.layout();
   }
 
@@ -125,7 +141,15 @@ export class NotesLayer {
   layout() {
     cancelAnimationFrame(this.frame);
     this.frame = requestAnimationFrame(() => {
-      if (!this.visible) return;
+      if (!this.visible) {
+        const base = this.gutter.getBoundingClientRect().top;
+        for (const dot of this.gutter.children) {
+          const p = this.paragraphEl(dot.dataset.for);
+          dot.hidden = !p;
+          if (p) dot.style.transform = `translateY(${p.getBoundingClientRect().top - base}px)`;
+        }
+        return;
+      }
       const base = this.el.getBoundingClientRect().top;
       let bottom = -Infinity;
       const cards = [...this.el.children].map((card) => {
