@@ -4,7 +4,8 @@ import StarterKit from '@tiptap/starter-kit';
 import { EntryIds, SceneBreak } from './schema.js';
 import { ChapterStore } from './chapter.js';
 import { NotesLayer } from './notes.js';
-import { getMeta, setMeta, putEntries, children, getEntry, snapshots } from './db.js';
+import { getMeta, setMeta, putEntries, children, getEntry, snapshots, byKind, onLocalWrites } from './db.js';
+import { Sync } from './sync.js';
 import { ensureSeed, outline, entry, wordCount } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
 
@@ -35,6 +36,86 @@ const editor = new Editor({
 window.__editor = editor;
 
 const notes = new NotesLayer($('.notes-layer'), editor);
+
+// ---------- sync between devices ----------
+
+const syncEl = $('#sync');
+const SYNC_LABELS = { 'signed-out': 'Sign in to sync', syncing: 'Syncing…', synced: 'Synced', offline: 'Offline · will sync' };
+const sync = new Sync({
+  onStatus: (s) => {
+    syncEl.hidden = s === 'off';
+    syncEl.textContent = SYNC_LABELS[s] || '';
+    syncEl.dataset.state = s;
+    document.body.dataset.sync = s;
+  },
+  onRemote: applyRemote
+});
+onLocalWrites(() => sync.soon());
+window.__sync = sync;
+syncEl.addEventListener('click', () => { if (syncEl.dataset.state === 'signed-out') sync.signIn(); else sync.soon(0); });
+
+async function pickProject() {
+  const projects = (await byKind('project')).sort((a, b) => a.created_at - b.created_at);
+  return projects[0] || null;
+}
+
+// An untouched starter project on a new device gives way to the real one from the cloud.
+async function dropEmptySeed(keep) {
+  for (const p of await byKind('project')) {
+    if (p.id === keep.id || p.title !== 'Untitled novel') continue;
+    const acts = await outline(p.id);
+    const chapters = acts.flatMap((a) => a.chapters);
+    const empty = chapters.every((c) => !c.fields?.words);
+    if (!empty) continue;
+    const now = Date.now();
+    await putEntries([p, ...acts, ...chapters].map((e) => ({ ...e, deleted: true, updated_at: now })));
+  }
+}
+
+async function applyRemote(rows) {
+  const structural = rows.some((r) => ['project', 'act', 'chapter'].includes(r.kind));
+  if (structural) {
+    const remoteProject = rows.find((r) => r.kind === 'project' && !r.deleted);
+    if (remoteProject) await dropEmptySeed(remoteProject);
+    const project = await pickProject();
+    if (project) state.project = project;
+    $('#project-title').textContent = state.project.title;
+    state.acts = await outline(state.project.id);
+    const chapters = state.acts.flatMap((a) => a.chapters);
+    if (!chapters.some((c) => c.id === state.chapterId) && chapters[0]) { state.chapterId = null; await openChapter(chapters[0].id); }
+    else {
+      const ch = chapters.find((c) => c.id === state.chapterId);
+      if (ch) $('#chapter-title').textContent = ch.title;
+      renderOutline();
+    }
+  }
+  if (rows.some((r) => r.parent_id === state.chapterId && ['para', 'scene', 'heading'].includes(r.kind))) await applyRemoteChapter();
+  if (rows.some((r) => r.kind === 'note' && r.fields?.chapter_id === state.chapterId)) await notes.load(state.chapterId);
+}
+
+async function applyRemoteChapter(tries = 0) {
+  // Never replace text that's still being saved; wait for this device to settle.
+  if (!store.idle) { if (tries < 20) setTimeout(() => applyRemoteChapter(tries + 1), 800); return; }
+  const doc = await store.refresh();
+  if (JSON.stringify(doc) === JSON.stringify(editor.state.doc.toJSON())) return;
+  const { $from } = editor.state.selection;
+  const block = $from.node(1);
+  const anchor = block ? { eid: block.attrs.eid, offset: $from.parentOffset } : null;
+  const focused = editor.isFocused;
+  editor.commands.setContent(doc, { emitUpdate: false });
+  if (anchor?.eid) {
+    editor.state.doc.forEach((node, pos) => {
+      if (node.attrs.eid === anchor.eid) {
+        const at = Math.min(pos + 1 + anchor.offset, pos + node.nodeSize - 1);
+        editor.commands.setTextSelection(at);
+      }
+    });
+  }
+  if (focused) editor.view.focus();
+  refreshWords();
+  scheduleScenes();
+  notes.layout();
+}
 
 // ---------- chapters ----------
 
@@ -313,6 +394,9 @@ const commands = [
   { label: 'Larger text', keys: 'Alt+=', run: () => setPage(currentWidth(), currentSize() + 1) },
   { label: 'Smaller text', keys: 'Alt+−', run: () => setPage(currentWidth(), currentSize() - 1) },
   { label: 'Light / dark', keys: `${mod}⇧L`, run: toggleTheme },
+  { label: 'Sync now', keys: '', run: () => sync.soon(0), when: () => !!sync.user },
+  { label: 'Sign in to sync between devices', keys: '', run: () => sync.signIn(), when: () => sync.available && !sync.user },
+  { label: 'Sign out of sync', keys: '', run: () => sync.signOut(), when: () => !!sync.user },
   { label: 'Change the writing font', keys: '', run: cycleFont },
   { label: 'Export this chapter as Markdown', keys: '', run: exportChapter },
   { label: 'Export the whole book as Markdown', keys: '', run: exportBook }
@@ -338,7 +422,7 @@ function closePalette(refocus = true) {
 
 function filterPalette() {
   const q = $('#palette-input').value.trim().toLowerCase();
-  paletteItems = commands.filter((c) => !q || c.label.toLowerCase().includes(q));
+  paletteItems = commands.filter((c) => (!c.when || c.when()) && (!q || c.label.toLowerCase().includes(q)));
   paletteIndex = 0;
   const list = $('#palette-list');
   list.replaceChildren();
@@ -422,12 +506,14 @@ window.addEventListener('pagehide', () => store.close(editor.state.doc));
 async function start() {
   const font = localStorage.getItem('font');
   if (font) document.documentElement.dataset.font = font;
-  state.project = await ensureSeed();
+  await ensureSeed();
+  state.project = await pickProject();
   $('#project-title').textContent = state.project.title;
   state.acts = await outline(state.project.id);
   let last = await getMeta('lastChapter');
   if (!last || !state.acts.some((a) => a.chapters.some((c) => c.id === last))) last = state.acts[0]?.chapters[0]?.id;
   await openChapter(last);
+  sync.start();
   if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('./sw.js');
 }
 

@@ -38,6 +38,15 @@ export class ChapterStore {
     return { doc: toDoc(rows), recovered: false };
   }
 
+  get idle() { return this.version === this.savedVersion; }
+
+  // Re-reads the chapter after another device changed it.
+  async refresh() {
+    const rows = await children(this.chapter.id);
+    this.cache = new Map(rows.map((r) => [r.id, r]));
+    return toDoc(rows);
+  }
+
   // Called on every editor change.
   change(doc) {
     if (!this.chapter) return;

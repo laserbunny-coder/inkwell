@@ -30,6 +30,20 @@ jobs:
       - run: npm ci
       - name: Install a browser for the tests
         run: npx --yes playwright@1.56.1 install --with-deps chromium && npm i --no-save playwright@1.56.1
+      - name: Connect to the Supabase project shared with Daybook
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          # Both values are public by design (row level security protects the data).
+          # Set them as repository variables, or they're read from Daybook's published settings.
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            cfg=$(curl -fsSL https://laserbunny-coder.github.io/daybook/js/config.js || true)
+            SUPABASE_URL=$(printf '%s' "$cfg" | sed -n "s/.*supabaseUrl: *'\([^']*\)'.*/\1/p")
+            SUPABASE_ANON_KEY=$(printf '%s' "$cfg" | sed -n "s/.*supabaseAnonKey: *'\([^']*\)'.*/\1/p")
+          fi
+          if [ -z "$SUPABASE_URL" ]; then echo "::warning::No Supabase settings found; publishing without sync."; fi
+          printf "export default { supabaseUrl: '%s', supabaseAnonKey: '%s' };\n" "$SUPABASE_URL" "$SUPABASE_ANON_KEY" > src/config.js
       - name: Build and test
         run: npm test
       - name: New cache name so phones pick up the update

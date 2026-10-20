@@ -114,6 +114,7 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 #history-doc { width: 100%; max-width: 660px; font-family: var(--prose); font-size: 19px; line-height: 1.7; }
 .history-actions { display: flex; gap: 8px; }
 
+#sync[data-state="offline"] { color: var(--accent); }
 .corner { position: fixed; right: 18px; bottom: 14px; z-index: 25; display: flex; gap: 4px; opacity: .35; transition: opacity .2s; }
 .corner:hover, .corner:focus-within { opacity: 1; }
 
