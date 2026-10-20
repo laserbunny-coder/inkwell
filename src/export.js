@@ -6,6 +6,7 @@ function inline(content) {
   if (!content) return '';
   return content.map((n) => {
     if (n.type === 'hardBreak') return '  \n';
+    if (n.type === 'entryRef') return `[[${n.attrs?.title || ''}]]`;
     let t = n.text || '';
     for (const m of n.marks || []) {
       if (m.type === 'bold') t = `**${t}**`;

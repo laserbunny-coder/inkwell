@@ -16,6 +16,7 @@
     try {
       const d = document.documentElement, t = localStorage.getItem('theme');
       if (t) d.dataset.theme = t;
+      if (localStorage.getItem('view') === 'notebook') d.dataset.view = 'notebook';
       const w = localStorage.getItem('pageWidth'), z = localStorage.getItem('textSize');
       if (w) d.style.setProperty('--page-width', w + 'px');
       if (z) d.style.setProperty('--text-size', z + 'px');
@@ -28,7 +29,8 @@
   <div class="edge edge-top" aria-hidden="true"></div>
 
   <header class="topbar">
-    <span class="crumb"><span id="project-title"></span> › <span id="chapter-title"></span></span>
+    <span class="crumb crumb-write"><span id="project-title"></span> › <span id="chapter-title"></span></span>
+    <span class="crumb crumb-notebook">Notebook</span>
     <span class="spacer"></span>
     <span id="words"></span>
     <span id="status" role="status"></span>
@@ -46,6 +48,48 @@
     </div>
     <div class="hint">Touch the left edge to open. ⌘1 keeps it open. Double-click a name to rename.</div>
   </nav>
+
+  <nav class="outline shelves" aria-label="Shelves">
+    <div class="panel-label">Notebook</div>
+    <div id="shelves-tree"></div>
+    <div class="outline-actions">
+      <button type="button" class="ghost-btn" id="nb-new-page">+ Page</button>
+    </div>
+    <div class="panel-label" id="shelves-tags-label" hidden>Tags</div>
+    <div id="shelves-tags"></div>
+    <div class="hint">Type [[ to link a page, # to tag a line. Tab nests a line. ⌘J switches between writing and today.</div>
+  </nav>
+
+  <main class="notebook" aria-label="Notebook">
+    <div class="nb-sheet">
+      <div id="nb-kind" class="panel-label"></div>
+      <div class="nb-head">
+        <h1 id="nb-title" spellcheck="false"></h1>
+        <span class="spacer"></span>
+        <button type="button" class="ghost-btn" id="nb-prev" aria-label="Day before">‹</button>
+        <button type="button" class="ghost-btn" id="nb-today">Today</button>
+        <button type="button" class="ghost-btn" id="nb-next" aria-label="Day after">›</button>
+      </div>
+      <article id="outline-editor" aria-label="Lines"></article>
+      <section class="backlinks" hidden>
+        <div class="panel-label">Linked from</div>
+        <ul id="backlinks-list" class="ref-list"></ul>
+      </section>
+    </div>
+  </main>
+
+  <aside class="tag-results" aria-label="Tagged lines" hidden>
+    <div class="history-head">
+      <span class="panel-label" id="tag-results-title"></span>
+      <button type="button" class="ghost-btn" data-cmd="close-tag">Close</button>
+    </div>
+    <ul id="tag-results-list" class="ref-list"></ul>
+  </aside>
+
+  <div class="picker" role="dialog" aria-label="Link to" hidden>
+    <input placeholder="Link to a page, day or chapter…" aria-label="Link to" autocomplete="off">
+    <ul role="listbox"></ul>
+  </div>
 
   <main class="page">
     <div class="sheet">
@@ -93,6 +137,8 @@
   <div class="corner">
     <button type="button" class="ghost-btn" data-cmd="page" aria-label="Page width and text size">Aa</button>
     <button type="button" class="ghost-btn" data-cmd="notes" id="notes-toggle">Notes</button>
+    <button type="button" class="ghost-btn" data-cmd="shelves" id="shelves-toggle">Shelves</button>
+    <button type="button" class="ghost-btn" data-cmd="view" id="view-toggle">Today</button>
     <button type="button" class="ghost-btn" data-cmd="palette">⌘K</button>
   </div>
 

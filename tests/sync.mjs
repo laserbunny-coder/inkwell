@@ -145,6 +145,26 @@ try {
     assert.ok(conflicts.some((c) => c.text.includes('Phone edit.')), 'phone version kept as a conflict copy');
   });
 
+  await check('a line on today’s page reaches the other device’s open page', async () => {
+    await phone.keyboard.press('Control+J');
+    await phone.waitForSelector('#outline-editor .ProseMirror-focused');
+    await laptop.keyboard.press('Control+J');
+    await laptop.waitForSelector('#outline-editor .ProseMirror-focused');
+    await sleep(300);
+    await laptop.keyboard.type('Idea from the laptop');
+    await sleep(700);
+    await syncNow(laptop);
+    await syncNow(phone);
+    await sleep(500);
+    assert.match(await phone.locator('#outline-editor .ProseMirror').innerText(), /Idea from the laptop/);
+    await phone.keyboard.type('Phone line');
+    await sleep(700);
+    await syncNow(phone);
+    await syncNow(laptop);
+    await sleep(500);
+    assert.match(await laptop.locator('#outline-editor .ProseMirror').innerText(), /Idea from the laptop[\s\S]*Phone line|Phone line[\s\S]*Idea from the laptop/);
+  });
+
   await check('no page errors', async () => assert.deepEqual([...laptop.errors, ...phone.errors], []));
 } finally {
   await browser.close();

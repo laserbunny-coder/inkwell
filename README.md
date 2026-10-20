@@ -33,3 +33,7 @@ npm run dev
 `npm test` builds the app and runs the browser checks in `tests/run.mjs`.
 
 Every push to `main` is tested and published to GitHub Pages by `.github/workflows/deploy.yml`.
+
+## Notebook
+
+⌘J switches between the manuscript and today's page. Every day has a page, and you can make named pages too. Pages are nested lines: Tab nests, Shift+Tab lifts. Type `[[` to link a page, day or chapter (or make a new page), and `#tag` to tag a line. Each page lists the lines that link to it, and the shelves (left edge) list pages, recent days and tags. Every line is its own entry, so it syncs, links and can be found like a manuscript paragraph.

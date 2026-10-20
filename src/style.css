@@ -135,3 +135,60 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
   .notes-layer { position: static; width: auto; }
   .note { position: static; width: auto; transform: none !important; margin: 0 0 12px; }
 }
+
+/* Two views: the manuscript and the notebook */
+.notebook, .crumb-notebook, .shelves, #shelves-toggle { display: none; }
+:root[data-view="notebook"] .page, :root[data-view="notebook"] .crumb-write,
+:root[data-view="notebook"] .outline:not(.shelves), :root[data-view="notebook"] #notes-toggle { display: none; }
+:root[data-view="notebook"] .notebook { display: flex; }
+:root[data-view="notebook"] .crumb-notebook, :root[data-view="notebook"] #shelves-toggle { display: inline; }
+:root[data-view="notebook"] .shelves { display: flex; }
+
+.notebook { justify-content: center; padding: 72px 32px 40vh; }
+.nb-sheet { width: 100%; max-width: var(--page-width, 660px); }
+.nb-head { display: flex; align-items: center; gap: 2px; margin: 4px 0 18px; }
+#nb-title { font-family: var(--prose); font-weight: 500; font-size: calc(var(--text-size, 21px) * 1.45); line-height: 1.25; margin: 0; outline: none; min-width: 4ch; }
+#nb-title[contenteditable="true"]:empty::before { content: 'Untitled page'; color: var(--faint); }
+.nb-head .ghost-btn { font-size: 16px; padding: 6px 10px; opacity: .5; }
+.nb-head:hover .ghost-btn, .nb-head .ghost-btn:focus { opacity: 1; }
+#nb-today { font-size: 13px; }
+
+#outline-editor .ProseMirror { outline: none; font-family: var(--prose); font-size: calc(var(--text-size, 21px) * .9); line-height: 1.6; caret-color: var(--accent); }
+#outline-editor ul { list-style: none; margin: 0; padding-left: 1.4em; }
+#outline-editor .ProseMirror > ul { padding-left: 1.1em; }
+#outline-editor li { position: relative; }
+#outline-editor li::before { content: ''; position: absolute; left: -.95em; top: .72em; width: .32em; height: .32em; border-radius: 50%; background: var(--faint); }
+#outline-editor li > ul { border-left: 1px solid var(--line); margin-left: -.8em; padding-left: 2.2em; }
+#outline-editor p { margin: .15em 0; }
+#outline-editor ol { margin: 0; padding-left: 1.4em; }
+#outline-editor ol > li::before { display: none; }
+
+a.ref { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); cursor: pointer; }
+a.ref::before { content: '↗ '; font-size: .7em; opacity: .7; }
+a.ref:hover { background: var(--tint); }
+
+.backlinks { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--line); }
+.ref-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.ref-list button { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; border: 0; background: transparent; padding: 8px 10px; margin-left: -10px; border-radius: 8px; }
+.ref-list button:hover { background: var(--tint); }
+.ref-list .from { font-size: 11px; color: var(--muted); }
+.ref-list .line { font-family: var(--prose); font-size: 16px; color: var(--ink); }
+
+.tag-chip { border: 1px solid var(--line); background: transparent; border-radius: 99px; padding: 3px 10px; margin: 0 4px 4px 0; color: var(--muted); font-size: 12px; }
+.tag-chip:hover { color: var(--ink); background: var(--tint); }
+.shelf-today { padding-left: 8px; font-weight: 600; color: var(--ink); }
+
+.tag-results { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; }
+.tag-results .ref-list { width: min(660px, calc(100% - 40px)); margin: 24px auto; overflow-y: auto; }
+
+.picker { position: fixed; z-index: 62; width: 320px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,.16); overflow: hidden; }
+.picker input { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: 10px 12px; outline: none; }
+.picker ul { list-style: none; margin: 0; padding: 4px; max-height: 240px; overflow-y: auto; }
+.picker li { display: flex; justify-content: space-between; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+.picker li[aria-selected="true"] { background: var(--tint); }
+.picker li .keys { color: var(--faint); font-size: 11px; }
+
+@media (max-width: 700px) {
+  .notebook { padding: 48px 20px 40vh; }
+  .nb-head .ghost-btn { opacity: 1; }
+}

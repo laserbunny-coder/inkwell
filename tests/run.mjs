@@ -170,6 +170,70 @@ try {
     assert.equal(await width(), '700px');
   });
 
+  const all = () => p.evaluate(() => new Promise((res) => {
+    const r = indexedDB.open('writing');
+    r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').getAll(); q.onsuccess = () => res(q.result); };
+  }));
+  const outlineText = () => p.locator('#outline-editor .ProseMirror').innerText();
+
+  await check('today’s page: nested lines are saved as linked entries', async () => {
+    await p.keyboard.press('Control+J');
+    await p.waitForSelector('#outline-editor .ProseMirror-focused');
+    await sleep(300);
+    assert.equal(await p.locator('#nb-kind').innerText(), 'TODAY');
+    await p.keyboard.type('Call the harbourmaster #research');
+    await p.keyboard.press('Enter');
+    await p.keyboard.press('Tab');
+    await p.keyboard.type('Ask about the 1912 storm');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('See [[');
+    await p.waitForSelector('.picker', { state: 'visible' });
+    await p.keyboard.type('Lighthouse keeper');
+    await p.keyboard.press('Enter');
+    await sleep(800);
+    const rows = await all();
+    const lines = rows.filter((e) => e.kind === 'line' && !e.deleted);
+    const day = rows.find((e) => e.kind === 'day');
+    const page = rows.find((e) => e.kind === 'page' && e.title === 'Lighthouse keeper');
+    assert.ok(day && page, 'day and page saved');
+    const top = lines.find((l) => l.text.startsWith('Call'));
+    const storm = lines.find((l) => l.text.startsWith('Ask'));
+    const see = lines.find((l) => l.text.startsWith('See'));
+    assert.equal(top.parent_id, day.id);
+    assert.equal(storm.parent_id, top.id);
+    assert.equal(see.parent_id, top.id);
+    assert.deepEqual(top.tags, ['research']);
+    assert.deepEqual(see.links, [page.id]);
+    assert.match(see.text, /Lighthouse keeper/);
+    await p.waitForFunction(() => document.querySelector('#shelves-tags').innerText.includes('#research'), null, { timeout: 3000 });
+  });
+
+  await check('a link opens its page, which shows where it was linked from', async () => {
+    await p.locator('#outline-editor a.ref').click();
+    await sleep(500);
+    assert.equal(await p.locator('#nb-title').innerText(), 'Lighthouse keeper');
+    await p.waitForSelector('.backlinks', { state: 'visible' });
+    assert.match(await p.locator('#backlinks-list').innerText(), /See Lighthouse keeper/);
+    await p.keyboard.type('Keeps the log in pencil');
+    await sleep(700);
+    await p.locator('#backlinks-list button').first().click();
+    await sleep(500);
+    assert.equal(await p.locator('#nb-kind').innerText(), 'TODAY');
+    assert.match(await outlineText(), /Ask about the 1912 storm/);
+  });
+
+  await check('the notebook survives a reload and ⌘J goes back to writing', async () => {
+    await p.reload();
+    await p.waitForSelector('#outline-editor .ProseMirror');
+    await sleep(500);
+    assert.equal(await p.locator('.notebook').isVisible(), true);
+    assert.match(await outlineText(), /Call the harbourmaster[\s\S]*Ask about the 1912 storm[\s\S]*See Lighthouse keeper/);
+    await p.keyboard.press('Control+J');
+    await sleep(300);
+    assert.equal(await p.locator('.page').isVisible(), true);
+    assert.equal(await p.locator('.notebook').isVisible(), false);
+  });
+
   await check('no page errors', async () => assert.deepEqual(errors, []));
 } finally {
   await browser.close();

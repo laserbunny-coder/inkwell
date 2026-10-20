@@ -5,7 +5,7 @@
 // slow down the live draft.
 
 const DB_NAME = 'writing';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise;
 
@@ -38,6 +38,10 @@ function open() {
         // A copy of the other device's version whenever both changed the same entry offline.
         db.createObjectStore('conflicts', { keyPath: 'key', autoIncrement: true });
       }
+      if (e.oldVersion < 3) {
+        // Which entries mention which: one row per link, so "linked from" is a lookup, not a scan.
+        req.transaction.objectStore('entries').createIndex('links', 'links', { multiEntry: true });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -69,6 +73,12 @@ export async function children(parentId) {
   const db = await open();
   const rows = await result(db.transaction('entries').objectStore('entries').index('parent_id').getAll(parentId));
   return rows.filter((r) => !r.deleted).sort((a, b) => a.sort - b.sort);
+}
+
+export async function linkedFrom(id) {
+  const db = await open();
+  const rows = await result(db.transaction('entries').objectStore('entries').index('links').getAll(id));
+  return rows.filter((r) => !r.deleted);
 }
 
 export async function byKind(kind) {

@@ -1,5 +1,6 @@
 import { children, getEntry, putEntries, addSnapshot, snapshots } from './db.js';
 import { tagsIn, wordCount } from './model.js';
+import { refsIn } from './outline.js';
 
 const WAL = (id) => `wal:${id}`;
 const SNAPSHOT_IDLE_MS = 4000;
@@ -104,6 +105,7 @@ export class ChapterStore {
         text,
         content,
         tags: tagsIn(text),
+        links: refsIn(content),
         deleted: false,
         updated_at: now
       };

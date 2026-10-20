@@ -8,10 +8,17 @@ import { getMeta, setMeta, putEntries, children, getEntry, snapshots, byKind, on
 import { Sync } from './sync.js';
 import { ensureSeed, outline, entry, wordCount } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
+import { EntryRef } from './outline.js';
+import { Notebook, rootOf } from './notebook.js';
+import { openPicker } from './picker.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
-const extensions = [StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false }), EntryIds, SceneBreak];
+const root = document.documentElement;
+const extensions = [
+  StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false }), EntryIds, SceneBreak,
+  EntryRef.configure({ onPick: openPicker, onOpen: openEntry })
+];
 
 const state = { project: null, acts: [], chapterId: null };
 
@@ -36,6 +43,58 @@ const editor = new Editor({
 window.__editor = editor;
 
 const notes = new NotesLayer($('.notes-layer'), editor);
+
+// ---------- notebook ----------
+
+const notebook = new Notebook({
+  onPick: openPicker,
+  onOpen: openEntry,
+  onStatus: (s) => { if (inNotebook()) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved'; }
+});
+
+const inNotebook = () => root.dataset.view === 'notebook';
+
+async function setView(view) {
+  // Switch at once so the next keystroke lands in the right place; saving catches up.
+  if (view === 'notebook') {
+    root.dataset.view = 'notebook';
+    notebook.editor.commands.focus();
+    store.close(editor.state.doc);
+    if (!notebook.page) await notebook.openDay();
+  } else {
+    delete root.dataset.view;
+    editor.commands.focus();
+    notebook.close();
+  }
+  localStorage.setItem('view', view);
+  $('#view-toggle').textContent = inNotebook() ? 'Write' : 'Today';
+  body.classList.remove('show-outline');
+}
+
+const currentEditor = () => (inNotebook() ? notebook.editor : editor);
+
+// Follow a link: pages and days open in the notebook, chapters in the
+// manuscript, and a single line or paragraph opens where it lives.
+async function openEntry(id) {
+  const row = await getEntry(id);
+  if (!row || row.deleted) return;
+  const home = await rootOf(row);
+  if (!home) return;
+  const focus = home.id === row.id ? null : row.id;
+  if (home.kind === 'day' || home.kind === 'page') {
+    if (!inNotebook()) await setView('notebook');
+    if (notebook.page?.id === home.id) { if (focus) notebook.focusLine(focus); }
+    else await notebook.open(home.id, null, focus);
+  } else if (home.kind === 'chapter') {
+    if (inNotebook()) await setView('write');
+    await openChapter(home.id);
+    if (focus) {
+      editor.state.doc.forEach((node, pos) => {
+        if (node.attrs.eid === focus) { editor.commands.setTextSelection(pos + node.nodeSize - 1); editor.view.nodeDOM(pos)?.scrollIntoView({ block: 'center' }); }
+      });
+    }
+  }
+}
 
 // ---------- sync between devices ----------
 
@@ -91,6 +150,7 @@ async function applyRemote(rows) {
   }
   if (rows.some((r) => r.parent_id === state.chapterId && ['para', 'scene', 'heading'].includes(r.kind))) await applyRemoteChapter();
   if (rows.some((r) => r.kind === 'note' && r.fields?.chapter_id === state.chapterId)) await notes.load(state.chapterId);
+  await notebook.applyRemote(rows);
 }
 
 async function applyRemoteChapter(tries = 0) {
@@ -261,7 +321,7 @@ function renderScenes() {
 // ---------- panels revealed by edges ----------
 
 $('.edge-left').addEventListener('mouseenter', () => body.classList.add('show-outline'));
-$('.outline').addEventListener('mouseleave', () => body.classList.remove('show-outline'));
+document.querySelectorAll('.outline').forEach((el) => el.addEventListener('mouseleave', () => body.classList.remove('show-outline')));
 $('.edge-top').addEventListener('mouseenter', () => body.classList.add('show-top'));
 $('.topbar').addEventListener('mouseleave', () => body.classList.remove('show-top'));
 
@@ -316,7 +376,6 @@ $('#history-copy').addEventListener('click', () => {
 
 // ---------- page width and text size (per device) ----------
 
-const root = document.documentElement;
 const DEFAULT_WIDTH = 660;
 const defaultSize = () => (matchMedia('(max-width: 700px)').matches ? 18 : 21);
 const currentWidth = () => Number(localStorage.getItem('pageWidth')) || DEFAULT_WIDTH;
@@ -381,13 +440,18 @@ async function exportBook() {
 }
 
 const commands = [
-  { label: 'Outline (keep open)', keys: `${mod}1`, run: () => body.classList.toggle('pin-outline') },
-  { label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes() },
-  { label: 'Add a note to this paragraph', keys: `${mod}⇧N`, run: () => notes.add() },
-  { label: 'Scene break', keys: `${mod}⇧↵`, run: () => editor.chain().focus().insertSceneBreak().run() },
-  { label: 'New chapter', keys: '', run: newChapter },
-  { label: 'New act', keys: '', run: newAct },
-  { label: 'History: earlier versions of this chapter', keys: `${mod}⇧H`, run: openHistory },
+  { label: 'Today’s page', keys: `${mod}J`, run: () => (inNotebook() ? notebook.openDay() : setView('notebook').then(() => notebook.openDay())) },
+  { label: 'Back to writing', keys: `${mod}J`, run: () => setView('write'), when: inNotebook },
+  { label: 'New notebook page', keys: '', run: () => setView('notebook').then(() => notebook.newPage()) },
+  { label: 'Link to a page…', keys: '[[', run: () => openPicker(currentEditor()) },
+  { label: 'Outline (keep open)', keys: `${mod}1`, run: () => body.classList.toggle('pin-outline'), when: () => !inNotebook() },
+  { label: 'Shelves (keep open)', keys: `${mod}1`, run: () => body.classList.toggle('pin-outline'), when: inNotebook },
+  { label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: () => !inNotebook() },
+  { label: 'Add a note to this paragraph', keys: `${mod}⇧N`, run: () => notes.add(), when: () => !inNotebook() },
+  { label: 'Scene break', keys: `${mod}⇧↵`, run: () => editor.chain().focus().insertSceneBreak().run(), when: () => !inNotebook() },
+  { label: 'New chapter', keys: '', run: () => setView('write').then(newChapter) },
+  { label: 'New act', keys: '', run: () => setView('write').then(newAct) },
+  { label: 'History: earlier versions of this chapter', keys: `${mod}⇧H`, run: openHistory, when: () => !inNotebook() },
   { label: 'Page width and text size', keys: '', run: togglePageSettings },
   { label: 'Wider page', keys: 'Alt+]', run: () => setPage(currentWidth() + 40, currentSize()) },
   { label: 'Narrower page', keys: 'Alt+[', run: () => setPage(currentWidth() - 40, currentSize()) },
@@ -417,7 +481,7 @@ function openPalette() {
 function closePalette(refocus = true) {
   $('.palette').hidden = true;
   $('.palette-backdrop').hidden = true;
-  if (refocus) editor.commands.focus();
+  if (refocus) currentEditor().commands.focus();
 }
 
 function filterPalette() {
@@ -447,7 +511,7 @@ function selectPalette(i) {
 
 function runCommand(c) {
   closePalette(false);
-  editor.commands.focus();
+  currentEditor().commands.focus();
   c.run();
 }
 
@@ -475,16 +539,20 @@ document.addEventListener('click', (e) => {
   if (cmd === 'history') openHistory();
   if (cmd === 'new-chapter') newChapter();
   if (cmd === 'new-act') newAct();
+  if (cmd === 'view') setView(inNotebook() ? 'write' : 'notebook');
+  if (cmd === 'shelves') body.classList.toggle('show-outline');
+  if (cmd === 'close-tag') { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
 });
 
 document.addEventListener('keydown', (e) => {
   const m = e.metaKey || e.ctrlKey;
   const k = e.key.toLowerCase();
   if (m && k === 'k') { e.preventDefault(); $('.palette').hidden ? openPalette() : closePalette(); }
+  else if (m && k === 'j') { e.preventDefault(); setView(inNotebook() ? 'write' : 'notebook'); }
   else if (m && k === '1') { e.preventDefault(); body.classList.toggle('pin-outline'); }
-  else if (m && k === '2') { e.preventDefault(); toggleNotes(); }
-  else if (m && e.shiftKey && k === 'n') { e.preventDefault(); notes.add(); }
-  else if (m && e.shiftKey && k === 'h') { e.preventDefault(); openHistory(); }
+  else if (m && k === '2' && !inNotebook()) { e.preventDefault(); toggleNotes(); }
+  else if (m && e.shiftKey && k === 'n' && !inNotebook()) { e.preventDefault(); notes.add(); }
+  else if (m && e.shiftKey && k === 'h' && !inNotebook()) { e.preventDefault(); openHistory(); }
   else if (m && e.shiftKey && k === 'l') { e.preventDefault(); toggleTheme(); }
   else if (e.altKey && !m && e.code === 'BracketRight') { e.preventDefault(); setPage(currentWidth() + 40, currentSize()); }
   else if (e.altKey && !m && e.code === 'BracketLeft') { e.preventDefault(); setPage(currentWidth() - 40, currentSize()); }
@@ -493,13 +561,14 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape') {
     if (!$('.page-settings').hidden) { $('.page-settings').hidden = true; editor.commands.focus(); }
     if (!$('.history').hidden) { $('.history').hidden = true; editor.commands.focus(); }
+    if (!$('.tag-results').hidden) { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
     body.classList.remove('show-outline', 'show-top');
   }
 });
 
 // Save before the tab goes away.
-document.addEventListener('visibilitychange', () => { if (document.hidden) store.close(editor.state.doc); });
-window.addEventListener('pagehide', () => store.close(editor.state.doc));
+document.addEventListener('visibilitychange', () => { if (document.hidden) { store.close(editor.state.doc); notebook.close(); } });
+window.addEventListener('pagehide', () => { store.close(editor.state.doc); notebook.close(); });
 
 // ---------- start ----------
 
@@ -513,6 +582,13 @@ async function start() {
   let last = await getMeta('lastChapter');
   if (!last || !state.acts.some((a) => a.chapters.some((c) => c.id === last))) last = state.acts[0]?.chapters[0]?.id;
   await openChapter(last);
+  if (inNotebook()) {
+    const page = localStorage.getItem('notebookPage');
+    // A day page opens to today; a named page opens where you left it.
+    if (page && !page.startsWith('day-') && (await getEntry(page))) await notebook.open(page);
+    else await notebook.openDay();
+    $('#view-toggle').textContent = 'Write';
+  } else await notebook.renderShelves();
   sync.start();
   if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('./sw.js');
 }
