@@ -1,0 +1,46 @@
+name: Publish the writing app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: true
+
+jobs:
+  site:
+    name: Test and publish
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install a browser for the tests
+        run: npx --yes playwright@1.56.1 install --with-deps chromium && npm i --no-save playwright@1.56.1
+      - name: Build and test
+        run: npm test
+      - name: New cache name so phones pick up the update
+        run: |
+          sed -i "s/writing-v1/writing-${GITHUB_SHA::8}/" dist/sw.js
+          touch dist/.nojekyll
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deploy
+        uses: actions/deploy-pages@v4
