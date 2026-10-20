@@ -2,7 +2,7 @@ import { children } from './db.js';
 
 // Plain Markdown, so the writing stays readable in any app even if this one breaks.
 
-function inline(content) {
+export function inline(content) {
   if (!content) return '';
   return content.map((n) => {
     if (n.type === 'hardBreak') return '  \n';
@@ -38,7 +38,7 @@ export async function bookMarkdown(project, acts) {
 
 export function download(name, text) {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }));
+  a.href = URL.createObjectURL(text instanceof Blob ? text : new Blob([text], { type: 'text/markdown' }));
   a.download = name.replace(/[\\/:*?"<>|]/g, '-');
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);

@@ -180,6 +180,17 @@ a.ref:hover { background: var(--tint); }
 .tag-results { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; }
 .tag-results .ref-list { width: min(660px, calc(100% - 40px)); margin: 24px auto; overflow-y: auto; }
 
+#versions { color: var(--accent); }
+.versions { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; }
+.versions-list { width: min(760px, calc(100% - 40px)); margin: 24px auto; overflow-y: auto; }
+.versions-list > li { padding: 14px 0 18px; border-bottom: 1px solid var(--line); }
+.versions-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 10px; }
+.versions-pair .line { margin: 6px 0 0; white-space: pre-wrap; }
+.versions-actions { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0 0 -10px; }
+.versions-actions .ghost-btn:hover { background: var(--tint); color: var(--ink); }
+.versions-empty { color: var(--muted); padding: 8px 0; }
+@media (max-width: 700px) { .versions-pair { grid-template-columns: 1fr; gap: 10px; } }
+
 .picker { position: fixed; z-index: 62; width: 320px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,.16); overflow: hidden; }
 .picker input { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: 10px 12px; outline: none; }
 .picker ul { list-style: none; margin: 0; padding: 4px; max-height: 240px; overflow-y: auto; }
