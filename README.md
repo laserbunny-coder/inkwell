@@ -37,3 +37,7 @@ Every push to `main` is tested and published to GitHub Pages by `.github/workflo
 ## Notebook
 
 ⌘J switches between the manuscript and today's page. Every day has a page, and you can make named pages too. Pages are nested lines: Tab nests, Shift+Tab lifts. Type `[[` to link a page, day or chapter (or make a new page), and `#tag` to tag a line. Each page lists the lines that link to it, and the shelves (left edge) list pages, recent days and tags. Every line is its own entry, so it syncs, links and can be found like a manuscript paragraph.
+
+## Library
+
+Everything lives in the Library (⌘O jumps to anything by name; the left edge shows the whole tree). Areas can nest as deep as you like, e.g. Writing › Novels › Working. Each area holds books (novels) and notes collections. A new book starts with an Idea page. A book's home shows its manuscript, its pages and the lines from daily pages that link to it. Pages with no book yet are listed as loose pages until you move them. The daily page scrolls back through earlier days, and the app reopens wherever you last were.

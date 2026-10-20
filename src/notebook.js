@@ -1,8 +1,9 @@
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import { OutlineDoc, LineIds, EntryRef, OutlineStore } from './outline.js';
+import { OutlineDoc, LineIds, EntryRef, OutlineStore, descendants } from './outline.js';
 import { getEntry, linkedFrom, byKind, putEntries } from './db.js';
-import { entry, newId } from './model.js';
+import { entry } from './model.js';
+import { newPage } from './library.js';
 
 // The notebook: a page for every day, plus named pages, all written as nested
 // lines. Lines can link to pages, days and chapters with [[, carry #tags, and
@@ -31,12 +32,14 @@ export async function rootOf(row) {
 const EMPTY = { type: 'doc', content: [{ type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }] }] };
 
 export class Notebook {
-  constructor({ onPick, onOpen, onStatus }) {
+  constructor({ onPick, onOpen, onStatus, onChange, onPlace }) {
     this.onOpen = onOpen;
+    this.onChange = onChange || (() => {});
+    this.onPlace = onPlace || (() => {});
     this.store = new OutlineStore((s) => {
       onStatus(s);
       // New pages, days and tags show on the shelves once they're saved.
-      if (s === 'saved') { clearTimeout(this.shelfTimer); this.shelfTimer = setTimeout(() => this.renderShelves(), 600); }
+      if (s === 'saved') { clearTimeout(this.shelfTimer); this.shelfTimer = setTimeout(() => this.onChange(), 600); }
     });
     this.page = null;
     this.editor = new Editor({
@@ -52,7 +55,14 @@ export class Notebook {
     $('#nb-prev').addEventListener('click', () => this.step(-1));
     $('#nb-next').addEventListener('click', () => this.step(1));
     $('#nb-today').addEventListener('click', () => this.openDay());
-    $('#nb-new-page').addEventListener('click', () => this.newPage());
+    $('#nb-date').addEventListener('change', (e) => { if (e.target.value) this.openDay(e.target.value); });
+    $('.past-days').addEventListener('click', (e) => {
+      const ref = e.target.closest('a[data-ref]');
+      if (ref) { e.preventDefault(); this.onOpen(ref.dataset.ref); return; }
+      const line = e.target.closest('[data-line]');
+      if (line) this.open(line.dataset.day, null, line.dataset.line);
+    });
+    this.more = new IntersectionObserver((seen) => { if (seen.some((s) => s.isIntersecting)) this.renderPastDays(false); });
     const title = $('#nb-title');
     title.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); this.editor.commands.focus('start'); } });
     title.addEventListener('blur', () => this.rename(title.textContent.trim()));
@@ -68,9 +78,8 @@ export class Notebook {
 
   step(n) { if (this.isDay) this.openDay(shiftDay(this.page.title, n)); }
 
-  async newPage(title = '') {
-    const page = entry('page', { id: newId('pg'), title });
-    await putEntries([page]);
+  async newPage(parentId = null, title = '') {
+    const page = await newPage(parentId, title);
     await this.open(page.id);
     $('#nb-title').focus();
   }
@@ -80,7 +89,8 @@ export class Notebook {
     this.page.title = title;
     this.page.updated_at = Date.now();
     await putEntries([this.page]);
-    this.renderShelves();
+    this.onChange();
+    this.onPlace(this.page);
   }
 
   async open(id, fallback, focusLine) {
@@ -89,9 +99,10 @@ export class Notebook {
     this.page = this.store.page;
     this.editor.commands.setContent(doc, { emitUpdate: false });
     if (recovered) this.store.change(this.editor.state.doc);
-    localStorage.setItem('notebookPage', id);
     this.renderHead();
-    await Promise.all([this.renderBacklinks(), this.renderShelves()]);
+    this.onPlace(this.page);
+    await Promise.all([this.renderBacklinks(), this.renderPastDays()]);
+    this.onChange();
     if (focusLine) this.focusLine(focusLine);
     else this.editor.commands.focus('end');
   }
@@ -137,34 +148,40 @@ export class Notebook {
     box.hidden = !list.children.length;
   }
 
-  async renderShelves() {
-    const today = isoDate();
-    const days = (await byKind('day')).filter((d) => !d.deleted && d.title !== today).sort((a, b) => (a.title < b.title ? 1 : -1)).slice(0, 10);
-    const pages = (await byKind('page')).filter((p) => !p.deleted).sort((a, b) => titleOf(a).localeCompare(titleOf(b)));
-    const lines = (await byKind('line')).filter((l) => !l.deleted);
-    const tags = new Map();
-    for (const l of lines) for (const t of l.tags || []) tags.set(t, (tags.get(t) || 0) + 1);
-
-    const button = (label, current, run, cls = 'tree-chapter') => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = cls + (current ? ' current' : '');
-      b.textContent = label;
-      b.addEventListener('click', run);
-      return b;
-    };
-    const heading = (label) => { const d = document.createElement('div'); d.className = 'tree-act'; d.textContent = label; return d; };
-    const box = $('#shelves-tree');
-    box.replaceChildren(
-      button('Today', this.page?.id === dayId(today), () => this.openDay(), 'tree-chapter shelf-today'),
-      ...(pages.length ? [heading('Pages')] : []),
-      ...pages.map((p) => button(titleOf(p), this.page?.id === p.id, () => this.open(p.id))),
-      ...(days.length ? [heading('Days')] : []),
-      ...days.map((d) => button(fromIso(d.title).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }), this.page?.id === d.id, () => this.openDay(d.title)))
-    );
-    const tagBox = $('#shelves-tags');
-    tagBox.replaceChildren(...[...tags].sort((a, b) => b[1] - a[1]).map(([t]) => button(`#${t}`, false, () => this.showTag(t), 'tag-chip')));
-    $('#shelves-tags-label').hidden = !tags.size;
+  // Earlier days below today's, so you can scroll back through them.
+  async renderPastDays(reset = true) {
+    const box = $('.past-days');
+    if (!this.isDay) { box.hidden = true; box.replaceChildren(); return; }
+    if (reset) {
+      const before = this.page.title;
+      this.pastDays = (await byKind('day')).filter((d) => !d.deleted && d.title < before).sort((a, b) => (a.title < b.title ? 1 : -1));
+      this.pastShown = 0;
+      this.more.disconnect();
+      box.replaceChildren();
+    }
+    box.querySelector('.past-more')?.remove();
+    const next = this.pastDays.slice(this.pastShown, this.pastShown + 5);
+    this.pastShown += next.length;
+    for (const day of next) {
+      const rows = await descendants(day.id);
+      if (!rows.some((r) => r.text)) continue;
+      const sec = document.createElement('section');
+      sec.className = 'past-day';
+      const h = document.createElement('button');
+      h.type = 'button';
+      h.className = 'past-title';
+      h.textContent = titleOf(day);
+      h.addEventListener('click', () => this.openDay(day.title));
+      sec.append(h, lineTree(day.id, rows));
+      box.append(sec);
+    }
+    if (this.pastShown < this.pastDays.length) {
+      const more = document.createElement('div');
+      more.className = 'past-more';
+      box.append(more);
+      this.more.observe(more);
+    }
+    box.hidden = !box.querySelector('.past-day');
   }
 
   // Every line and paragraph with this tag, wherever it lives.
@@ -195,7 +212,7 @@ export class Notebook {
     if (!this.page) return;
     const ids = this.store.ids();
     const touched = rows.some((r) => ids.has(r.id) || ids.has(r.parent_id));
-    if (rows.some((r) => ['day', 'page', 'line'].includes(r.kind))) this.renderShelves();
+    if (rows.some((r) => ['day', 'page', 'line'].includes(r.kind))) { this.onChange(); if (this.isDay) this.renderPastDays(); }
     if (rows.some((r) => r.links?.includes(this.page.id))) this.renderBacklinks();
     if (!touched) return;
     if (!this.store.idle) { if (tries < 20) setTimeout(() => this.applyRemote(rows, tries + 1), 800); return; }
@@ -223,4 +240,49 @@ export class Notebook {
   }
 
   close() { return this.page ? this.store.close(this.editor.state.doc) : null; }
+}
+
+// A read-only copy of a day's lines, nested as written.
+function lineTree(dayId, rows) {
+  const byParent = new Map();
+  for (const r of rows) {
+    if (!byParent.has(r.parent_id)) byParent.set(r.parent_id, []);
+    byParent.get(r.parent_id).push(r);
+  }
+  const list = (pid) => {
+    const ul = document.createElement('ul');
+    for (const r of (byParent.get(pid) || []).sort((a, b) => a.sort - b.sort)) {
+      const li = document.createElement('li');
+      const p = document.createElement('p');
+      p.dataset.line = r.id;
+      p.dataset.day = dayId;
+      appendInline(p, r.content);
+      li.append(p);
+      if (byParent.has(r.id)) li.append(list(r.id));
+      ul.append(li);
+    }
+    return ul;
+  };
+  return list(dayId);
+}
+
+function appendInline(el, content) {
+  for (const n of content || []) {
+    if (n.type === 'entryRef') {
+      const a = document.createElement('a');
+      a.className = 'ref';
+      a.href = '#';
+      a.dataset.ref = n.attrs?.id;
+      a.textContent = n.attrs?.title || 'Untitled';
+      el.append(a);
+    } else if (n.type === 'hardBreak') el.append(document.createElement('br'));
+    else if (n.text) {
+      let node = document.createTextNode(n.text);
+      for (const m of n.marks || []) {
+        const tag = { bold: 'strong', italic: 'em', strike: 's', underline: 'u' }[m.type];
+        if (tag) { const w = document.createElement(tag); w.append(node); node = w; }
+      }
+      el.append(node);
+    }
+  }
 }

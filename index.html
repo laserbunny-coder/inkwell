@@ -16,7 +16,8 @@
     try {
       const d = document.documentElement, t = localStorage.getItem('theme');
       if (t) d.dataset.theme = t;
-      if (localStorage.getItem('view') === 'notebook') d.dataset.view = 'notebook';
+      const pl = JSON.parse(localStorage.getItem('place') || 'null');
+      if (pl && pl.view && pl.view !== 'write') d.dataset.view = pl.view;
       const w = localStorage.getItem('pageWidth'), z = localStorage.getItem('textSize');
       if (w) d.style.setProperty('--page-width', w + 'px');
       if (z) d.style.setProperty('--text-size', z + 'px');
@@ -29,8 +30,7 @@
   <div class="edge edge-top" aria-hidden="true"></div>
 
   <header class="topbar">
-    <span class="crumb crumb-write"><span id="project-title"></span> › <span id="chapter-title"></span></span>
-    <span class="crumb crumb-notebook">Notebook</span>
+    <nav class="crumb" id="crumb" aria-label="Where you are"></nav>
     <span class="spacer"></span>
     <span id="words"></span>
     <span id="status" role="status"></span>
@@ -39,26 +39,66 @@
     <button type="button" class="pill" data-cmd="palette">⌘K</button>
   </header>
 
-  <nav class="outline" aria-label="Outline">
-    <div class="panel-label">Outline</div>
+  <nav class="outline" aria-label="Library">
+    <div class="rail-top">
+      <button type="button" class="tree-top" data-cmd="library">Library <span class="keys">⌘O</span></button>
+      <button type="button" class="tree-top" data-cmd="today">Today <span class="keys">⌘J</span></button>
+    </div>
     <div id="outline-tree"></div>
     <div class="outline-actions">
-      <button type="button" class="ghost-btn" data-cmd="new-chapter">+ Chapter</button>
-      <button type="button" class="ghost-btn" data-cmd="new-act">+ Act</button>
-    </div>
-    <div class="hint">Touch the left edge to open. ⌘1 keeps it open. Double-click a name to rename.</div>
-  </nav>
-
-  <nav class="outline shelves" aria-label="Shelves">
-    <div class="panel-label">Notebook</div>
-    <div id="shelves-tree"></div>
-    <div class="outline-actions">
-      <button type="button" class="ghost-btn" id="nb-new-page">+ Page</button>
+      <button type="button" class="ghost-btn when-write" data-cmd="new-chapter">+ Chapter</button>
+      <button type="button" class="ghost-btn when-write" data-cmd="new-act">+ Act</button>
+      <button type="button" class="ghost-btn" data-cmd="new-page">+ Page</button>
     </div>
     <div class="panel-label" id="shelves-tags-label" hidden>Tags</div>
     <div id="shelves-tags"></div>
-    <div class="hint">Type [[ to link a page, # to tag a line. Tab nests a line. ⌘J switches between writing and today.</div>
+    <div class="hint">Touch the left edge to open. ⌘1 keeps it open. Double-click a name to rename.</div>
   </nav>
+
+  <main class="library" aria-label="Library">
+    <div class="lib-sheet">
+      <div class="lib-head">
+        <h1>Library</h1>
+        <div id="lib-areas" class="chips" role="group" aria-label="Areas"></div>
+      </div>
+      <div id="lib-path" class="hint"></div>
+      <div id="lib-books" class="cards"></div>
+      <form id="lib-new" class="lib-new" hidden>
+        <input id="lib-new-title" placeholder="Title" aria-label="Title" autocomplete="off" required>
+        <select id="lib-new-type" aria-label="Kind"><option value="novel">Novel</option><option value="notes">Notes collection</option></select>
+        <select id="lib-new-area" aria-label="Area"></select>
+        <button type="submit" class="pill">Create</button>
+        <button type="button" class="ghost-btn" id="lib-new-cancel">Cancel</button>
+      </form>
+      <section id="lib-loose-box" hidden>
+        <div class="panel-label">Loose pages, not in a book yet</div>
+        <ul id="lib-loose" class="loose-list"></ul>
+      </section>
+    </div>
+  </main>
+
+  <main class="project-home" aria-label="Book">
+    <div class="lib-sheet">
+      <div class="ph-head">
+        <h1 id="ph-title" spellcheck="false"></h1>
+        <button type="button" class="pill" id="ph-continue">Continue writing</button>
+      </div>
+      <div class="ph-meta"><span id="ph-stats"></span> · <label>Area <select id="ph-area"></select></label></div>
+      <div class="ph-grid">
+        <section>
+          <div class="panel-label" id="ph-ms-label">Manuscript</div>
+          <div id="ph-manuscript"></div>
+          <div class="panel-label ph-gap">From your daily pages</div>
+          <ul id="ph-daily" class="ref-list"></ul>
+          <div class="hint" id="ph-daily-empty">Link a line on a daily page to this book or its pages with [[ and it shows here.</div>
+        </section>
+        <section>
+          <div class="ph-row"><span class="panel-label">Pages</span><button type="button" class="ghost-btn" data-cmd="new-page">+ Page</button></div>
+          <ul id="ph-pages" class="loose-list"></ul>
+        </section>
+      </div>
+    </div>
+  </main>
 
   <main class="notebook" aria-label="Notebook">
     <div class="nb-sheet">
@@ -69,12 +109,14 @@
         <button type="button" class="ghost-btn" id="nb-prev" aria-label="Day before">‹</button>
         <button type="button" class="ghost-btn" id="nb-today">Today</button>
         <button type="button" class="ghost-btn" id="nb-next" aria-label="Day after">›</button>
+        <label class="ghost-btn nb-date" aria-label="Go to a date"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><input type="date" id="nb-date"></label>
       </div>
       <article id="outline-editor" aria-label="Lines"></article>
       <section class="backlinks" hidden>
         <div class="panel-label">Linked from</div>
         <ul id="backlinks-list" class="ref-list"></ul>
       </section>
+      <div class="past-days" hidden></div>
     </div>
   </main>
 
@@ -137,7 +179,7 @@
   <div class="corner">
     <button type="button" class="ghost-btn" data-cmd="page" aria-label="Page width and text size">Aa</button>
     <button type="button" class="ghost-btn" data-cmd="notes" id="notes-toggle">Notes</button>
-    <button type="button" class="ghost-btn" data-cmd="shelves" id="shelves-toggle">Shelves</button>
+    <button type="button" class="ghost-btn" data-cmd="library" id="library-toggle">Library</button>
     <button type="button" class="ghost-btn" data-cmd="view" id="view-toggle">Today</button>
     <button type="button" class="ghost-btn" data-cmd="palette">⌘K</button>
   </div>

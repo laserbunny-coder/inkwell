@@ -136,7 +136,7 @@ try {
     await p.keyboard.type('new chapter');
     await p.keyboard.press('Enter');
     await sleep(800);
-    assert.equal(await p.locator('#chapter-title').innerText(), 'Chapter 2');
+    assert.match(await p.locator('#crumb').innerText(), /Chapter 2/);
   });
 
   await check('earlier versions are kept and can be restored', async () => {
@@ -174,6 +174,7 @@ try {
     const r = indexedDB.open('writing');
     r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').getAll(); q.onsuccess = () => res(q.result); };
   }));
+  const text2 = () => p.locator('#editor .ProseMirror').innerText();
   const outlineText = () => p.locator('#outline-editor .ProseMirror').innerText();
 
   await check('today’s page: nested lines are saved as linked entries', async () => {
@@ -232,6 +233,87 @@ try {
     await sleep(300);
     assert.equal(await p.locator('.page').isVisible(), true);
     assert.equal(await p.locator('.notebook').isVisible(), false);
+  });
+
+  await check('library: nested areas, a new book, and moving between books', async () => {
+    await p.keyboard.press('Control+K');
+    await p.keyboard.type('Library');
+    await p.keyboard.press('Enter');
+    await p.waitForSelector('#lib-books .card:not(.card-new)');
+    assert.match(await p.locator('#lib-books').innerText(), /Untitled novel/);
+    await p.locator('#lib-areas .chip', { hasText: 'Writing' }).click();
+    await sleep(300);
+    await p.locator('#lib-areas .chip-row').nth(1).locator('.chip.add').click();
+    await p.keyboard.type('Novels');
+    await p.keyboard.press('Enter');
+    await sleep(500);
+    assert.equal(await p.locator('#lib-areas .chip.on').count(), 2, 'Writing and Novels both picked');
+    await p.locator('.card-new').click();
+    await p.keyboard.type('Winter Harbour');
+    await p.keyboard.press('Enter');
+    await p.waitForSelector('.notebook', { state: 'visible' });
+    await sleep(400);
+    assert.equal(await p.locator('#nb-title').innerText(), 'Idea');
+    assert.match(await p.locator('#crumb').innerText(), /Library\s*›\s*Writing\s*›\s*Novels\s*›\s*Winter Harbour\s*›\s*Idea/);
+    const rows = await all();
+    const novels = rows.find((e) => e.kind === 'area' && e.title === 'Novels');
+    const book = rows.find((e) => e.kind === 'project' && e.title === 'Winter Harbour');
+    assert.equal(novels.parent_id, 'area-writing');
+    assert.equal(book.area_id, novels.id);
+    assert.ok(rows.some((e) => e.kind === 'page' && e.title === 'Idea' && e.parent_id === book.id));
+
+    await p.mouse.move(600, 4);
+    await sleep(300);
+    await p.locator('#crumb .crumb-part', { hasText: /^Winter Harbour$/ }).click();
+    await p.waitForSelector('.project-home', { state: 'visible' });
+    await p.locator('#ph-continue').click();
+    await p.waitForSelector('#editor .ProseMirror', { state: 'visible' });
+    await sleep(300);
+    await p.keyboard.type('Snow on the harbour wall.');
+    await sleep(700);
+    assert.match(await p.locator('#crumb').innerText(), /Winter Harbour\s*▾\s*›\s*Chapter 1/);
+
+    await p.keyboard.press('Control+O');
+    await p.keyboard.type('Chapter 2 · Untitled');
+    await p.keyboard.press('Enter');
+    await sleep(600);
+    assert.match(await p.locator('#crumb').innerText(), /Untitled novel/);
+    await p.keyboard.press('Control+O');
+    await p.keyboard.type('Chapter 1 · Winter');
+    await p.keyboard.press('Enter');
+    await sleep(600);
+    assert.match(await text2(), /Snow on the harbour wall\./);
+  });
+
+  await check('the app reopens where you left off', async () => {
+    await p.reload();
+    await p.waitForSelector('#editor .ProseMirror');
+    await sleep(700);
+    assert.match(await p.locator('#crumb').innerText(), /Winter Harbour/);
+    assert.match(await text2(), /Snow on the harbour wall\./);
+  });
+
+  await check('earlier days show below today and open when clicked', async () => {
+    await p.evaluate(() => new Promise((res) => {
+      const d = new Date(); d.setDate(d.getDate() - 1);
+      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const r = indexedDB.open('writing');
+      r.onsuccess = () => {
+        const tx = r.result.transaction('entries', 'readwrite');
+        const st = tx.objectStore('entries');
+        const base = { tags: [], links: [], fields: {}, type: null, area_id: null, deleted: false, created_at: 1, updated_at: 1 };
+        st.put({ ...base, id: `day-${iso}`, kind: 'day', parent_id: null, sort: 0, title: iso, text: '', content: null });
+        st.put({ ...base, id: 'li_yesterday', kind: 'line', parent_id: `day-${iso}`, sort: 1, title: '', text: 'Yesterday’s thought', content: [{ type: 'text', text: 'Yesterday’s thought' }] });
+        tx.oncomplete = res;
+      };
+    }));
+    await p.keyboard.press('Control+J');
+    await p.waitForSelector('.past-days', { state: 'visible' });
+    assert.match(await p.locator('.past-days').innerText(), /Yesterday’s thought/);
+    await p.locator('.past-days p', { hasText: 'Yesterday’s thought' }).click();
+    await sleep(500);
+    assert.equal(await p.locator('#nb-kind').innerText(), 'DAILY PAGE');
+    assert.match(await outlineText(), /Yesterday’s thought/);
   });
 
   await check('no page errors', async () => assert.deepEqual(errors, []));

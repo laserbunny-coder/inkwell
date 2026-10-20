@@ -9,8 +9,9 @@ import { Sync } from './sync.js';
 import { ensureSeed, outline, entry, wordCount } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
 import { EntryRef } from './outline.js';
-import { Notebook, rootOf } from './notebook.js';
+import { Notebook, rootOf, titleOf, dayId } from './notebook.js';
 import { openPicker } from './picker.js';
+import { ensureAreas, areas, books, bookType, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, stats, dailyMentions, ago } from './library.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -20,7 +21,10 @@ const extensions = [
   EntryRef.configure({ onPick: openPicker, onOpen: openEntry })
 ];
 
-const state = { project: null, acts: [], chapterId: null };
+// project: the book open in the manuscript view. bookId: the book whose home is shown.
+const state = { project: null, acts: [], chapterId: null, bookId: null, libArea: null };
+const view = () => root.dataset.view || 'write';
+const inNotebook = () => view() === 'notebook';
 
 const statusEl = $('#status');
 const store = new ChapterStore((s) => {
@@ -32,7 +36,6 @@ const editor = new Editor({
   element: $('#editor'),
   extensions,
   content: { type: 'doc', content: [{ type: 'paragraph' }] },
-  autofocus: 'end',
   onUpdate: ({ editor: ed }) => {
     store.change(ed.state.doc);
     notes.layout();
@@ -46,54 +49,123 @@ const notes = new NotesLayer($('.notes-layer'), editor);
 
 // ---------- notebook ----------
 
+let railTimer;
 const notebook = new Notebook({
   onPick: openPicker,
   onOpen: openEntry,
-  onStatus: (s) => { if (inNotebook()) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved'; }
-});
-
-const inNotebook = () => root.dataset.view === 'notebook';
-
-async function setView(view) {
-  // Switch at once so the next keystroke lands in the right place; saving catches up.
-  if (view === 'notebook') {
-    root.dataset.view = 'notebook';
-    notebook.editor.commands.focus();
-    store.close(editor.state.doc);
-    if (!notebook.page) await notebook.openDay();
-  } else {
-    delete root.dataset.view;
-    editor.commands.focus();
-    notebook.close();
+  onStatus: (s) => { if (inNotebook()) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved'; },
+  onChange: () => { clearTimeout(railTimer); railTimer = setTimeout(renderRail, 100); },
+  onPlace: (page) => {
+    if (!inNotebook()) return;
+    remember({ view: 'notebook', pageId: page.id });
+    renderCrumb();
   }
-  localStorage.setItem('view', view);
-  $('#view-toggle').textContent = inNotebook() ? 'Write' : 'Today';
-  body.classList.remove('show-outline');
-}
+});
 
 const currentEditor = () => (inNotebook() ? notebook.editor : editor);
 
+// ---------- getting around ----------
+
+// Where you are, kept per device so the app opens back there.
+function remember(place) {
+  try { localStorage.setItem('place', JSON.stringify(place)); } catch { /* full */ }
+}
+
+async function go(place) {
+  const from = view();
+  // Switch at once so the next keystroke lands in the right place; saving catches up.
+  if (from === 'write' && place.view !== 'write') store.close(editor.state.doc);
+  if (from === 'notebook' && place.view !== 'notebook') notebook.close();
+  if (place.view === 'write') delete root.dataset.view;
+  else root.dataset.view = place.view;
+  body.classList.remove('show-outline');
+  $('#view-toggle').textContent = place.view === 'notebook' ? 'Write' : 'Today';
+
+  if (place.view === 'write') {
+    editor.commands.focus();
+    const id = place.chapterId || state.chapterId || (await lastChapterAnywhere());
+    if (!id) return go({ view: 'library' });
+    if (id !== state.chapterId) await openChapter(id);
+    else remember({ view: 'write', chapterId: id });
+    if (place.focus) focusParagraph(place.focus);
+  } else if (place.view === 'notebook') {
+    notebook.editor.commands.focus();
+    const id = place.pageId;
+    if (id && id !== notebook.page?.id) {
+      const fallback = id.startsWith('day-') ? entry('day', { id, title: id.slice(4) }) : null;
+      await notebook.open(id, fallback, place.line);
+    } else if (!notebook.page) await notebook.openDay();
+    else {
+      if (place.line) notebook.focusLine(place.line);
+      remember({ view: 'notebook', pageId: notebook.page.id });
+    }
+  } else if (place.view === 'library') {
+    if ('area' in place) state.libArea = place.area;
+    remember({ view: 'library', area: state.libArea });
+    await renderLibrary();
+  } else if (place.view === 'project') {
+    state.bookId = place.id;
+    remember(place);
+    await renderProject();
+  }
+  renderCrumb();
+  renderRail();
+}
+
+async function openBook(projectId) {
+  const book = await getEntry(projectId);
+  if (!book || bookType(book) !== 'novel') return go({ view: 'project', id: projectId });
+  const acts = await outline(projectId);
+  const chapters = acts.flatMap((a) => a.chapters);
+  const last = await getMeta(`lastChapter:${projectId}`);
+  const id = chapters.some((c) => c.id === last) ? last : chapters[0]?.id;
+  if (id) return go({ view: 'write', chapterId: id });
+  return go({ view: 'project', id: projectId });
+}
+
+async function lastChapterAnywhere() {
+  const last = await getMeta('lastChapter');
+  const ch = last && (await getEntry(last));
+  if (ch && !ch.deleted) {
+    const book = await bookOf(ch);
+    if (book && !book.deleted) return ch.id;
+  }
+  const novels = (await books()).filter((b) => bookType(b) === 'novel').sort((a, b) => a.created_at - b.created_at);
+  for (const b of novels) {
+    const first = (await outline(b.id)).flatMap((a) => a.chapters)[0];
+    if (first) return first.id;
+  }
+  return null;
+}
+
+function focusParagraph(eid) {
+  editor.state.doc.forEach((node, pos) => {
+    if (node.attrs.eid === eid) { editor.commands.setTextSelection(pos + node.nodeSize - 1); editor.view.nodeDOM(pos)?.scrollIntoView({ block: 'center' }); }
+  });
+}
+
 // Follow a link: pages and days open in the notebook, chapters in the
-// manuscript, and a single line or paragraph opens where it lives.
+// manuscript, books on their home page, and a single line or paragraph opens
+// where it lives.
 async function openEntry(id) {
   const row = await getEntry(id);
   if (!row || row.deleted) return;
+  if (row.kind === 'project') return go({ view: 'project', id: row.id });
+  if (row.kind === 'area') return go({ view: 'library', area: row.id });
   const home = await rootOf(row);
   if (!home) return;
   const focus = home.id === row.id ? null : row.id;
-  if (home.kind === 'day' || home.kind === 'page') {
-    if (!inNotebook()) await setView('notebook');
-    if (notebook.page?.id === home.id) { if (focus) notebook.focusLine(focus); }
-    else await notebook.open(home.id, null, focus);
-  } else if (home.kind === 'chapter') {
-    if (inNotebook()) await setView('write');
-    await openChapter(home.id);
-    if (focus) {
-      editor.state.doc.forEach((node, pos) => {
-        if (node.attrs.eid === focus) { editor.commands.setTextSelection(pos + node.nodeSize - 1); editor.view.nodeDOM(pos)?.scrollIntoView({ block: 'center' }); }
-      });
-    }
-  }
+  if (home.kind === 'day' || home.kind === 'page') return go({ view: 'notebook', pageId: home.id, line: focus });
+  if (home.kind === 'chapter') return go({ view: 'write', chapterId: home.id, focus });
+}
+
+async function newPageHere() {
+  let parent = null;
+  if (view() === 'project') parent = state.bookId;
+  else if (view() === 'write') parent = state.project?.id || null;
+  else if (inNotebook() && notebook.page) parent = (await bookOf(notebook.page))?.id || null;
+  if (!inNotebook()) await go({ view: 'notebook' });
+  await notebook.newPage(parent);
 }
 
 // ---------- sync between devices ----------
@@ -113,40 +185,38 @@ onLocalWrites(() => sync.soon());
 window.__sync = sync;
 syncEl.addEventListener('click', () => { if (syncEl.dataset.state === 'signed-out') sync.signIn(); else sync.soon(0); });
 
-async function pickProject() {
-  const projects = (await byKind('project')).sort((a, b) => a.created_at - b.created_at);
-  return projects[0] || null;
-}
-
-// An untouched starter project on a new device gives way to the real one from the cloud.
+// An untouched starter book on a new device gives way to the real one from the cloud.
 async function dropEmptySeed(keep) {
   for (const p of await byKind('project')) {
-    if (p.id === keep.id || p.title !== 'Untitled novel') continue;
+    if (p.id === keep.id || p.deleted || p.title !== 'Untitled novel') continue;
     const acts = await outline(p.id);
     const chapters = acts.flatMap((a) => a.chapters);
-    const empty = chapters.every((c) => !c.fields?.words);
-    if (!empty) continue;
+    if (!chapters.every((c) => !c.fields?.words)) continue;
     const now = Date.now();
     await putEntries([p, ...acts, ...chapters].map((e) => ({ ...e, deleted: true, updated_at: now })));
   }
 }
 
 async function applyRemote(rows) {
-  const structural = rows.some((r) => ['project', 'act', 'chapter'].includes(r.kind));
+  const structural = rows.some((r) => ['project', 'act', 'chapter', 'area', 'page'].includes(r.kind));
   if (structural) {
     const remoteProject = rows.find((r) => r.kind === 'project' && !r.deleted);
     if (remoteProject) await dropEmptySeed(remoteProject);
-    const project = await pickProject();
-    if (project) state.project = project;
-    $('#project-title').textContent = state.project.title;
-    state.acts = await outline(state.project.id);
-    const chapters = state.acts.flatMap((a) => a.chapters);
-    if (!chapters.some((c) => c.id === state.chapterId) && chapters[0]) { state.chapterId = null; await openChapter(chapters[0].id); }
-    else {
-      const ch = chapters.find((c) => c.id === state.chapterId);
-      if (ch) $('#chapter-title').textContent = ch.title;
-      renderOutline();
+    if (state.project) {
+      const p = await getEntry(state.project.id);
+      state.project = p && !p.deleted ? p : null;
     }
+    const ch = state.chapterId && (await getEntry(state.chapterId));
+    if (view() === 'write' && (!state.project || !ch || ch.deleted)) {
+      state.chapterId = null;
+      const id = await lastChapterAnywhere();
+      if (id) await openChapter(id);
+      else await go({ view: 'library' });
+    } else if (state.project) state.acts = await outline(state.project.id);
+    if (view() === 'library') await renderLibrary();
+    if (view() === 'project') await renderProject();
+    renderRail();
+    renderCrumb();
   }
   if (rows.some((r) => r.parent_id === state.chapterId && ['para', 'scene', 'heading'].includes(r.kind))) await applyRemoteChapter();
   if (rows.some((r) => r.kind === 'note' && r.fields?.chapter_id === state.chapterId)) await notes.load(state.chapterId);
@@ -187,31 +257,37 @@ async function openChapter(id) {
   editor.commands.setContent(doc, { emitUpdate: false });
   if (recovered) store.change(editor.state.doc);
   else statusEl.textContent = 'Saved';
+  const book = await bookOf(store.chapter);
+  if (book && book.id !== state.project?.id) state.project = book;
+  if (state.project) state.acts = await outline(state.project.id);
   await notes.load(id);
   await setMeta('lastChapter', id);
-  const ch = await getEntry(id);
-  $('#chapter-title').textContent = ch.title;
+  if (state.project) await setMeta(`lastChapter:${state.project.id}`, id);
+  if (view() === 'write') remember({ view: 'write', chapterId: id });
   refreshWords();
-  renderOutline();
+  renderRail();
+  renderCrumb();
   editor.commands.focus('end');
 }
 
 function refreshWords() {
-  $('#words').textContent = `${wordCount(editor.state.doc.textContent).toLocaleString()} words`;
+  $('#words').textContent = view() === 'write' ? `${wordCount(editor.state.doc.textContent).toLocaleString()} words` : '';
 }
 
 async function newChapter() {
+  if (!state.project) return;
   const act = state.acts.find((a) => a.chapters.some((c) => c.id === state.chapterId)) || state.acts.at(-1);
   if (!act) return newAct();
   const level = state.project.fields?.levels?.[1] || 'Chapter';
   const count = state.acts.reduce((n, a) => n + a.chapters.length, 0);
   const ch = entry('chapter', { parent_id: act.id, title: `${level} ${count + 1}`, sort: (act.chapters.at(-1)?.sort || 0) + 1 });
   await putEntries([ch]);
-  await reloadOutline();
+  state.acts = await outline(state.project.id);
   await openChapter(ch.id);
 }
 
 async function newAct() {
+  if (!state.project) return;
   const level = state.project.fields?.levels?.[0] || 'Act';
   const names = ['One', 'Two', 'Three', 'Four', 'Five', 'Six'];
   const act = entry('act', { parent_id: state.project.id, title: `${level} ${names[state.acts.length] || state.acts.length + 1}`, sort: (state.acts.at(-1)?.sort || 0) + 1 });
@@ -219,18 +295,13 @@ async function newAct() {
   const count = state.acts.reduce((n, a) => n + a.chapters.length, 0);
   const ch = entry('chapter', { parent_id: act.id, title: `${chLevel} ${count + 1}`, sort: 1 });
   await putEntries([act, ch]);
-  await reloadOutline();
+  state.acts = await outline(state.project.id);
   await openChapter(ch.id);
 }
 
-// ---------- outline ----------
+// ---------- names you can rename in place ----------
 
-async function reloadOutline() {
-  state.acts = await outline(state.project.id);
-  renderOutline();
-}
-
-function renameable(el, row) {
+function renameable(el, row, after) {
   el.addEventListener('dblclick', (e) => {
     e.preventDefault();
     el.contentEditable = 'true';
@@ -247,8 +318,9 @@ function renameable(el, row) {
       row.title = title;
       row.updated_at = Date.now();
       await putEntries([row]);
-      if (row.id === state.chapterId) $('#chapter-title').textContent = title;
-      if (row.id === state.project.id) $('#project-title').textContent = title;
+      if (row.id === state.project?.id) state.project.title = title;
+      renderCrumb();
+      after?.();
     } else {
       el.textContent = row.title;
     }
@@ -261,37 +333,120 @@ function renameable(el, row) {
   el.addEventListener('blur', () => finish(true));
 }
 
-function renderOutline() {
+const make = (tag, cls, text) => {
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  if (text !== undefined) el.textContent = text;
+  if (tag === 'button') el.type = 'button';
+  return el;
+};
+const dot = (color) => { const d = make('span', 'dot'); d.style.background = color; return d; };
+
+async function areaPath(areaId, all) {
+  const list = all || (await areas());
+  const out = [];
+  for (let a = list.find((x) => x.id === areaId), i = 0; a && i < 20; a = list.find((x) => x.id === a.parent_id), i++) out.unshift(a);
+  return out;
+}
+
+const subtree = (areaId, all) => {
+  const ids = new Set([areaId]);
+  let grew = true;
+  while (grew) { grew = false; for (const a of all) if (a.parent_id && ids.has(a.parent_id) && !ids.has(a.id)) { ids.add(a.id); grew = true; } }
+  return ids;
+};
+
+// ---------- the library sidebar (left edge) ----------
+
+let railBusy = Promise.resolve();
+function renderRail() { railBusy = railBusy.then(drawRail).catch((e) => console.error(e)); return railBusy; }
+
+async function drawRail() {
+  const [allAreas, allBooks, loose] = await Promise.all([areas(), books(), loosePages()]);
+  let current = null;
+  if (view() === 'write') current = state.project?.id;
+  else if (view() === 'project') current = state.bookId;
+  else if (inNotebook() && notebook.page) current = (await bookOf(notebook.page))?.id;
+
   const tree = $('#outline-tree');
-  tree.replaceChildren();
-  const proj = document.createElement('div');
-  proj.className = 'tree-act';
-  proj.style.fontSize = '16px';
-  proj.textContent = state.project.title;
-  renameable(proj, state.project);
-  tree.append(proj);
-  for (const act of state.acts) {
-    const a = document.createElement('div');
-    a.className = 'tree-act';
-    a.textContent = act.title;
-    renameable(a, act);
-    tree.append(a);
-    for (const ch of act.chapters) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'tree-chapter' + (ch.id === state.chapterId ? ' current' : '');
-      b.textContent = ch.title;
-      b.addEventListener('click', () => { if (b.contentEditable !== 'true') openChapter(ch.id); });
-      renameable(b, ch);
-      tree.append(b);
-      if (ch.id === state.chapterId) {
-        const scenes = document.createElement('div');
-        scenes.id = 'outline-scenes';
-        tree.append(scenes);
+  const out = [];
+  $('.rail-top [data-cmd="library"]').classList.toggle('current', view() === 'library');
+  $('.rail-top [data-cmd="today"]').classList.toggle('current', inNotebook() && notebook.page?.id === dayId(isoToday()) );
+
+  const bookNode = async (b, depth) => {
+    const area = allAreas.find((a) => a.id === b.area_id);
+    const btn = make('button', 'tree-book' + (b.id === current ? ' current' : ''));
+    btn.style.paddingLeft = `${10 + depth * 14}px`;
+    const name = make('span', 'name', b.title || 'Untitled');
+    btn.append(dot(areaColor(area)), name);
+    btn.addEventListener('click', () => { if (name.contentEditable !== 'true') go({ view: 'project', id: b.id }); });
+    renameable(name, b, renderRail);
+    out.push(btn);
+    if (b.id !== current) return;
+    const pad = 26 + depth * 14;
+    if (bookType(b) === 'novel') {
+      const acts = b.id === state.project?.id ? state.acts : await outline(b.id);
+      for (const act of acts) {
+        const a = make('div', 'tree-act', act.title);
+        a.style.paddingLeft = `${pad}px`;
+        renameable(a, act);
+        out.push(a);
+        for (const ch of act.chapters) {
+          const c = make('button', 'tree-chapter' + (ch.id === state.chapterId && view() === 'write' ? ' current' : ''), ch.title);
+          c.style.paddingLeft = `${pad + 14}px`;
+          c.addEventListener('click', () => { if (c.contentEditable !== 'true') go({ view: 'write', chapterId: ch.id }); });
+          renameable(c, ch);
+          out.push(c);
+          if (ch.id === state.chapterId && view() === 'write') {
+            const scenes = make('div');
+            scenes.id = 'outline-scenes';
+            scenes.style.setProperty('--pad', `${pad + 30}px`);
+            out.push(scenes);
+          }
+        }
       }
     }
+    for (const p of await pagesIn(b.id)) {
+      const c = make('button', 'tree-page' + (inNotebook() && notebook.page?.id === p.id ? ' current' : ''), p.title || 'Untitled page');
+      c.style.paddingLeft = `${pad}px`;
+      c.addEventListener('click', () => go({ view: 'notebook', pageId: p.id }));
+      out.push(c);
+    }
+  };
+
+  const areaNode = async (area, depth) => {
+    const label = make('button', 'tree-area', area.title);
+    label.style.paddingLeft = `${10 + depth * 14}px`;
+    label.addEventListener('click', () => { if (label.contentEditable !== 'true') go({ view: 'library', area: area.id }); });
+    renameable(label, area, renderRail);
+    out.push(label);
+    for (const b of allBooks.filter((x) => x.area_id === area.id).sort((x, y) => x.title.localeCompare(y.title))) await bookNode(b, depth);
+    for (const sub of allAreas.filter((a) => a.parent_id === area.id)) await areaNode(sub, depth + 1);
+  };
+
+  for (const area of allAreas.filter((a) => !a.parent_id || !allAreas.some((x) => x.id === a.parent_id))) await areaNode(area, 0);
+  const orphans = allBooks.filter((b) => !allAreas.some((a) => a.id === b.area_id));
+  if (orphans.length) { out.push(make('div', 'tree-area', 'Other')); for (const b of orphans) await bookNode(b, 0); }
+  if (loose.length) {
+    out.push(make('div', 'tree-area', 'Loose pages'));
+    for (const p of loose.slice(0, 12)) {
+      const c = make('button', 'tree-page' + (inNotebook() && notebook.page?.id === p.id ? ' current' : ''), p.title || 'Untitled page');
+      c.style.paddingLeft = '10px';
+      c.addEventListener('click', () => go({ view: 'notebook', pageId: p.id }));
+      out.push(c);
+    }
   }
+  tree.replaceChildren(...out);
   renderScenes();
+
+  const tags = new Map();
+  for (const l of await byKind('line')) if (!l.deleted) for (const t of l.tags || []) tags.set(t, (tags.get(t) || 0) + 1);
+  $('#shelves-tags').replaceChildren(...[...tags].sort((a, b) => b[1] - a[1]).slice(0, 30).map(([t]) => {
+    const b = make('button', 'tag-chip', `#${t}`);
+    b.addEventListener('click', () => notebook.showTag(t));
+    return b;
+  }));
+  $('#shelves-tags-label').hidden = !tags.size;
 }
 
 let scenesTimer;
@@ -306,10 +461,8 @@ function renderScenes() {
   box.replaceChildren();
   editor.state.doc.forEach((node, pos) => {
     if (node.type.name !== 'sceneBreak') return;
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'tree-scene';
-    b.textContent = node.attrs.title || 'Untitled scene';
+    const b = make('button', 'tree-scene', node.attrs.title || 'Untitled scene');
+    b.style.paddingLeft = box.style.getPropertyValue('--pad');
     b.addEventListener('click', () => {
       editor.view.nodeDOM(pos)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       editor.commands.focus(pos + node.nodeSize + 1);
@@ -318,10 +471,253 @@ function renderScenes() {
   });
 }
 
+// ---------- breadcrumb: where you are ----------
+
+let crumbBusy = Promise.resolve();
+function renderCrumb() { crumbBusy = crumbBusy.then(drawCrumb).catch((e) => console.error(e)); return crumbBusy; }
+
+async function drawCrumb() {
+  const parts = [];
+  const link = (label, run, cls = '') => { const b = make('button', 'crumb-part ' + cls, label); b.addEventListener('click', run); return b; };
+  const all = await areas();
+  const lib = link('Library', () => go({ view: 'library', area: null }));
+  const areaParts = async (areaId) => (await areaPath(areaId, all)).map((a) => link(a.title, () => go({ view: 'library', area: a.id })));
+  const bookPart = (b) => link(`${b.title || 'Untitled'} ▾`, () => openPalette('go', 'books'), 'book');
+  if (view() === 'library') {
+    parts.push(lib, ...(state.libArea ? await areaParts(state.libArea) : []));
+  } else if (view() === 'project') {
+    const b = await getEntry(state.bookId);
+    if (b) parts.push(lib, ...(await areaParts(b.area_id)), bookPart(b));
+  } else if (view() === 'write' && state.project) {
+    const ch = state.chapterId && (await getEntry(state.chapterId));
+    parts.push(lib, ...(await areaParts(state.project.area_id)), bookPart(state.project), link(ch?.title || '', () => {}, 'here'));
+  } else if (inNotebook() && notebook.page) {
+    const p = notebook.page;
+    if (p.kind === 'day') parts.push(link('Daily pages', () => go({ view: 'notebook', pageId: dayId(isoToday()) })), link(titleOf(p), () => {}, 'here'));
+    else {
+      const b = await bookOf(p);
+      if (b) parts.push(lib, ...(await areaParts(b.area_id)), link(b.title, () => go({ view: 'project', id: b.id })));
+      else parts.push(lib, link('Loose pages', () => go({ view: 'library', area: null })));
+      parts.push(link(p.title || 'Untitled page', () => {}, 'here'));
+    }
+  }
+  const crumb = $('#crumb');
+  crumb.replaceChildren();
+  parts.forEach((p, i) => { if (i) crumb.append(make('span', 'sep', '›')); crumb.append(p); });
+  refreshWords();
+}
+
+// ---------- library view ----------
+
+async function renderLibrary() {
+  const [allAreas, allBooks, loose] = await Promise.all([areas(), books(), loosePages()]);
+  if (state.libArea && !allAreas.some((a) => a.id === state.libArea)) state.libArea = null;
+  const sel = state.libArea;
+  const path = sel ? await areaPath(sel, allAreas) : [];
+
+  // Area chips: the top level, then each level down to the one picked.
+  const chips = $('#lib-areas');
+  chips.replaceChildren();
+  const chip = (label, on, run) => { const b = make('button', 'chip' + (on ? ' on' : ''), label); b.addEventListener('click', run); return b; };
+  const row = (parentId) => {
+    const wrap = make('div', 'chip-row');
+    const list = allAreas.filter((a) => (a.parent_id || null) === parentId);
+    if (!parentId) wrap.append(chip('All', !sel, () => go({ view: 'library', area: null })));
+    for (const a of list) {
+      const c = chip(a.title, path.some((p) => p.id === a.id), () => { if (c.contentEditable !== 'true') go({ view: 'library', area: a.id }); });
+      renameable(c, a, () => { renderRail(); });
+      wrap.append(c);
+    }
+    wrap.append(addAreaChip(parentId));
+    return wrap;
+  };
+  chips.append(row(null));
+  for (const a of path) chips.append(row(a.id));
+  $('#lib-path').textContent = sel ? 'Double-click an area to rename it. + adds an area inside the one you picked.' : '';
+
+  // Books in the picked area and everything nested under it.
+  const ids = sel ? subtree(sel, allAreas) : null;
+  const shown = allBooks.filter((b) => !ids || ids.has(b.area_id)).sort((a, b) => b.updated_at - a.updated_at);
+  const cards = [];
+  for (const b of shown) {
+    const area = allAreas.find((a) => a.id === b.area_id);
+    const s = await stats(b);
+    const card = make('button', 'card');
+    const kind = make('span', 'card-kind');
+    kind.append(dot(areaColor(area)), document.createTextNode(`${area?.title || 'No area'} · ${bookType(b) === 'novel' ? 'novel' : 'notes'}`));
+    const detail = bookType(b) === 'novel'
+      ? `${s.chapters.length} chapter${s.chapters.length === 1 ? '' : 's'} · ${s.words.toLocaleString()} words`
+      : `${s.pages} page${s.pages === 1 ? '' : 's'}`;
+    card.append(kind, make('span', 'card-title', b.title || 'Untitled'), make('span', 'card-detail', detail), make('span', 'card-when', `Edited ${ago(b.updated_at)}`));
+    card.addEventListener('click', () => go({ view: 'project', id: b.id }));
+    cards.push(card);
+  }
+  const add = make('button', 'card card-new');
+  add.append(make('span', 'plus', '+'), make('span', '', 'New novel or notes collection'));
+  add.addEventListener('click', () => showNewBook('novel'));
+  cards.push(add);
+  $('#lib-books').replaceChildren(...cards);
+
+  // Area choices for the new-book form.
+  const opts = await areaOptions(allAreas);
+  $('#lib-new-area').replaceChildren(...opts.map(([id, label]) => { const o = make('option', '', label); o.value = id; return o; }));
+  $('#lib-new-area').value = sel || allAreas[0]?.id || '';
+
+  // Loose pages, each with somewhere to move it.
+  const bookOpts = allBooks.slice().sort((a, b) => a.title.localeCompare(b.title));
+  $('#lib-loose').replaceChildren(...loose.map((p) => {
+    const li = make('li');
+    const open = make('button', 'loose-title', p.title || 'Untitled page');
+    open.addEventListener('click', () => go({ view: 'notebook', pageId: p.id }));
+    const move = make('select', 'move');
+    move.setAttribute('aria-label', `Move ${p.title || 'page'} to a book`);
+    move.append(Object.assign(make('option', '', 'Move to…'), { value: '' }), ...bookOpts.map((b) => Object.assign(make('option', '', b.title), { value: b.id })));
+    move.addEventListener('change', async () => {
+      if (!move.value) return;
+      await putEntries([{ ...p, parent_id: move.value, updated_at: Date.now() }]);
+      renderLibrary();
+      renderRail();
+    });
+    li.append(open, make('span', 'when', ago(p.updated_at)), move);
+    return li;
+  }));
+  $('#lib-loose-box').hidden = !loose.length;
+}
+
+function addAreaChip(parentId) {
+  const b = make('button', 'chip add', '+');
+  b.setAttribute('aria-label', parentId ? 'Add an area inside this one' : 'Add an area');
+  b.addEventListener('click', () => {
+    const input = make('input', 'chip-input');
+    input.placeholder = 'New area';
+    b.replaceWith(input);
+    input.focus();
+    let done = false;
+    const finish = async (save) => {
+      if (done) return;
+      done = true;
+      const title = input.value.trim();
+      if (save && title) {
+        const area = await newArea(title, parentId);
+        await go({ view: 'library', area: area.id });
+      } else renderLibrary();
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') { e.stopPropagation(); finish(false); } });
+    input.addEventListener('blur', () => finish(true));
+  });
+  return b;
+}
+
+async function areaOptions(allAreas) {
+  const out = [];
+  const walk = (parentId, depth) => {
+    for (const a of allAreas.filter((x) => (x.parent_id || null) === parentId)) {
+      out.push([a.id, `${' '.repeat(depth)}${a.title}`]);
+      walk(a.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return out;
+}
+
+async function showNewBook(type) {
+  if (view() !== 'library') await go({ view: 'library' });
+  const form = $('#lib-new');
+  form.hidden = false;
+  $('#lib-new-type').value = type;
+  $('#lib-new-title').value = '';
+  $('#lib-new-title').focus();
+}
+
+$('#lib-new').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const title = $('#lib-new-title').value.trim();
+  if (!title) return;
+  const type = $('#lib-new-type').value;
+  const book = await newBook(type, title, $('#lib-new-area').value || null);
+  $('#lib-new').hidden = true;
+  // A new book opens on its Idea page, the place to think it through.
+  const idea = (await pagesIn(book.id))[0];
+  if (idea) await go({ view: 'notebook', pageId: idea.id });
+  else await go({ view: 'project', id: book.id });
+});
+$('#lib-new-cancel').addEventListener('click', () => { $('#lib-new').hidden = true; });
+
+// ---------- a book's home ----------
+
+async function renderProject() {
+  const b = await getEntry(state.bookId);
+  if (!b || b.deleted) return go({ view: 'library' });
+  const allAreas = await areas();
+  const s = await stats(b);
+  const novel = bookType(b) === 'novel';
+  const title = $('#ph-title');
+  title.textContent = b.title;
+  title.contentEditable = 'true';
+  title.onblur = async () => {
+    const t = title.textContent.trim();
+    if (t && t !== b.title) { await putEntries([{ ...b, title: t, updated_at: Date.now() }]); if (state.project?.id === b.id) state.project.title = t; renderRail(); renderCrumb(); }
+  };
+  title.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); title.blur(); } };
+  $('#ph-stats').textContent = novel
+    ? `Novel · ${s.words.toLocaleString()} words · ${s.chapters.length} chapter${s.chapters.length === 1 ? '' : 's'}`
+    : `Notes collection · ${s.pages} page${s.pages === 1 ? '' : 's'}`;
+  const areaSel = $('#ph-area');
+  areaSel.replaceChildren(...(await areaOptions(allAreas)).map(([id, label]) => Object.assign(make('option', '', label), { value: id })));
+  areaSel.value = b.area_id || '';
+  areaSel.onchange = async () => { await putEntries([{ ...b, area_id: areaSel.value, updated_at: Date.now() }]); renderRail(); renderCrumb(); };
+
+  const cont = $('#ph-continue');
+  cont.hidden = !novel || !s.chapters.length;
+  if (novel && s.chapters.length) {
+    const last = await getMeta(`lastChapter:${b.id}`);
+    const ch = s.chapters.find((c) => c.id === last) || s.chapters[0];
+    cont.textContent = `Continue writing · ${ch.title}`;
+    cont.onclick = () => go({ view: 'write', chapterId: ch.id });
+  }
+
+  $('#ph-ms-label').hidden = !novel;
+  const ms = $('#ph-manuscript');
+  ms.replaceChildren();
+  if (novel) {
+    for (const act of s.acts) {
+      const box = make('div', 'ms-act');
+      box.append(make('div', 'ms-act-title', act.title));
+      for (const ch of act.chapters) {
+        const c = make('button', 'ms-chapter');
+        c.append(make('span', '', ch.title), make('span', 'when', `${(ch.fields?.words || 0).toLocaleString()} words`));
+        c.addEventListener('click', () => go({ view: 'write', chapterId: ch.id }));
+        box.append(c);
+      }
+      ms.append(box);
+    }
+  }
+
+  const pages = await pagesIn(b.id);
+  $('#ph-pages').replaceChildren(...pages.map((p) => {
+    const li = make('li');
+    const open = make('button', 'loose-title', p.title || 'Untitled page');
+    open.addEventListener('click', () => go({ view: 'notebook', pageId: p.id }));
+    li.append(open, make('span', 'when', ago(p.updated_at)));
+    return li;
+  }));
+
+  const mentions = await dailyMentions(b);
+  $('#ph-daily').replaceChildren(...mentions.map(({ row, day }) => {
+    const li = make('li');
+    const btn = make('button');
+    btn.append(make('span', 'from', titleOf(day)), make('span', 'line', row.text));
+    btn.addEventListener('click', () => go({ view: 'notebook', pageId: day.id, line: row.id }));
+    li.append(btn);
+    return li;
+  }));
+  $('#ph-daily-empty').hidden = mentions.length > 0;
+}
+
 // ---------- panels revealed by edges ----------
 
 $('.edge-left').addEventListener('mouseenter', () => body.classList.add('show-outline'));
-document.querySelectorAll('.outline').forEach((el) => el.addEventListener('mouseleave', () => body.classList.remove('show-outline')));
+$('.outline').addEventListener('mouseleave', () => body.classList.remove('show-outline'));
 $('.edge-top').addEventListener('mouseenter', () => body.classList.add('show-top'));
 $('.topbar').addEventListener('mouseleave', () => body.classList.remove('show-top'));
 
@@ -397,7 +793,7 @@ function setPage(width, size) {
 
 function togglePageSettings() {
   const panel = $('.page-settings');
-  if (!panel.hidden) { panel.hidden = true; editor.commands.focus(); return; }
+  if (!panel.hidden) { panel.hidden = true; currentEditor().commands.focus(); return; }
   setPage(currentWidth(), currentSize());
   panel.hidden = false;
   $('#page-width').focus();
@@ -408,7 +804,7 @@ $('#text-size').addEventListener('input', (e) => setPage(currentWidth(), Number(
 $('#page-reset').addEventListener('click', () => setPage(DEFAULT_WIDTH, defaultSize()));
 $('#page-done').addEventListener('click', togglePageSettings);
 
-// ---------- command menu ----------
+// ---------- command menu (⌘K) and go-to (⌘O) ----------
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 const mod = isMac ? '⌘' : 'Ctrl+';
@@ -439,19 +835,24 @@ async function exportBook() {
   download(`${state.project.title}.md`, await bookMarkdown(state.project, state.acts));
 }
 
+const writing = () => view() === 'write';
 const commands = [
-  { label: 'Today’s page', keys: `${mod}J`, run: () => (inNotebook() ? notebook.openDay() : setView('notebook').then(() => notebook.openDay())) },
-  { label: 'Back to writing', keys: `${mod}J`, run: () => setView('write'), when: inNotebook },
-  { label: 'New notebook page', keys: '', run: () => setView('notebook').then(() => notebook.newPage()) },
-  { label: 'Link to a page…', keys: '[[', run: () => openPicker(currentEditor()) },
-  { label: 'Outline (keep open)', keys: `${mod}1`, run: () => body.classList.toggle('pin-outline'), when: () => !inNotebook() },
-  { label: 'Shelves (keep open)', keys: `${mod}1`, run: () => body.classList.toggle('pin-outline'), when: inNotebook },
-  { label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: () => !inNotebook() },
-  { label: 'Add a note to this paragraph', keys: `${mod}⇧N`, run: () => notes.add(), when: () => !inNotebook() },
-  { label: 'Scene break', keys: `${mod}⇧↵`, run: () => editor.chain().focus().insertSceneBreak().run(), when: () => !inNotebook() },
-  { label: 'New chapter', keys: '', run: () => setView('write').then(newChapter) },
-  { label: 'New act', keys: '', run: () => setView('write').then(newAct) },
-  { label: 'History: earlier versions of this chapter', keys: `${mod}⇧H`, run: openHistory, when: () => !inNotebook() },
+  { label: 'Go to… a book, chapter or page', keys: `${mod}O`, run: () => openPalette('go') },
+  { label: 'Library', keys: '', run: () => go({ view: 'library', area: null }) },
+  { label: 'Today’s page', keys: `${mod}J`, run: () => go({ view: 'notebook', pageId: dayId(isoToday()) }) },
+  { label: 'Back to writing', keys: `${mod}J`, run: () => go({ view: 'write' }), when: () => !writing() },
+  { label: 'New novel', keys: '', run: () => showNewBook('novel') },
+  { label: 'New notes collection', keys: '', run: () => showNewBook('notes') },
+  { label: 'New page', keys: '', run: newPageHere },
+  { label: 'New area', keys: '', run: () => go({ view: 'library' }).then(() => [...document.querySelectorAll('#lib-areas .chip.add')].at(-1)?.click()) },
+  { label: 'Link to a page…', keys: '[[', run: () => openPicker(currentEditor()), when: () => writing() || inNotebook() },
+  { label: 'Sidebar (keep open)', keys: `${mod}1`, run: () => body.classList.toggle('pin-outline') },
+  { label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: writing },
+  { label: 'Add a note to this paragraph', keys: `${mod}⇧N`, run: () => notes.add(), when: writing },
+  { label: 'Scene break', keys: `${mod}⇧↵`, run: () => editor.chain().focus().insertSceneBreak().run(), when: writing },
+  { label: 'New chapter', keys: '', run: () => go({ view: 'write' }).then(newChapter), when: () => !!state.project },
+  { label: 'New act', keys: '', run: () => go({ view: 'write' }).then(newAct), when: () => !!state.project },
+  { label: 'History: earlier versions of this chapter', keys: `${mod}⇧H`, run: openHistory, when: writing },
   { label: 'Page width and text size', keys: '', run: togglePageSettings },
   { label: 'Wider page', keys: 'Alt+]', run: () => setPage(currentWidth() + 40, currentSize()) },
   { label: 'Narrower page', keys: 'Alt+[', run: () => setPage(currentWidth() - 40, currentSize()) },
@@ -462,31 +863,68 @@ const commands = [
   { label: 'Sign in to sync between devices', keys: '', run: () => sync.signIn(), when: () => sync.available && !sync.user },
   { label: 'Sign out of sync', keys: '', run: () => sync.signOut(), when: () => !!sync.user },
   { label: 'Change the writing font', keys: '', run: cycleFont },
-  { label: 'Export this chapter as Markdown', keys: '', run: exportChapter },
-  { label: 'Export the whole book as Markdown', keys: '', run: exportBook }
+  { label: 'Export this chapter as Markdown', keys: '', run: exportChapter, when: writing },
+  { label: 'Export the whole book as Markdown', keys: '', run: exportBook, when: () => writing() && !!state.project }
 ];
+
+function isoToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Everything you can go to: books, areas, chapters, pages and recent days.
+async function places(only) {
+  const [allAreas, allBooks] = await Promise.all([areas(), books()]);
+  const out = [];
+  for (const b of allBooks.sort((a, c) => c.updated_at - a.updated_at)) out.push({ label: b.title || 'Untitled', keys: 'book', run: () => go({ view: 'project', id: b.id }) });
+  if (only === 'books') return out;
+  for (const a of allAreas) out.push({ label: a.title, keys: 'area', run: () => go({ view: 'library', area: a.id }) });
+  for (const b of allBooks.filter((x) => bookType(x) === 'novel')) {
+    for (const act of await outline(b.id)) for (const ch of act.chapters) out.push({ label: `${ch.title} · ${b.title}`, keys: 'chapter', run: () => go({ view: 'write', chapterId: ch.id }) });
+  }
+  for (const p of (await byKind('page')).filter((x) => !x.deleted)) out.push({ label: p.title || 'Untitled page', keys: 'page', run: () => go({ view: 'notebook', pageId: p.id }) });
+  const days = (await byKind('day')).filter((d) => !d.deleted).sort((a, c) => (a.title < c.title ? 1 : -1)).slice(0, 30);
+  for (const d of days) out.push({ label: titleOf(d), keys: 'day', run: () => go({ view: 'notebook', pageId: d.id }) });
+  return out;
+}
 
 let paletteIndex = 0;
 let paletteItems = [];
+let paletteMode = 'commands';
+let paletteSource = commands;
+let paletteReady = Promise.resolve();
 
-function openPalette() {
+async function openPalette(mode = 'commands', only) {
+  // Open and focus at once so nothing typed is lost; the list fills in after.
+  paletteMode = mode;
+  paletteSource = mode === 'go' ? [] : commands;
+  paletteReady = Promise.resolve();
   $('.palette').hidden = false;
   $('.palette-backdrop').hidden = false;
   const input = $('#palette-input');
+  input.placeholder = mode === 'go' ? (only === 'books' ? 'Go to a book…' : 'Go to a book, chapter, page or day…') : 'Type a command…';
   input.value = '';
-  filterPalette();
   input.focus();
+  filterPalette();
+  if (mode === 'go') {
+    paletteReady = places(only).then((list) => {
+      if (paletteMode !== mode) return;
+      paletteSource = list;
+      filterPalette();
+    });
+    await paletteReady;
+  }
 }
 
 function closePalette(refocus = true) {
   $('.palette').hidden = true;
   $('.palette-backdrop').hidden = true;
-  if (refocus) currentEditor().commands.focus();
+  if (refocus && (writing() || inNotebook())) currentEditor().commands.focus();
 }
 
 function filterPalette() {
   const q = $('#palette-input').value.trim().toLowerCase();
-  paletteItems = commands.filter((c) => (!c.when || c.when()) && (!q || c.label.toLowerCase().includes(q)));
+  paletteItems = paletteSource.filter((c) => (!c.when || c.when()) && (!q || c.label.toLowerCase().includes(q))).slice(0, 60);
   paletteIndex = 0;
   const list = $('#palette-list');
   list.replaceChildren();
@@ -510,8 +948,7 @@ function selectPalette(i) {
 }
 
 function runCommand(c) {
-  closePalette(false);
-  currentEditor().commands.focus();
+  closePalette(paletteMode !== 'go');
   c.run();
 }
 
@@ -519,8 +956,12 @@ $('#palette-input').addEventListener('input', filterPalette);
 $('#palette-input').addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown') { e.preventDefault(); selectPalette(Math.min(paletteIndex + 1, paletteItems.length - 1)); }
   if (e.key === 'ArrowUp') { e.preventDefault(); selectPalette(Math.max(paletteIndex - 1, 0)); }
-  if (e.key === 'Enter') { e.preventDefault(); if (paletteItems[paletteIndex]) runCommand(paletteItems[paletteIndex]); }
-  if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    // Enter pressed before the list arrived still picks the best match.
+    paletteReady.then(() => { if (paletteItems[paletteIndex]) runCommand(paletteItems[paletteIndex]); });
+  }
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePalette(); }
 });
 $('.palette-backdrop').addEventListener('click', () => closePalette());
 
@@ -528,6 +969,8 @@ function toggleNotes() {
   notes.setVisible(!notes.visible);
   $('#notes-toggle').textContent = notes.visible ? 'Hide notes' : 'Notes';
 }
+
+const toggleWriteToday = () => go(inNotebook() ? { view: 'write' } : { view: 'notebook', pageId: dayId(isoToday()) });
 
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-cmd]');
@@ -539,8 +982,10 @@ document.addEventListener('click', (e) => {
   if (cmd === 'history') openHistory();
   if (cmd === 'new-chapter') newChapter();
   if (cmd === 'new-act') newAct();
-  if (cmd === 'view') setView(inNotebook() ? 'write' : 'notebook');
-  if (cmd === 'shelves') body.classList.toggle('show-outline');
+  if (cmd === 'new-page') newPageHere();
+  if (cmd === 'view') toggleWriteToday();
+  if (cmd === 'library') go({ view: 'library', area: null });
+  if (cmd === 'today') go({ view: 'notebook', pageId: dayId(isoToday()) });
   if (cmd === 'close-tag') { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
 });
 
@@ -548,18 +993,19 @@ document.addEventListener('keydown', (e) => {
   const m = e.metaKey || e.ctrlKey;
   const k = e.key.toLowerCase();
   if (m && k === 'k') { e.preventDefault(); $('.palette').hidden ? openPalette() : closePalette(); }
-  else if (m && k === 'j') { e.preventDefault(); setView(inNotebook() ? 'write' : 'notebook'); }
+  else if (m && k === 'o') { e.preventDefault(); openPalette('go'); }
+  else if (m && k === 'j') { e.preventDefault(); toggleWriteToday(); }
   else if (m && k === '1') { e.preventDefault(); body.classList.toggle('pin-outline'); }
-  else if (m && k === '2' && !inNotebook()) { e.preventDefault(); toggleNotes(); }
-  else if (m && e.shiftKey && k === 'n' && !inNotebook()) { e.preventDefault(); notes.add(); }
-  else if (m && e.shiftKey && k === 'h' && !inNotebook()) { e.preventDefault(); openHistory(); }
+  else if (m && k === '2' && writing()) { e.preventDefault(); toggleNotes(); }
+  else if (m && e.shiftKey && k === 'n' && writing()) { e.preventDefault(); notes.add(); }
+  else if (m && e.shiftKey && k === 'h' && writing()) { e.preventDefault(); openHistory(); }
   else if (m && e.shiftKey && k === 'l') { e.preventDefault(); toggleTheme(); }
   else if (e.altKey && !m && e.code === 'BracketRight') { e.preventDefault(); setPage(currentWidth() + 40, currentSize()); }
   else if (e.altKey && !m && e.code === 'BracketLeft') { e.preventDefault(); setPage(currentWidth() - 40, currentSize()); }
   else if (e.altKey && !m && e.code === 'Equal') { e.preventDefault(); setPage(currentWidth(), currentSize() + 1); }
   else if (e.altKey && !m && e.code === 'Minus') { e.preventDefault(); setPage(currentWidth(), currentSize() - 1); }
   else if (e.key === 'Escape') {
-    if (!$('.page-settings').hidden) { $('.page-settings').hidden = true; editor.commands.focus(); }
+    if (!$('.page-settings').hidden) { $('.page-settings').hidden = true; currentEditor().commands.focus(); }
     if (!$('.history').hidden) { $('.history').hidden = true; editor.commands.focus(); }
     if (!$('.tag-results').hidden) { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
     body.classList.remove('show-outline', 'show-top');
@@ -576,19 +1022,17 @@ async function start() {
   const font = localStorage.getItem('font');
   if (font) document.documentElement.dataset.font = font;
   await ensureSeed();
-  state.project = await pickProject();
-  $('#project-title').textContent = state.project.title;
-  state.acts = await outline(state.project.id);
-  let last = await getMeta('lastChapter');
-  if (!last || !state.acts.some((a) => a.chapters.some((c) => c.id === last))) last = state.acts[0]?.chapters[0]?.id;
-  await openChapter(last);
-  if (inNotebook()) {
-    const page = localStorage.getItem('notebookPage');
-    // A day page opens to today; a named page opens where you left it.
-    if (page && !page.startsWith('day-') && (await getEntry(page))) await notebook.open(page);
-    else await notebook.openDay();
-    $('#view-toggle').textContent = 'Write';
-  } else await notebook.renderShelves();
+  await ensureAreas();
+  let place = null;
+  try { place = JSON.parse(localStorage.getItem('place') || 'null'); } catch { /* ignore */ }
+  if (!place?.view) place = { view: 'write' };
+  // A daily page opens to today; anything else opens where you left it.
+  if (place.view === 'notebook' && (!place.pageId || place.pageId.startsWith('day-'))) place = { view: 'notebook', pageId: dayId(isoToday()) };
+  if (place.view === 'notebook') { const p = await getEntry(place.pageId); if (!place.pageId.startsWith('day-') && (!p || p.deleted)) place = { view: 'notebook', pageId: dayId(isoToday()) }; }
+  if (place.view === 'project') { const b = await getEntry(place.id); if (!b || b.deleted) place = { view: 'library' }; }
+  if (place.view === 'write' && place.chapterId) { const c = await getEntry(place.chapterId); if (!c || c.deleted) place = { view: 'write' }; }
+  if (place.view !== 'write') delete root.dataset.view;
+  await go(place);
   sync.start();
   if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('./sw.js');
 }

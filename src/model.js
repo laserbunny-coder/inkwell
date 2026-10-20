@@ -66,7 +66,7 @@ export async function ensureSeed() {
 }
 
 export async function outline(projectId) {
-  const acts = await children(projectId);
+  const acts = (await children(projectId)).filter((r) => r.kind === 'act');
   for (const act of acts) act.chapters = await children(act.id);
   return acts;
 }
