@@ -4,6 +4,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { children, getEntry, putEntries } from './db.js';
 import { newId, tagsIn } from './model.js';
+import { placeSorts, bySort } from './order.js';
 
 // The notebook's pages (daily pages and named pages) are outlines: lines you
 // can nest, Workflowy-style. Every line is its own entry whose parent is the
@@ -217,12 +218,15 @@ export class OutlineStore {
     const rows = [];
     const present = new Set();
     const visit = (list, parentId) => {
-      let sort = 0;
-      list.forEach((item) => {
-        if (item.type.name !== 'listItem') return;
-        sort += 1;
+      const items = [];
+      list.forEach((item) => { if (item.type.name === 'listItem' && item.attrs.eid) items.push(item); });
+      const sorts = placeSorts(items.map((item) => {
+        const prev = this.cache.get(item.attrs.eid);
+        return prev && !prev.deleted && prev.parent_id === parentId ? prev.sort : undefined;
+      }));
+      items.forEach((item, i) => {
+        const sort = sorts[i];
         const id = item.attrs.eid;
-        if (!id) return;
         present.add(id);
         const para = item.firstChild;
         const content = para?.toJSON().content || null;
@@ -278,7 +282,7 @@ function toOutlineDoc(pageId, rows) {
     byParent.get(r.parent_id).push(r);
   }
   const list = (pid) => {
-    const items = (byParent.get(pid) || []).sort((a, b) => a.sort - b.sort).map((r) => {
+    const items = (byParent.get(pid) || []).sort(bySort).map((r) => {
       const content = [{ type: 'paragraph', ...(r.content ? { content: r.content } : {}) }];
       const kids = list(r.id);
       if (kids) content.push(kids);

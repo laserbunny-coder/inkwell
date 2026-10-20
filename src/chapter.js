@@ -1,6 +1,7 @@
 import { children, getEntry, putEntries, addSnapshot, snapshots } from './db.js';
 import { tagsIn, wordCount } from './model.js';
 import { refsIn } from './outline.js';
+import { placeSorts } from './order.js';
 
 const WAL = (id) => `wal:${id}`;
 const SNAPSHOT_IDLE_MS = 4000;
@@ -81,11 +82,15 @@ export class ChapterStore {
     const rows = [];
     const present = new Set();
     let words = 0;
-    let index = 0;
-    doc.forEach((node) => {
-      index += 1;
+    const nodes = [];
+    doc.forEach((node) => { if (node.attrs.eid) nodes.push(node); });
+    const sorts = placeSorts(nodes.map((node) => {
+      const prev = this.cache.get(node.attrs.eid);
+      return prev && !prev.deleted && prev.parent_id === chapter.id ? prev.sort : undefined;
+    }));
+    nodes.forEach((node, i) => {
+      const index = sorts[i];
       const id = node.attrs.eid;
-      if (!id) return;
       present.add(id);
       const kind = node.type.name === 'sceneBreak' ? 'scene' : node.type.name === 'heading' ? 'heading' : 'para';
       const text = node.textContent;

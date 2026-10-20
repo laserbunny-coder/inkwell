@@ -1,9 +1,11 @@
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { OutlineDoc, LineIds, EntryRef, TagMarks, OutlineStore, descendants } from './outline.js';
-import { getEntry, linkedFrom, byKind, putEntries } from './db.js';
+import { getEntry, linkedFrom, byKind, byTag, putEntries } from './db.js';
 import { entry } from './model.js';
+import { bySort } from './order.js';
 import { newPage } from './library.js';
+import { freshenRefs } from './links.js';
 
 // The notebook: a page for every day, plus named pages, all written as nested
 // lines. Lines can link to pages, days and chapters with [[, carry #tags, and
@@ -99,6 +101,7 @@ export class Notebook {
     this.page = this.store.page;
     this.editor.commands.setContent(doc, { emitUpdate: false });
     if (recovered) this.store.change(this.editor.state.doc);
+    freshenRefs(this.editor);
     this.renderHead();
     this.onPlace(this.page);
     await Promise.all([this.renderBacklinks(), this.renderPastDays()]);
@@ -187,7 +190,7 @@ export class Notebook {
   // Every line and paragraph with this tag, wherever it lives.
   async showTag(tag) {
     const panel = $('.tag-results');
-    const rows = [...await byKind('line'), ...await byKind('para')].filter((r) => !r.deleted && r.tags?.includes(tag))
+    const rows = (await byTag(tag)).filter((r) => r.kind === 'line' || r.kind === 'para')
       .sort((a, b) => b.updated_at - a.updated_at);
     $('#tag-results-title').textContent = `#${tag}`;
     const list = $('#tag-results-list');
@@ -251,7 +254,7 @@ function lineTree(dayId, rows) {
   }
   const list = (pid) => {
     const ul = document.createElement('ul');
-    for (const r of (byParent.get(pid) || []).sort((a, b) => a.sort - b.sort)) {
+    for (const r of (byParent.get(pid) || []).sort(bySort)) {
       const li = document.createElement('li');
       const p = document.createElement('p');
       p.dataset.line = r.id;

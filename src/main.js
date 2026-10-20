@@ -5,11 +5,14 @@ import { EntryIds, SceneBreak } from './schema.js';
 import { ChapterStore } from './chapter.js';
 import { NotesLayer } from './notes.js';
 import { BlockHandle } from './blocks.js';
-import { getMeta, setMeta, putEntries, children, getEntry, snapshots, byKind, onLocalWrites } from './db.js';
+import { getMeta, setMeta, putEntries, children, getEntry, snapshots, byKind, onLocalWrites, forgetDeleted } from './db.js';
 import { Sync } from './sync.js';
 import { ensureSeed, outline, entry, wordCount } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
 import { EntryRef, TagMarks } from './outline.js';
+import { retitleLinks, freshenRefs } from './links.js';
+import { Conflicts } from './conflicts.js';
+import { vaultZip } from './vault.js';
 import { Notebook, rootOf, titleOf, dayId } from './notebook.js';
 import { openPicker } from './picker.js';
 import { ensureAreas, areas, books, bookType, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, stats, dailyMentions, ago } from './library.js';
@@ -205,10 +208,15 @@ const sync = new Sync({
     syncEl.textContent = SYNC_LABELS[s] || '';
     syncEl.dataset.state = s;
     document.body.dataset.sync = s;
+    if (s === 'synced') conflicts.count();
   },
   onRemote: applyRemote
 });
-onLocalWrites(() => sync.soon());
+const conflicts = new Conflicts({ onApplied: (rows) => applyRemote(rows) });
+onLocalWrites((rows) => {
+  sync.soon();
+  retitleLinks(rows).then((changed) => { if (changed) { freshenRefs(editor); freshenRefs(notebook.editor); } }).catch((e) => console.error(e));
+});
 window.__sync = sync;
 syncEl.addEventListener('click', () => { if (syncEl.dataset.state === 'signed-out') sync.signIn(); else sync.soon(0); });
 
@@ -284,6 +292,7 @@ async function openChapter(id) {
   editor.commands.setContent(doc, { emitUpdate: false });
   if (recovered) store.change(editor.state.doc);
   else statusEl.textContent = 'Saved';
+  freshenRefs(editor);
   const book = await bookOf(store.chapter);
   if (book && book.id !== state.project?.id) state.project = book;
   if (state.project) state.acts = await outline(state.project.id);
@@ -857,6 +866,12 @@ async function exportChapter() {
   download(`${ch.title}.md`, chapterMarkdown(ch, await children(ch.id)));
 }
 
+async function exportVault() {
+  await store.close(editor.state.doc);
+  await notebook.close();
+  download(`Writing vault ${isoToday()}.zip`, await vaultZip());
+}
+
 async function exportBook() {
   await store.close(editor.state.doc);
   download(`${state.project.title}.md`, await bookMarkdown(state.project, state.acts));
@@ -891,7 +906,9 @@ const commands = [
   { label: 'Sign out of sync', keys: '', run: () => sync.signOut(), when: () => !!sync.user },
   { label: 'Change the writing font', keys: '', run: cycleFont },
   { label: 'Export this chapter as Markdown', keys: '', run: exportChapter, when: writing },
-  { label: 'Export the whole book as Markdown', keys: '', run: exportBook, when: () => writing() && !!state.project }
+  { label: 'Export the whole book as Markdown', keys: '', run: exportBook, when: () => writing() && !!state.project },
+  { label: 'Back up everything (download all as files)', keys: '', run: exportVault },
+  { label: 'Two versions to check', keys: '', run: () => conflicts.open(), when: () => !$('#versions').hidden }
 ];
 
 function isoToday() {
@@ -1036,6 +1053,7 @@ document.addEventListener('keydown', (e) => {
     if (!$('.page-settings').hidden) { $('.page-settings').hidden = true; currentEditor().commands.focus(); }
     if (!$('.history').hidden) { $('.history').hidden = true; editor.commands.focus(); }
     if (!$('.tag-results').hidden) { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
+    if (!$('.versions').hidden) conflicts.close();
     body.classList.remove('show-outline', 'show-top');
   }
 });
@@ -1063,6 +1081,9 @@ async function start() {
   await go(place);
   historyMode = 'push';
   sync.start();
+  conflicts.count();
+  // Deleted things are remembered for six months, then this device lets go of them.
+  forgetDeleted(Date.now() - 182 * 864e5).catch((e) => console.warn(e));
   if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('./sw.js');
 }
 

@@ -4,8 +4,10 @@
 // be linked to and tagged. Past versions live in their own store so they never
 // slow down the live draft.
 
+import { bySort } from './order.js';
+
 const DB_NAME = 'writing';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbPromise;
 
@@ -42,8 +44,18 @@ function open() {
         // Which entries mention which: one row per link, so "linked from" is a lookup, not a scan.
         req.transaction.objectStore('entries').createIndex('links', 'links', { multiEntry: true });
       }
+      if (e.oldVersion < 4) {
+        // One row per #tag, so a tag's lines are a lookup, not a scan.
+        req.transaction.objectStore('entries').createIndex('tags', 'tags', { multiEntry: true });
+      }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      // A newer version of the app opened in another tab and needs to upgrade
+      // storage: step aside and reload into the new version (the write-ahead
+      // copy keeps anything not yet saved).
+      req.result.onversionchange = () => { req.result.close(); location.reload(); };
+      resolve(req.result);
+    };
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
@@ -72,12 +84,18 @@ export async function getEntry(id) {
 export async function children(parentId) {
   const db = await open();
   const rows = await result(db.transaction('entries').objectStore('entries').index('parent_id').getAll(parentId));
-  return rows.filter((r) => !r.deleted).sort((a, b) => a.sort - b.sort);
+  return rows.filter((r) => !r.deleted).sort(bySort);
 }
 
 export async function linkedFrom(id) {
   const db = await open();
   const rows = await result(db.transaction('entries').objectStore('entries').index('links').getAll(id));
+  return rows.filter((r) => !r.deleted);
+}
+
+export async function byTag(tag) {
+  const db = await open();
+  const rows = await result(db.transaction('entries').objectStore('entries').index('tags').getAll(tag));
   return rows.filter((r) => !r.deleted);
 }
 
@@ -104,7 +122,7 @@ export async function putEntries(rows, { fromSync = false } = {}) {
     if (!fromSync) outbox.put({ id: row.id });
   }
   await done(tx);
-  if (!fromSync) onLocalWrite();
+  if (!fromSync) onLocalWrite(rows);
 }
 
 export async function outboxIds() {
@@ -142,6 +160,40 @@ export async function addConflict(row) {
   const tx = db.transaction('conflicts', 'readwrite');
   tx.objectStore('conflicts').add({ ...row, saved_at: Date.now() });
   return done(tx);
+}
+
+export async function conflicts() {
+  const db = await open();
+  return result(db.transaction('conflicts').objectStore('conflicts').getAll());
+}
+
+export async function dropConflict(key) {
+  const db = await open();
+  const tx = db.transaction('conflicts', 'readwrite');
+  tx.objectStore('conflicts').delete(key);
+  return done(tx);
+}
+
+// Deleted entries stay behind as markers so every device hears they're gone.
+// Once a marker is old and already sent to the cloud, this device can forget
+// it. The cloud keeps its copy, so a device that's been away still learns.
+export async function forgetDeleted(olderThan) {
+  const db = await open();
+  const tx = db.transaction(['entries', 'outbox'], 'readwrite');
+  const entries = tx.objectStore('entries');
+  const outbox = tx.objectStore('outbox');
+  let count = 0;
+  entries.index('updated_at').openCursor(IDBKeyRange.upperBound(olderThan)).onsuccess = (e) => {
+    const c = e.target.result;
+    if (!c) return;
+    const row = c.value;
+    if (row.deleted) {
+      outbox.getKey(row.id).onsuccess = (ev) => { if (ev.target.result === undefined) { entries.delete(row.id); count += 1; } };
+    }
+    c.continue();
+  };
+  await done(tx);
+  return count;
 }
 
 export async function addSnapshot(snap) {
