@@ -49,7 +49,13 @@ function open() {
         req.transaction.objectStore('entries').createIndex('tags', 'tags', { multiEntry: true });
       }
     };
+    // An older copy of the app, open in another window or tab, is holding the
+    // storage and the upgrade has to wait for it. Say so (and cover the page,
+    // so nothing is typed that can't be saved yet); it carries on by itself
+    // once that copy is closed.
+    req.onblocked = () => showBlocked(true);
     req.onsuccess = () => {
+      showBlocked(false);
       // A newer version of the app opened in another tab and needs to upgrade
       // storage: step aside and reload into the new version (the write-ahead
       // copy keeps anything not yet saved).
@@ -59,6 +65,17 @@ function open() {
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
+}
+
+function showBlocked(on) {
+  let el = document.getElementById('storage-blocked');
+  if (!on) { el?.remove(); return; }
+  if (el) return;
+  el = document.createElement('div');
+  el.id = 'storage-blocked';
+  el.setAttribute('role', 'alert');
+  el.innerHTML = '<div><p><strong>Finishing an update</strong></p><p>The writing app is also open in another window or tab with the older version. Close that copy and your writing will appear here. Nothing has been lost.</p></div>';
+  document.body.append(el);
 }
 
 function done(tx) {
