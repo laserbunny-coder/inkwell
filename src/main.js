@@ -1080,7 +1080,7 @@ const commands = [
   { group: 'view', label: 'Show or hide note dots', keys: '', run: () => setShown('dots', hidden().has('dots')) },
   { group: 'view', label: 'Show or hide alternate marks', keys: '', run: () => setShown('alts', hidden().has('alts')) },
   { group: 'view', label: 'Show or hide the paragraph handle', keys: '', run: () => setShown('handle', hidden().has('handle')) },
-  { group: 'view', label: 'Keyboard shortcuts', keys: `${mod}/`, run: toggleShortcuts },
+  { group: 'view', label: 'Keyboard shortcuts (all the keys)', keys: `${mod}/`, run: toggleShortcuts },
   { group: 'page', label: 'Page and text settings', keys: '', run: togglePageSettings },
   { group: 'page', label: 'Wider page', keys: 'Alt+]', run: () => setPage(currentWidth() + 40, currentSize()) },
   { group: 'page', label: 'Narrower page', keys: 'Alt+[', run: () => setPage(currentWidth() - 40, currentSize()) },
@@ -1181,7 +1181,8 @@ function filterPalette() {
     // Anything waiting on you stays at the top; then the categories.
     paletteItems = [
       ...commands.filter((c) => c.urgent && usable(c)),
-      ...GROUPS.map((g) => ({ label: g.label, hint: g.hint, keys: '›', stay: true, run: () => openGroup(g.id) }))
+      ...GROUPS.map((g) => ({ label: g.label, hint: g.hint, keys: '›', stay: true, run: () => openGroup(g.id) })),
+      { label: 'Keyboard shortcuts', hint: 'Every key, named for this computer', keys: `${mod}/`, run: toggleShortcuts }
     ];
   } else if (paletteMode === 'commands' && !q) {
     paletteItems = [

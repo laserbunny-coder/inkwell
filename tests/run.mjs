@@ -440,6 +440,14 @@ try {
     assert.equal(await p.locator('#focus-toggle').getAttribute('title'), 'Focus: just the text (Ctrl+.)');
     await p.keyboard.press('Escape');
     assert.equal(await p.locator('.shortcuts').isVisible(), false);
+    // The empty command menu has a row for the same list.
+    await sleep(300);
+    await p.keyboard.press('Control+K');
+    await p.locator('.palette li', { hasText: 'Keyboard shortcuts' }).click();
+    assert.equal(await p.locator('.shortcuts').isVisible(), true);
+    assert.equal(await p.locator('.palette').isVisible(), false);
+    await p.keyboard.press('Escape');
+    assert.equal(await p.locator('.shortcuts').isVisible(), false);
     await p.locator('#focus-toggle').click({ force: true });
     assert.equal(await p.evaluate(() => document.documentElement.classList.contains('focus')), true);
     await p.locator('#focus-toggle').click({ force: true });
@@ -483,14 +491,15 @@ try {
     await p.keyboard.press('Control+K');
     await p.waitForSelector('.palette', { state: 'visible' });
     const top = await p.locator('#palette-list li .label').allInnerTexts();
-    assert.equal(top.length, 6, top.join(' | '));
+    assert.equal(top.length, 7, top.join(' | '));
     assert.match(top[3], /^View/);
+    assert.match(top[6], /^Keyboard shortcuts/);
     await p.keyboard.press('ArrowDown'); await p.keyboard.press('ArrowDown'); await p.keyboard.press('ArrowDown');
     await p.keyboard.press('Enter');
     await p.waitForFunction(() => document.querySelector('#palette-input').placeholder === 'View…');
     assert.match(await p.locator('#palette-list li[aria-selected="true"]').innerText(), /Sidebar/);
     await p.keyboard.press('Backspace');
-    await p.waitForFunction(() => document.querySelectorAll('#palette-list li').length === 6);
+    await p.waitForFunction(() => document.querySelectorAll('#palette-list li').length === 7);
     await p.keyboard.type('light / dark');
     assert.match(await p.locator('#palette-list li').first().innerText(), /Light \/ dark/);
     await p.keyboard.press('Escape');

@@ -416,6 +416,8 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .shortcuts { position: fixed; left: 50%; top: 10vh; transform: translateX(-50%); z-index: 62; width: min(460px, calc(100% - 32px)); max-height: 80vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.18); padding: 16px 20px 18px; font-size: 14px; }
 .sc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .sc-group { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; margin: 12px 0 6px; }
+.shortcuts h3 { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 16px 0 8px; }
+.shortcuts h3:first-of-type { margin-top: 4px; }
 .shortcuts dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
 .shortcuts dt { font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
 .shortcuts dd { margin: 0; color: var(--muted); }
