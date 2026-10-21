@@ -17,7 +17,7 @@ import { chapterMarkdown, bookMarkdown, download } from './export.js';
 import { EntryRef, TagMarks } from './outline.js';
 import { retitleLinks, freshenRefs } from './links.js';
 import { Conflicts } from './conflicts.js';
-import { vaultZip } from './vault.js';
+import { vaultZip, pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, scriptPages, toFountain, fromFountain } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
 import { moveLine, toggleDone } from './outline.js';
@@ -62,7 +62,17 @@ const editor = new Editor({
 window.__editor = editor;
 
 const notes = new NotesLayer($('.notes-layer'), editor);
-const alts = new AltPanel(editor);
+// Alternates, with Claude's suggestions when you're signed in and online.
+// Tests stand in for Claude with window.__claude.
+const alts = new AltPanel(editor, {
+  ask: (body) => (window.__claude ? window.__claude(body) : sync.invoke('inkwell', body)),
+  canAsk: () => !!window.__claude || (!!sync.user && navigator.onLine && !!sync.backend?.invoke),
+  context: async () => {
+    const chapter = state.chapterId ? await getEntry(state.chapterId) : null;
+    const idea = state.project ? (await pagesIn(state.project.id)).find((p) => /^idea$/i.test(p.title || '')) : null;
+    return { book: state.project?.title || '', chapter: chapter?.title || '', idea: idea ? await pageMarkdown(idea) : '' };
+  }
+});
 
 const isText = (n) => n.type.name === 'paragraph' || n.type.name === 'heading';
 const blocks = new BlockHandle(editor, $('.sheet'), {

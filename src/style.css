@@ -514,6 +514,10 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 body.line-dragging, body.line-dragging * { user-select: none; }
 /* With the keyboard and a row up, leave room to scroll the last lines above them. */
 .outline-bar-on .notebook, .script-bar-on .sheet { padding-bottom: 60vh; }
+.alt-panel li.by-claude .alt-pick::after { content: '✦'; margin-left: 6px; font-size: 10px; color: var(--faint); vertical-align: .2em; }
+.alt-ask { align-self: flex-start; font-family: var(--ui); font-size: 13px; color: var(--muted); }
+.alt-ask:disabled { opacity: .7; cursor: progress; }
+.alt-note { color: var(--muted); }
 
 /* Tidying up: ⋯ menus, questions before big steps, the Undo note, the Trash */
 .more-btn { border: 0; background: transparent; color: var(--muted); width: 30px; height: 30px; border-radius: 8px; font-size: 18px; line-height: 1; padding: 0; flex: none; opacity: .55; }
