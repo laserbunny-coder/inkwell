@@ -1,4 +1,4 @@
-name: Publish the writing app
+name: Publish Inkwell
 
 on:
   push:
@@ -48,7 +48,7 @@ jobs:
         run: npm test
       - name: New cache name so phones pick up the update
         run: |
-          sed -i "s/writing-v1/writing-${GITHUB_SHA::8}/" dist/sw.js
+          sed -i "s/inkwell-v2/inkwell-${GITHUB_SHA::8}/" dist/sw.js
           touch dist/.nojekyll
       - uses: actions/configure-pages@v5
         with:
