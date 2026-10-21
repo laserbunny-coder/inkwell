@@ -315,3 +315,7 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 @media (hover: none) { .block-handle { opacity: .6; } }
 @media (max-width: 760px) { .block-handle { left: -30px; } .block-menu { left: -12px; } }
 @media (max-width: 700px) { .page { padding-left: 36px; } }
+
+#storage-blocked { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 24px; }
+#storage-blocked > div { max-width: 420px; font-family: var(--prose); font-size: 18px; color: var(--ink); line-height: 1.5; }
+#storage-blocked p { margin: 0 0 10px; }
