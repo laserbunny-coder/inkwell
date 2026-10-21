@@ -112,7 +112,7 @@ try {
 
   await check('everything downloads as one backup of plain files', async () => {
     const [download] = await Promise.all([p.waitForEvent('download'), command('Back up everything')]);
-    assert.match(download.suggestedFilename(), /^Writing vault \d{4}-\d\d-\d\d\.zip$/);
+    assert.match(download.suggestedFilename(), /^Inkwell vault \d{4}-\d\d-\d\d\.zip$/);
     const buf = await readFile(await download.path());
     assert.equal(buf.readUInt32LE(0), 0x04034b50, 'a zip file');
     const s = buf.toString('utf8');

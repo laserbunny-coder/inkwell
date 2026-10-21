@@ -907,7 +907,7 @@ async function exportChapter() {
 async function exportVault() {
   await store.close(editor.state.doc);
   await notebook.close();
-  download(`Writing vault ${isoToday()}.zip`, await vaultZip());
+  download(`Inkwell vault ${isoToday()}.zip`, await vaultZip());
 }
 
 async function exportBook() {
