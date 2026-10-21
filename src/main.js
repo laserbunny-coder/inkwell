@@ -95,11 +95,32 @@ function placeScriptBar() {
   const el = p.type.name === 'paragraph' ? p.attrs.el || 'action' : null;
   scriptBar.querySelectorAll('button').forEach((b) => b.classList.toggle('current', b.dataset.el === el));
 }
-// pointerdown, not click, so the keyboard stays up.
-scriptBar.addEventListener('pointerdown', (e) => {
-  const b = e.target.closest('button[data-el]');
-  if (!b) return;
-  e.preventDefault();
+// The rows above the keyboard: a quick tap runs a button; holding (or sliding)
+// scrolls the row instead, so a thumb resting on a button never sets it off.
+// pointerdown is held back so the keyboard stays up.
+const TAP_MS = 280;
+function tapBar(bar, selector, run) {
+  let start = null;
+  let hold = null;
+  const end = () => { clearTimeout(hold); bar.classList.remove('holding'); };
+  bar.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    const b = e.target.closest(selector);
+    start = b ? { b, x: e.clientX, y: e.clientY, t: performance.now(), left: bar.scrollLeft } : null;
+    clearTimeout(hold);
+    hold = setTimeout(() => bar.classList.add('holding'), TAP_MS);
+  });
+  bar.addEventListener('pointerup', (e) => {
+    end();
+    const s = start;
+    start = null;
+    if (!s) return;
+    const tap = performance.now() - s.t < TAP_MS && Math.hypot(e.clientX - s.x, e.clientY - s.y) < 10 && Math.abs(bar.scrollLeft - s.left) < 4;
+    if (tap) run(s.b);
+  });
+  bar.addEventListener('pointercancel', () => { end(); start = null; });
+}
+tapBar(scriptBar, 'button[data-el]', (b) => {
   if (b.dataset.el === 'section') {
     const at = editor.state.selection.$from.before(1);
     editor.chain().insertContentAt(at, { type: 'sceneBreak' }).run();
@@ -150,16 +171,13 @@ function placeOutlineBar() {
   z.textContent = zoomOut ? 'Out' : 'Zoom';
   z.setAttribute('aria-label', zoomOut ? 'Zoom out' : 'Zoom in');
 }
-outlineBar.addEventListener('pointerdown', (e) => {
-  const b = e.target.closest('button[data-do]');
-  if (!b) return;
-  e.preventDefault();
+tapBar(outlineBar, 'button[data-do]', (b) => {
   const ed = notebook.editor;
   const act = b.dataset.do;
   if (act === 'undo') ed.chain().focus().undo().run();
   else if (act === 'redo') ed.chain().focus().redo().run();
   else if (act === 'done') toggleDone(ed);
-  else if (act === 'move') return; // opens on click, so the tap doesn't land on the menu it opens
+  else if (act === 'move') setTimeout(moveLinePicker, 120); // after the tap's click, so it doesn't land on the menu
   else if (act === 'indent') ed.chain().focus().sinkListItem('listItem').run();
   else if (act === 'outdent') ed.chain().focus().liftListItem('listItem').run();
   else if (act === 'up' || act === 'down') moveLine(ed, act === 'up' ? -1 : 1);
@@ -168,11 +186,9 @@ outlineBar.addEventListener('pointerdown', (e) => {
     const before = $from.parent.textBetween(Math.max(0, $from.parentOffset - 1), $from.parentOffset);
     ed.chain().focus().insertContent(before && before !== ' ' ? ' #' : '#').run();
   } else if (act === 'link') openPicker(ed);
-  else if (act === 'fold') notebook.toggleFold();
   else if (act === 'zoom') { const here = notebook.currentLine(); notebook.zoomTo(notebook.zoom && here === notebook.zoom ? null : here); ed.commands.focus(); }
   placeOutlineBar();
 });
-outlineBar.querySelector('[data-do="move"]').addEventListener('click', () => moveLinePicker());
 notebook.editor.on('transaction', placeOutlineBar);
 notebook.editor.on('focus', placeOutlineBar);
 notebook.editor.on('blur', () => setTimeout(placeOutlineBar, 50));

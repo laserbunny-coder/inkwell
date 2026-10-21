@@ -202,14 +202,21 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 @media (min-width: 701px) { .hide-bullets #outline-editor .ProseMirror > ul { padding-left: 0; } }
 .hide-bullets #outline-editor .bullet::after { opacity: 0; transition: opacity .12s, transform .12s; }
 .hide-bullets #outline-editor .bullet:hover::after, .hide-bullets #outline-editor .bullet:focus-visible::after { opacity: 1; }
-@media (hover: none) { .hide-bullets #outline-editor li.here > .line-gutter .bullet::after { opacity: .6; } }
 #outline-editor li.folded > .line-gutter .bullet::after { box-shadow: 0 0 0 .22em var(--line); background: var(--muted); }
 #outline-editor .fold { left: 0; top: 0; width: .9em; height: 1.6em; opacity: 0; color: var(--muted); transition: opacity .12s, transform .12s; }
 #outline-editor .fold::after { content: ''; position: absolute; left: .28em; top: .62em; border: .2em solid transparent; border-top: .28em solid currentColor; border-bottom: 0; }
 #outline-editor li:hover > .line-gutter .fold, #outline-editor li.folded > .line-gutter .fold { opacity: .7; }
 #outline-editor li.folded > .line-gutter .fold { transform: rotate(-90deg); }
 #outline-editor li.folded > ul { display: none; }
-@media (hover: none) { #outline-editor li.has-kids > .line-gutter .fold { opacity: .45; } }
+/* On a phone the caret is the way to fold: always there (faintly) on lines with lines under them, with room for a thumb. */
+@media (hover: none) {
+  #outline-editor li.has-kids > .line-gutter .fold { opacity: .45; }
+  #outline-editor li.folded > .line-gutter .fold { opacity: .8; }
+  /* Without bullets the caret takes the bullet's spot, clear of the screen-edge strip; zoom is on the row. */
+  .hide-bullets #outline-editor .line-gutter .bullet { display: none; }
+  .hide-bullets #outline-editor .fold { left: auto; right: 0; width: 1.4em; }
+  .hide-bullets #outline-editor .fold::after { left: .5em; }
+}
 /* Zoomed in on one line */
 #outline-editor li.zoom-hidden { display: none; }
 #outline-editor li.zoom-path > p, #outline-editor li.zoom-path > .line-gutter, #outline-editor li.zoom-root > .line-gutter { display: none; }
@@ -432,10 +439,11 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .script-bar[hidden] { display: none; }
 .script-bar::-webkit-scrollbar { display: none; }
 .script-bar button { flex: 1 0 auto; border: 0; background: transparent; border-radius: 8px; padding: 9px 6px; font-family: var(--ui); font-size: 12px; color: var(--muted); }
+.script-bar.holding button { opacity: .6; }
 .script-bar button.current { background: var(--tint); color: var(--accent); font-weight: 600; }
 .script-bar-on .corner, .outline-bar-on .corner { display: none; }
 .outline-bar button { font-size: 15px; min-width: 40px; }
-.outline-bar button[data-do="fold"], .outline-bar button[data-do="zoom"], .outline-bar button[data-do="link"], .outline-bar button[data-do="done"], .outline-bar button[data-do="move"] { font-size: 12px; }
+.outline-bar button[data-do="zoom"], .outline-bar button[data-do="link"], .outline-bar button[data-do="done"], .outline-bar button[data-do="move"] { font-size: 12px; }
 .outline-bar button[data-do="undo"], .outline-bar button[data-do="redo"] { font-size: 18px; }
 .outline-bar button:disabled { opacity: .35; }
 .outline-bar .bar-gap { flex: 0 0 1px; margin: 6px 4px; background: var(--line); }
@@ -499,4 +507,4 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .line-drop { position: fixed; height: 2px; background: var(--accent); border-radius: 1px; z-index: 70; pointer-events: none; }
 #outline-editor li[data-done] > p { text-decoration: line-through; text-decoration-color: var(--faint); color: var(--muted); }
 #outline-editor li[data-done] > ul { opacity: .55; }
-body.line-dragging, body.line-dragging * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+body.line-dragging, body.line-dragging * { user-select: none; }

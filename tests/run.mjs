@@ -644,22 +644,32 @@ try {
     assert.equal(moved.length, 1);
     assert.equal(moved[0].parent_id, tomorrow);
     assert.equal(moved[0].deleted, false);
-    // The line you're on shows a faint dot; dragging it with a finger moves the line.
+    // Holding a button doesn't press it (holding is for scrolling the row); a quick tap does.
+    const order2 = await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do));
+    assert.equal(order2.indexOf('zoom'), order2.indexOf('down') + 1, order2.join(','));
+    assert.equal(order2.includes('fold'), false);
     await ph.evaluate(() => window.__outline.commands.focus('end'));
     await ph.keyboard.press('Enter');
     await ph.keyboard.type('Gulls');
-    await sleep(300);
-    const gull = ph.locator('#outline-editor li', { has: ph.locator(':scope > p', { hasText: /^Gulls$/ }) }).locator(':scope > .line-gutter .bullet');
-    assert.equal(await gull.evaluate((b) => getComputedStyle(b, '::after').opacity), '0.6');
-    const g = await gull.boundingBox();
-    const boats = await ph.locator('#outline-editor li > p', { hasText: /^Boats$/ }).boundingBox();
+    await sleep(200);
+    const nested = () => ph.evaluate(() => [...document.querySelectorAll('#outline-editor li li > p')].some((x) => x.textContent === 'Gulls'));
+    const ib = await ph.locator('.outline-bar [data-do="indent"]').boundingBox();
     const cdp = await phoneCtx.newCDPSession(ph);
-    const at = (x, y) => ({ touchPoints: [{ x, y }] });
-    const x = g.x + g.width / 2, y0 = g.y + g.height / 2;
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', ...at(x, y0) });
-    for (let i = 1; i <= 6; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', ...at(x, y0 + (boats.y + 4 - y0) * i / 6) }); await sleep(30); }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: ib.x + ib.width / 2, y: ib.y + ib.height / 2 }] });
+    await sleep(500);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    await ph.waitForFunction(() => { const t = [...document.querySelectorAll('#outline-editor li > p')].map((x) => x.textContent); return t.indexOf('Gulls') > -1 && t.indexOf('Gulls') < t.indexOf('Boats'); });
+    await sleep(300);
+    assert.equal(await nested(), false, 'a held button does nothing');
+    await tap('indent');
+    await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li li > p')].some((x) => x.textContent === 'Gulls'));
+    // A line with lines under it has a caret to fold it.
+    const parent = ph.locator('#outline-editor li.has-kids').first();
+    const caret = parent.locator(':scope > .line-gutter .fold');
+    assert.ok(Number(await caret.evaluate((b) => getComputedStyle(b).opacity)) > 0.3, 'caret shows on a phone');
+    await caret.tap();
+    await ph.waitForSelector('#outline-editor li.folded');
+    await caret.tap();
+    await ph.waitForFunction(() => !document.querySelector('#outline-editor li.folded'));
     await phoneCtx.close();
   });
 

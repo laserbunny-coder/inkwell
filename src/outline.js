@@ -193,9 +193,8 @@ export function moveLine(editor, dir) {
   return true;
 }
 
-// Drags a line by its dot (shown or not) to sit before or after another. On a
-// phone the line you're on shows a faint dot to drag by.
-function startDrag(view, dragged, event, { now = false, onClick } = {}) {
+// Drags a line by its dot (shown or not) to sit before or after another.
+function startDrag(view, dragged, event, { onClick } = {}) {
   const eid = dragged.querySelector(':scope > .line-gutter')?.dataset.eid;
   const x0 = event.clientX, y0 = event.clientY;
   let mark = null, drop = null;
@@ -206,9 +205,7 @@ function startDrag(view, dragged, event, { now = false, onClick } = {}) {
     document.body.append(mark);
     dragged.classList.add('dragging');
     document.body.classList.add('line-dragging');
-    window.getSelection()?.removeAllRanges();
   };
-  if (now) begin();
   const find = (e) => {
     const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('li');
     if (!hit || !view.dom.contains(hit) || dragged.contains(hit)) return null;
@@ -222,24 +219,15 @@ function startDrag(view, dragged, event, { now = false, onClick } = {}) {
     mark.hidden = !drop;
     if (drop) Object.assign(mark.style, { left: `${drop.box.left}px`, width: `${drop.box.width}px`, top: `${(drop.after ? drop.box.bottom : drop.box.top) - 1}px` });
   };
-  // A finger keeps going by touch events even if the browser gives up on the
-  // pointer, and while dragging the page must not scroll or pop a menu.
-  const still = (e) => { if (mark) e.preventDefault(); };
-  const touchMove = (e) => { if (!mark) return; e.preventDefault(); const t = e.touches[0]; if (t) move(t); };
   const done = (e) => {
-    if (e.type === 'pointercancel' && mark && e.pointerType === 'touch') return; // touchend finishes it
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', done);
     window.removeEventListener('pointercancel', done);
-    window.removeEventListener('touchmove', touchMove);
-    window.removeEventListener('touchend', done);
-    window.removeEventListener('touchcancel', done);
-    window.removeEventListener('contextmenu', still);
     if (!mark) { if (e.type === 'pointerup') onClick?.(); return; }
     mark.remove();
     dragged.classList.remove('dragging');
     document.body.classList.remove('line-dragging');
-    if (!drop || e.type === 'touchcancel') return;
+    if (!drop || e.type === 'pointercancel') return;
     const state = view.state;
     const posOf = (id) => { let at = -1; if (!id) return at; state.doc.descendants((n, pos) => { if (at < 0 && n.type.name === 'listItem' && n.attrs.eid === id) at = pos; return at < 0; }); return at; };
     const from = posOf(eid);
@@ -258,10 +246,6 @@ function startDrag(view, dragged, event, { now = false, onClick } = {}) {
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', done);
   window.addEventListener('pointercancel', done);
-  window.addEventListener('touchmove', touchMove, { passive: false });
-  window.addEventListener('touchend', done);
-  window.addEventListener('touchcancel', done);
-  window.addEventListener('contextmenu', still);
 }
 
 // Done: the line is struck through (Ctrl+Enter, or the Done button on a phone).
@@ -343,20 +327,13 @@ export const OutlineFold = Extension.create({
           return next;
         }
       },
-      view: (editorView) => {
-        // A finger dragging a line must not scroll the page. This has to be in
-        // place before the touch starts for the browser to honour it.
-        const still = (e) => { if (document.body.classList.contains('line-dragging')) e.preventDefault(); };
-        editorView.dom.addEventListener('touchmove', still, { passive: false });
-        return {
-        destroy() { editorView.dom.removeEventListener('touchmove', still); },
+      view: () => ({
         update(view, prev) {
           const a = foldKey.getState(view.state);
           const b = foldKey.getState(prev);
           if (a.zoom !== b.zoom) onZoom(a.zoom);
         }
-        };
-      },
+      }),
       // Keep the caret where you can see it: arrows skip over folded lines,
       // and anything typed or moved into a fold opens it.
       appendTransaction(trs, oldState, state) {
@@ -387,8 +364,7 @@ export const OutlineFold = Extension.create({
             const eid = node.attrs.eid;
             const kids = kidsOf(node);
             const folded = kids && st.folded.has(eid) && eid !== st.zoom;
-            const here = state.selection.$head.pos > pos && state.selection.$head.pos < pos + 1 + (node.firstChild?.nodeSize || 0) + 1;
-            const cls = [kids ? 'has-kids' : '', folded ? 'folded' : '', here ? 'here' : ''];
+            const cls = [kids ? 'has-kids' : '', folded ? 'folded' : ''];
             if (root) {
               if (eid === st.zoom) cls.push('zoom-root');
               else if (pos < root.from && pos + node.nodeSize > root.to) cls.push('zoom-path');
@@ -414,7 +390,8 @@ export const OutlineFold = Extension.create({
             const eid = b.parentElement.dataset.eid;
             if (!eid) return true;
             if (b.classList.contains('fold')) view.dispatch(view.state.tr.setMeta(foldKey, { fold: eid }));
-            // A click (or tap) zooms in; a drag moves the line.
+            // A click (or tap) zooms in; with a mouse, a drag moves the line. On a phone the row's arrows move it.
+            else if (event.pointerType === 'touch') view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid }));
             else startDrag(view, b.closest('li'), event, { onClick: () => view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid })) });
             return true;
           },
