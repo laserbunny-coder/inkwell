@@ -558,3 +558,9 @@ body.line-dragging, body.line-dragging * { user-select: none; }
 .lib-trash { margin-top: 36px; }
 .lib-trash summary { cursor: pointer; list-style: revert; }
 .lib-trash li .loose-title { flex: 1; }
+
+.lib-bar { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.lib-bar #lib-path { flex: 1; margin: 0; }
+.lib-sort { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.lib-sort select { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 5px 6px; margin-left: 4px; }
+.tree-more { color: var(--muted); font-size: 13px; }
