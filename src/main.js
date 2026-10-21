@@ -2,6 +2,7 @@ import './style.css';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { EntryIds, SceneBreak } from './schema.js';
+import { AltMark, ParagraphVersions, AltPanel, flip, newParagraphVersion } from './alts.js';
 import { ChapterStore } from './chapter.js';
 import { NotesLayer } from './notes.js';
 import { BlockHandle } from './blocks.js';
@@ -22,7 +23,7 @@ const $ = (s) => document.querySelector(s);
 const body = document.body;
 const root = document.documentElement;
 const extensions = [
-  StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false }), EntryIds, SceneBreak,
+  StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false }), EntryIds, SceneBreak, AltMark, ParagraphVersions,
   EntryRef.configure({ onPick: openPicker, onOpen: openEntry }),
   TagMarks.configure({ onTag: (t) => notebook.showTag(t) }),
   ScriptElements.configure({ isScript: () => isScript() })
@@ -54,11 +55,14 @@ const editor = new Editor({
 window.__editor = editor;
 
 const notes = new NotesLayer($('.notes-layer'), editor);
+const alts = new AltPanel(editor);
 
 const isText = (n) => n.type.name === 'paragraph' || n.type.name === 'heading';
 const blocks = new BlockHandle(editor, $('.sheet'), {
   actions: [
     { label: 'Add a note', keys: '⌘⇧N', when: isText, run: ({ node }) => notes.add(node.attrs.eid) },
+    { label: 'Versions of this paragraph', keys: '', when: isText, run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().setTextSelection(from + 1).focus().run(); alts.open({ scope: 'para' }); } },
+    { label: 'New version to rewrite', keys: '⌘⇧D', when: isText, run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().setTextSelection(from + 1).focus().run(); newParagraphVersion(editor); } },
     { label: 'Move up', keys: 'Alt+⇧↑', when: (_n, i) => i > 0, run: ({ index, handle }) => handle.move(index, index - 1) },
     { label: 'Move down', keys: 'Alt+⇧↓', when: (_n, i, count) => i < count - 1, run: ({ index, handle }) => handle.move(index, index + 2) },
     ...ELEMENTS.map((x) => ({ label: x.label, keys: '', when: (n) => isScript() && n.type.name === 'paragraph' && (n.attrs.el || 'action') !== x.id, run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().setTextSelection(from + 1).updateAttributes('paragraph', { el: x.id }).focus().run(); } })),
@@ -1063,6 +1067,11 @@ const commands = [
   { group: 'write', label: 'Script: Section (your own heading)', keys: '# ', run: () => { const at = editor.state.selection.$from.before(1); editor.chain().insertContentAt(at, { type: 'sceneBreak' }).run(); requestAnimationFrame(() => editor.view.nodeDOM(at)?.querySelector('input')?.focus()); }, when: () => writing() && isScript() },
   { group: 'write', label: 'Link to a page…', keys: '[[', run: () => openPicker(currentEditor()), when: () => writing() || inNotebook() },
   { group: 'write', label: 'Add a note to this paragraph', keys: `${mod}⇧N`, run: () => notes.add(), when: writing },
+  { group: 'write', label: 'Alternates for this word (or the selection)', keys: `${mod}⇧E`, run: () => alts.open({ scope: 'word', focusAdd: true }), when: writing },
+  { group: 'write', label: 'Versions of this paragraph', keys: '', run: () => alts.open({ scope: 'para' }), when: writing },
+  { group: 'write', label: 'New version of this paragraph to rewrite', keys: `${mod}⇧D`, run: () => newParagraphVersion(editor), when: writing },
+  { group: 'write', label: 'Next alternate (word, or else paragraph)', keys: '⌥↓', run: () => flip(editor, 1), when: writing },
+  { group: 'write', label: 'Previous alternate', keys: '⌥↑', run: () => flip(editor, -1), when: writing },
   { group: 'write', label: 'Scene break', keys: `${mod}⇧↵`, run: () => editor.chain().focus().insertSceneBreak().run(), when: writing },
   { group: 'write', label: 'History: earlier versions of this chapter', keys: `${mod}⇧H`, run: openHistory, when: writing },
   { group: 'write', label: 'Note categories: add, rename, recolour', keys: '', run: () => notes.editTypes() },
@@ -1072,6 +1081,7 @@ const commands = [
   { group: 'view', label: 'Focus: just the text (on / off)', keys: `${mod}.`, run: toggleFocus },
   { group: 'view', label: 'Show or hide "Linked from"', keys: '', run: () => setShown('links', hidden().has('links')) },
   { group: 'view', label: 'Show or hide note dots', keys: '', run: () => setShown('dots', hidden().has('dots')) },
+  { group: 'view', label: 'Show or hide alternate marks', keys: '', run: () => setShown('alts', hidden().has('alts')) },
   { group: 'view', label: 'Show or hide the paragraph handle', keys: '', run: () => setShown('handle', hidden().has('handle')) },
   { group: 'view', label: 'Keyboard shortcuts', keys: `${mod}/`, run: toggleShortcuts },
   { group: 'page', label: 'Page and text settings', keys: '', run: togglePageSettings },
@@ -1276,6 +1286,9 @@ document.addEventListener('keydown', (e) => {
   else if (m && k === '2' && writing()) { e.preventDefault(); toggleNotes(); }
   else if (m && e.shiftKey && k === 'n' && writing()) { e.preventDefault(); notes.add(); }
   else if (e.altKey && e.shiftKey && !m && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && writing() && editor.isFocused) { e.preventDefault(); blocks.moveCurrent(e.key === 'ArrowUp' ? -1 : 1); }
+  else if (m && e.shiftKey && k === 'e' && writing()) { e.preventDefault(); editor.commands.focus(); alts.toggle({ scope: 'word', focusAdd: true }); }
+  else if (m && e.shiftKey && k === 'd' && writing() && editor.isFocused) { e.preventDefault(); newParagraphVersion(editor); }
+  else if (e.altKey && !e.shiftKey && !m && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && writing() && editor.isFocused) { if (flip(editor, e.key === 'ArrowDown' ? 1 : -1)) e.preventDefault(); }
   else if (m && e.shiftKey && k === 'h' && writing()) { e.preventDefault(); openHistory(); }
   else if (m && e.shiftKey && k === 'l') { e.preventDefault(); toggleTheme(); }
   else if (e.altKey && !m && e.code === 'BracketRight') { e.preventDefault(); setPage(currentWidth() + 40, currentSize()); }
@@ -1284,6 +1297,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.altKey && !m && e.code === 'Minus') { e.preventDefault(); setPage(currentWidth(), currentSize() - 1); }
   else if (e.key === 'Escape' && root.classList.contains('reading')) toggleReading();
   else if (e.key === 'Escape') {
+    if (alts.isOpen) alts.close();
     if (!$('.page-settings').hidden) { $('.page-settings').hidden = true; currentEditor().commands.focus(); }
     if (!$('.history').hidden) { $('.history').hidden = true; editor.commands.focus(); }
     if (!$('.tag-results').hidden) { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
