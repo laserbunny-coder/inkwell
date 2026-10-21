@@ -1,3 +1,4 @@
+import { keyLabel } from './keys.js';
 // The six-dot handle beside each paragraph: drag it to move the paragraph,
 // click or tap it for that paragraph's actions.
 
@@ -161,7 +162,7 @@ export class BlockHandle {
       b.setAttribute('role', 'menuitem');
       b.innerHTML = '<span></span><span class="keys"></span>';
       b.firstChild.textContent = a.label;
-      b.lastChild.textContent = a.keys || '';
+      b.lastChild.textContent = keyLabel(a.keys) || '';
       b.addEventListener('click', () => { this.closeMenu(); a.run({ node, index: i, handle: this }); });
       this.menu.append(b);
     }

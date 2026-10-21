@@ -1,5 +1,6 @@
 import { Extension, Mark, getMarkRange } from '@tiptap/core';
 import { Fragment } from '@tiptap/pm/model';
+import { keyLabel } from './keys.js';
 
 // Alternates: a word, phrase or paragraph can hold other ways of saying it.
 // You keep writing with one showing and flip between them in place until one
@@ -324,18 +325,18 @@ export class AltPanel {
       if (hadFocus) input.focus();
       const hint = document.createElement('div');
       hint.className = 'hint';
-      hint.textContent = 'Enter adds it, ⇧Enter uses it. ⌥↑ ⌥↓ flip in place.';
+      hint.textContent = keyLabel('Enter adds it, ⇧Enter uses it. ⌥↑ ⌥↓ flip in place.');
       this.el.append(hint);
     } else {
       const add = document.createElement('button');
       add.type = 'button';
       add.className = 'pill';
       add.textContent = 'New version to rewrite';
-      add.title = 'Keeps this one and gives you a copy to change (⌘⇧D)';
+      add.title = keyLabel('Keeps this one and gives you a copy to change (⌘⇧D)');
       add.onclick = () => { newParagraphVersion(this.editor); this.editor.commands.focus(); };
       const hint = document.createElement('div');
       hint.className = 'hint';
-      hint.textContent = '⌥↑ ⌥↓ flip in place.';
+      hint.textContent = keyLabel('⌥↑ ⌥↓ flip in place.');
       this.el.append(add, hint);
     }
   }
