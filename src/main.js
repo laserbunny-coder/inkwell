@@ -10,6 +10,7 @@ import { NotesLayer } from './notes.js';
 import { BlockHandle } from './blocks.js';
 import { getMeta, setMeta, putEntries, children, getEntry, snapshots, byKind, onLocalWrites, forgetDeleted, isTrashed } from './db.js';
 import { trash, restore, trashed, deleteForever, contents } from './trash.js';
+import { searchIndex } from './search.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, toast, closeMenu } from './menu.js';
 import { Sync } from './sync.js';
 import { ensureSeed, outline, entry, wordCount } from './model.js';
@@ -676,6 +677,12 @@ async function drawRail() {
       onContextMenu(c, () => pageMenu(p));
       out.push(c);
     }
+    if (loose.length > 12) {
+      const more = make('button', 'tree-page tree-more', `All ${loose.length} loose pages ›`);
+      more.style.paddingLeft = '10px';
+      more.addEventListener('click', async () => { await go({ view: 'library', area: null }); $('#lib-loose-box').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      out.push(more);
+    }
   }
   tree.replaceChildren(...out);
   renderScenes();
@@ -945,6 +952,10 @@ async function bookMenu(book) {
     { label: 'Kind', sub: KINDS.map(([id, label]) => ({ label, current: bookType(b) === id, run: () => setKind(b, id) })) },
     { label: 'Move to area', sub: (await areaOptions(all)).map(([id, label]) => ({ label: label.trim(), current: b.area_id === id, run: () => moveBookToArea(b, id) })) },
     { label: 'New page in it', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(b.id); } },
+    ...(view() === 'library' ? [
+      { label: 'Move earlier in my order', run: () => nudgeBook(b, -1) },
+      { label: 'Move later in my order', run: () => nudgeBook(b, 1) }
+    ] : []),
     'sep',
     { label: 'Move to Trash…', danger: true, run: () => toTrash(b) }
   ];
@@ -1042,6 +1053,38 @@ async function renderTrash() {
 
 // ---------- library view ----------
 
+// How books are ordered in the Library, per device.
+const libSort = () => { try { return localStorage.getItem('libSort') || 'recent'; } catch { return 'recent'; } };
+// Your own order: a number on each book (synced, so it's the same on every
+// device). Books never placed yet follow, most recently edited first.
+const ORDER_KEY = (b) => b.fields?.order ?? Infinity;
+const byMyOrder = (a, b) => ORDER_KEY(a) - ORDER_KEY(b) || b.updated_at - a.updated_at;
+
+// Put a book just before (or after) another one in your order.
+async function placeBook(bookId, targetId, after = false) {
+  if (bookId === targetId) return;
+  const list = (await books()).sort(byMyOrder);
+  const moving = list.find((b) => b.id === bookId);
+  const rest = list.filter((b) => b.id !== bookId);
+  const at = rest.findIndex((b) => b.id === targetId);
+  if (!moving || at < 0) return;
+  rest.splice(after ? at + 1 : at, 0, moving);
+  const now = Date.now();
+  await putEntries(rest.map((b, i) => ({ b, i })).filter(({ b, i }) => b.fields?.order !== i + 1)
+    .map(({ b, i }) => ({ ...b, fields: { ...b.fields, order: i + 1 }, updated_at: now })));
+  if (libSort() !== 'custom') { try { localStorage.setItem('libSort', 'custom'); } catch { /* full */ } }
+  await refreshViews();
+}
+
+// One step earlier or later among the books shown right now.
+async function nudgeBook(book, dir) {
+  const shown = [...document.querySelectorAll('#lib-books .card-wrap[data-id]')].map((w) => w.dataset.id);
+  const list = shown.length && shown.includes(book.id) && libSort() === 'custom' ? shown : (await books()).sort(byMyOrder).map((b) => b.id);
+  const i = list.indexOf(book.id);
+  const target = list[i + dir];
+  if (target) await placeBook(book.id, target, dir > 0);
+}
+
 async function renderLibrary() {
   const [allAreas, allBooks, loose] = await Promise.all([areas(), books(), loosePages()]);
   if (state.libArea && !allAreas.some((a) => a.id === state.libArea)) state.libArea = null;
@@ -1076,7 +1119,12 @@ async function renderLibrary() {
 
   // Books in the picked area and everything nested under it.
   const ids = sel ? subtree(sel, allAreas) : null;
-  const shown = allBooks.filter((b) => !ids || ids.has(b.area_id)).sort((a, b) => b.updated_at - a.updated_at);
+  const sort = libSort();
+  const shown = allBooks.filter((b) => !ids || ids.has(b.area_id))
+    .sort(sort === 'custom' ? byMyOrder : sort === 'title' ? (a, b) => (a.title || '').localeCompare(b.title || '', undefined, { numeric: true }) : sort === 'made' ? (a, b) => b.created_at - a.created_at : (a, b) => b.updated_at - a.updated_at);
+  const sortSel = $('#lib-sort');
+  sortSel.value = sort;
+  sortSel.onchange = () => { try { localStorage.setItem('libSort', sortSel.value); } catch { /* full */ } renderLibrary(); };
   const cards = [];
   for (const b of shown) {
     const area = allAreas.find((a) => a.id === b.area_id);
@@ -1093,7 +1141,30 @@ async function renderLibrary() {
     card.addEventListener('click', () => go({ view: 'project', id: b.id }));
     onContextMenu(card, () => bookMenu(b));
     const wrap = make('div', 'card-wrap');
+    wrap.dataset.id = b.id;
     wrap.append(card, menuButton(() => bookMenu(b), `More for ${b.title || 'this book'}`));
+    // In your own order, drag a card onto another to put it there.
+    if (sort === 'custom') {
+      card.draggable = true;
+      card.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-book', b.id); e.dataTransfer.effectAllowed = 'move'; wrap.classList.add('dragging'); });
+      card.addEventListener('dragend', () => wrap.classList.remove('dragging'));
+      wrap.addEventListener('dragover', (e) => {
+        if (!e.dataTransfer.types.includes('text/x-book')) return;
+        e.preventDefault();
+        const r = wrap.getBoundingClientRect();
+        const after = e.clientX > r.left + r.width / 2;
+        wrap.classList.toggle('drop-before', !after);
+        wrap.classList.toggle('drop-after', after);
+      });
+      wrap.addEventListener('dragleave', () => wrap.classList.remove('drop-before', 'drop-after'));
+      wrap.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const after = wrap.classList.contains('drop-after');
+        wrap.classList.remove('drop-before', 'drop-after');
+        const id = e.dataTransfer.getData('text/x-book');
+        if (id) placeBook(id, b.id, after);
+      });
+    }
     cards.push(wrap);
   }
   const add = make('button', 'card card-new');
@@ -1492,6 +1563,7 @@ async function exportBook() {
 const writing = () => view() === 'write';
 const commands = [
   { group: 'go', label: 'Go to… a book, chapter or page', keys: `${mod}O`, run: () => openPalette('go') },
+  { group: 'go', label: 'Search inside all your writing', keys: `${mod}⇧F`, run: () => openPalette('search') },
   { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
   { group: 'go', label: 'Today’s page', keys: `${mod}J`, run: () => go({ view: 'notebook', pageId: dayId(isoToday()) }) },
   { group: 'go', label: 'Back to writing', keys: `${mod}J`, run: () => go({ view: 'write' }), when: () => !writing() },
@@ -1632,20 +1704,39 @@ let paletteMode = 'commands';
 let paletteSource = commands;
 let paletteReady = Promise.resolve();
 let paletteGroup = null;
+let searchIdx = null;
+const KIND_LABEL = { para: 'text', heading: 'heading', line: 'line', note: 'note', scene: 'scene', project: 'book', chapter: 'chapter', page: 'page', area: 'area' };
+
+// A search result: open it where it lives, with the caret on it.
+async function openHit(row) {
+  if (row.kind === 'note') { await openEntry(row.parent_id); if (!notes.visible) notes.setVisible(true); return; }
+  if (row.kind === 'chapter') return go({ view: 'write', chapterId: row.id });
+  return openEntry(row.id);
+}
 
 async function openPalette(mode = 'commands', only) {
   // Open and focus at once so nothing typed is lost; the list fills in after.
   paletteMode = mode;
   paletteGroup = null;
-  paletteSource = mode === 'go' || mode === 'move' ? [] : commands;
+  paletteSource = mode === 'go' || mode === 'move' || mode === 'search' ? [] : commands;
   paletteReady = Promise.resolve();
   $('.palette').hidden = false;
   $('.palette-backdrop').hidden = false;
   const input = $('#palette-input');
-  input.placeholder = mode === 'move' ? 'Move this line to…' : mode === 'go' ? (only === 'books' ? 'Go to a book…' : 'Go to a book, chapter, page or day…') : 'Type a command…';
-  input.value = '';
+  input.placeholder = mode === 'search' ? 'Search all your writing…' : mode === 'move' ? 'Move this line to…' : mode === 'go' ? (only === 'books' ? 'Go to a book…' : 'Go to a book, chapter, page or day…') : 'Type a command…';
+  input.value = typeof only === 'string' && mode === 'search' ? only : '';
   input.focus();
   filterPalette();
+  if (mode === 'search') {
+    // Stores what's written now; each search after that is instant.
+    searchIdx = null;
+    paletteReady = (async () => { await store.close(editor.state.doc); await notebook.close(); return searchIndex(); })().then((idx) => {
+      if (paletteMode !== 'search') return;
+      searchIdx = idx;
+      filterPalette();
+    });
+    await paletteReady;
+  }
   if (mode === 'go' || mode === 'move') {
     paletteReady = (mode === 'move' ? only() : places(only)).then((list) => {
       if (paletteMode !== mode) return;
@@ -1686,9 +1777,22 @@ function filterPalette() {
       { label: '‹ All commands', keys: '', stay: true, back: true, run: () => openGroup(null) },
       ...commands.filter((c) => c.group === paletteGroup && usable(c))
     ];
+  } else if (paletteMode === 'search') {
+    const raw = $('#palette-input').value;
+    const hits = searchIdx ? searchIdx.find(raw) : [];
+    paletteItems = hits.map((h) => ({ label: h.snippet, hint: h.where, keys: KIND_LABEL[h.row.kind] || '', run: () => openHit(h.row) }));
+    if (!paletteItems.length) {
+      const note = !searchIdx ? 'Looking…' : raw.trim().length < 2 ? 'Type a word or two from anything you’ve written' : 'Nothing found';
+      paletteItems = [{ label: note, keys: '', stay: true, run: () => {} }];
+    }
   } else {
     const inGroup = (c) => !paletteGroup || paletteMode !== 'commands' || c.group === paletteGroup;
     paletteItems = paletteSource.filter((c) => usable(c) && inGroup(c) && c.label.toLowerCase().includes(q)).slice(0, 60);
+    // Not a title? Offer to look inside the writing too.
+    if (paletteMode === 'go' && q.length > 1) {
+      const text = $('#palette-input').value.trim();
+      paletteItems.push({ label: `Search inside your writing for “${text}”`, keys: `${mod}⇧F`, stay: true, run: () => openPalette('search', text) });
+    }
   }
   // In a category, start on its first command rather than the way back.
   paletteIndex = paletteItems[0]?.back && paletteItems.length > 1 ? 1 : 0;
@@ -1771,6 +1875,7 @@ document.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (m && k === 'k') { e.preventDefault(); $('.palette').hidden ? openPalette() : closePalette(); }
   else if (m && e.key === '.') { e.preventDefault(); toggleFocus(); }
+  else if (m && e.shiftKey && k === 'f') { e.preventDefault(); openPalette('search'); }
   else if (m && e.shiftKey && k === 'o') { e.preventDefault(); go({ view: 'library', area: null }); }
   else if (m && k === 'o') { e.preventDefault(); openPalette('go'); }
   else if (m && e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); step(e.key === 'ArrowDown' ? 1 : -1); }
