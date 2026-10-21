@@ -93,6 +93,10 @@ function result(req) {
   });
 }
 
+// Gone from view: deleted for good, or in the Trash (still there, and can come back).
+export const isTrashed = (r) => !!r?.fields?.trashed;
+const live = (r) => !r.deleted && !isTrashed(r);
+
 export async function getEntry(id) {
   const db = await open();
   return result(db.transaction('entries').objectStore('entries').get(id));
@@ -101,25 +105,25 @@ export async function getEntry(id) {
 export async function children(parentId) {
   const db = await open();
   const rows = await result(db.transaction('entries').objectStore('entries').index('parent_id').getAll(parentId));
-  return rows.filter((r) => !r.deleted).sort(bySort);
+  return rows.filter(live).sort(bySort);
 }
 
 export async function linkedFrom(id) {
   const db = await open();
   const rows = await result(db.transaction('entries').objectStore('entries').index('links').getAll(id));
-  return rows.filter((r) => !r.deleted);
+  return rows.filter(live);
 }
 
 export async function byTag(tag) {
   const db = await open();
   const rows = await result(db.transaction('entries').objectStore('entries').index('tags').getAll(tag));
-  return rows.filter((r) => !r.deleted);
+  return rows.filter(live);
 }
 
-export async function byKind(kind) {
+export async function byKind(kind, { withTrash = false } = {}) {
   const db = await open();
   const rows = await result(db.transaction('entries').objectStore('entries').index('kind').getAll(kind));
-  return rows.filter((r) => !r.deleted);
+  return rows.filter((r) => !r.deleted && (withTrash || !isTrashed(r)));
 }
 
 let onLocalWrite = () => {};

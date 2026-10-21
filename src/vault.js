@@ -27,6 +27,8 @@ export async function pageMarkdown(page) {
 export async function vaultFiles() {
   const rows = await allEntries();
   const live = rows.filter((r) => !r.deleted);
+  // The Trash is kept in vault.json, but not written out as files.
+  const shown = live.filter((r) => !r.fields?.trashed);
   const areas = new Map(live.filter((r) => r.kind === 'area').map((a) => [a.id, a]));
   const used = new Set();
   const files = [];
@@ -41,20 +43,20 @@ export async function vaultFiles() {
     for (let a = areas.get(id), i = 0; a && i < 50; a = areas.get(a.parent_id), i++) parts.unshift(clean(a.title));
     return parts.length ? parts.join('/') : 'No area';
   };
-  const pagesUnder = (pid) => live.filter((r) => r.kind === 'page' && r.parent_id === pid);
+  const pagesUnder = (pid) => shown.filter((r) => r.kind === 'page' && r.parent_id === pid);
 
-  for (const book of live.filter((r) => r.kind === 'project')) {
+  for (const book of shown.filter((r) => r.kind === 'project')) {
     const dir = `Library/${areaPath(book.area_id)}/${clean(book.title)}`;
     const acts = await outline(book.id);
     if (acts.length && book.fields?.type === 'screenplay') {
       const rows = [];
-      for (const act of acts) for (const ch of act.chapters) rows.push(...live.filter((r) => r.parent_id === ch.id).sort((a, b) => a.sort - b.sort));
+      for (const act of acts) for (const ch of act.chapters) rows.push(...shown.filter((r) => r.parent_id === ch.id).sort((a, b) => a.sort - b.sort));
       add(`${dir}/${clean(book.title)}.fountain`, toFountain(book.title, rows));
     } else if (acts.length) add(`${dir}/${clean(book.title)}.md`, await bookMarkdown(book, acts));
     for (const p of pagesUnder(book.id)) add(`${dir}/${clean(p.title)}.md`, await pageMarkdown(p));
   }
   for (const p of pagesUnder(null)) add(`Loose pages/${clean(p.title)}.md`, await pageMarkdown(p));
-  for (const d of live.filter((r) => r.kind === 'day').sort((a, b) => (a.title < b.title ? -1 : 1))) {
+  for (const d of shown.filter((r) => r.kind === 'day').sort((a, b) => (a.title < b.title ? -1 : 1))) {
     const md = await pageMarkdown(d);
     if (md.includes('\n- ')) add(`Daily pages/${clean(d.title)}.md`, md);
   }

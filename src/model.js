@@ -64,7 +64,8 @@ export async function saveNoteTypes(types) {
 
 // First run: one empty project with one act and one chapter to start writing in.
 export async function ensureSeed() {
-  const projects = await byKind('project');
+  // Books in the Trash count: putting your only book there shouldn't make a new one.
+  const projects = await byKind('project', { withTrash: true });
   if (projects.length) return projects[0];
   const project = entry('project', { title: 'Untitled novel', fields: { levels: ['Act', 'Chapter', 'Scene'] } });
   const act = entry('act', { parent_id: project.id, title: 'Act One', sort: 1 });
