@@ -346,3 +346,17 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .hide-handle .block-handle, .focus .block-handle { display: none; }
 .focus .corner { opacity: 0; }
 .focus .corner:hover, .focus .corner:focus-within { opacity: 1; }
+#focus-toggle[aria-pressed="true"] { color: var(--accent); }
+/* On a touch screen there's no hover, so in focus mode only a faint Focus button stays, to tap your way out. */
+@media (hover: none) {
+  .focus .corner { opacity: .3; }
+  .focus .corner > :not(#focus-toggle) { display: none; }
+}
+
+/* Shortcuts sheet */
+.shortcuts { position: fixed; left: 50%; top: 10vh; transform: translateX(-50%); z-index: 62; width: min(460px, calc(100% - 32px)); max-height: 80vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.18); padding: 16px 20px 18px; font-size: 14px; }
+.sc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.sc-group { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; margin: 12px 0 6px; }
+.shortcuts dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.shortcuts dt { font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
+.shortcuts dd { margin: 0; color: var(--muted); }

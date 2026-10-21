@@ -412,6 +412,28 @@ try {
     await p.keyboard.press('Control+.');
   });
 
+  await check('shortcuts: Library, a day back, the shortcuts sheet and the Focus button', async () => {
+    await p.keyboard.press('Control+Shift+O');
+    await p.waitForSelector('main.library', { state: 'visible' });
+    await p.keyboard.press('Control+J');
+    await p.waitForSelector('.notebook', { state: 'visible' });
+    await p.waitForFunction(() => document.querySelector('#nb-kind').textContent === 'Today');
+    const today = await p.evaluate(() => document.querySelector('#nb-title').textContent);
+    await p.keyboard.press('Control+Alt+ArrowUp');
+    await p.waitForFunction((t) => document.querySelector('#nb-title').textContent !== t, today);
+    await p.keyboard.press('Control+Alt+ArrowDown');
+    await p.waitForFunction((t) => document.querySelector('#nb-title').textContent === t, today);
+    await p.keyboard.press('Control+/');
+    assert.equal(await p.locator('.shortcuts').isVisible(), true);
+    await p.keyboard.press('Escape');
+    assert.equal(await p.locator('.shortcuts').isVisible(), false);
+    await p.locator('#focus-toggle').click({ force: true });
+    assert.equal(await p.evaluate(() => document.documentElement.classList.contains('focus')), true);
+    await p.locator('#focus-toggle').click({ force: true });
+    assert.equal(await p.evaluate(() => document.documentElement.classList.contains('focus')), false);
+    await p.keyboard.press('Control+J');
+  });
+
   await check('no page errors', async () => assert.deepEqual(errors, []));
 } finally {
   await browser.close();

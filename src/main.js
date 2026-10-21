@@ -765,9 +765,11 @@ async function renderProject() {
 
 // ---------- panels revealed by edges ----------
 
-$('.edge-left').addEventListener('mouseenter', () => body.classList.add('show-outline'));
+// The browser can fire a stray hover when the layout shifts (like turning focus on), so edges ignore it then.
+let edgesQuietUntil = 0;
+$('.edge-left').addEventListener('mouseenter', () => { if (Date.now() > edgesQuietUntil) body.classList.add('show-outline'); });
 $('.outline').addEventListener('mouseleave', () => body.classList.remove('show-outline'));
-$('.edge-top').addEventListener('mouseenter', () => body.classList.add('show-top'));
+$('.edge-top').addEventListener('mouseenter', () => { if (Date.now() > edgesQuietUntil) body.classList.add('show-top'); });
 $('.topbar').addEventListener('mouseleave', () => body.classList.remove('show-top'));
 
 // ---------- history ----------
@@ -861,6 +863,7 @@ function toggleFocus() {
   const on = !root.classList.contains('focus');
   root.classList.toggle('focus', on);
   localStorage.setItem('focus', on ? '1' : '0');
+  edgesQuietUntil = Date.now() + 600;
   body.classList.remove('show-outline', 'show-top');
   syncSwitches();
 }
@@ -868,7 +871,20 @@ function syncSwitches() {
   const h = hidden();
   document.querySelectorAll('[data-show]').forEach((c) => { c.checked = !h.has(c.dataset.show); });
   $('#focus-mode').checked = root.classList.contains('focus');
+  $('#focus-toggle').setAttribute('aria-pressed', String(root.classList.contains('focus')));
 }
+
+// Next or previous chapter in the book, or day on a daily page.
+async function step(dir) {
+  if (inNotebook()) return notebook.step(dir);
+  if (!writing() || !state.project) return;
+  const chapters = (await outline(state.project.id)).flatMap((a) => a.chapters);
+  const i = chapters.findIndex((c) => c.id === state.chapterId);
+  const next = chapters[i + dir];
+  if (next) go({ view: 'write', chapterId: next.id });
+}
+
+const toggleShortcuts = () => { const s = $('.shortcuts'); s.hidden = !s.hidden; if (s.hidden) currentEditor().commands.focus(); };
 document.querySelectorAll('[data-show]').forEach((c) => c.addEventListener('change', () => setShown(c.dataset.show, c.checked)));
 $('#focus-mode').addEventListener('change', toggleFocus);
 syncSwitches();
@@ -882,6 +898,10 @@ $('#page-done').addEventListener('click', togglePageSettings);
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 const mod = isMac ? '⌘' : 'Ctrl+';
+if (!isMac) document.querySelectorAll('.shortcuts dt, .corner [title], .rail-top .keys').forEach((el) => {
+  const fix = (t) => t.replaceAll('⌘', 'Ctrl+').replaceAll('⌥', 'Alt+').replaceAll('⇧', 'Shift+');
+  if (!el.title) el.textContent = fix(el.textContent); else el.title = fix(el.title);
+});
 
 function toggleTheme() {
   const dark = getComputedStyle(document.documentElement).colorScheme === 'dark';
@@ -918,9 +938,12 @@ async function exportBook() {
 const writing = () => view() === 'write';
 const commands = [
   { label: 'Go to… a book, chapter or page', keys: `${mod}O`, run: () => openPalette('go') },
-  { label: 'Library', keys: '', run: () => go({ view: 'library', area: null }) },
+  { label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
   { label: 'Today’s page', keys: `${mod}J`, run: () => go({ view: 'notebook', pageId: dayId(isoToday()) }) },
   { label: 'Back to writing', keys: `${mod}J`, run: () => go({ view: 'write' }), when: () => !writing() },
+  { label: 'Next chapter (or day)', keys: `${mod}⌥↓`, run: () => step(1), when: () => writing() || inNotebook() },
+  { label: 'Previous chapter (or day)', keys: `${mod}⌥↑`, run: () => step(-1), when: () => writing() || inNotebook() },
+  { label: 'Keyboard shortcuts', keys: `${mod}/`, run: toggleShortcuts },
   { label: 'New novel', keys: '', run: () => showNewBook('novel') },
   { label: 'New notes collection', keys: '', run: () => showNewBook('notes') },
   { label: 'New page', keys: '', run: newPageHere },
@@ -1071,6 +1094,8 @@ document.addEventListener('click', (e) => {
   if (cmd === 'new-act') newAct();
   if (cmd === 'new-page') newPageHere();
   if (cmd === 'view') toggleWriteToday();
+  if (cmd === 'focus') toggleFocus();
+  if (cmd === 'shortcuts') toggleShortcuts();
   if (cmd === 'library') go({ view: 'library', area: null });
   if (cmd === 'today') go({ view: 'notebook', pageId: dayId(isoToday()) });
   if (cmd === 'close-tag') { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
@@ -1081,7 +1106,12 @@ document.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (m && k === 'k') { e.preventDefault(); $('.palette').hidden ? openPalette() : closePalette(); }
   else if (m && e.key === '.') { e.preventDefault(); toggleFocus(); }
+  else if (m && e.shiftKey && k === 'o') { e.preventDefault(); go({ view: 'library', area: null }); }
   else if (m && k === 'o') { e.preventDefault(); openPalette('go'); }
+  else if (m && e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); step(e.key === 'ArrowDown' ? 1 : -1); }
+  else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketLeft') { e.preventDefault(); history.back(); }
+  else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketRight') { e.preventDefault(); history.forward(); }
+  else if (m && (e.key === '/' || e.code === 'Slash')) { e.preventDefault(); toggleShortcuts(); }
   else if (m && k === 'j') { e.preventDefault(); toggleWriteToday(); }
   else if (m && k === '1') { e.preventDefault(); body.classList.toggle('pin-outline'); }
   else if (m && k === '2' && writing()) { e.preventDefault(); toggleNotes(); }
@@ -1098,6 +1128,7 @@ document.addEventListener('keydown', (e) => {
     if (!$('.history').hidden) { $('.history').hidden = true; editor.commands.focus(); }
     if (!$('.tag-results').hidden) { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
     if (!$('.versions').hidden) conflicts.close();
+    if (!$('.shortcuts').hidden) toggleShortcuts();
     body.classList.remove('show-outline', 'show-top');
   }
 });

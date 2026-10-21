@@ -50,7 +50,7 @@
 
   <nav class="outline" aria-label="Library">
     <div class="rail-top">
-      <button type="button" class="tree-top" data-cmd="library">Library <span class="keys">⌘O</span></button>
+      <button type="button" class="tree-top" data-cmd="library">Library <span class="keys">⌘⇧O</span></button>
       <button type="button" class="tree-top" data-cmd="today">Today <span class="keys">⌘J</span></button>
     </div>
     <div id="outline-tree"></div>
@@ -204,11 +204,37 @@
   </div>
 
   <div class="corner">
-    <button type="button" class="ghost-btn" data-cmd="page" aria-label="Page width and text size">Aa</button>
-    <button type="button" class="ghost-btn" data-cmd="notes" id="notes-toggle">Notes</button>
-    <button type="button" class="ghost-btn" data-cmd="library" id="library-toggle">Library</button>
-    <button type="button" class="ghost-btn" data-cmd="view" id="view-toggle">Today</button>
-    <button type="button" class="ghost-btn" data-cmd="palette">⌘K</button>
+    <button type="button" class="ghost-btn" data-cmd="page" aria-label="Page width and text size" title="Page width, text size, what to show">Aa</button>
+    <button type="button" class="ghost-btn" data-cmd="notes" id="notes-toggle" title="Notes beside the text (⌘2)">Notes</button>
+    <button type="button" class="ghost-btn" data-cmd="library" id="library-toggle" title="Library (⌘⇧O)">Library</button>
+    <button type="button" class="ghost-btn" data-cmd="view" id="view-toggle" title="Today’s page and back (⌘J)">Today</button>
+    <button type="button" class="ghost-btn" data-cmd="focus" id="focus-toggle" title="Focus: just the text (⌘.)">Focus</button>
+    <button type="button" class="ghost-btn" data-cmd="palette" title="Everything you can do (⌘K). Shortcuts: ⌘/">⌘K</button>
+  </div>
+
+  <div class="shortcuts" role="dialog" aria-label="Keyboard shortcuts" hidden>
+    <div class="sc-head"><strong>Shortcuts</strong><button type="button" class="ghost-btn" data-cmd="shortcuts">Close</button></div>
+    <div class="sc-group">Getting around</div>
+    <dl>
+      <dt>⌘J</dt><dd>Today’s page, and back to writing</dd>
+      <dt>⌘⇧O</dt><dd>Library</dd>
+      <dt>⌘O</dt><dd>Go to a book, chapter or page</dd>
+      <dt>⌘⌥↓ ⌘⌥↑</dt><dd>Next or previous chapter (or day)</dd>
+      <dt>⌘[ ⌘]</dt><dd>Back and forward</dd>
+      <dt>⌘K</dt><dd>Everything you can do</dd>
+    </dl>
+    <div class="sc-group">Writing</div>
+    <dl>
+      <dt>⌘.</dt><dd>Focus: just the text</dd>
+      <dt>⌘1</dt><dd>Keep the sidebar open</dd>
+      <dt>⌘2</dt><dd>Notes beside the text</dd>
+      <dt>⌘⇧N</dt><dd>Add a note to this paragraph</dd>
+      <dt>[[</dt><dd>Link to a page</dd>
+      <dt>⌥⇧↑ ⌥⇧↓</dt><dd>Move the paragraph up or down</dd>
+      <dt>⌘⇧↵</dt><dd>Scene break</dd>
+      <dt>⌘⇧H</dt><dd>Earlier versions of this chapter</dd>
+      <dt>⌘⇧L</dt><dd>Light or dark</dd>
+    </dl>
   </div>
 
   <script type="module" src="./src/main.js"></script>
