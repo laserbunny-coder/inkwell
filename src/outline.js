@@ -29,7 +29,23 @@ export const LineIds = Extension.create({
           default: false,
           parseHTML: (el) => el.hasAttribute('data-done'),
           renderHTML: (a) => (a.done ? { 'data-done': '' } : {})
-        }
+        },
+        // A line can gather a tag: everything tagged with it lands under it.
+        gather: {
+          default: null,
+          keepOnSplit: false,
+          parseHTML: (el) => el.getAttribute('data-gather'),
+          renderHTML: (a) => (a.gather ? { 'data-gather': a.gather } : {})
+        },
+        // A mirror shows (and edits) another line or paragraph, wherever it lives.
+        mirror: {
+          default: null,
+          keepOnSplit: false,
+          parseHTML: (el) => el.getAttribute('data-mirror'),
+          renderHTML: (a) => (a.mirror ? { 'data-mirror': '' } : {})
+        },
+        // What it has gathered so far, so a line you delete stays gone.
+        gathered: { default: null, keepOnSplit: false, parseHTML: () => null, renderHTML: () => ({}) }
       }
     }];
   },
@@ -140,6 +156,96 @@ export const TagMarks = Extension.create({
             if (!t || event.altKey) return false;
             event.preventDefault();
             onTag(t.dataset.tag);
+            return true;
+          }
+        }
+      }
+    })];
+  }
+});
+
+// A gathering line wears a small #tag after its words; clicking it lists the
+// tag. A mirror shows, faintly on hover, where its original lives; clicking
+// that opens it there. Both are drawn by CSS from attributes, not widgets in
+// the text, so arrow keys and the caret move past them as if they weren't there.
+export const mirrorKey = new PluginKey('gatherBadge');
+export const GatherBadge = Extension.create({
+  name: 'gatherBadge',
+  addOptions() { return { onTag: () => {}, onOpen: () => {}, origin: () => '' }; },
+  addProseMirrorPlugins() {
+    const { onTag, onOpen, origin } = this.options;
+    const build = (doc) => {
+      const decos = [];
+      doc.descendants((node, pos) => {
+        if (node.type.name !== 'listItem' || !node.firstChild) return;
+        if (node.attrs.mirror) {
+          const from = origin(node.attrs.mirror);
+          decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'mirror', ...(from ? { 'data-from': from } : {}) }));
+        }
+        if (node.attrs.gather) {
+          decos.push(Decoration.node(pos + 1, pos + 1 + node.firstChild.nodeSize, { class: 'gathers', 'data-gathers': `#${node.attrs.gather}` }));
+        }
+      });
+      return DecorationSet.create(doc, decos);
+    };
+    // Clicks past the end of a line's words land on the drawn label.
+    const pastWords = (p, event) => {
+      const r = document.createRange();
+      r.selectNodeContents(p);
+      const rects = [...r.getClientRects()].filter((x) => x.width);
+      const last = rects.at(-1);
+      if (!last) return false;
+      const chip = parseFloat(getComputedStyle(p, '::after').width) || 80;
+      return event.clientY >= last.top && event.clientY <= last.bottom && event.clientX > last.right + 4 && event.clientX < last.right + 12 + chip;
+    };
+    const hit = (event) => {
+      const li = event.target.closest?.('li.mirror[data-from]');
+      if (li && event.target === li) {
+        const p = li.querySelector(':scope > p');
+        if (p && event.clientX > p.getBoundingClientRect().right - 24) return { open: li };
+      }
+      const p = event.target.closest?.('p.gathers');
+      if (p && event.target === p && pastWords(p, event)) return { tag: p };
+      return null;
+    };
+    return [new Plugin({
+      key: mirrorKey,
+      // Clearing a mirror's words takes the mirror off this line (the
+      // original keeps its words), so an emptied line never refills itself.
+      appendTransaction(trs, _old, state) {
+        if (!trs.some((t) => t.docChanged)) return null;
+        let tr = null;
+        state.doc.descendants((node, pos) => {
+          if (node.type.name !== 'listItem' || !node.attrs.mirror || node.firstChild?.content.size) return;
+          tr = tr || state.tr;
+          // A fresh id too: the mirror's id stays free in case it's brought back.
+          tr.setNodeMarkup(pos, undefined, { ...node.attrs, mirror: null, eid: null });
+        });
+        return tr;
+      },
+      state: {
+        init: (_c, state) => build(state.doc),
+        apply: (tr, old) => (tr.docChanged || tr.getMeta(mirrorKey) ? build(tr.doc) : old)
+      },
+      props: {
+        decorations(state) { return this.getState(state); },
+        handleDOMEvents: {
+          mousedown(_view, event) {
+            if (!hit(event)) return false;
+            event.preventDefault();
+            return true;
+          },
+          click(view, event) {
+            const h = hit(event);
+            if (!h) return false;
+            event.preventDefault();
+            if (h.tag) onTag(h.tag.dataset.gathers.slice(1));
+            else {
+              const eid = h.open.dataset.eid;
+              let id = null;
+              view.state.doc.descendants((n) => { if (!id && n.type.name === 'listItem' && n.attrs.eid === eid) id = n.attrs.mirror; return !id; });
+              if (id) onOpen(id);
+            }
             return true;
           }
         }
@@ -285,6 +391,36 @@ export const OutlineFold = Extension.create({
       Enter: () => {
         const st = foldKey.getState(this.editor.state);
         const li = at();
+        // Enter on an empty line at the top level would try to step out of the
+        // outline (there's nowhere to go, and the next words were lost); it
+        // starts a new line below instead.
+        const { $from: $e } = this.editor.state.selection;
+        if (li && !li.firstChild.content.size && $e.depth === 3 && $e.node(2) === li && li.attrs.eid !== st?.zoom) {
+          return this.editor.commands.command(({ tr, dispatch }) => {
+            const after = $e.after(2);
+            tr.insert(after, this.editor.schema.nodes.listItem.create(null, this.editor.schema.nodes.paragraph.create()));
+            if (dispatch) tr.setSelection(TextSelection.create(tr.doc, after + 2));
+            return true;
+          });
+        }
+        // Enter inside a mirror doesn't cut its words in two (that would cut
+        // its original too); it opens a new line after it.
+        const { $from: $m, $to: $mt } = this.editor.state.selection;
+        if (li?.attrs.mirror && $m.parent.type.name === 'paragraph' && $m.node($m.depth - 1) === li && $mt.sameParent($m) &&
+          !($m.parentOffset === 0 && $mt.parentOffset === 0 && $m.parent.content.size > 0) && $mt.parentOffset < $m.parent.content.size) {
+          return this.editor.chain().setTextSelection($m.end()).splitListItem('listItem').run();
+        }
+        // Enter at the very start of a line opens a new line above and leaves
+        // this one whole, so its id (and a mirror's link to its original) stays
+        // with its words.
+        const { $from: $at, empty } = this.editor.state.selection;
+        if (empty && li && li.attrs.eid !== st?.zoom && $at.parent.type.name === 'paragraph' && $at.parentOffset === 0 &&
+          $at.parent.content.size > 0 && $at.node($at.depth - 1) === li) {
+          const schema = this.editor.schema;
+          const tr = this.editor.state.tr.insert($at.before($at.depth - 1), schema.nodes.listItem.create(null, schema.nodes.paragraph.create()));
+          this.editor.view.dispatch(tr.scrollIntoView());
+          return true;
+        }
         if (!st?.zoom || !li || li.attrs.eid !== st.zoom) return false;
         const { $from } = this.editor.state.selection;
         if ($from.parent.type.name !== 'paragraph' || $from.node($from.depth - 1) !== li) return false;
@@ -423,10 +559,16 @@ const WAL = (id) => `wal:${id}`;
 // Loads and saves one outline page, the same two-layer way as chapters:
 // write-ahead copy at once, changed lines to IndexedDB a moment later.
 export class OutlineStore {
-  constructor(onStatus) {
+  constructor(onStatus, onSources) {
     this.onStatus = onStatus || (() => {});
+    // Told when a mirror's edit was written back to the line it shows.
+    this.onSources = onSources || (() => {});
     this.page = null;
     this.cache = new Map();
+    // Mirrors: what each shows (source id -> row), and each mirror's words as
+    // last shown, so only a real edit is written back to the source.
+    this.sources = new Map();
+    this.shown = new Map();
     this.version = 0;
     this.savedVersion = 0;
     this.timer = null;
@@ -440,20 +582,41 @@ export class OutlineStore {
     const rows = await descendants(pageId);
     this.cache = new Map(rows.map((r) => [r.id, r]));
     this.version = this.savedVersion = 0;
+    await this.loadSources(rows);
     try {
       const wal = JSON.parse(localStorage.getItem(WAL(pageId)) || 'null');
-      if (wal) return { doc: wal.doc, recovered: true };
+      if (wal) { this.shown = new Map(); return { doc: withSources(wal.doc, this.sources, this.shown), recovered: true }; }
     } catch { /* fall through */ }
-    return { doc: toOutlineDoc(pageId, rows), recovered: false };
+    return { doc: toOutlineDoc(pageId, rows, this.sources), recovered: false };
   }
 
   async refresh() {
     const rows = await descendants(this.page.id);
     this.cache = new Map(rows.map((r) => [r.id, r]));
-    return toOutlineDoc(this.page.id, rows);
+    await this.loadSources(rows);
+    return toOutlineDoc(this.page.id, rows, this.sources);
   }
 
-  ids() { return new Set([this.page?.id, ...this.cache.keys()]); }
+  async loadSources(rows) {
+    this.sources = new Map();
+    for (const r of rows) {
+      const id = r.fields?.mirror;
+      if (id && !this.sources.has(id)) this.sources.set(id, (await getEntry(id)) || null);
+    }
+  }
+
+  addSource(row) { this.sources.set(row.id, row); }
+
+  // What each mirror shows right now; called once the editor holds the page.
+  noteShown(doc, reset = false) {
+    if (reset) this.shown = new Map();
+    doc.descendants((node) => {
+      if (node.type.name !== 'listItem' || !node.attrs.mirror) return;
+      if (reset || !this.shown.has(node.attrs.eid)) this.shown.set(node.attrs.eid, JSON.stringify(node.firstChild?.toJSON().content || null));
+    });
+  }
+
+  ids() { return new Set([this.page?.id, ...this.cache.keys(), ...this.sources.keys()]); }
 
   change(doc) {
     if (!this.page) return;
@@ -496,28 +659,52 @@ export class OutlineStore {
         const text = para?.textContent || '';
         const prev = this.cache.get(id);
         const done = !!item.attrs.done;
+        const gather = item.attrs.gather || null;
+        const gathered = item.attrs.gathered || null;
+        const mirror = item.attrs.mirror || null;
         const same = prev && !prev.deleted && prev.parent_id === parentId && prev.sort === sort && !!prev.fields?.done === done &&
-          JSON.stringify(prev.content) === JSON.stringify(content);
+          (prev.fields?.gather || null) === gather && JSON.stringify(prev.fields?.gathered || null) === JSON.stringify(gathered) &&
+          (prev.fields?.mirror || null) === mirror && JSON.stringify(prev.content) === JSON.stringify(content);
         if (!same) {
           rows.push({
             ...(prev || { id, created_at: now, type: null, fields: {}, area_id: null, title: '' }),
-            kind: 'line', parent_id: parentId, sort, text, content, fields: { ...(prev?.fields || {}), done },
-            tags: tagsIn(text), links: refsIn(content), deleted: false, updated_at: now
+            kind: 'line', parent_id: parentId, sort, text, content, fields: { ...(prev?.fields || {}), done, gather, gathered, mirror },
+            // A mirror keeps a copy of its words (for search and exports) but
+            // not its tags, so the line isn't found twice under its #tag.
+            tags: mirror ? [] : tagsIn(text), links: refsIn(content), deleted: false, updated_at: now
           });
         }
+        if (mirror) edits.push({ id, mirror, content, text });
         item.forEach((child) => { if (child.type.name === 'bulletList') visit(child, id); });
       });
     };
+    const edits = [];
     doc.forEach((list) => visit(list, page.id));
     for (const [id, prev] of this.cache) {
       if (!present.has(id) && !prev.deleted) rows.push({ ...prev, deleted: true, updated_at: now });
     }
+    // A mirror whose words changed here writes them back to the line it shows.
+    const sourceRows = [];
+    for (const m of edits) {
+      const json = JSON.stringify(m.content);
+      const shown = this.shown.get(m.id);
+      this.shown.set(m.id, json);
+      // An emptied mirror is on its way out, not a reason to wipe the original.
+      if (shown === undefined || shown === json || !m.text.trim()) continue;
+      const src = await getEntry(m.mirror);
+      if (!src || src.deleted || JSON.stringify(src.content) === json) continue;
+      const row = { ...src, content: m.content, text: m.text, tags: tagsIn(m.text), links: refsIn(m.content), updated_at: now };
+      sourceRows.push(row);
+      this.sources.set(row.id, row);
+    }
+    rows.push(...sourceRows);
     if (rows.length) {
       page.updated_at = now;
       rows.push(page);
     }
     await putEntries(rows);
-    for (const r of rows) if (r.id !== page.id) this.cache.set(r.id, r);
+    for (const r of rows) if (r.id !== page.id && !sourceRows.includes(r)) this.cache.set(r.id, r);
+    if (sourceRows.length) this.onSources(sourceRows);
     if (version === this.version && page === this.page) {
       localStorage.removeItem(WAL(page.id));
       this.savedVersion = version;
@@ -539,7 +726,32 @@ export async function descendants(id) {
   return out;
 }
 
-function toOutlineDoc(pageId, rows) {
+// A mirror shows its source's words as they are now. If the source is gone for
+// good, the mirror becomes an ordinary line with the words it last showed.
+function mirrorView(attrs, content, sources) {
+  if (!attrs.mirror || !sources.has(attrs.mirror)) return { attrs, content };
+  const src = sources.get(attrs.mirror);
+  if (!src) return { attrs, content };
+  if (src.deleted) return { attrs: { ...attrs, mirror: null }, content };
+  return { attrs, content: src.content || null };
+}
+
+// A recovered write-ahead copy keeps its own words, which may hold an edit to a
+// mirror that never got saved; measured against the source, that edit is
+// written back on the next save.
+function withSources(doc, sources, shown) {
+  const walk = (node) => {
+    if (node.type === 'listItem' && node.attrs?.mirror) {
+      const src = sources.get(node.attrs.mirror);
+      if (src?.deleted) return { ...node, attrs: { ...node.attrs, mirror: null }, content: node.content?.map(walk) };
+      if (src && node.attrs.eid) shown.set(node.attrs.eid, JSON.stringify(src.content || null));
+    }
+    return node.content ? { ...node, content: node.content.map(walk) } : node;
+  };
+  return walk(doc);
+}
+
+function toOutlineDoc(pageId, rows, sources = new Map()) {
   const byParent = new Map();
   for (const r of rows) {
     if (!byParent.has(r.parent_id)) byParent.set(r.parent_id, []);
@@ -547,10 +759,11 @@ function toOutlineDoc(pageId, rows) {
   }
   const list = (pid) => {
     const items = (byParent.get(pid) || []).sort(bySort).map((r) => {
-      const content = [{ type: 'paragraph', ...(r.content ? { content: r.content } : {}) }];
+      const v = mirrorView({ eid: r.id, done: !!r.fields?.done, gather: r.fields?.gather || null, gathered: r.fields?.gathered || null, mirror: r.fields?.mirror || null }, r.content, sources);
+      const content = [{ type: 'paragraph', ...(v.content ? { content: v.content } : {}) }];
       const kids = list(r.id);
       if (kids) content.push(kids);
-      return { type: 'listItem', attrs: { eid: r.id, done: !!r.fields?.done }, content };
+      return { type: 'listItem', attrs: v.attrs, content };
     });
     return items.length ? { type: 'bulletList', content: items } : null;
   };

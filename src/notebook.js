@@ -1,7 +1,8 @@
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import { OutlineDoc, LineIds, EntryRef, TagMarks, OutlineFold, foldKey, OutlineStore, descendants } from './outline.js';
-import { getEntry, linkedFrom, byKind, byTag, putEntries, children } from './db.js';
+import { AltMark } from './alts.js';
+import { OutlineDoc, LineIds, EntryRef, TagMarks, GatherBadge, mirrorKey, OutlineFold, foldKey, OutlineStore, descendants } from './outline.js';
+import { getEntry, linkedFrom, byKind, byTag, putEntries, children, isTrashed } from './db.js';
 import { entry } from './model.js';
 import { bySort } from './order.js';
 import { newPage } from './library.js';
@@ -52,11 +53,24 @@ export async function rootOf(row) {
   return r;
 }
 
+// The same short id for the same gathering line and original, on any device.
+export function mirrorEid(gatherer, source) {
+  let a = 0x811c9dc5;
+  let b = 0x01000193;
+  for (const ch of `${gatherer}|${source}`) {
+    const k = ch.codePointAt(0);
+    a = Math.imul(a ^ k, 16777619);
+    b = Math.imul(b ^ k, 2246822519) ^ (b >>> 15);
+  }
+  return `li_g${(a >>> 0).toString(36)}${(b >>> 0).toString(36)}`;
+}
+
 const EMPTY = { type: 'doc', content: [{ type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }] }] };
 
 export class Notebook {
-  constructor({ onPick, onOpen, onStatus, onChange, onPlace, onZoom }) {
+  constructor({ onPick, onOpen, onStatus, onChange, onPlace, onZoom, onSources }) {
     this.onZoom = onZoom || (() => {});
+    this.origins = new Map();
     this.onOpen = onOpen;
     this.onChange = onChange || (() => {});
     this.onPlace = onPlace || (() => {});
@@ -64,13 +78,13 @@ export class Notebook {
       onStatus(s);
       // New pages, days and tags show on the shelves once they're saved.
       if (s === 'saved') { clearTimeout(this.shelfTimer); this.shelfTimer = setTimeout(() => this.onChange(), 600); }
-    });
+    }, onSources);
     this.page = null;
     this.editor = new Editor({
       element: $('#outline-editor'),
       extensions: [
         StarterKit.configure({ document: false, codeBlock: false, code: false, horizontalRule: false, heading: false, blockquote: false, trailingNode: false }),
-        OutlineDoc, LineIds, EntryRef.configure({ onPick, onOpen }), TagMarks.configure({ onTag: (t) => this.showTag(t) }),
+        OutlineDoc, LineIds, EntryRef.configure({ onPick, onOpen }), TagMarks.configure({ onTag: (t) => this.showTag(t) }), GatherBadge.configure({ onTag: (t) => this.showTag(t), onOpen, origin: (id) => this.origins.get(id) || '' }), AltMark,
         OutlineFold.configure({ onZoom: (eid) => this.zoomed(eid) })
       ],
       content: EMPTY,
@@ -210,11 +224,14 @@ export class Notebook {
     const { doc, recovered } = await this.store.load(id, fallback);
     this.page = this.store.page;
     this.editor.commands.setContent(doc, { emitUpdate: false });
+    this.store.noteShown(this.editor.state.doc, !recovered);
     if (recovered) this.store.change(this.editor.state.doc);
+    await this.noteOrigins();
     freshenRefs(this.editor);
     this.renderHead();
     this.onPlace(this.page);
     await Promise.all([this.renderBacklinks(), this.renderPastDays()]);
+    await this.gather();
     this.onChange();
     if (focusLine) this.focusLine(focusLine);
     else this.editor.commands.focus('end');
@@ -283,9 +300,162 @@ export class Notebook {
     box.hidden = !box.querySelector('.past-day');
   }
 
+  // Gathering: a line that gathers a #tag gets a linked line under it for
+  // everything with that tag, wherever it was written, and for anything
+  // tagged later. Those lines are yours to sort, nest and note on; one you
+  // delete isn't brought back, since the line remembers what it has gathered.
+  gatherLine() {
+    const { $from } = this.editor.state.selection;
+    for (let d = $from.depth; d > 0; d--) if ($from.node(d).attrs.gather) return $from.node(d);
+    return null;
+  }
+
+  // One at a time, so two runs can't both add the same line.
+  gather() {
+    this.gathering = (this.gathering || Promise.resolve()).then(() => this.gatherNow()).catch((e) => { console.error(e); return 0; });
+    return this.gathering;
+  }
+
+  async gatherNow() {
+    const ed = this.editor;
+    const page = this.page;
+    const spots = [];
+    ed.state.doc.descendants((node) => { if (node.type.name === 'listItem' && node.attrs.gather) spots.push(node.attrs); });
+    if (!spots.length) return 0;
+    const found = new Map();
+    for (const { gather: tag } of spots) {
+      if (found.has(tag)) continue;
+      const rows = [];
+      for (const row of await byTag(tag)) {
+        if (row.kind !== 'line' && row.kind !== 'para') continue;
+        const root = await rootOf(row);
+        if (root && !root.deleted && !isTrashed(root) && root.id !== page.id) rows.push(row);
+      }
+      found.set(tag, rows.sort((a, b) => a.created_at - b.created_at));
+    }
+    // A mirror's id comes from its gathering line and its original, so two
+    // devices gathering the same line make the same mirror, not two. One that
+    // already exists (here, or moved to another page) isn't made again.
+    const taken = new Set();
+    for (const { eid, gather: tag } of spots) {
+      for (const r of found.get(tag)) {
+        const ex = eid && await getEntry(mirrorEid(eid, r.id));
+        if (ex && !ex.deleted && !isTrashed(ex) && ex.fields?.mirror === r.id) taken.add(ex.id);
+      }
+    }
+    if (this.page !== page || ed.isDestroyed) return 0;
+    const onPage = new Set();
+    ed.state.doc.descendants((node) => {
+      if (node.type.name === 'listItem' && node.attrs.eid) onPage.add(node.attrs.eid);
+      if (node.type.name === 'listItem' && node.attrs.mirror) onPage.add(node.attrs.mirror);
+    });
+    const { schema } = ed;
+    const tr = ed.state.tr;
+    let added = 0;
+    // Last line first, so earlier positions stay put.
+    const at = [];
+    tr.doc.descendants((node, pos) => { if (node.type.name === 'listItem' && node.attrs.gather) at.push({ node, pos }); });
+    for (const { node, pos } of at.reverse()) {
+      const seen = new Set(node.attrs.gathered || []);
+      const matches = found.get(node.attrs.gather) || [];
+      const fresh = matches.filter((r) => !seen.has(r.id) && !onPage.has(r.id) && !taken.has(mirrorEid(node.attrs.eid, r.id)));
+      const all = [...new Set([...seen, ...matches.map((r) => r.id)])];
+      if (!fresh.length && all.length === seen.size) continue;
+      tr.setNodeMarkup(pos, undefined, { ...node.attrs, gathered: all });
+      if (!fresh.length) continue;
+      const items = fresh.map((r) => {
+        let para;
+        try { para = schema.nodeFromJSON({ type: 'paragraph', ...(r.content ? { content: r.content } : {}) }); } catch { para = schema.nodes.paragraph.create(null, r.text ? schema.text(r.text) : null); }
+        return schema.nodes.listItem.create({ mirror: r.id, eid: node.attrs.eid ? mirrorEid(node.attrs.eid, r.id) : null }, para);
+      });
+      for (const r of fresh) { onPage.add(r.id); this.store.addSource(r); }
+      const kids = node.lastChild?.type.name === 'bulletList' ? node.lastChild : null;
+      if (kids) tr.insert(pos + node.nodeSize - 2, items);
+      else tr.insert(pos + node.nodeSize - 1, schema.nodes.bulletList.create(null, items));
+      added += fresh.length;
+    }
+    if (tr.docChanged) {
+      ed.view.dispatch(tr.setMeta('addToHistory', false));
+      this.store.noteShown(ed.state.doc);
+      await this.noteOrigins();
+    }
+    return added;
+  }
+
+  // Where each mirror's original lives, shown faintly beside it.
+  async noteOrigins() {
+    const ids = [];
+    this.editor.state.doc.descendants((n) => { if (n.type.name === 'listItem' && n.attrs.mirror && !this.origins.has(n.attrs.mirror)) ids.push(n.attrs.mirror); });
+    if (!ids.length) return;
+    for (const id of ids) {
+      const src = await getEntry(id);
+      const root = src && await rootOf(src);
+      // Short, so it fits the margin: "Wed, Oct 21" for a day, else the page's name.
+      this.origins.set(id, !root ? '' : root.kind === 'day' ? fromIso(root.title || root.id.slice(4)).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : titleOf(root));
+    }
+    const ed = this.editor;
+    if (!ed.isDestroyed) ed.view.dispatch(ed.state.tr.setMeta(mirrorKey, 'origins').setMeta('addToHistory', false));
+  }
+
+  // Starts gathering a tag on the line you're on, or a new line at the end if it already has words.
+  async addGather(tag) {
+    tag = tag.replace(/^#/, '').toLowerCase();
+    const ed = this.editor;
+    const { schema } = ed;
+    const label = tag.charAt(0).toUpperCase() + tag.slice(1).replace(/[-_]/g, ' ');
+    let target = null;
+    const { $from } = ed.state.selection;
+    for (let d = $from.depth; d > 0; d--) {
+      const n = $from.node(d);
+      if (n.type.name === 'listItem') { if (!n.firstChild.textContent.trim() && !n.attrs.gather) target = { node: n, pos: $from.before(d) }; break; }
+    }
+    const tr = ed.state.tr;
+    if (target) {
+      tr.setNodeMarkup(target.pos, undefined, { ...target.node.attrs, gather: tag, gathered: null });
+      tr.insertText(label, target.pos + 2);
+    } else {
+      const list = tr.doc.firstChild;
+      const end = list.nodeSize - 1;
+      tr.insert(end, schema.nodes.listItem.create({ gather: tag }, schema.nodes.paragraph.create(null, schema.text(label))));
+    }
+    ed.view.dispatch(tr);
+    const n = await this.gather();
+    let line = null;
+    ed.state.doc.descendants((node, pos) => { if (!line && node.type.name === 'listItem' && node.attrs.gather === tag) line = { node, pos }; return !line; });
+    if (line) ed.commands.setTextSelection(line.pos + 1 + line.node.firstChild.nodeSize - 1);
+    ed.view.focus();
+    return n;
+  }
+
+  // Stops the line gathering; what it already gathered stays where it is.
+  stopGather() {
+    const li = this.gatherLine();
+    if (!li) return;
+    this.setGatherAttrs(li.attrs.eid, { gather: null, gathered: null });
+  }
+
+  // Brings back gathered lines that were deleted.
+  async regather() {
+    const li = this.gatherLine();
+    if (!li) return 0;
+    this.setGatherAttrs(li.attrs.eid, { gathered: null });
+    return this.gather();
+  }
+
+  setGatherAttrs(eid, attrs) {
+    const ed = this.editor;
+    ed.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'listItem' && node.attrs.eid === eid) {
+        ed.view.dispatch(ed.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attrs }));
+        return false;
+      }
+    });
+  }
+
   // Every line and paragraph with this tag, wherever it lives.
   async showTag(tag) {
     const panel = $('.tag-results');
+    this.shownTag = tag;
     const rows = (await byTag(tag)).filter((r) => r.kind === 'line' || r.kind === 'para')
       .sort((a, b) => b.updated_at - a.updated_at);
     $('#tag-results-title').textContent = `#${tag}`;
@@ -313,6 +483,7 @@ export class Notebook {
     const touched = rows.some((r) => ids.has(r.id) || ids.has(r.parent_id));
     if (rows.some((r) => ['day', 'page', 'line'].includes(r.kind))) { this.onChange(); if (this.isDay) this.renderPastDays(); }
     if (rows.some((r) => r.links?.includes(this.page.id))) this.renderBacklinks();
+    if (rows.some((r) => r.tags?.length) && this.store.idle) this.gather();
     if (!touched) return;
     if (!this.store.idle) { if (tries < 20) setTimeout(() => this.applyRemote(rows, tries + 1), 800); return; }
     const page = await getEntry(this.page.id);
@@ -327,6 +498,7 @@ export class Notebook {
     }
     const focused = ed.isFocused;
     ed.commands.setContent(doc, { emitUpdate: false });
+    this.store.noteShown(ed.state.doc, true);
     if (anchor) {
       ed.state.doc.descendants((node, pos) => {
         if (node.type.name === 'listItem' && node.attrs.eid === anchor.eid) {
@@ -336,6 +508,7 @@ export class Notebook {
       });
     }
     if (focused) ed.view.focus();
+    this.gather();
   }
 
   close() { return this.page ? this.store.close(this.editor.state.doc) : null; }

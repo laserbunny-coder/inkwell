@@ -23,7 +23,7 @@ import { ScriptElements, ELEMENTS, scriptPages, toFountain, fromFountain } from 
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
 import { moveLine, toggleDone } from './outline.js';
 import { openPicker } from './picker.js';
-import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, changeType } from './library.js';
+import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType } from './library.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -170,6 +170,8 @@ const notebook = new Notebook({
   onOpen: openEntry,
   onStatus: (s) => { if (inNotebook()) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved'; },
   onChange: () => { clearTimeout(railTimer); railTimer = setTimeout(renderRail, 100); },
+  // A mirror edited a paragraph of the chapter that's open behind the notebook.
+  onSources: (rows) => { if (rows.some((r) => r.parent_id === state.chapterId)) applyRemoteChapter(); },
   onPlace: (page) => {
     if (!inNotebook()) return;
     remember({ view: 'notebook', pageId: page.id, ...(notebook?.zoom ? { zoom: notebook.zoom } : {}) });
@@ -1603,6 +1605,9 @@ const commands = [
   { group: 'view', label: 'Show or hide bullets on notebook lines', keys: '', run: () => setShown('bullets', hidden().has('bullets')) },
   { group: 'view', label: 'Progress: words and pages over time (stats)', keys: `${mod}⇧P`, run: () => progressPanel.open() },
   { group: 'write', label: 'Move this line to another page or day…', keys: '', run: moveLinePicker, when: inNotebook },
+  { group: 'write', label: 'Gather a #tag onto this page…', keys: '', run: gatherTagHere, when: inNotebook },
+  { group: 'write', label: 'Bring back gathered lines I deleted', keys: '', run: () => notebook.regather(), when: () => inNotebook() && !!notebook.gatherLine() },
+  { group: 'write', label: 'Stop gathering on this line', keys: '', run: () => notebook.stopGather(), when: () => inNotebook() && !!notebook.gatherLine() },
   { group: 'write', label: 'Done: strike this line through', keys: `${mod}↵`, run: () => toggleDone(notebook.editor), when: inNotebook },
   { group: 'view', label: 'Keyboard shortcuts (all the keys)', keys: `${mod}/`, run: toggleShortcuts },
   { group: 'page', label: 'Page and text settings', keys: '', run: togglePageSettings },
@@ -1683,6 +1688,41 @@ function moveLinePicker() {
   });
 }
 
+// Gather a tag: pick the page its lines should gather on (from the tag's list).
+function gatherOntoPage(tag) {
+  if (!tag) return;
+  $('.tag-results').hidden = true;
+  const onto = (pageId) => async () => {
+    await go({ view: 'notebook', pageId });
+    const n = await notebook.addGather(tag);
+    statusEl.textContent = n ? `Gathered ${n} #${tag} ${n === 1 ? 'line' : 'lines'}` : `Gathering #${tag} here`;
+  };
+  openPalette('pick', async () => {
+    const out = [];
+    if (notebook.page && !notebook.isDay) out.push({ label: `This page: ${titleOf(notebook.page)}`, keys: 'page', run: onto(notebook.page.id) });
+    const label = tag.charAt(0).toUpperCase() + tag.slice(1).replace(/[-_]/g, ' ');
+    out.push({ label: `A new page called “${label}”`, keys: 'new', run: async () => {
+      const book = notebook.page ? await bookOf(notebook.page) : null;
+      const page = await newPage(book?.id || (view() === 'project' ? state.bookId : null), label);
+      await onto(page.id)();
+    } });
+    for (const pg of (await byKind('page')).filter((x) => !x.deleted && x.id !== notebook.page?.id).sort((a, c) => c.updated_at - a.updated_at)) out.push({ label: pg.title || 'Untitled page', keys: 'page', run: onto(pg.id) });
+    return out;
+  }, `Gather #${tag} onto which page?`);
+}
+
+// Gather a tag onto the page you're on: pick the tag.
+function gatherTagHere() {
+  openPalette('pick', async () => {
+    const tags = new Map();
+    for (const kind of ['line', 'para']) for (const r of await byKind(kind)) for (const t of r.tags || []) tags.set(t, (tags.get(t) || 0) + 1);
+    return [...tags].sort((a, b) => b[1] - a[1]).map(([t, n]) => ({ label: `#${t}`, keys: String(n), run: async () => {
+      const added = await notebook.addGather(t);
+      statusEl.textContent = added ? `Gathered ${added} #${t} ${added === 1 ? 'line' : 'lines'}` : `Gathering #${t} here`;
+    } }));
+  }, 'Gather which #tag onto this page?');
+}
+
 async function places(only) {
   const [allAreas, allBooks] = await Promise.all([areas(), books()]);
   const out = [];
@@ -1714,16 +1754,17 @@ async function openHit(row) {
   return openEntry(row.id);
 }
 
-async function openPalette(mode = 'commands', only) {
+async function openPalette(mode = 'commands', only, placeholder) {
   // Open and focus at once so nothing typed is lost; the list fills in after.
   paletteMode = mode;
   paletteGroup = null;
-  paletteSource = mode === 'go' || mode === 'move' || mode === 'search' ? [] : commands;
+  const listed = mode === 'move' || mode === 'pick';
+  paletteSource = mode === 'go' || listed || mode === 'search' ? [] : commands;
   paletteReady = Promise.resolve();
   $('.palette').hidden = false;
   $('.palette-backdrop').hidden = false;
   const input = $('#palette-input');
-  input.placeholder = mode === 'search' ? 'Search all your writing…' : mode === 'move' ? 'Move this line to…' : mode === 'go' ? (only === 'books' ? 'Go to a book…' : 'Go to a book, chapter, page or day…') : 'Type a command…';
+  input.placeholder = mode === 'pick' ? placeholder : mode === 'search' ? 'Search all your writing…' : mode === 'move' ? 'Move this line to…' : mode === 'go' ? (only === 'books' ? 'Go to a book…' : 'Go to a book, chapter, page or day…') : 'Type a command…';
   input.value = typeof only === 'string' && mode === 'search' ? only : '';
   input.focus();
   filterPalette();
@@ -1737,8 +1778,8 @@ async function openPalette(mode = 'commands', only) {
     });
     await paletteReady;
   }
-  if (mode === 'go' || mode === 'move') {
-    paletteReady = (mode === 'move' ? only() : places(only)).then((list) => {
+  if (mode === 'go' || listed) {
+    paletteReady = (listed ? only() : places(only)).then((list) => {
       if (paletteMode !== mode) return;
       paletteSource = list;
       filterPalette();
@@ -1867,6 +1908,7 @@ document.addEventListener('click', (e) => {
   if (cmd === 'stats') progressPanel.toggle();
   if (cmd === 'library') go({ view: 'library', area: null });
   if (cmd === 'today') go({ view: 'notebook', pageId: dayId(isoToday()) });
+  if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
   if (cmd === 'close-tag') { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
 });
 
