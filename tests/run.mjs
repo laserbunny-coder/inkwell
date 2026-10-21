@@ -403,9 +403,10 @@ try {
     assert.equal(await p.locator('#nb-links').innerText(), 'Linked from 1');
     await p.keyboard.press('Control+K');
     await p.keyboard.type('hide "Linked from"');
+    await p.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('Linked from'));
     await p.keyboard.press('Enter');
-    await sleep(300);
-    assert.equal(await p.locator('.backlinks').first().isVisible(), false);
+    await p.waitForFunction(() => document.documentElement.classList.contains('hide-links'), null, { timeout: 3000 });
+    assert.equal(await p.locator('.notebook .backlinks').isVisible(), false);
     await p.keyboard.press('Control+.');
     assert.equal(await p.evaluate(() => document.documentElement.classList.contains('focus')), true);
     await p.keyboard.press('Control+.');
