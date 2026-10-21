@@ -112,7 +112,7 @@ try {
   await check('a note attaches to its paragraph as its own entry', async () => {
     await sleep(400);
     await p.locator('#editor .ProseMirror p').first().click();
-    await p.keyboard.press('Control+Shift+N');
+    await p.keyboard.press('Alt+N'); // Windows: Chrome keeps Ctrl+Shift+N for itself
     await sleep(300);
     await p.keyboard.type('Macro insert on the handwriting #props');
     await sleep(800);
@@ -133,6 +133,7 @@ try {
     await p.locator('#editor .ProseMirror p').first().click();
     await p.keyboard.press('Control+K');
     assert.equal(await p.locator('.palette').isVisible(), true);
+    assert.ok(!/[⌘⌥⇧]/.test(await p.locator('.palette').innerText()), 'menu shows Ctrl, not ⌘');
     await p.keyboard.type('new chapter');
     await p.keyboard.press('Enter');
     await sleep(800);
@@ -432,6 +433,11 @@ try {
     await p.waitForFunction((t) => document.querySelector('#nb-title').textContent === t, today);
     await p.keyboard.press('Control+/');
     assert.equal(await p.locator('.shortcuts').isVisible(), true);
+    // Off a Mac every label reads Ctrl, Alt and Shift, in the sheet, the buttons and the menu.
+    const sheet = await p.locator('.shortcuts').innerText();
+    assert.ok(!/[⌘⌥⇧]/.test(sheet), sheet);
+    assert.ok(sheet.includes('Ctrl+J') && sheet.includes('Ctrl+Shift+O') && sheet.includes('Alt+N'), sheet);
+    assert.equal(await p.locator('#focus-toggle').getAttribute('title'), 'Focus: just the text (Ctrl+.)');
     await p.keyboard.press('Escape');
     assert.equal(await p.locator('.shortcuts').isVisible(), false);
     await p.locator('#focus-toggle').click({ force: true });

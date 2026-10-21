@@ -2,7 +2,7 @@ import './style.css';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { EntryIds, SceneBreak } from './schema.js';
-import { isMac, keyLabel } from './keys.js';
+import { isMac, keyLabel, showKeysForThisComputer } from './keys.js';
 import { AltMark, ParagraphVersions, AltPanel, flip, newParagraphVersion } from './alts.js';
 import { ChapterStore } from './chapter.js';
 import { NotesLayer } from './notes.js';
@@ -982,10 +982,8 @@ $('#page-done').addEventListener('click', togglePageSettings);
 
 // ---------- command menu (⌘K) and go-to (⌘O) ----------
 
-const mod = isMac ? '⌘' : 'Ctrl+';
-if (!isMac) document.querySelectorAll('.shortcuts dt, .corner [title], .rail-top .keys').forEach((el) => {
-  if (!el.title) el.textContent = keyLabel(el.textContent); else el.title = keyLabel(el.title);
-});
+const mod = '⌘'; // shown as Ctrl+ off a Mac, see keys.js
+showKeysForThisComputer();
 
 function toggleTheme() {
   const dark = getComputedStyle(document.documentElement).colorScheme === 'dark';
@@ -1283,7 +1281,7 @@ document.addEventListener('keydown', (e) => {
   else if (m && k === 'j') { e.preventDefault(); toggleWriteToday(); }
   else if (m && k === '1') { e.preventDefault(); body.classList.toggle('pin-outline'); }
   else if (m && k === '2' && writing()) { e.preventDefault(); toggleNotes(); }
-  else if (m && e.shiftKey && k === 'n' && writing()) { e.preventDefault(); notes.add(); }
+  else if (((m && e.shiftKey) || (!isMac && e.altKey && !m && !e.shiftKey)) && e.code === 'KeyN' && writing()) { e.preventDefault(); notes.add(); }
   else if (e.altKey && e.shiftKey && !m && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && writing() && editor.isFocused) { e.preventDefault(); blocks.moveCurrent(e.key === 'ArrowUp' ? -1 : 1); }
   else if (m && e.shiftKey && k === 'e' && writing()) { e.preventDefault(); editor.commands.focus(); alts.toggle({ scope: 'word', focusAdd: true }); }
   else if (m && e.shiftKey && k === 'd' && writing() && editor.isFocused) { e.preventDefault(); newParagraphVersion(editor); }
