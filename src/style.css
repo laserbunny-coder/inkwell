@@ -202,6 +202,7 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 @media (min-width: 701px) { .hide-bullets #outline-editor .ProseMirror > ul { padding-left: 0; } }
 .hide-bullets #outline-editor .bullet::after { opacity: 0; transition: opacity .12s, transform .12s; }
 .hide-bullets #outline-editor .bullet:hover::after, .hide-bullets #outline-editor .bullet:focus-visible::after { opacity: 1; }
+@media (hover: none) { .hide-bullets #outline-editor li.here > .line-gutter .bullet::after { opacity: .6; } }
 #outline-editor li.folded > .line-gutter .bullet::after { box-shadow: 0 0 0 .22em var(--line); background: var(--muted); }
 #outline-editor .fold { left: 0; top: 0; width: .9em; height: 1.6em; opacity: 0; color: var(--muted); transition: opacity .12s, transform .12s; }
 #outline-editor .fold::after { content: ''; position: absolute; left: .28em; top: .62em; border: .2em solid transparent; border-top: .28em solid currentColor; border-bottom: 0; }
@@ -434,7 +435,10 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .script-bar button.current { background: var(--tint); color: var(--accent); font-weight: 600; }
 .script-bar-on .corner, .outline-bar-on .corner { display: none; }
 .outline-bar button { font-size: 15px; min-width: 40px; }
-.outline-bar button[data-do="fold"], .outline-bar button[data-do="zoom"], .outline-bar button[data-do="link"] { font-size: 12px; }
+.outline-bar button[data-do="fold"], .outline-bar button[data-do="zoom"], .outline-bar button[data-do="link"], .outline-bar button[data-do="done"], .outline-bar button[data-do="move"] { font-size: 12px; }
+.outline-bar button[data-do="undo"], .outline-bar button[data-do="redo"] { font-size: 18px; }
+.outline-bar button:disabled { opacity: .35; }
+.outline-bar .bar-gap { flex: 0 0 1px; margin: 6px 4px; background: var(--line); }
 
 /* ---------- alternates ---------- */
 /* A faint dotted underline on words that hold other versions, and "2/3" in the
@@ -493,3 +497,6 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 #outline-editor .bullet { cursor: grab; touch-action: none; }
 #outline-editor li.dragging { opacity: .35; }
 .line-drop { position: fixed; height: 2px; background: var(--accent); border-radius: 1px; z-index: 70; pointer-events: none; }
+#outline-editor li[data-done] > p { text-decoration: line-through; text-decoration-color: var(--faint); color: var(--muted); }
+#outline-editor li[data-done] > ul { opacity: .55; }
+body.line-dragging, body.line-dragging * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }

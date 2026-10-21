@@ -24,6 +24,11 @@ export const LineIds = Extension.create({
           default: null,
           parseHTML: (el) => el.getAttribute('data-eid'),
           renderHTML: (a) => (a.eid ? { 'data-eid': a.eid } : {})
+        },
+        done: {
+          default: false,
+          parseHTML: (el) => el.hasAttribute('data-done'),
+          renderHTML: (a) => (a.done ? { 'data-done': '' } : {})
         }
       }
     }];
@@ -188,12 +193,22 @@ export function moveLine(editor, dir) {
   return true;
 }
 
-// Drags a line by its dot (the bullet, shown or not) to sit before or after another.
-function startDrag(view, gutter, event) {
-  const eid = gutter.dataset.eid;
-  const dragged = gutter.closest('li');
+// Drags a line by its dot (shown or not) to sit before or after another. On a
+// phone the line you're on shows a faint dot to drag by.
+function startDrag(view, dragged, event, { now = false, onClick } = {}) {
+  const eid = dragged.querySelector(':scope > .line-gutter')?.dataset.eid;
   const x0 = event.clientX, y0 = event.clientY;
   let mark = null, drop = null;
+  const begin = () => {
+    mark = document.createElement('div');
+    mark.className = 'line-drop';
+    mark.hidden = true;
+    document.body.append(mark);
+    dragged.classList.add('dragging');
+    document.body.classList.add('line-dragging');
+    window.getSelection()?.removeAllRanges();
+  };
+  if (now) begin();
   const find = (e) => {
     const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('li');
     if (!hit || !view.dom.contains(hit) || dragged.contains(hit)) return null;
@@ -202,18 +217,29 @@ function startDrag(view, gutter, event) {
   };
   const move = (e) => {
     if (!mark && Math.hypot(e.clientX - x0, e.clientY - y0) < 5) return;
-    if (!mark) { mark = document.createElement('div'); mark.className = 'line-drop'; document.body.append(mark); dragged.classList.add('dragging'); }
+    if (!mark) begin();
     drop = find(e);
     mark.hidden = !drop;
     if (drop) Object.assign(mark.style, { left: `${drop.box.left}px`, width: `${drop.box.width}px`, top: `${(drop.after ? drop.box.bottom : drop.box.top) - 1}px` });
   };
-  const up = () => {
+  // A finger keeps going by touch events even if the browser gives up on the
+  // pointer, and while dragging the page must not scroll or pop a menu.
+  const still = (e) => { if (mark) e.preventDefault(); };
+  const touchMove = (e) => { if (!mark) return; e.preventDefault(); const t = e.touches[0]; if (t) move(t); };
+  const done = (e) => {
+    if (e.type === 'pointercancel' && mark && e.pointerType === 'touch') return; // touchend finishes it
     window.removeEventListener('pointermove', move);
-    window.removeEventListener('pointerup', up);
-    if (!mark) { if (eid) view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid })); return; }
+    window.removeEventListener('pointerup', done);
+    window.removeEventListener('pointercancel', done);
+    window.removeEventListener('touchmove', touchMove);
+    window.removeEventListener('touchend', done);
+    window.removeEventListener('touchcancel', done);
+    window.removeEventListener('contextmenu', still);
+    if (!mark) { if (e.type === 'pointerup') onClick?.(); return; }
     mark.remove();
     dragged.classList.remove('dragging');
-    if (!drop) return;
+    document.body.classList.remove('line-dragging');
+    if (!drop || e.type === 'touchcancel') return;
     const state = view.state;
     const posOf = (id) => { let at = -1; if (!id) return at; state.doc.descendants((n, pos) => { if (at < 0 && n.type.name === 'listItem' && n.attrs.eid === id) at = pos; return at < 0; }); return at; };
     const from = posOf(eid);
@@ -230,7 +256,24 @@ function startDrag(view, gutter, event) {
     view.focus();
   };
   window.addEventListener('pointermove', move);
-  window.addEventListener('pointerup', up);
+  window.addEventListener('pointerup', done);
+  window.addEventListener('pointercancel', done);
+  window.addEventListener('touchmove', touchMove, { passive: false });
+  window.addEventListener('touchend', done);
+  window.addEventListener('touchcancel', done);
+  window.addEventListener('contextmenu', still);
+}
+
+// Done: the line is struck through (Ctrl+Enter, or the Done button on a phone).
+export function toggleDone(editor) {
+  const { $head } = editor.state.selection;
+  let d = $head.depth;
+  while (d > 0 && $head.node(d).type.name !== 'listItem') d--;
+  if (!d) return false;
+  const pos = $head.before(d);
+  const li = $head.node(d);
+  editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...li.attrs, done: !li.attrs.done }));
+  return true;
 }
 
 export const OutlineFold = Extension.create({
@@ -248,6 +291,7 @@ export const OutlineFold = Extension.create({
       return this.editor.commands.command(({ tr }) => { tr.setMeta(foldKey, { fold: li.attrs.eid, on }); return true; });
     };
     return {
+      'Mod-Enter': () => toggleDone(this.editor),
       'Alt-Shift-ArrowUp': () => moveLine(this.editor, -1),
       'Alt-Shift-ArrowDown': () => moveLine(this.editor, 1),
       'Mod-ArrowUp': () => setFold(true),
@@ -299,13 +343,20 @@ export const OutlineFold = Extension.create({
           return next;
         }
       },
-      view: () => ({
+      view: (editorView) => {
+        // A finger dragging a line must not scroll the page. This has to be in
+        // place before the touch starts for the browser to honour it.
+        const still = (e) => { if (document.body.classList.contains('line-dragging')) e.preventDefault(); };
+        editorView.dom.addEventListener('touchmove', still, { passive: false });
+        return {
+        destroy() { editorView.dom.removeEventListener('touchmove', still); },
         update(view, prev) {
           const a = foldKey.getState(view.state);
           const b = foldKey.getState(prev);
           if (a.zoom !== b.zoom) onZoom(a.zoom);
         }
-      }),
+        };
+      },
       // Keep the caret where you can see it: arrows skip over folded lines,
       // and anything typed or moved into a fold opens it.
       appendTransaction(trs, oldState, state) {
@@ -336,7 +387,8 @@ export const OutlineFold = Extension.create({
             const eid = node.attrs.eid;
             const kids = kidsOf(node);
             const folded = kids && st.folded.has(eid) && eid !== st.zoom;
-            const cls = [kids ? 'has-kids' : '', folded ? 'folded' : ''];
+            const here = state.selection.$head.pos > pos && state.selection.$head.pos < pos + 1 + (node.firstChild?.nodeSize || 0) + 1;
+            const cls = [kids ? 'has-kids' : '', folded ? 'folded' : '', here ? 'here' : ''];
             if (root) {
               if (eid === st.zoom) cls.push('zoom-root');
               else if (pos < root.from && pos + node.nodeSize > root.to) cls.push('zoom-path');
@@ -355,14 +407,20 @@ export const OutlineFold = Extension.create({
           return DecorationSet.create(state.doc, decos);
         },
         handleDOMEvents: {
-          mousedown(view, event) {
+          pointerdown(view, event) {
             const b = event.target.closest?.('.line-gutter button');
             if (!b) return false;
             event.preventDefault();
             const eid = b.parentElement.dataset.eid;
             if (!eid) return true;
             if (b.classList.contains('fold')) view.dispatch(view.state.tr.setMeta(foldKey, { fold: eid }));
-            else startDrag(view, b.parentElement, event); // a click zooms in, a drag moves the line
+            // A click (or tap) zooms in; a drag moves the line.
+            else startDrag(view, b.closest('li'), event, { onClick: () => view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid })) });
+            return true;
+          },
+          mousedown(_view, event) {
+            if (!event.target.closest?.('.line-gutter button')) return false;
+            event.preventDefault();
             return true;
           }
         }
@@ -460,12 +518,13 @@ export class OutlineStore {
         const content = para?.toJSON().content || null;
         const text = para?.textContent || '';
         const prev = this.cache.get(id);
-        const same = prev && !prev.deleted && prev.parent_id === parentId && prev.sort === sort &&
+        const done = !!item.attrs.done;
+        const same = prev && !prev.deleted && prev.parent_id === parentId && prev.sort === sort && !!prev.fields?.done === done &&
           JSON.stringify(prev.content) === JSON.stringify(content);
         if (!same) {
           rows.push({
             ...(prev || { id, created_at: now, type: null, fields: {}, area_id: null, title: '' }),
-            kind: 'line', parent_id: parentId, sort, text, content,
+            kind: 'line', parent_id: parentId, sort, text, content, fields: { ...(prev?.fields || {}), done },
             tags: tagsIn(text), links: refsIn(content), deleted: false, updated_at: now
           });
         }
@@ -514,7 +573,7 @@ function toOutlineDoc(pageId, rows) {
       const content = [{ type: 'paragraph', ...(r.content ? { content: r.content } : {}) }];
       const kids = list(r.id);
       if (kids) content.push(kids);
-      return { type: 'listItem', attrs: { eid: r.id }, content };
+      return { type: 'listItem', attrs: { eid: r.id, done: !!r.fields?.done }, content };
     });
     return items.length ? { type: 'bulletList', content: items } : null;
   };

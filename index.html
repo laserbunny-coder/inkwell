@@ -228,6 +228,9 @@
   </div>
 
   <div class="script-bar outline-bar" role="toolbar" aria-label="Outline" hidden>
+    <button type="button" data-do="undo" aria-label="Undo">↶</button>
+    <button type="button" data-do="redo" aria-label="Redo">↷</button>
+    <span class="bar-gap" aria-hidden="true"></span>
     <button type="button" data-do="outdent" aria-label="Outdent">⇤</button>
     <button type="button" data-do="indent" aria-label="Indent">⇥</button>
     <button type="button" data-do="up" aria-label="Move line up">↑</button>
@@ -236,6 +239,8 @@
     <button type="button" data-do="link" aria-label="Link to a page">[[ ]]</button>
     <button type="button" data-do="fold" aria-label="Fold or unfold">Fold</button>
     <button type="button" data-do="zoom" aria-label="Zoom in">Zoom</button>
+    <button type="button" data-do="done" aria-label="Done">Done</button>
+    <button type="button" data-do="move" aria-label="Move to another page">Move to…</button>
   </div>
 
   <div class="stats" role="dialog" aria-label="Progress" hidden>
@@ -286,6 +291,7 @@
     <dl>
       <dt>⌘↑ ⌘↓</dt><dd>Fold or unfold this line</dd>
       <dt>⌥⇧↑ ⌥⇧↓</dt><dd>Move the line up or down (or drag its dot)</dd>
+      <dt>⌘↵</dt><dd>Done: strike the line through</dd>
       <dt>Tab ⇧Tab</dt><dd>Indent or outdent</dd>
       <dt>Esc</dt><dd>Zoom back out</dd>
     </dl>

@@ -618,6 +618,48 @@ try {
     await ph.keyboard.type('sea');
     await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].some((p) => p.textContent === 'Tides #sea'));
     assert.equal(await ph.evaluate(() => document.activeElement?.closest('#outline-editor') !== null), true, 'keyboard stays up');
+    // Undo and Redo come first in the row.
+    assert.deepEqual((await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do))).slice(0, 3), ['undo', 'redo', 'outdent']);
+    await tap('undo');
+    await ph.waitForFunction(() => ![...document.querySelectorAll('#outline-editor li > p')].some((p) => p.textContent === 'Tides #sea'));
+    await tap('redo');
+    await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].some((p) => p.textContent === 'Tides #sea'));
+    await tap('done');
+    await ph.waitForFunction((t) => [...document.querySelectorAll('#outline-editor li[data-done] > p')].some((x) => x.textContent === t), 'Tides #sea');
+    await tap('done');
+    await ph.waitForFunction(() => !document.querySelector('#outline-editor li[data-done]'));
+    // Move to… sends the line to tomorrow's page.
+    await tap('move');
+    await ph.waitForSelector('.palette', { state: 'visible' });
+    await ph.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.startsWith('Tomorrow'));
+    await ph.locator('#palette-list li').first().tap();
+    await ph.waitForFunction(() => ![...document.querySelectorAll('#outline-editor li > p')].some((p) => p.textContent === 'Tides #sea'));
+    await sleep(500);
+    const moved = await ph.evaluate(() => new Promise((res) => {
+      const r = indexedDB.open('writing');
+      r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').getAll(); q.onsuccess = () => res(q.result.filter((e) => e.text === 'Tides #sea')); };
+    }));
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    const tomorrow = `day-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    assert.equal(moved.length, 1);
+    assert.equal(moved[0].parent_id, tomorrow);
+    assert.equal(moved[0].deleted, false);
+    // The line you're on shows a faint dot; dragging it with a finger moves the line.
+    await ph.evaluate(() => window.__outline.commands.focus('end'));
+    await ph.keyboard.press('Enter');
+    await ph.keyboard.type('Gulls');
+    await sleep(300);
+    const gull = ph.locator('#outline-editor li', { has: ph.locator(':scope > p', { hasText: /^Gulls$/ }) }).locator(':scope > .line-gutter .bullet');
+    assert.equal(await gull.evaluate((b) => getComputedStyle(b, '::after').opacity), '0.6');
+    const g = await gull.boundingBox();
+    const boats = await ph.locator('#outline-editor li > p', { hasText: /^Boats$/ }).boundingBox();
+    const cdp = await phoneCtx.newCDPSession(ph);
+    const at = (x, y) => ({ touchPoints: [{ x, y }] });
+    const x = g.x + g.width / 2, y0 = g.y + g.height / 2;
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', ...at(x, y0) });
+    for (let i = 1; i <= 6; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', ...at(x, y0 + (boats.y + 4 - y0) * i / 6) }); await sleep(30); }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await ph.waitForFunction(() => { const t = [...document.querySelectorAll('#outline-editor li > p')].map((x) => x.textContent); return t.indexOf('Gulls') > -1 && t.indexOf('Gulls') < t.indexOf('Boats'); });
     await phoneCtx.close();
   });
 
@@ -654,6 +696,18 @@ try {
     await p.waitForFunction(() => document.querySelector('#nb-kind')?.textContent === 'Today');
     const after = await texts();
     assert.equal(after.indexOf('Alpha'), after.indexOf('Beta') - 1, 'the new order is saved');
+    // Ctrl+Enter marks a line done, and it stays done.
+    await sleep(600); // the page takes focus back after a reload
+    const alphaLine = p.locator('#outline-editor li > p', { hasText: /^Alpha$/ });
+    await alphaLine.click();
+    await sleep(300);
+    await alphaLine.click();
+    await p.waitForFunction(() => window.__outline.state.selection.$head.parent.textContent === 'Alpha');
+    await p.keyboard.press('Control+Enter');
+    await p.waitForFunction((t) => [...document.querySelectorAll('#outline-editor li[data-done] > p')].some((x) => x.textContent === t), 'Alpha');
+    await sleep(1200);
+    await p.reload();
+    await p.waitForFunction((t) => [...document.querySelectorAll('#outline-editor li[data-done] > p')].some((x) => x.textContent === t), 'Alpha');
   });
 
   await check('Progress shows words and pages by day, week and month', async () => {

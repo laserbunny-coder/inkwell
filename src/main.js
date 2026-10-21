@@ -18,7 +18,7 @@ import { Conflicts } from './conflicts.js';
 import { vaultZip } from './vault.js';
 import { ScriptElements, ELEMENTS, scriptPages, toFountain, fromFountain } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
-import { moveLine } from './outline.js';
+import { moveLine, toggleDone } from './outline.js';
 import { openPicker } from './picker.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, stats, dailyMentions, ago } from './library.js';
 
@@ -144,6 +144,8 @@ function placeOutlineBar() {
   outlineBar.style.bottom = `${Math.max(0, vv ? window.innerHeight - (vv.offsetTop + vv.height) : 0)}px`;
   const here = notebook.currentLine();
   const zoomOut = !!notebook.zoom && here === notebook.zoom;
+  outlineBar.querySelector('[data-do="undo"]').disabled = !notebook.editor.can().undo();
+  outlineBar.querySelector('[data-do="redo"]').disabled = !notebook.editor.can().redo();
   const z = outlineBar.querySelector('[data-do="zoom"]');
   z.textContent = zoomOut ? 'Out' : 'Zoom';
   z.setAttribute('aria-label', zoomOut ? 'Zoom out' : 'Zoom in');
@@ -154,7 +156,11 @@ outlineBar.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   const ed = notebook.editor;
   const act = b.dataset.do;
-  if (act === 'indent') ed.chain().focus().sinkListItem('listItem').run();
+  if (act === 'undo') ed.chain().focus().undo().run();
+  else if (act === 'redo') ed.chain().focus().redo().run();
+  else if (act === 'done') toggleDone(ed);
+  else if (act === 'move') return; // opens on click, so the tap doesn't land on the menu it opens
+  else if (act === 'indent') ed.chain().focus().sinkListItem('listItem').run();
   else if (act === 'outdent') ed.chain().focus().liftListItem('listItem').run();
   else if (act === 'up' || act === 'down') moveLine(ed, act === 'up' ? -1 : 1);
   else if (act === 'tag') {
@@ -166,6 +172,7 @@ outlineBar.addEventListener('pointerdown', (e) => {
   else if (act === 'zoom') { const here = notebook.currentLine(); notebook.zoomTo(notebook.zoom && here === notebook.zoom ? null : here); ed.commands.focus(); }
   placeOutlineBar();
 });
+outlineBar.querySelector('[data-do="move"]').addEventListener('click', () => moveLinePicker());
 notebook.editor.on('transaction', placeOutlineBar);
 notebook.editor.on('focus', placeOutlineBar);
 notebook.editor.on('blur', () => setTimeout(placeOutlineBar, 50));
@@ -1130,6 +1137,8 @@ const commands = [
   { group: 'view', label: 'Show or hide the paragraph handle', keys: '', run: () => setShown('handle', hidden().has('handle')) },
   { group: 'view', label: 'Show or hide bullets on notebook lines', keys: '', run: () => setShown('bullets', hidden().has('bullets')) },
   { group: 'view', label: 'Progress: words and pages over time (stats)', keys: `${mod}⇧P`, run: () => progressPanel.open() },
+  { group: 'write', label: 'Move this line to another page or day…', keys: '', run: moveLinePicker, when: inNotebook },
+  { group: 'write', label: 'Done: strike this line through', keys: `${mod}↵`, run: () => toggleDone(notebook.editor), when: inNotebook },
   { group: 'view', label: 'Keyboard shortcuts (all the keys)', keys: `${mod}/`, run: toggleShortcuts },
   { group: 'page', label: 'Page and text settings', keys: '', run: togglePageSettings },
   { group: 'page', label: 'Wider page', keys: 'Alt+]', run: () => setPage(currentWidth() + 40, currentSize()) },
@@ -1164,6 +1173,27 @@ function isoToday() {
 }
 
 // Everything you can go to: books, areas, chapters, pages and recent days.
+// Move to…: send the line you're on (and what's under it) to another page or day.
+function moveLinePicker() {
+  const eid = notebook.currentLine();
+  if (!eid || !inNotebook()) return;
+  const send = (id, fallback) => async () => {
+    if (await notebook.moveLineTo(eid, id, fallback)) statusEl.textContent = (`Moved to ${fallback ? titleOf(fallback) : titleOf(await getEntry(id))}`);
+  };
+  const day = (offset) => { const d = new Date(); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  openPalette('move', async () => {
+    const out = [];
+    for (const [label, iso] of [['Today', day(0)], ['Tomorrow', day(1)], ['Yesterday', day(-1)]]) {
+      const id = dayId(iso);
+      if (id !== notebook.page?.id) out.push({ label, keys: 'day', run: send(id, entry('day', { id, title: iso })) });
+    }
+    for (const pg of (await byKind('page')).filter((x) => !x.deleted && x.id !== notebook.page?.id).sort((a, c) => c.updated_at - a.updated_at)) out.push({ label: pg.title || 'Untitled page', keys: 'page', run: send(pg.id) });
+    const days = (await byKind('day')).filter((d) => !d.deleted && d.id !== notebook.page?.id).sort((a, c) => (a.title < c.title ? 1 : -1)).slice(0, 30);
+    for (const d of days) out.push({ label: titleOf(d), keys: 'day', run: send(d.id) });
+    return out;
+  });
+}
+
 async function places(only) {
   const [allAreas, allBooks] = await Promise.all([areas(), books()]);
   const out = [];
@@ -1190,17 +1220,17 @@ async function openPalette(mode = 'commands', only) {
   // Open and focus at once so nothing typed is lost; the list fills in after.
   paletteMode = mode;
   paletteGroup = null;
-  paletteSource = mode === 'go' ? [] : commands;
+  paletteSource = mode === 'go' || mode === 'move' ? [] : commands;
   paletteReady = Promise.resolve();
   $('.palette').hidden = false;
   $('.palette-backdrop').hidden = false;
   const input = $('#palette-input');
-  input.placeholder = mode === 'go' ? (only === 'books' ? 'Go to a book…' : 'Go to a book, chapter, page or day…') : 'Type a command…';
+  input.placeholder = mode === 'move' ? 'Move this line to…' : mode === 'go' ? (only === 'books' ? 'Go to a book…' : 'Go to a book, chapter, page or day…') : 'Type a command…';
   input.value = '';
   input.focus();
   filterPalette();
-  if (mode === 'go') {
-    paletteReady = places(only).then((list) => {
+  if (mode === 'go' || mode === 'move') {
+    paletteReady = (mode === 'move' ? only() : places(only)).then((list) => {
       if (paletteMode !== mode) return;
       paletteSource = list;
       filterPalette();
