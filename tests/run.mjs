@@ -31,7 +31,7 @@ const entries = () => page.evaluate(() => new Promise((res) => {
 const text = () => page.locator('#editor .ProseMirror').innerText();
 let failed = 0;
 async function check(name, fn) {
-  try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message}`); }
+  try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message}`); if (process.env.STACK) console.log(e.stack); }
 }
 
 try {
@@ -345,6 +345,154 @@ try {
     assert.match(found, /Ferry timetable/);
     assert.match(found, /Call the harbourmaster/);
     await p.keyboard.press('Escape');
+  });
+
+  await check('a #tag gathers onto a page as mirrors you can sort and edit', async () => {
+    const words = (sel) => p.evaluate((sel) => [...document.querySelectorAll(sel)].map((x) => {
+      const c = x.cloneNode(true);
+      return c.textContent;
+    }), sel);
+    const lines = () => words('#outline-editor li > p');
+    // Puts the caret at the start (or end) of the line with these words.
+    const caret = (has, end = false) => p.evaluate(({ has, end }) => {
+      const ed = window.__outline;
+      let at = null;
+      ed.state.doc.descendants((n, pos) => { if (at === null && n.type.name === 'paragraph' && n.textContent.includes(has)) at = end === true ? pos + 1 + n.content.size : pos + 1 + (end || 0); return at === null; });
+      ed.commands.setTextSelection(at);
+      ed.commands.focus();
+    }, { has, end });
+    const mirrors = () => words('#outline-editor li.mirror > p');
+    const toNotebook = async () => {
+      await p.keyboard.press('Control+J');
+      await p.waitForSelector('#editor .ProseMirror', { state: 'visible' });
+      await sleep(300);
+      await p.keyboard.press('Control+J');
+      await p.waitForSelector('.notebook', { state: 'visible' });
+      await sleep(400);
+    };
+    await toNotebook();
+    const today = await p.locator('#nb-title').innerText();
+    await p.evaluate(() => window.__outline.commands.focus('end'));
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('Lego lighthouse for Sam #gift');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('Wool scarf for Mum #gift');
+    await sleep(700);
+    await p.locator('#outline-editor .tag', { hasText: '#gift' }).last().click();
+    await p.waitForSelector('.tag-results', { state: 'visible' });
+    await p.locator('.tag-results [data-cmd=gather-tag]').click();
+    await p.waitForSelector('.palette', { state: 'visible' });
+    await sleep(300);
+    await p.locator('#palette-list li', { hasText: 'A new page called “Gift”' }).click();
+    await p.waitForFunction(() => document.querySelectorAll('#outline-editor li.mirror').length === 2);
+    assert.equal(await p.locator('#nb-title').innerText(), 'Gift');
+    assert.equal(await p.locator('#outline-editor p.gathers').getAttribute('data-gathers'), '#gift');
+    assert.deepEqual(await mirrors(), ['Lego lighthouse for Sam #gift', 'Wool scarf for Mum #gift']);
+    const short = await p.evaluate(() => new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }));
+    assert.equal(await p.locator('#outline-editor li.mirror').first().getAttribute('data-from'), short, `mirrored from ${today}`);
+    await sleep(700);
+    let rows = await all();
+    const giftPage = rows.find((r) => r.kind === 'page' && r.title === 'Gift' && !r.deleted);
+    const mirrorRows = rows.filter((r) => r.kind === 'line' && !r.deleted && r.fields?.mirror);
+    assert.equal(mirrorRows.length, 2);
+    assert.ok(mirrorRows.every((r) => r.tags.length === 0), 'a mirror is not found twice under its #tag');
+    const tagged = rows.filter((r) => !r.deleted && r.tags?.includes('gift'));
+    assert.equal(tagged.length, 2);
+
+    // Edit a mirror: the original changes too.
+    await p.locator('#outline-editor li.mirror > p', { hasText: 'Lego lighthouse' }).click();
+    assert.equal(await p.locator('#nb-title').innerText(), 'Gift', 'clicking a mirror edits it here');
+    await caret('Lego lighthouse');
+    await p.keyboard.type('Big ');
+    await sleep(900);
+    rows = await all();
+    const lego = rows.find((r) => r.id === mirrorRows.find((m) => m.text.startsWith('Lego')).fields.mirror);
+    assert.equal(lego.text, 'Big Lego lighthouse for Sam #gift');
+    assert.deepEqual(lego.tags, ['gift']);
+    assert.notEqual(lego.parent_id, giftPage.id, 'the original stays where it was written');
+
+    // Sort them: a heading for Mum with the scarf under it, then delete the Lego mirror.
+    await caret('Wool scarf');
+    await p.keyboard.press('Enter');
+    await p.keyboard.press('ArrowUp');
+    await p.keyboard.type('Mum');
+    await p.keyboard.press('ArrowDown');
+    await sleep(100); // the editor picks up an arrow's move a moment later
+    await p.keyboard.press('Tab');
+    await sleep(300);
+    // Enter in the middle of a mirror opens a line after it and leaves its words whole.
+    await caret('Big Lego', 3);
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('blue one');
+    await sleep(900);
+    assert.deepEqual((await mirrors()).slice(0, 1), ['Big Lego lighthouse for Sam #gift']);
+    assert.ok((await lines()).includes('blue one'));
+    assert.equal((await all()).find((r) => r.id === lego.id).text, 'Big Lego lighthouse for Sam #gift');
+    // The editor reads each key's effect a moment later; a person never types this fast.
+    const keys = async (...ks) => { for (const k of ks) { await p.keyboard.press(k); await sleep(80); } };
+    await keys('Shift+Home', 'Backspace', 'Backspace');
+    await caret('Big Lego', true);
+    await sleep(80);
+    await keys('Shift+Home', 'Backspace', 'Backspace');
+    await sleep(900);
+    rows = await all();
+    assert.ok(!rows.some((r) => r.kind === 'line' && !r.deleted && r.fields?.mirror === lego.id), 'the Lego mirror is gone from the page');
+    const scarfMirror = rows.find((r) => r.kind === 'line' && !r.deleted && r.fields?.mirror && r.text.startsWith('Wool'));
+    const mum = rows.find((r) => r.kind === 'line' && !r.deleted && r.text === 'Mum');
+    assert.ok(mum && scarfMirror, 'Mum heading and scarf mirror saved');
+    assert.equal(scarfMirror.parent_id, mum.id, 'the mirror nests under Mum on this page');
+    assert.ok(rows.find((r) => r.id === lego.id && !r.deleted), 'deleting a mirror leaves the original');
+
+    // Edit the original on its own page, and tag something new.
+    await toNotebook();
+    await caret('Wool scarf for Mum', true);
+    await p.keyboard.press('Control+ArrowLeft');
+    await p.keyboard.press('Control+ArrowLeft');
+    await p.keyboard.type('(green) ');
+    await p.evaluate(() => window.__outline.commands.focus('end'));
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('Ferry tickets for Dad #gift');
+    await sleep(900);
+    await p.keyboard.press('Control+O');
+    await p.waitForSelector('.palette', { state: 'visible' });
+    await sleep(300);
+    await p.keyboard.type('Gift');
+    await sleep(300);
+    await p.locator('#palette-list li', { hasText: /^Gift/ }).first().click();
+    await p.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Gift');
+    await p.waitForFunction(() => document.querySelectorAll('#outline-editor li.mirror').length === 2);
+    const after = await lines();
+    assert.ok(after.includes('Wool scarf for Mum (green) #gift'), after.join(' | '));
+    assert.ok(after.includes('Ferry tickets for Dad #gift'), after.join(' | '));
+    assert.ok(!after.some((t) => t.includes('Lego')), 'a deleted mirror stays gone');
+    assert.ok(after.indexOf('Mum') < after.indexOf('Wool scarf for Mum (green) #gift'), 'the sorting is kept');
+
+    // Bring back what was deleted.
+    await p.locator('#outline-editor li[data-gather] > p').click();
+    assert.equal(await p.locator('.tag-results').isVisible(), false, 'clicking the line (not its #tag chip) edits it');
+    await p.locator('#outline-editor li[data-gather] > p').click({ position: { x: 1, y: 8 } });
+    await sleep(100);
+    await p.keyboard.press('Control+K');
+    await p.waitForSelector('.palette', { state: 'visible' });
+    await p.keyboard.type('Bring back gathered');
+    await sleep(200);
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => document.querySelectorAll('#outline-editor li.mirror').length === 3);
+
+    // The #tag chip on the gathering line lists the tag.
+    const box = await p.evaluate(() => {
+      const el = document.querySelector('#outline-editor p.gathers');
+      const r = document.createRange(); r.selectNodeContents(el);
+      const last = [...r.getClientRects()].filter((x) => x.width).at(-1);
+      return { x: last.right + 30, y: last.top + last.height / 2 };
+    });
+    await p.mouse.click(box.x, box.y);
+    await p.waitForSelector('.tag-results', { state: 'visible' });
+    assert.equal(await p.locator('#tag-results-title').textContent(), '#gift');
+    const listed = await p.locator('#tag-results-list').innerText();
+    assert.equal((listed.match(/Wool scarf/g) || []).length, 1, 'mirrors are not listed again under the tag');
+    await p.locator('.tag-results [data-cmd=close-tag]').click();
+
   });
 
   await check('the six-dot handle moves a paragraph and adds a note', async () => {
@@ -774,6 +922,58 @@ try {
     assert.ok(tally[0].fields.start && tally[0].fields.end, 'the first tally keeps where the day started');
     await p.keyboard.press('Escape');
     assert.equal(await p.locator('.stats').isVisible(), false);
+  });
+
+  await check('a manuscript paragraph gathers too, and a mirror edit reaches the open chapter', async () => {
+    await p.keyboard.press('Escape');
+    if (!(await p.locator('#editor .ProseMirror').isVisible())) await p.keyboard.press('Control+J');
+    await p.waitForSelector('#editor .ProseMirror', { state: 'visible' });
+    await sleep(400);
+    await p.evaluate(() => window.__editor.commands.focus('end'));
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('A ship in a bottle for Dad. #gift');
+    await sleep(900);
+    await p.keyboard.press('Control+O');
+    await p.waitForSelector('.palette', { state: 'visible' });
+    await sleep(300);
+    await p.keyboard.type('Gift');
+    await sleep(300);
+    await p.locator('#palette-list li', { hasText: /^Gift/ }).first().click();
+    await p.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Gift');
+    await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li.mirror > p')].some((x) => x.textContent.startsWith('A ship in a bottle')));
+    await p.evaluate(() => {
+      const ed = window.__outline;
+      ed.state.doc.descendants((n, pos) => { if (n.type.name === 'paragraph' && n.textContent.startsWith('A ship in a bottle')) { ed.commands.setTextSelection(pos + 3); return false; } });
+      ed.commands.focus();
+    });
+    await sleep(80);
+    await p.keyboard.type('glass ');
+    await sleep(900);
+    await p.keyboard.press('Control+J');
+    await p.waitForSelector('#editor .ProseMirror', { state: 'visible' });
+    await sleep(400);
+    assert.match(await p.locator('#editor .ProseMirror').innerText(), /A glass ship in a bottle for Dad\. #gift/);
+    const para = (await p.evaluate(() => new Promise((res) => {
+      const r = indexedDB.open('writing');
+      r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').getAll(); q.onsuccess = () => res(q.result); };
+    }))).find((r) => r.kind === 'para' && !r.deleted && r.text.includes('ship in a bottle'));
+    assert.equal(para.text, 'A glass ship in a bottle for Dad. #gift');
+  });
+
+  await check('Enter on an empty top line starts a new line (the next words are kept)', async () => {
+    if (!(await p.locator('#outline-editor').isVisible())) await p.keyboard.press('Control+J');
+    await p.waitForSelector('#outline-editor .ProseMirror', { state: 'visible' });
+    await sleep(500);
+    await p.evaluate(() => {
+      const ed = window.__outline;
+      ed.commands.setContent({ type: 'doc', content: [{ type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }] }] });
+      ed.commands.focus('end');
+    });
+    await sleep(200);
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('Kept words');
+    const texts = await p.evaluate(() => { const o = []; window.__outline.state.doc.descendants((n) => { if (n.type.name === 'listItem') o.push(n.firstChild.textContent); }); return o; });
+    assert.deepEqual(texts, ['', 'Kept words']);
   });
 
   await check('no page errors', async () => assert.deepEqual(errors, []));

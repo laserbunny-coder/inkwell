@@ -15,6 +15,8 @@ export async function searchIndex() {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const items = [];
   for (const r of rows) {
+    // A mirror's words are its original's, which is found already.
+    if (r.fields?.mirror) continue;
     const text = TEXT.includes(r.kind) ? (r.kind === 'scene' ? r.title : r.text) : NAMED.includes(r.kind) ? r.title : '';
     if (text && text.trim()) items.push({ row: r, text, key: fold(text), named: NAMED.includes(r.kind) });
   }

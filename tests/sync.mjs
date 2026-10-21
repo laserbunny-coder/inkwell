@@ -182,6 +182,145 @@ try {
     assert.match(await laptop.locator('#outline-editor .ProseMirror').innerText(), /Idea from the laptop[\s\S]*Phone line|Phone line[\s\S]*Idea from the laptop/);
   });
 
+  // Gathering a #tag onto a page, with mirrors edited on either device.
+  const mirrorTexts = (p) => p.evaluate(() => [...document.querySelectorAll('#outline-editor li.mirror > p')].map((x) => x.textContent));
+  const outlineHas = (p, re) => p.waitForFunction((src) => new RegExp(src).test(document.querySelector('#outline-editor .ProseMirror').innerText), re.source, { timeout: 5000 });
+  const atEnd = async (p, words) => {
+    await p.evaluate(() => window.__outline.commands.focus('end'));
+    await p.keyboard.press('Enter');
+    await p.keyboard.type(words);
+    await sleep(700);
+  };
+  const openPage = async (p, title) => {
+    await p.keyboard.press('Control+O');
+    await p.waitForSelector('.palette', { state: 'visible' });
+    await sleep(300);
+    await p.keyboard.type(title);
+    await sleep(300);
+    await p.locator('#palette-list li', { hasText: new RegExp(`^${title}`) }).first().click();
+    await p.waitForFunction((t) => document.querySelector('#nb-title')?.textContent === t, title);
+    await sleep(400);
+  };
+  const today = async (p) => {
+    await p.keyboard.press('Control+O');
+    await p.waitForSelector('.palette', { state: 'visible' });
+    await sleep(300);
+    await p.keyboard.press('Escape');
+    await p.keyboard.press('Control+J');
+    await sleep(300);
+    if (!(await p.locator('.notebook').isVisible())) await p.keyboard.press('Control+J');
+    await p.waitForSelector('#outline-editor .ProseMirror', { state: 'visible' });
+    await sleep(400);
+  };
+
+  await check('a page gathering #gift on one device shows the same mirrors on the other', async () => {
+    await atEnd(laptop, 'Candle for Ana #gift');
+    await laptop.locator('#outline-editor .tag', { hasText: '#gift' }).last().click();
+    await laptop.waitForSelector('.tag-results', { state: 'visible' });
+    await laptop.locator('.tag-results [data-cmd=gather-tag]').click();
+    await laptop.waitForSelector('.palette', { state: 'visible' });
+    await laptop.locator('#palette-list li', { hasText: 'A new page called “Gift”' }).click();
+    await laptop.waitForFunction(() => document.querySelectorAll('#outline-editor li.mirror').length === 1);
+    await sleep(700);
+    await syncNow(laptop);
+    await syncNow(phone);
+    await openPage(phone, 'Gift');
+    assert.deepEqual(await mirrorTexts(phone), ['Candle for Ana #gift']);
+  });
+
+  await check('editing a mirror on the phone changes the original on the laptop', async () => {
+    await phone.evaluate(() => {
+      const ed = window.__outline;
+      ed.state.doc.descendants((n, pos) => { if (n.type.name === 'listItem' && n.attrs.mirror) { ed.commands.setTextSelection(pos + 2); return false; } });
+      ed.commands.focus();
+    });
+    await sleep(100);
+    await phone.keyboard.type('Tall ');
+    await sleep(800);
+    await syncNow(phone);
+    await syncNow(laptop);
+    await outlineHas(laptop, /Tall Candle for Ana #gift/);
+    const src = [...table.values()].find((r) => r.kind === 'line' && !r.deleted && !r.fields?.mirror && r.text === 'Tall Candle for Ana #gift');
+    assert.ok(src, 'the original line itself changed');
+    await today(laptop);
+    await outlineHas(laptop, /Tall Candle for Ana #gift/);
+  });
+
+  await check('editing the original on the laptop updates the mirror open on the phone', async () => {
+    await laptop.evaluate(() => {
+      const ed = window.__outline;
+      ed.state.doc.descendants((n, pos) => { if (n.type.name === 'paragraph' && n.textContent.startsWith('Tall Candle')) { ed.commands.setTextSelection(pos + 1 + 'Tall Candle'.length); return false; } });
+      ed.commands.focus();
+    });
+    await sleep(100);
+    await laptop.keyboard.type(' (vanilla)');
+    await sleep(800);
+    await syncNow(laptop);
+    await syncNow(phone);
+    await phone.waitForFunction(() => [...document.querySelectorAll('#outline-editor li.mirror > p')].some((x) => x.textContent === 'Tall Candle (vanilla) for Ana #gift'), null, { timeout: 5000 });
+  });
+
+  await check('something tagged later on one device gathers onto the page open on the other', async () => {
+    await atEnd(laptop, 'Book for Leo #gift');
+    await syncNow(laptop);
+    await syncNow(phone);
+    await phone.waitForFunction(() => document.querySelectorAll('#outline-editor li.mirror').length === 2, null, { timeout: 5000 });
+    assert.deepEqual(await mirrorTexts(phone), ['Tall Candle (vanilla) for Ana #gift', 'Book for Leo #gift']);
+  });
+
+  await check('both devices gathering the same line while apart make one mirror, not two', async () => {
+    await sleep(800);
+    await syncNow(phone);
+    await syncNow(laptop);
+    await atEnd(laptop, 'Scarf for Kim #gift');
+    await syncNow(laptop);
+    await syncNow(phone); // the phone's open page gathers it...
+    await phone.waitForFunction(() => document.querySelectorAll('#outline-editor li.mirror').length === 3, null, { timeout: 5000 });
+    await openPage(laptop, 'Gift'); // ...and so does the laptop's, before hearing from the phone
+    await laptop.waitForFunction(() => document.querySelectorAll('#outline-editor li.mirror').length === 3, null, { timeout: 5000 });
+    await sleep(800);
+    await syncNow(phone);
+    await syncNow(laptop);
+    await syncNow(phone);
+    await sleep(500);
+    for (const p of [laptop, phone]) {
+      const texts = await mirrorTexts(p);
+      assert.equal(texts.filter((t) => t.startsWith('Scarf for Kim')).length, 1, texts.join(' | '));
+    }
+    const rows = [...table.values()].filter((r) => r.kind === 'line' && !r.deleted && r.fields?.mirror && r.text.startsWith('Scarf for Kim'));
+    assert.equal(rows.length, 1);
+    assert.ok(rows.every((r) => r.tags.length === 0));
+  });
+
+  await check('sorting on one device and deleting a mirror on the other both stick', async () => {
+    // Laptop: move Scarf up to the top of the list. Phone: delete Book's mirror.
+    await laptop.evaluate(() => {
+      const ed = window.__outline;
+      ed.state.doc.descendants((n, pos) => { if (n.type.name === 'paragraph' && n.textContent.startsWith('Scarf for Kim')) { ed.commands.setTextSelection(pos + 1); return false; } });
+      ed.commands.focus();
+    });
+    await laptop.keyboard.press('Alt+Shift+ArrowUp');
+    await sleep(100);
+    await laptop.keyboard.press('Alt+Shift+ArrowUp');
+    await sleep(800);
+    await phone.evaluate(() => {
+      const ed = window.__outline;
+      ed.state.doc.descendants((n, pos) => {
+        if (n.type.name === 'listItem' && n.firstChild.textContent.startsWith('Book for Leo')) { ed.view.dispatch(ed.state.tr.delete(pos, pos + n.nodeSize)); return false; }
+      });
+    });
+    await sleep(800);
+    await syncNow(laptop);
+    await syncNow(phone);
+    await syncNow(laptop);
+    await sleep(600);
+    for (const p of [laptop, phone]) {
+      const texts = await mirrorTexts(p);
+      assert.deepEqual(texts, ['Scarf for Kim #gift', 'Tall Candle (vanilla) for Ana #gift'], texts.join(' | '));
+    }
+    assert.ok([...table.values()].some((r) => !r.deleted && r.text === 'Book for Leo #gift' && !r.fields?.mirror), 'the original Book line is still there');
+  });
+
   await check('no page errors', async () => assert.deepEqual([...laptop.errors, ...phone.errors], []));
 } finally {
   await browser.close();
