@@ -148,6 +148,15 @@ export class ChapterStore {
     await addSnapshot({ chapter_id: this.chapter.id, at: Date.now(), words: wordCount(text), doc: json });
   }
 
+  // Let go of the chapter without saving anything more to it (it went to the Trash).
+  detach() {
+    clearTimeout(this.timer);
+    clearTimeout(this.snapTimer);
+    this.chapter = null;
+    this.cache = new Map();
+    this.savedVersion = this.version;
+  }
+
   // Before switching chapters or closing: finish any pending save and snapshot.
   async close(doc) {
     if (!this.chapter) return;

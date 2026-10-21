@@ -15,6 +15,11 @@ export class NotesLayer {
     this.saveTimers = new Map();
     this.frame = 0;
     window.addEventListener('resize', () => this.layout());
+    // Turning notes on narrows the text column over a quarter second, and the
+    // paragraphs rewrap as it goes; lining up once at the start left cards
+    // sitting low. Line up again whenever the text changes size.
+    new ResizeObserver(() => this.layout()).observe(editor.view.dom);
+    layerEl.closest('.sheet')?.addEventListener('transitionend', () => this.layout());
     // A quiet gutter just right of the text: a dot where a paragraph has notes.
     this.gutter = document.createElement('div');
     this.gutter.className = 'note-gutter';
@@ -127,7 +132,7 @@ export class NotesLayer {
     text.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); this.editor.commands.focus(); }
     });
-    requestAnimationFrame(grow);
+    requestAnimationFrame(() => { grow(); this.layout(); });
 
     const hl = (on) => this.paragraphEl(note.parent_id)?.classList.toggle('noted', on);
     card.addEventListener('mouseenter', () => hl(true));

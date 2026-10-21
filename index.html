@@ -63,7 +63,7 @@
     </div>
     <div class="panel-label" id="shelves-tags-label" hidden>Tags</div>
     <div id="shelves-tags"></div>
-    <div class="hint">Touch the left edge to open. ⌘1 keeps it open. Double-click a name to rename.</div>
+    <div class="hint">Touch the left edge to open. ⌘1 keeps it open. Double-click a name to rename; right-click (or press and hold) for more.</div>
   </nav>
 
   <main class="library" aria-label="Library">
@@ -85,6 +85,11 @@
         <div class="panel-label">Loose pages, not in a book yet</div>
         <ul id="lib-loose" class="loose-list"></ul>
       </section>
+      <details id="lib-trash-box" class="lib-trash" hidden>
+        <summary class="panel-label">Trash <span id="lib-trash-count"></span></summary>
+        <p class="hint">Things you moved to the Trash, with everything that was in them. Restore puts them back where they were.</p>
+        <ul id="lib-trash" class="loose-list"></ul>
+      </details>
     </div>
   </main>
 
@@ -93,8 +98,9 @@
       <div class="ph-head">
         <h1 id="ph-title" spellcheck="false"></h1>
         <button type="button" class="pill" id="ph-continue">Continue writing</button>
+        <span id="ph-more"></span>
       </div>
-      <div class="ph-meta"><span id="ph-stats"></span> · <label>Area <select id="ph-area"></select></label></div>
+      <div class="ph-meta"><label><select id="ph-kind" aria-label="What this book is"></select></label> · <span id="ph-stats"></span> · <label>Area <select id="ph-area"></select></label></div>
       <div class="ph-grid">
         <section>
           <div class="panel-label" id="ph-ms-label">Manuscript</div>
@@ -116,6 +122,7 @@
       <div id="nb-kind" class="panel-label"></div>
       <div class="nb-head">
         <h1 id="nb-title" spellcheck="false"></h1>
+        <span id="nb-more"></span>
         <span class="spacer"></span>
         <button type="button" class="ghost-btn" id="nb-prev" aria-label="Day before">‹</button>
         <button type="button" class="ghost-btn" id="nb-today">Today</button>
