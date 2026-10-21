@@ -419,3 +419,11 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .shortcuts dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
 .shortcuts dt { font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
 .shortcuts dd { margin: 0; color: var(--muted); }
+
+/* Element buttons above the phone keyboard, for scripts */
+.script-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; display: flex; gap: 2px; padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); background: var(--panel); border-top: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.script-bar[hidden] { display: none; }
+.script-bar::-webkit-scrollbar { display: none; }
+.script-bar button { flex: 1 0 auto; border: 0; background: transparent; border-radius: 8px; padding: 9px 6px; font-family: var(--ui); font-size: 12px; color: var(--muted); }
+.script-bar button.current { background: var(--tint); color: var(--accent); font-weight: 600; }
+.script-bar-on .corner { display: none; }

@@ -546,6 +546,38 @@ try {
     assert.equal(await p.locator('#editor p[data-el="dialogue"]').innerText(), 'Is anyone up here?');
   });
 
+  await check('on a phone, element buttons above the keyboard change the line you are on', async () => {
+    const phoneCtx = await browser.newContext({ viewport: { width: 390, height: 780 }, hasTouch: true, isMobile: true });
+    const ph = await phoneCtx.newPage();
+    ph.on('pageerror', (e) => errors.push(e.message));
+    await ph.goto(URL);
+    await ph.waitForSelector('#editor .ProseMirror');
+    await sleep(500);
+    await ph.keyboard.press('Control+K');
+    await ph.keyboard.type('New screenplay');
+    await ph.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('New screenplay'));
+    await ph.keyboard.press('Enter');
+    await ph.waitForSelector('#lib-new', { state: 'visible' });
+    await ph.fill('#lib-new-title', 'Pocket');
+    await ph.keyboard.press('Enter');
+    await ph.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Idea');
+    await sleep(400);
+    await ph.keyboard.press('Control+O');
+    await ph.keyboard.type('Script · Pocket');
+    await ph.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('Script · Pocket'));
+    await ph.keyboard.press('Enter');
+    await ph.waitForSelector('html.script #editor p[data-el="scene"]');
+    await ph.locator('#editor p[data-el="scene"]').tap();
+    await ph.waitForSelector('.script-bar', { state: 'visible' });
+    assert.equal(await ph.locator('.script-bar button.current').innerText(), 'Scene');
+    await ph.keyboard.type('Mara');
+    await ph.locator('.script-bar button[data-el="character"]').tap();
+    await ph.waitForSelector('#editor p[data-el="character"]');
+    assert.equal(await ph.evaluate(() => document.activeElement?.classList.contains('ProseMirror')), true, 'keyboard stays up');
+    assert.equal(await ph.locator('.script-bar button.current').innerText(), 'Character');
+    await phoneCtx.close();
+  });
+
   await check('no page errors', async () => assert.deepEqual(errors, []));
 } finally {
   await browser.close();

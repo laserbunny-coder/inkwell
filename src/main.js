@@ -70,6 +70,42 @@ const blocks = new BlockHandle(editor, $('.sheet'), {
   ]
 });
 
+// ---------- script bar ----------
+
+// On a phone there's no Tab key, so a row of element buttons rides just above
+// the keyboard while you write a script. Tapping one changes the line you're on.
+const scriptBar = $('.script-bar');
+const touch = matchMedia('(hover: none)');
+function placeScriptBar() {
+  const show = touch.matches && isScript() && writing() && editor.isFocused;
+  scriptBar.hidden = !show;
+  body.classList.toggle('script-bar-on', show);
+  if (!show) return;
+  const vv = window.visualViewport;
+  const bottom = vv ? window.innerHeight - (vv.offsetTop + vv.height) : 0;
+  scriptBar.style.bottom = `${Math.max(0, bottom)}px`;
+  const p = editor.state.selection.$from.parent;
+  const el = p.type.name === 'paragraph' ? p.attrs.el || 'action' : null;
+  scriptBar.querySelectorAll('button').forEach((b) => b.classList.toggle('current', b.dataset.el === el));
+}
+// pointerdown, not click, so the keyboard stays up.
+scriptBar.addEventListener('pointerdown', (e) => {
+  const b = e.target.closest('button[data-el]');
+  if (!b) return;
+  e.preventDefault();
+  if (b.dataset.el === 'section') {
+    const at = editor.state.selection.$from.before(1);
+    editor.chain().insertContentAt(at, { type: 'sceneBreak' }).run();
+    requestAnimationFrame(() => editor.view.nodeDOM(at)?.querySelector('input')?.focus());
+  } else editor.chain().focus().updateAttributes('paragraph', { el: b.dataset.el }).run();
+  placeScriptBar();
+});
+editor.on('transaction', placeScriptBar);
+editor.on('focus', placeScriptBar);
+editor.on('blur', () => setTimeout(placeScriptBar, 50));
+window.visualViewport?.addEventListener('resize', placeScriptBar);
+window.visualViewport?.addEventListener('scroll', placeScriptBar);
+
 // ---------- notebook ----------
 
 let railTimer;
@@ -310,6 +346,7 @@ async function openChapter(id) {
   const book = await bookOf(store.chapter);
   if (book && book.id !== state.project?.id) state.project = book;
   root.classList.toggle('script', bookType(book) === 'screenplay');
+  requestAnimationFrame(placeScriptBar);
   editor.commands.setContent(doc, { emitUpdate: false });
   if (recovered) store.change(editor.state.doc);
   else statusEl.textContent = 'Saved';
@@ -793,13 +830,19 @@ async function renderProject() {
 
 // The browser can fire a stray hover when the layout shifts (like turning focus on), so edges ignore it then.
 let edgesQuietUntil = 0;
-$('.edge-left').addEventListener('mouseenter', () => { if (Date.now() > edgesQuietUntil) body.classList.add('show-outline'); });
+// On a touch screen an edge opens on a tap, never on a hover: phones send
+// stray hover events when the page shifts (the keyboard opening, say).
+const hovers = () => Date.now() > edgesQuietUntil && !matchMedia('(hover: none)').matches;
+$('.edge-left').addEventListener('mouseenter', () => { if (hovers()) body.classList.add('show-outline'); });
+$('.edge-left').addEventListener('click', () => body.classList.add('show-outline'));
 $('.outline').addEventListener('mouseleave', () => body.classList.remove('show-outline'));
-$('.edge-top').addEventListener('mouseenter', () => { if (Date.now() > edgesQuietUntil) body.classList.add('show-top'); });
+$('.edge-top').addEventListener('mouseenter', () => { if (hovers()) body.classList.add('show-top'); });
+$('.edge-top').addEventListener('click', () => body.classList.add('show-top'));
 $('.topbar').addEventListener('mouseleave', () => body.classList.remove('show-top'));
 // On a touch screen there's no mouse to leave the bar, so a tap anywhere else tucks it away.
 document.addEventListener('pointerdown', (e) => {
   if (e.pointerType !== 'mouse' && !e.target.closest('.topbar, .edge-top')) body.classList.remove('show-top');
+  if (e.pointerType !== 'mouse' && !e.target.closest('.outline, .edge-left')) body.classList.remove('show-outline');
 });
 
 // ---------- history ----------
