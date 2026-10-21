@@ -227,6 +227,17 @@
     <button type="button" data-el="section">#</button>
   </div>
 
+  <div class="script-bar outline-bar" role="toolbar" aria-label="Outline" hidden>
+    <button type="button" data-do="outdent" aria-label="Outdent">⇤</button>
+    <button type="button" data-do="indent" aria-label="Indent">⇥</button>
+    <button type="button" data-do="up" aria-label="Move line up">↑</button>
+    <button type="button" data-do="down" aria-label="Move line down">↓</button>
+    <button type="button" data-do="tag" aria-label="Tag">#</button>
+    <button type="button" data-do="link" aria-label="Link to a page">[[ ]]</button>
+    <button type="button" data-do="fold" aria-label="Fold or unfold">Fold</button>
+    <button type="button" data-do="zoom" aria-label="Zoom in">Zoom</button>
+  </div>
+
   <div class="stats" role="dialog" aria-label="Progress" hidden>
     <div class="sc-head"><strong>Progress</strong>
       <span class="seg"><button type="button" data-unit="day">Days</button><button type="button" data-unit="week">Weeks</button><button type="button" data-unit="month">Months</button></span>
@@ -274,6 +285,7 @@
     <h3>Notebook</h3>
     <dl>
       <dt>⌘↑ ⌘↓</dt><dd>Fold or unfold this line</dd>
+      <dt>⌥⇧↑ ⌥⇧↓</dt><dd>Move the line up or down (or drag its dot)</dd>
       <dt>Tab ⇧Tab</dt><dd>Indent or outdent</dd>
       <dt>Esc</dt><dd>Zoom back out</dd>
     </dl>

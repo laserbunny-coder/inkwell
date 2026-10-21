@@ -168,6 +168,71 @@ function hiddenRanges(doc, { folded, zoom }) {
   return { ranges, root };
 }
 
+// Moves the line you're on (with everything under it) past its neighbour, up or down.
+export function moveLine(editor, dir) {
+  const { state } = editor;
+  const { $head, head } = state.selection;
+  let d = $head.depth;
+  while (d > 0 && $head.node(d).type.name !== 'listItem') d--;
+  if (!d) return false;
+  const li = $head.node(d);
+  const list = $head.node(d - 1);
+  const index = $head.index(d - 1);
+  const liPos = $head.before(d);
+  const other = list.maybeChild(index + dir);
+  if (!other) return false;
+  const to = dir < 0 ? liPos - other.nodeSize : liPos + other.nodeSize;
+  const tr = state.tr.delete(liPos, liPos + li.nodeSize).insert(to, li);
+  tr.setSelection(TextSelection.create(tr.doc, to + (head - liPos)));
+  editor.view.dispatch(tr.scrollIntoView());
+  return true;
+}
+
+// Drags a line by its dot (the bullet, shown or not) to sit before or after another.
+function startDrag(view, gutter, event) {
+  const eid = gutter.dataset.eid;
+  const dragged = gutter.closest('li');
+  const x0 = event.clientX, y0 = event.clientY;
+  let mark = null, drop = null;
+  const find = (e) => {
+    const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('li');
+    if (!hit || !view.dom.contains(hit) || dragged.contains(hit)) return null;
+    const box = hit.querySelector(':scope > p')?.getBoundingClientRect() || hit.getBoundingClientRect();
+    return { li: hit, after: e.clientY > box.top + box.height / 2, box };
+  };
+  const move = (e) => {
+    if (!mark && Math.hypot(e.clientX - x0, e.clientY - y0) < 5) return;
+    if (!mark) { mark = document.createElement('div'); mark.className = 'line-drop'; document.body.append(mark); dragged.classList.add('dragging'); }
+    drop = find(e);
+    mark.hidden = !drop;
+    if (drop) Object.assign(mark.style, { left: `${drop.box.left}px`, width: `${drop.box.width}px`, top: `${(drop.after ? drop.box.bottom : drop.box.top) - 1}px` });
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    if (!mark) { if (eid) view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid })); return; }
+    mark.remove();
+    dragged.classList.remove('dragging');
+    if (!drop) return;
+    const state = view.state;
+    const posOf = (id) => { let at = -1; if (!id) return at; state.doc.descendants((n, pos) => { if (at < 0 && n.type.name === 'listItem' && n.attrs.eid === id) at = pos; return at < 0; }); return at; };
+    const from = posOf(eid);
+    const at = posOf(drop.li.querySelector(':scope > .line-gutter')?.dataset.eid);
+    if (from < 0 || at < 0) return;
+    const node = state.doc.nodeAt(from);
+    const target = state.doc.nodeAt(at);
+    if (node?.type.name !== 'listItem' || target?.type.name !== 'listItem') return;
+    const tr = state.tr.delete(from, from + node.nodeSize);
+    const to = tr.mapping.map(drop.after ? at + target.nodeSize : at, drop.after ? 1 : -1);
+    tr.insert(to, node);
+    tr.setSelection(TextSelection.create(tr.doc, Math.min(to + 2, tr.doc.content.size)));
+    view.dispatch(tr.scrollIntoView());
+    view.focus();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
 export const OutlineFold = Extension.create({
   name: 'outlineFold',
   addOptions() { return { onZoom: () => {} }; },
@@ -183,6 +248,8 @@ export const OutlineFold = Extension.create({
       return this.editor.commands.command(({ tr }) => { tr.setMeta(foldKey, { fold: li.attrs.eid, on }); return true; });
     };
     return {
+      'Alt-Shift-ArrowUp': () => moveLine(this.editor, -1),
+      'Alt-Shift-ArrowDown': () => moveLine(this.editor, 1),
       'Mod-ArrowUp': () => setFold(true),
       'Mod-ArrowDown': () => setFold(false),
       // Enter on the zoomed-in line starts its first line underneath, since a
@@ -295,7 +362,7 @@ export const OutlineFold = Extension.create({
             const eid = b.parentElement.dataset.eid;
             if (!eid) return true;
             if (b.classList.contains('fold')) view.dispatch(view.state.tr.setMeta(foldKey, { fold: eid }));
-            else view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid }));
+            else startDrag(view, b.parentElement, event); // a click zooms in, a drag moves the line
             return true;
           }
         }

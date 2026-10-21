@@ -593,7 +593,67 @@ try {
     await ph.waitForSelector('#editor p[data-el="character"]');
     assert.equal(await ph.evaluate(() => document.activeElement?.classList.contains('ProseMirror')), true, 'keyboard stays up');
     assert.equal(await ph.locator('.script-bar button.current').innerText(), 'Character');
+
+    // Outlines get their own row: indent, outdent, move, tag.
+    await ph.keyboard.press('Control+J');
+    await ph.waitForFunction(() => document.querySelector('#nb-kind')?.textContent === 'Today');
+    await ph.locator('#outline-editor .ProseMirror').tap();
+    await ph.keyboard.type('Boats');
+    await ph.keyboard.press('Enter');
+    await ph.keyboard.type('Tides');
+    await ph.waitForSelector('.outline-bar', { state: 'visible' });
+    const tap = (what) => ph.locator(`.outline-bar [data-do="${what}"]`).tap();
+    await tap('indent');
+    await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li li > p')].some((p) => p.textContent === 'Tides'));
+    await tap('outdent');
+    await ph.waitForFunction(() => ![...document.querySelectorAll('#outline-editor li li > p')].some((p) => p.textContent === 'Tides'));
+    await tap('up');
+    const order = () => ph.evaluate(() => [...document.querySelectorAll('#outline-editor .ProseMirror > ul > li > p')].map((p) => p.textContent).filter((t) => t === 'Boats' || t === 'Tides'));
+    await ph.waitForFunction(() => {
+      const t = [...document.querySelectorAll('#outline-editor .ProseMirror > ul > li > p')].map((p) => p.textContent);
+      return t.indexOf('Tides') > -1 && t.indexOf('Tides') < t.indexOf('Boats');
+    });
+    assert.deepEqual(await order(), ['Tides', 'Boats']);
+    await tap('tag');
+    await ph.keyboard.type('sea');
+    await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].some((p) => p.textContent === 'Tides #sea'));
+    assert.equal(await ph.evaluate(() => document.activeElement?.closest('#outline-editor') !== null), true, 'keyboard stays up');
     await phoneCtx.close();
+  });
+
+  await check('a notebook line moves with Alt+Shift+arrows and by dragging its dot', async () => {
+    await sleep(300);
+    if (!(await p.locator('.notebook').isVisible())) await p.keyboard.press('Control+J');
+    await p.waitForFunction(() => document.querySelector('#nb-kind')?.textContent === 'Today');
+    const texts = () => p.evaluate(() => [...document.querySelectorAll('#outline-editor li > p')].map((x) => x.textContent));
+    const last = p.locator('#outline-editor li > p').last();
+    await last.click();
+    await p.keyboard.press('End');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('Alpha');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('Beta');
+    await sleep(150);
+    await p.keyboard.press('Alt+Shift+ArrowUp');
+    await p.waitForFunction(() => { const t = [...document.querySelectorAll('#outline-editor li > p')].map((x) => x.textContent); return t.indexOf('Beta') === t.indexOf('Alpha') - 1; });
+    // Drag Alpha's dot above Beta.
+    const alpha = p.locator('#outline-editor li', { has: p.locator(':scope > p', { hasText: /^Alpha$/ }) });
+    const beta = p.locator('#outline-editor li > p', { hasText: /^Beta$/ });
+    const dot = await alpha.locator(':scope > .line-gutter .bullet').boundingBox();
+    const tgt = await beta.boundingBox();
+    await p.mouse.move(dot.x + dot.width / 2, dot.y + dot.height / 2);
+    await p.mouse.down();
+    await p.mouse.move(dot.x + 4, dot.y - 10, { steps: 4 });
+    await p.mouse.move(tgt.x + 20, tgt.y + 4, { steps: 6 });
+    assert.equal(await p.locator('.line-drop').isVisible(), true);
+    await p.mouse.up();
+    await p.waitForFunction(() => { const t = [...document.querySelectorAll('#outline-editor li > p')].map((x) => x.textContent); return t.indexOf('Alpha') === t.indexOf('Beta') - 1; });
+    assert.equal(await p.locator('.notebook.zoomed').count(), 0, 'a drag does not zoom in');
+    await sleep(1200);
+    await p.reload();
+    await p.waitForFunction(() => document.querySelector('#nb-kind')?.textContent === 'Today');
+    const after = await texts();
+    assert.equal(after.indexOf('Alpha'), after.indexOf('Beta') - 1, 'the new order is saved');
   });
 
   await check('Progress shows words and pages by day, week and month', async () => {

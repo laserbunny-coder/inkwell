@@ -18,6 +18,7 @@ import { Conflicts } from './conflicts.js';
 import { vaultZip } from './vault.js';
 import { ScriptElements, ELEMENTS, scriptPages, toFountain, fromFountain } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
+import { moveLine } from './outline.js';
 import { openPicker } from './picker.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, stats, dailyMentions, ago } from './library.js';
 
@@ -131,6 +132,45 @@ const notebook = new Notebook({
     remember({ view: 'notebook', pageId: notebook.page.id, ...(zoom ? { zoom } : {}) });
   }
 });
+
+// On a phone, a row above the keyboard for outlines: indent, move, tag, link, fold, zoom.
+const outlineBar = $('.outline-bar');
+function placeOutlineBar() {
+  const show = touch.matches && inNotebook() && notebook.editor.isFocused;
+  outlineBar.hidden = !show;
+  body.classList.toggle('outline-bar-on', show);
+  if (!show) return;
+  const vv = window.visualViewport;
+  outlineBar.style.bottom = `${Math.max(0, vv ? window.innerHeight - (vv.offsetTop + vv.height) : 0)}px`;
+  const here = notebook.currentLine();
+  const zoomOut = !!notebook.zoom && here === notebook.zoom;
+  const z = outlineBar.querySelector('[data-do="zoom"]');
+  z.textContent = zoomOut ? 'Out' : 'Zoom';
+  z.setAttribute('aria-label', zoomOut ? 'Zoom out' : 'Zoom in');
+}
+outlineBar.addEventListener('pointerdown', (e) => {
+  const b = e.target.closest('button[data-do]');
+  if (!b) return;
+  e.preventDefault();
+  const ed = notebook.editor;
+  const act = b.dataset.do;
+  if (act === 'indent') ed.chain().focus().sinkListItem('listItem').run();
+  else if (act === 'outdent') ed.chain().focus().liftListItem('listItem').run();
+  else if (act === 'up' || act === 'down') moveLine(ed, act === 'up' ? -1 : 1);
+  else if (act === 'tag') {
+    const { $from } = ed.state.selection;
+    const before = $from.parent.textBetween(Math.max(0, $from.parentOffset - 1), $from.parentOffset);
+    ed.chain().focus().insertContent(before && before !== ' ' ? ' #' : '#').run();
+  } else if (act === 'link') openPicker(ed);
+  else if (act === 'fold') notebook.toggleFold();
+  else if (act === 'zoom') { const here = notebook.currentLine(); notebook.zoomTo(notebook.zoom && here === notebook.zoom ? null : here); ed.commands.focus(); }
+  placeOutlineBar();
+});
+notebook.editor.on('transaction', placeOutlineBar);
+notebook.editor.on('focus', placeOutlineBar);
+notebook.editor.on('blur', () => setTimeout(placeOutlineBar, 50));
+window.visualViewport?.addEventListener('resize', placeOutlineBar);
+window.visualViewport?.addEventListener('scroll', placeOutlineBar);
 
 const currentEditor = () => (inNotebook() ? notebook.editor : editor);
 

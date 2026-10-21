@@ -432,7 +432,9 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .script-bar::-webkit-scrollbar { display: none; }
 .script-bar button { flex: 1 0 auto; border: 0; background: transparent; border-radius: 8px; padding: 9px 6px; font-family: var(--ui); font-size: 12px; color: var(--muted); }
 .script-bar button.current { background: var(--tint); color: var(--accent); font-weight: 600; }
-.script-bar-on .corner { display: none; }
+.script-bar-on .corner, .outline-bar-on .corner { display: none; }
+.outline-bar button { font-size: 15px; min-width: 40px; }
+.outline-bar button[data-do="fold"], .outline-bar button[data-do="zoom"], .outline-bar button[data-do="link"] { font-size: 12px; }
 
 /* ---------- alternates ---------- */
 /* A faint dotted underline on words that hold other versions, and "2/3" in the
@@ -486,3 +488,8 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .stats-list .period { text-align: right; }
 .stats-list .total { grid-column: 2; text-align: right; color: var(--muted); font-size: 12px; }
 .stats-foot { color: var(--muted); font-size: 12px; margin: 12px 0 0; }
+
+/* Dragging a line by its dot */
+#outline-editor .bullet { cursor: grab; touch-action: none; }
+#outline-editor li.dragging { opacity: .35; }
+.line-drop { position: fixed; height: 2px; background: var(--accent); border-radius: 1px; z-index: 70; pointer-events: none; }
