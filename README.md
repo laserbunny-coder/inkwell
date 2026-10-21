@@ -1,6 +1,8 @@
-# Writing
+# Inkwell
 
 A quiet, warm writing app for novels and screenplays, built to grow into a notebook and research vault.
+
+Live at https://laserbunny-coder.github.io/inkwell/
 
 When you write, the screen shows only your text. Everything else is a hover or a keystroke away:
 
