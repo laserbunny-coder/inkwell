@@ -797,6 +797,10 @@ $('.edge-left').addEventListener('mouseenter', () => { if (Date.now() > edgesQui
 $('.outline').addEventListener('mouseleave', () => body.classList.remove('show-outline'));
 $('.edge-top').addEventListener('mouseenter', () => { if (Date.now() > edgesQuietUntil) body.classList.add('show-top'); });
 $('.topbar').addEventListener('mouseleave', () => body.classList.remove('show-top'));
+// On a touch screen there's no mouse to leave the bar, so a tap anywhere else tucks it away.
+document.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'mouse' && !e.target.closest('.topbar, .edge-top')) body.classList.remove('show-top');
+});
 
 // ---------- history ----------
 

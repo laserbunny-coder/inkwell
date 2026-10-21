@@ -80,6 +80,16 @@ export class Sync {
     this.again = false;
     this.timer = null;
     this.retry = 2000;
+    // When each entry was last sent from here, by the server's clock. A pull
+    // can bring back our own earlier send while the entry has changed again
+    // here; that's an echo, not another device, so it mustn't count as a clash.
+    try { this.sent = new Map(Object.entries(JSON.parse(localStorage.getItem('sentStamps') || '{}'))); } catch { this.sent = new Map(); }
+  }
+
+  remember(stamps) {
+    for (const [id, at] of stamps) if (at) this.sent.set(id, at);
+    while (this.sent.size > 5000) this.sent.delete(this.sent.keys().next().value);
+    try { localStorage.setItem('sentStamps', JSON.stringify(Object.fromEntries(this.sent))); } catch { /* full */ }
   }
 
   get available() { return !!this.backend; }
@@ -146,6 +156,7 @@ export class Sync {
       if (!local.length) continue;
       const stamped = await this.backend.push(local.map(toRemote));
       const stamps = new Map((stamped || []).map((r) => [r.id, Date.parse(r.updated_at)]));
+      this.remember(stamps);
       await clearOutbox(local.map((e) => ({ id: e.id, updated_at: e.updated_at, server_at: stamps.get(e.id) })));
     }
   }
@@ -164,6 +175,8 @@ export class Sync {
         const incoming = toLocal(r);
         const mine = await getEntry(r.id);
         if (pending.has(r.id)) {
+          // Our own earlier send coming back: nothing new.
+          if (incoming.updated_at <= (this.sent.get(r.id) || 0)) continue;
           // Changed here too and not sent yet: keep ours, save theirs.
           if (mine && (mine.text !== incoming.text || mine.title !== incoming.title || mine.deleted !== incoming.deleted)) await addConflict(incoming);
           continue;

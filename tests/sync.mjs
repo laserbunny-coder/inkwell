@@ -77,6 +77,23 @@ try {
     assert.equal(paras[0].text, 'From the laptop.');
   });
 
+  await check('writing on after a sync does not count as a clash with yourself', async () => {
+    await laptop.keyboard.type(' Still going.');
+    await sleep(600);
+    await syncNow(laptop);
+    await laptop.keyboard.type(' And more.');
+    await sleep(600);
+    await syncNow(laptop);
+    await syncNow(laptop);
+    assert.equal(await laptop.locator('#versions').isHidden(), true, 'no "to check" pill');
+    const paras = [...table.values()].filter((r) => r.kind === 'para');
+    assert.equal(paras[0].text, 'From the laptop. Still going. And more.');
+    // Put the text back the way the later checks expect it.
+    for (let i = 0; i < ' Still going. And more.'.length; i++) await laptop.keyboard.press('Backspace');
+    await sleep(600);
+    await syncNow(laptop);
+  });
+
   await sleep(50);
   const phone = await device();
   await sleep(500);

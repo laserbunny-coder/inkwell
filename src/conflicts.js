@@ -20,7 +20,17 @@ export class Conflicts {
   }
 
   async count() {
-    const n = (await conflicts()).length;
+    // Drop any where the other version adds nothing to this one, such as an
+    // earlier copy of a paragraph you kept writing (an old sync bug made these).
+    let list = await conflicts();
+    const stale = [];
+    for (const other of list) {
+      const mine = await getEntry(other.id);
+      if (mine && !mine.deleted && !other.deleted && other.title === mine.title && (mine.text || '').startsWith(other.text || '')) stale.push(other);
+    }
+    for (const o of stale) await dropConflict(o.key);
+    if (stale.length) list = await conflicts();
+    const n = list.length;
     this.pill.hidden = !n;
     this.pill.textContent = n === 1 ? '1 to check' : `${n} to check`;
     // New ones: let the top bar peek out for a moment so it's noticed.
