@@ -440,6 +440,37 @@ try {
     await p.keyboard.press('Control+J');
   });
 
+  await check('lines fold away and a bullet zooms in', async () => {
+    if (!(await p.locator('.notebook').isVisible())) await p.keyboard.press('Control+J');
+    await p.waitForSelector('.notebook', { state: 'visible' });
+    await p.waitForFunction(() => document.querySelector('#nb-kind').textContent === 'Today');
+    const top = p.locator('#outline-editor li', { hasText: 'Call the harbourmaster' }).first();
+    const storm = p.locator('#outline-editor li p', { hasText: 'Ask about the 1912 storm' });
+    await top.locator(':scope > p').click({ position: { x: 12, y: 10 } }); // away from the #tag
+    await sleep(150);
+    await p.keyboard.press('Control+ArrowUp');
+    await p.waitForFunction(() => document.querySelector('#outline-editor li.folded'));
+    assert.equal(await storm.isVisible(), false, 'folded away');
+    await p.keyboard.press('Control+ArrowDown');
+    assert.equal(await storm.isVisible(), true, 'unfolded');
+    await top.locator(':scope > .line-gutter .fold').click();
+    assert.equal(await storm.isVisible(), false, 'arrow folds');
+    await top.locator(':scope > .line-gutter .fold').click();
+    assert.equal(await storm.isVisible(), true, 'arrow unfolds');
+    await top.locator(':scope > .line-gutter .bullet').click();
+    await p.waitForSelector('.notebook.zoomed');
+    assert.equal(await p.locator('#nb-zoom').isVisible(), true);
+    assert.equal(await p.locator('#nb-title').isVisible(), false);
+    assert.equal(await storm.isVisible(), true);
+    await p.keyboard.press('Escape');
+    await p.waitForFunction(() => !document.querySelector('.notebook.zoomed'));
+    await top.locator(':scope > .line-gutter .bullet').click();
+    await p.waitForSelector('.notebook.zoomed');
+    await p.goBack();
+    await p.waitForFunction(() => !document.querySelector('.notebook.zoomed'));
+    assert.equal(await p.locator('#nb-title').isVisible(), true);
+  });
+
   await check('the command menu opens on categories, and typing still finds everything', async () => {
     await sleep(600);
     await p.keyboard.press('Control+K');
@@ -453,8 +484,8 @@ try {
     assert.match(await p.locator('#palette-list li[aria-selected="true"]').innerText(), /Sidebar/);
     await p.keyboard.press('Backspace');
     await p.waitForFunction(() => document.querySelectorAll('#palette-list li').length === 6);
-    await p.keyboard.type('scene break');
-    assert.match(await p.locator('#palette-list li').first().innerText(), /Scene break/);
+    await p.keyboard.type('light / dark');
+    assert.match(await p.locator('#palette-list li').first().innerText(), /Light \/ dark/);
     await p.keyboard.press('Escape');
   });
 

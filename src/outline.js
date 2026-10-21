@@ -1,6 +1,6 @@
 import { Node, Extension, InputRule, mergeAttributes } from '@tiptap/core';
 import Document from '@tiptap/extension-document';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { children, getEntry, putEntries } from './db.js';
 import { newId, tagsIn } from './model.js';
@@ -135,6 +135,167 @@ export const TagMarks = Extension.create({
             if (!t || event.altKey) return false;
             event.preventDefault();
             onTag(t.dataset.tag);
+            return true;
+          }
+        }
+      }
+    })];
+  }
+});
+
+// Folding and zooming, Workflowy-style. The arrow beside a line with lines
+// under it folds them away; clicking a bullet zooms in so that line is the
+// whole page. Which lines are folded is remembered on this device.
+export const foldKey = new PluginKey('fold');
+const FOLDED = 'folded';
+const loadFolded = () => { try { return new Set(JSON.parse(localStorage.getItem(FOLDED) || '[]')); } catch { return new Set(); } };
+const saveFolded = (set) => { try { localStorage.setItem(FOLDED, JSON.stringify([...set].slice(-2000))); } catch {} };
+const kidsOf = (li) => (li.lastChild?.type.name === 'bulletList' ? li.lastChild : null);
+
+// Where each line sits, and which parts of the page are out of sight.
+function hiddenRanges(doc, { folded, zoom }) {
+  const ranges = [];
+  let root = null;
+  doc.descendants((node, pos) => {
+    if (node.type.name !== 'listItem') return;
+    if (zoom && node.attrs.eid === zoom) root = { from: pos, to: pos + node.nodeSize, node };
+    const kids = kidsOf(node);
+    if (kids && folded.has(node.attrs.eid) && node.attrs.eid !== zoom) {
+      const start = pos + node.nodeSize - 1 - kids.nodeSize;
+      ranges.push({ from: start, to: start + kids.nodeSize, eid: node.attrs.eid });
+    }
+  });
+  return { ranges, root };
+}
+
+export const OutlineFold = Extension.create({
+  name: 'outlineFold',
+  addOptions() { return { onZoom: () => {} }; },
+  addKeyboardShortcuts() {
+    const at = () => {
+      const { $from } = this.editor.state.selection;
+      for (let d = $from.depth; d > 0; d--) if ($from.node(d).type.name === 'listItem') return $from.node(d);
+      return null;
+    };
+    const setFold = (on) => {
+      const li = at();
+      if (!li || !kidsOf(li)) return false;
+      return this.editor.commands.command(({ tr }) => { tr.setMeta(foldKey, { fold: li.attrs.eid, on }); return true; });
+    };
+    return {
+      'Mod-ArrowUp': () => setFold(true),
+      'Mod-ArrowDown': () => setFold(false),
+      // Enter on the zoomed-in line starts its first line underneath, since a
+      // line beside it would be out of view.
+      Enter: () => {
+        const st = foldKey.getState(this.editor.state);
+        const li = at();
+        if (!st?.zoom || !li || li.attrs.eid !== st.zoom) return false;
+        const { $from } = this.editor.state.selection;
+        if ($from.parent.type.name !== 'paragraph' || $from.node($from.depth - 1) !== li) return false;
+        const schema = this.editor.schema;
+        const liPos = $from.before($from.depth - 1);
+        const fresh = schema.nodes.listItem.create(null, schema.nodes.paragraph.create());
+        const kids = kidsOf(li);
+        let tr = this.editor.state.tr;
+        let insertAt;
+        if (kids) { insertAt = liPos + li.nodeSize - 1 - kids.nodeSize + 1; tr = tr.insert(insertAt, fresh); }
+        else { insertAt = liPos + li.nodeSize - 1; tr = tr.insert(insertAt, schema.nodes.bulletList.create(null, fresh)); insertAt += 1; }
+        tr.setSelection(TextSelection.create(tr.doc, insertAt + 2));
+        this.editor.view.dispatch(tr.scrollIntoView());
+        return true;
+      },
+      Escape: () => {
+        const st = foldKey.getState(this.editor.state);
+        if (!st?.zoom) return false;
+        return this.editor.commands.command(({ tr }) => { tr.setMeta(foldKey, { zoom: null }); return true; });
+      }
+    };
+  },
+  addProseMirrorPlugins() {
+    const onZoom = this.options.onZoom;
+    return [new Plugin({
+      key: foldKey,
+      state: {
+        init: () => ({ folded: loadFolded(), zoom: null }),
+        apply(tr, old) {
+          const m = tr.getMeta(foldKey);
+          if (!m) return old;
+          const next = { folded: old.folded, zoom: old.zoom };
+          if ('fold' in m) {
+            next.folded = new Set(old.folded);
+            const on = m.on ?? !old.folded.has(m.fold);
+            if (on) next.folded.add(m.fold); else next.folded.delete(m.fold);
+            saveFolded(next.folded);
+          }
+          if ('zoom' in m) next.zoom = m.zoom;
+          return next;
+        }
+      },
+      view: () => ({
+        update(view, prev) {
+          const a = foldKey.getState(view.state);
+          const b = foldKey.getState(prev);
+          if (a.zoom !== b.zoom) onZoom(a.zoom);
+        }
+      }),
+      // Keep the caret where you can see it: arrows skip over folded lines,
+      // and anything typed or moved into a fold opens it.
+      appendTransaction(trs, oldState, state) {
+        const st = foldKey.getState(state);
+        if (!st.folded.size && !st.zoom) return null;
+        if (!trs.some((t) => t.docChanged || t.selectionSet || t.getMeta(foldKey))) return null;
+        const { ranges, root } = hiddenRanges(state.doc, st);
+        const head = state.selection.head;
+        if (st.zoom && !root) return state.tr.setMeta(foldKey, { zoom: null });
+        const forward = head >= oldState.selection.head;
+        if (root && (head < root.from || head > root.to)) {
+          const sel = head < root.from ? Selection.findFrom(state.doc.resolve(root.from + 1), 1, true) : Selection.findFrom(state.doc.resolve(root.to - 1), -1, true);
+          return sel ? state.tr.setSelection(sel) : null;
+        }
+        const inside = ranges.find((r) => head > r.from && head < r.to);
+        if (!inside) return null;
+        if (trs.some((t) => t.docChanged)) return state.tr.setMeta(foldKey, { fold: inside.eid, on: false });
+        const sel = forward ? Selection.findFrom(state.doc.resolve(inside.to), 1, true) : Selection.findFrom(state.doc.resolve(inside.from), -1, true);
+        return state.tr.setSelection(sel || Selection.findFrom(state.doc.resolve(inside.from), -1, true));
+      },
+      props: {
+        decorations(state) {
+          const st = foldKey.getState(state);
+          const decos = [];
+          const { root } = hiddenRanges(state.doc, st);
+          state.doc.descendants((node, pos) => {
+            if (node.type.name !== 'listItem') return;
+            const eid = node.attrs.eid;
+            const kids = kidsOf(node);
+            const folded = kids && st.folded.has(eid) && eid !== st.zoom;
+            const cls = [kids ? 'has-kids' : '', folded ? 'folded' : ''];
+            if (root) {
+              if (eid === st.zoom) cls.push('zoom-root');
+              else if (pos < root.from && pos + node.nodeSize > root.to) cls.push('zoom-path');
+              else if (pos < root.from || pos >= root.to) cls.push('zoom-hidden');
+            }
+            decos.push(Decoration.node(pos, pos + node.nodeSize, { class: cls.filter(Boolean).join(' ') }));
+            decos.push(Decoration.widget(pos + 1, () => {
+              const w = document.createElement('span');
+              w.className = 'line-gutter';
+              w.contentEditable = 'false';
+              w.innerHTML = `${kids ? '<button type="button" class="fold" tabindex="-1" aria-label="Fold or unfold"></button>' : ''}<button type="button" class="bullet" tabindex="-1" aria-label="Zoom in"></button>`;
+              w.dataset.eid = eid || '';
+              return w;
+            }, { side: -1, key: `g-${eid}-${kids ? 1 : 0}`, ignoreSelection: true }));
+          });
+          return DecorationSet.create(state.doc, decos);
+        },
+        handleDOMEvents: {
+          mousedown(view, event) {
+            const b = event.target.closest?.('.line-gutter button');
+            if (!b) return false;
+            event.preventDefault();
+            const eid = b.parentElement.dataset.eid;
+            if (!eid) return true;
+            if (b.classList.contains('fold')) view.dispatch(view.state.tr.setMeta(foldKey, { fold: eid }));
+            else view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid }));
             return true;
           }
         }

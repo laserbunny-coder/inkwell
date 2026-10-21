@@ -1,6 +1,6 @@
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import { OutlineDoc, LineIds, EntryRef, TagMarks, OutlineStore, descendants } from './outline.js';
+import { OutlineDoc, LineIds, EntryRef, TagMarks, OutlineFold, foldKey, OutlineStore, descendants } from './outline.js';
 import { getEntry, linkedFrom, byKind, byTag, putEntries } from './db.js';
 import { entry } from './model.js';
 import { bySort } from './order.js';
@@ -55,7 +55,8 @@ export async function rootOf(row) {
 const EMPTY = { type: 'doc', content: [{ type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }] }] };
 
 export class Notebook {
-  constructor({ onPick, onOpen, onStatus, onChange, onPlace }) {
+  constructor({ onPick, onOpen, onStatus, onChange, onPlace, onZoom }) {
+    this.onZoom = onZoom || (() => {});
     this.onOpen = onOpen;
     this.onChange = onChange || (() => {});
     this.onPlace = onPlace || (() => {});
@@ -69,7 +70,8 @@ export class Notebook {
       element: $('#outline-editor'),
       extensions: [
         StarterKit.configure({ document: false, codeBlock: false, code: false, horizontalRule: false, heading: false, blockquote: false, trailingNode: false }),
-        OutlineDoc, LineIds, EntryRef.configure({ onPick, onOpen }), TagMarks.configure({ onTag: (t) => this.showTag(t) })
+        OutlineDoc, LineIds, EntryRef.configure({ onPick, onOpen }), TagMarks.configure({ onTag: (t) => this.showTag(t) }),
+        OutlineFold.configure({ onZoom: (eid) => this.zoomed(eid) })
       ],
       content: EMPTY,
       onUpdate: ({ editor }) => this.store.change(editor.state.doc)
@@ -93,6 +95,62 @@ export class Notebook {
   }
 
   get isDay() { return this.page?.kind === 'day'; }
+
+  get zoom() { return foldKey.getState(this.editor.state)?.zoom || null; }
+
+  currentLine() {
+    const { $from } = this.editor.state.selection;
+    for (let d = $from.depth; d > 0; d--) if ($from.node(d).type.name === 'listItem') return $from.node(d).attrs.eid;
+    return null;
+  }
+
+  toggleFold() {
+    const eid = this.currentLine();
+    if (eid) this.editor.view.dispatch(this.editor.state.tr.setMeta(foldKey, { fold: eid }));
+    this.editor.commands.focus();
+  }
+
+  zoomTo(eid) {
+    if ((eid || null) === this.zoom) return;
+    this.editor.view.dispatch(this.editor.state.tr.setMeta(foldKey, { zoom: eid || null }));
+  }
+
+  // Zoomed in: a trail back up to the page, and the day's extras step aside.
+  zoomed(eid) {
+    const trail = $('#nb-zoom');
+    $('.notebook').classList.toggle('zoomed', !!eid);
+    trail.replaceChildren();
+    trail.hidden = !eid;
+    if (eid) {
+      const path = [];
+      const find = (node, chain) => {
+        let hit = null;
+        node.forEach((child) => {
+          if (hit) return;
+          if (child.type.name === 'listItem') {
+            if (child.attrs.eid === eid) hit = chain;
+            else hit = find(child, [...chain, child]);
+          } else if (!child.isTextblock) hit = find(child, chain);
+        });
+        return hit;
+      };
+      path.push(...(find(this.editor.state.doc, []) || []));
+      const crumb = (label, target) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.addEventListener('click', () => { this.zoomTo(target); this.editor.commands.focus(); });
+        trail.append(b);
+      };
+      crumb(this.page ? titleOf(this.page) : 'Page', null);
+      for (const li of path) {
+        const t = li.firstChild?.textContent.trim() || 'Untitled line';
+        crumb(t.length > 40 ? `${t.slice(0, 38)}…` : t, li.attrs.eid);
+      }
+      this.editor.commands.focus();
+    }
+    this.onZoom(eid);
+  }
 
   async openDay(iso = isoDate()) {
     const id = dayId(iso);

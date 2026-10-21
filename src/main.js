@@ -75,8 +75,13 @@ const notebook = new Notebook({
   onChange: () => { clearTimeout(railTimer); railTimer = setTimeout(renderRail, 100); },
   onPlace: (page) => {
     if (!inNotebook()) return;
-    remember({ view: 'notebook', pageId: page.id });
+    remember({ view: 'notebook', pageId: page.id, ...(notebook?.zoom ? { zoom: notebook.zoom } : {}) });
     renderCrumb();
+  },
+  // Zooming in is a step you can go Back from.
+  onZoom: (zoom) => {
+    if (!inNotebook() || !notebook.page) return;
+    remember({ view: 'notebook', pageId: notebook.page.id, ...(zoom ? { zoom } : {}) });
   }
 });
 
@@ -128,6 +133,12 @@ async function go(place) {
     else {
       if (place.line) notebook.focusLine(place.line);
       remember({ view: 'notebook', pageId: notebook.page.id });
+    }
+    if ((place.zoom || null) !== notebook.zoom) {
+      const mode = historyMode;
+      historyMode = 'replace';
+      notebook.zoomTo(place.zoom || null);
+      historyMode = mode;
     }
   } else if (place.view === 'library') {
     if ('area' in place) state.libArea = place.area;
@@ -949,6 +960,9 @@ const commands = [
   { group: 'new', label: 'New area', keys: '', run: () => go({ view: 'library' }).then(() => [...document.querySelectorAll('#lib-areas .chip.add')].at(-1)?.click()) },
   { group: 'new', label: 'New chapter', keys: '', run: () => go({ view: 'write' }).then(newChapter), when: () => !!state.project },
   { group: 'new', label: 'New act', keys: '', run: () => go({ view: 'write' }).then(newAct), when: () => !!state.project },
+  { group: 'write', label: 'Zoom into this line', keys: 'click its bullet', run: () => notebook.zoomTo(notebook.currentLine()), when: inNotebook },
+  { group: 'write', label: 'Zoom out', keys: 'Esc', run: () => notebook.zoomTo(null), when: () => inNotebook() && !!notebook.zoom },
+  { group: 'write', label: 'Fold or unfold this line', keys: `${mod}↑ ${mod}↓`, run: () => notebook.toggleFold(), when: inNotebook },
   { group: 'write', label: 'Link to a page…', keys: '[[', run: () => openPicker(currentEditor()), when: () => writing() || inNotebook() },
   { group: 'write', label: 'Add a note to this paragraph', keys: `${mod}⇧N`, run: () => notes.add(), when: writing },
   { group: 'write', label: 'Scene break', keys: `${mod}⇧↵`, run: () => editor.chain().focus().insertSceneBreak().run(), when: writing },

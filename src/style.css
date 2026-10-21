@@ -167,7 +167,31 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 #outline-editor ul { list-style: none; margin: 0; padding-left: 1.4em; }
 #outline-editor .ProseMirror > ul { padding-left: 1.1em; }
 #outline-editor li { position: relative; }
-#outline-editor li::before { content: ''; position: absolute; left: -.95em; top: .72em; width: .32em; height: .32em; border-radius: 50%; background: var(--faint); }
+/* Each line's bullet (click to zoom in) and, for lines with lines under them, a fold arrow. */
+#outline-editor .line-gutter { position: absolute; left: -2.1em; top: 0; width: 2.1em; height: 1.6em; margin-top: .15em; user-select: none; }
+#outline-editor .line-gutter button { position: absolute; padding: 0; border: 0; background: transparent; cursor: pointer; }
+#outline-editor .bullet { right: 0; top: 0; width: 1.3em; height: 1.6em; }
+#outline-editor .bullet::after { content: ''; position: absolute; left: .49em; top: .66em; width: .32em; height: .32em; border-radius: 50%; background: var(--faint); transition: transform .12s; }
+#outline-editor .bullet:hover::after { background: var(--accent); transform: scale(1.4); }
+#outline-editor li.folded > .line-gutter .bullet::after { box-shadow: 0 0 0 .22em var(--line); background: var(--muted); }
+#outline-editor .fold { left: 0; top: 0; width: .9em; height: 1.6em; opacity: 0; color: var(--muted); transition: opacity .12s, transform .12s; }
+#outline-editor .fold::after { content: ''; position: absolute; left: .28em; top: .62em; border: .2em solid transparent; border-top: .28em solid currentColor; border-bottom: 0; }
+#outline-editor li:hover > .line-gutter .fold, #outline-editor li.folded > .line-gutter .fold { opacity: .7; }
+#outline-editor li.folded > .line-gutter .fold { transform: rotate(-90deg); }
+#outline-editor li.folded > ul { display: none; }
+@media (hover: none) { #outline-editor li.has-kids > .line-gutter .fold { opacity: .45; } }
+/* Zoomed in on one line */
+#outline-editor li.zoom-hidden { display: none; }
+#outline-editor li.zoom-path > p, #outline-editor li.zoom-path > .line-gutter, #outline-editor li.zoom-root > .line-gutter { display: none; }
+#outline-editor li.zoom-path > ul, #outline-editor li.zoom-root > ul { border-left: 0; margin-left: 0; padding-left: 0; }
+:root .notebook.zoomed #outline-editor .ProseMirror > ul { padding-left: 0; }
+#outline-editor li.zoom-root > p { font-weight: 500; font-size: 1.35em; margin: 0 0 .5em; }
+#outline-editor li.zoom-root > ul { padding-left: 1.1em; }
+.nb-zoom { display: flex; flex-wrap: wrap; gap: 2px; margin: -8px 0 10px; font-size: 13px; color: var(--muted); }
+.nb-zoom button { border: 0; background: transparent; padding: 2px 4px; border-radius: 6px; color: inherit; }
+.nb-zoom button:hover { background: var(--tint); color: var(--ink); }
+.nb-zoom button + button::before { content: '›'; margin-right: 6px; color: var(--faint); }
+.notebook.zoomed .nb-head, .notebook.zoomed #nb-kind, .notebook.zoomed .past-days, .notebook.zoomed .backlinks, .notebook.zoomed #nb-links { display: none !important; }
 #outline-editor li > ul { border-left: 1px solid var(--line); margin-left: -.8em; padding-left: 2.2em; }
 #outline-editor p { margin: .15em 0; }
 #outline-editor ol { margin: 0; padding-left: 1.4em; }
