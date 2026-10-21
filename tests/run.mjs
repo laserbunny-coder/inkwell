@@ -407,6 +407,7 @@ try {
     await p.keyboard.press('Enter');
     await p.waitForSelector('#nb-links', { state: 'visible' });
     assert.equal(await p.locator('#nb-links').innerText(), 'Linked from 1');
+    await sleep(500); // let the page finish opening, so it doesn't take focus back from the menu
     await p.keyboard.press('Control+K');
     await p.keyboard.type('hide "Linked from"');
     await p.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('Linked from'));
