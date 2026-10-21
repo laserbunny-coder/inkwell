@@ -508,3 +508,5 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 #outline-editor li[data-done] > p { text-decoration: line-through; text-decoration-color: var(--faint); color: var(--muted); }
 #outline-editor li[data-done] > ul { opacity: .55; }
 body.line-dragging, body.line-dragging * { user-select: none; }
+/* With the keyboard and a row up, leave room to scroll the last lines above them. */
+.outline-bar-on .notebook, .script-bar-on .sheet { padding-bottom: 60vh; }

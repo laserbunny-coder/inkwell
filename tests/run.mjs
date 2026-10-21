@@ -662,6 +662,24 @@ try {
     assert.equal(await nested(), false, 'a held button does nothing');
     await tap('indent');
     await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li li > p')].some((x) => x.textContent === 'Gulls'));
+    // After zooming in and out, and moving lines, the caret stays clear of the row.
+    await ph.evaluate(() => window.__outline.commands.focus('end'));
+    for (let i = 0; i < 30; i++) { await ph.keyboard.press('Enter'); await ph.keyboard.type(`Line ${i}`); }
+    const clear = () => ph.evaluate(() => {
+      const r = window.getSelection().getRangeAt(0).getBoundingClientRect();
+      const bar = document.querySelector('.outline-bar').getBoundingClientRect();
+      return r.bottom > 0 && r.bottom <= bar.top - 40;
+    });
+    await tap('zoom');
+    await ph.waitForSelector('.notebook.zoomed');
+    await tap('zoom');
+    await ph.waitForFunction(() => !document.querySelector('.notebook.zoomed'));
+    await sleep(200);
+    assert.equal(await clear(), true, 'caret visible after zooming out');
+    await ph.evaluate(() => window.scrollTo(0, 0));
+    await tap('up');
+    await sleep(200);
+    assert.equal(await clear(), true, 'caret visible after moving a line');
     // A line with lines under it has a caret to fold it.
     const parent = ph.locator('#outline-editor li.has-kids').first();
     const caret = parent.locator(':scope > .line-gutter .fold');

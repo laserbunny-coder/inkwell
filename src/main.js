@@ -99,6 +99,19 @@ function placeScriptBar() {
 // scrolls the row instead, so a thumb resting on a button never sets it off.
 // pointerdown is held back so the keyboard stays up.
 const TAP_MS = 280;
+
+// Room kept below the caret when the page scrolls to it: whatever the keyboard
+// and the row above it cover, plus a couple of lines, so the caret never hides.
+const caretRoom = {
+  top: 60, left: 5, right: 5,
+  get bottom() {
+    const vv = window.visualViewport;
+    const keyboard = vv ? Math.max(0, window.innerHeight - (vv.offsetTop + vv.height)) : 0;
+    const bar = [scriptBar, $('.outline-bar')].find((b) => b && !b.hidden);
+    return keyboard + (bar ? bar.offsetHeight : 0) + 72;
+  }
+};
+
 function tapBar(bar, selector, run) {
   let start = null;
   let hold = null;
@@ -178,8 +191,8 @@ tapBar(outlineBar, 'button[data-do]', (b) => {
   else if (act === 'redo') ed.chain().focus().redo().run();
   else if (act === 'done') toggleDone(ed);
   else if (act === 'move') setTimeout(moveLinePicker, 120); // after the tap's click, so it doesn't land on the menu
-  else if (act === 'indent') ed.chain().focus().sinkListItem('listItem').run();
-  else if (act === 'outdent') ed.chain().focus().liftListItem('listItem').run();
+  else if (act === 'indent') ed.chain().focus().sinkListItem('listItem').scrollIntoView().run();
+  else if (act === 'outdent') ed.chain().focus().liftListItem('listItem').scrollIntoView().run();
   else if (act === 'up' || act === 'down') moveLine(ed, act === 'up' ? -1 : 1);
   else if (act === 'tag') {
     const { $from } = ed.state.selection;
@@ -189,6 +202,11 @@ tapBar(outlineBar, 'button[data-do]', (b) => {
   else if (act === 'zoom') { const here = notebook.currentLine(); notebook.zoomTo(notebook.zoom && here === notebook.zoom ? null : here); ed.commands.focus(); }
   placeOutlineBar();
 });
+for (const ed of [editor, notebook.editor]) ed.view.setProps({ scrollMargin: caretRoom, scrollThreshold: caretRoom });
+// When the keyboard or a row appears, bring the caret back above them.
+const keepCaretInView = () => { const ed = currentEditor(); if (ed?.isFocused) ed.commands.scrollIntoView(); };
+let caretTimer;
+window.visualViewport?.addEventListener('resize', () => { clearTimeout(caretTimer); caretTimer = setTimeout(keepCaretInView, 120); });
 notebook.editor.on('transaction', placeOutlineBar);
 notebook.editor.on('focus', placeOutlineBar);
 notebook.editor.on('blur', () => setTimeout(placeOutlineBar, 50));
