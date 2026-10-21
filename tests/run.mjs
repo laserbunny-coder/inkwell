@@ -680,6 +680,17 @@ try {
     await tap('up');
     await sleep(200);
     assert.equal(await clear(), true, 'caret visible after moving a line');
+    // Tapping a line low on the screen brings it up above the row.
+    await ph.evaluate(() => {
+      const bar = document.querySelector('.outline-bar').getBoundingClientRect();
+      const p = [...document.querySelectorAll('#outline-editor li > p')].find((x) => x.textContent === 'Line 12');
+      window.scrollBy(0, p.getBoundingClientRect().bottom - bar.top + 4);
+    });
+    await sleep(150);
+    await ph.locator('#outline-editor li > p', { hasText: /^Line 12$/ }).tap({ position: { x: 30, y: 4 } });
+    await ph.waitForFunction(() => window.__outline.state.selection.$head.parent.textContent === 'Line 12');
+    await sleep(400);
+    assert.equal(await clear(), true, 'caret visible after tapping a line near the bottom');
     // A line with lines under it has a caret to fold it.
     const parent = ph.locator('#outline-editor li.has-kids').first();
     const caret = parent.locator(':scope > .line-gutter .fold');

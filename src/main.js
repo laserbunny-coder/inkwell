@@ -129,7 +129,7 @@ function tapBar(bar, selector, run) {
     start = null;
     if (!s) return;
     const tap = performance.now() - s.t < TAP_MS && Math.hypot(e.clientX - s.x, e.clientY - s.y) < 10 && Math.abs(bar.scrollLeft - s.left) < 4;
-    if (tap) run(s.b);
+    if (tap) { run(s.b); caretSoon(80); }
   });
   bar.addEventListener('pointercancel', () => { end(); start = null; });
 }
@@ -204,9 +204,26 @@ tapBar(outlineBar, 'button[data-do]', (b) => {
 });
 for (const ed of [editor, notebook.editor]) ed.view.setProps({ scrollMargin: caretRoom, scrollThreshold: caretRoom });
 // When the keyboard or a row appears, bring the caret back above them.
-const keepCaretInView = () => { const ed = currentEditor(); if (ed?.isFocused) ed.commands.scrollIntoView(); };
+// On a phone, a standing rule: the caret always sits clear above the keyboard
+// and the row, with a couple of lines to spare, however it got there (a tap,
+// typing, zooming, moving a line, or the keyboard opening).
+function keepCaretInView() {
+  const ed = currentEditor();
+  if (!touch.matches || !ed?.isFocused) return;
+  let r;
+  try { r = ed.view.coordsAtPos(ed.state.selection.head); } catch { return; }
+  const vv = window.visualViewport;
+  const bar = [scriptBar, outlineBar].find((b) => !b.hidden);
+  const floor = (bar ? bar.getBoundingClientRect().top : vv ? vv.offsetTop + vv.height : window.innerHeight) - 72;
+  const ceiling = (vv ? vv.offsetTop : 0) + 60;
+  if (r.bottom > floor) window.scrollBy(0, r.bottom - floor);
+  else if (r.top < ceiling) window.scrollBy(0, r.top - ceiling);
+}
 let caretTimer;
-window.visualViewport?.addEventListener('resize', () => { clearTimeout(caretTimer); caretTimer = setTimeout(keepCaretInView, 120); });
+const caretSoon = (ms = 60) => { clearTimeout(caretTimer); caretTimer = setTimeout(() => requestAnimationFrame(keepCaretInView), ms); };
+for (const ed of [editor, notebook.editor]) { ed.on('selectionUpdate', () => caretSoon()); ed.on('focus', () => caretSoon(250)); }
+window.visualViewport?.addEventListener('resize', () => caretSoon(120));
+window.visualViewport?.addEventListener('scroll', () => caretSoon(200));
 notebook.editor.on('transaction', placeOutlineBar);
 notebook.editor.on('focus', placeOutlineBar);
 notebook.editor.on('blur', () => setTimeout(placeOutlineBar, 50));
