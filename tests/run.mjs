@@ -374,6 +374,43 @@ try {
     assert.equal(note.parent_id, await paras.nth(1).getAttribute('data-eid'));
   });
 
+  await check('the handle stays while the mouse crosses the margin to it', async () => {
+    await p.keyboard.press('Escape');
+    const para = await p.locator('#editor .ProseMirror > p').first().boundingBox();
+    await p.mouse.move(para.x + 40, para.y + 6);
+    await p.mouse.move(para.x - 20, para.y + 6, { steps: 5 });
+    assert.equal(await p.locator('.block-handle').evaluate((el) => el.classList.contains('visible')), true);
+  });
+
+  await check('note categories can be added and are saved to sync', async () => {
+    await p.keyboard.press('Control+K');
+    await p.keyboard.type('Note categories');
+    await p.keyboard.press('Enter');
+    await p.waitForSelector('.note-types');
+    await p.locator('.note-types button', { hasText: '+ Add a category' }).click();
+    await p.keyboard.type('Props');
+    await p.locator('.note-types button', { hasText: 'Save' }).click();
+    await sleep(500);
+    const row = (await all()).find((e) => e.id === 'settings-note-types');
+    assert.ok(row?.fields.types.some((t) => t.name === 'Props'));
+  });
+
+  await check('Linked from shows with a count, and can be switched off', async () => {
+    await p.keyboard.press('Control+O');
+    await p.keyboard.type('Lighthouse keeper');
+    await p.keyboard.press('Enter');
+    await p.waitForSelector('#nb-links', { state: 'visible' });
+    assert.equal(await p.locator('#nb-links').innerText(), 'Linked from 1');
+    await p.keyboard.press('Control+K');
+    await p.keyboard.type('hide "Linked from"');
+    await p.keyboard.press('Enter');
+    await sleep(300);
+    assert.equal(await p.locator('.backlinks').first().isVisible(), false);
+    await p.keyboard.press('Control+.');
+    assert.equal(await p.evaluate(() => document.documentElement.classList.contains('focus')), true);
+    await p.keyboard.press('Control+.');
+  });
+
   await check('no page errors', async () => assert.deepEqual(errors, []));
 } finally {
   await browser.close();

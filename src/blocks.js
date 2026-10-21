@@ -25,18 +25,25 @@ export class BlockHandle {
     this.menu.hidden = true;
     sheet.append(this.handle, this.line, this.menu);
 
-    editor.view.dom.addEventListener('mousemove', (e) => {
+    // The whole row counts, margin included, so the handle stays put while
+    // you move from the text over to it.
+    const zone = sheet.closest('.page') || sheet;
+    zone.addEventListener('mousemove', (e) => {
       if (this.dragging || !this.menu.hidden) return;
-      const i = this.blockIndexAt(e.target);
+      if (e.target === this.handle || this.handle.contains(e.target)) return;
+      const box = sheet.getBoundingClientRect();
+      if (e.clientX < box.left - 80 || e.clientX > box.right + 20) { this.hide(); return; }
+      const i = this.blockIndexAtY(e.clientY);
       if (i >= 0) this.show(i);
+      else this.hide();
     });
+    zone.addEventListener('mouseleave', () => this.hide());
     // On a phone, the handle shows for the paragraph you're typing in.
     editor.on('selectionUpdate', () => {
       if (this.dragging || !this.menu.hidden) return;
       const i = editor.state.selection.$from.index(0);
       if (matchMedia('(hover: none)').matches) this.show(i);
     });
-    sheet.addEventListener('mouseleave', () => { if (!this.dragging && this.menu.hidden) this.handle.hidden = true; });
     this.handle.addEventListener('pointerdown', (e) => this.startDrag(e));
     document.addEventListener('pointerdown', (e) => {
       if (!this.menu.hidden && !this.menu.contains(e.target) && e.target !== this.handle && !this.handle.contains(e.target)) this.closeMenu();
@@ -51,6 +58,22 @@ export class BlockHandle {
     return el ? [...dom.children].indexOf(el) : -1;
   }
 
+  // The block whose row (from its top to the next block's top) holds y.
+  blockIndexAtY(y) {
+    const kids = [...this.editor.view.dom.children];
+    if (!kids.length) return -1;
+    const first = kids[0].getBoundingClientRect();
+    const last = kids[kids.length - 1].getBoundingClientRect();
+    if (y < first.top - 8 || y > last.bottom + 24) return -1;
+    for (let i = kids.length - 1; i >= 0; i--) if (y >= kids[i].getBoundingClientRect().top - 8) return i;
+    return 0;
+  }
+
+  hide() {
+    if (this.dragging || !this.menu.hidden) return;
+    this.handle.classList.remove('visible');
+  }
+
   blockEl(i) { return this.editor.view.dom.children[i]; }
 
   show(i) {
@@ -61,6 +84,7 @@ export class BlockHandle {
     const lh = parseFloat(getComputedStyle(el).lineHeight) || 30;
     this.handle.style.top = `${top + Math.max(0, (lh - 26) / 2)}px`;
     this.handle.hidden = false;
+    this.handle.classList.add('visible');
   }
 
   // Positions of the top-level block at index i.

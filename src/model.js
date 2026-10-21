@@ -1,4 +1,4 @@
-import { putEntries, byKind, children, getMeta, setMeta } from './db.js';
+import { putEntries, byKind, children, getMeta, setMeta, getEntry } from './db.js';
 
 // Time-ordered random ids: sortable, safe to make offline on any device.
 export function newId(prefix = 'e') {
@@ -48,8 +48,18 @@ export const DEFAULT_NOTE_TYPES = [
   { id: 'ai', name: 'AI production', color: '#6B4BB8' }
 ];
 
+// Note categories are one shared entry, so a change on one device reaches the others.
+const NOTE_TYPES_ID = 'settings-note-types';
+
 export async function noteTypes() {
+  const row = await getEntry(NOTE_TYPES_ID);
+  if (row && !row.deleted && row.fields?.types?.length) return row.fields.types;
   return (await getMeta('noteTypes')) || DEFAULT_NOTE_TYPES;
+}
+
+export async function saveNoteTypes(types) {
+  const prev = await getEntry(NOTE_TYPES_ID);
+  await putEntries([{ ...(prev || entry('settings', { id: NOTE_TYPES_ID, title: 'Note categories' })), fields: { types }, deleted: false, updated_at: Date.now() }]);
 }
 
 // First run: one empty project with one act and one chapter to start writing in.

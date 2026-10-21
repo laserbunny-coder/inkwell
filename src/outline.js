@@ -72,7 +72,7 @@ export const EntryRef = Node.create({
   extendNodeSchema() { return { leafText: (node) => node.attrs.title || '' }; },
   parseHTML() { return [{ tag: 'a[data-ref]' }]; },
   renderHTML({ node, HTMLAttributes }) {
-    return ['a', mergeAttributes(HTMLAttributes, { 'data-ref': node.attrs.id, class: 'ref', href: '#' }), node.attrs.title || 'Untitled'];
+    return ['a', mergeAttributes(HTMLAttributes, { 'data-ref': node.attrs.id, class: 'ref', role: 'link' }), node.attrs.title || 'Untitled'];
   },
   renderText({ node }) { return `[[${node.attrs.title}]]`; },
   addInputRules() {

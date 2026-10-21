@@ -304,7 +304,7 @@ button.tree-area:hover { color: var(--ink); }
 
 /* Six-dot handle beside each paragraph */
 .block-handle { position: absolute; left: -38px; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--faint); display: flex; align-items: center; justify-content: center; cursor: grab; opacity: 0; transition: opacity .15s; touch-action: none; z-index: 5; }
-.sheet:hover .block-handle, .block-handle.open, body.block-dragging .block-handle { opacity: 1; }
+.block-handle.visible, .block-handle.open, body.block-dragging .block-handle { opacity: 1; }
 .block-handle:hover, .block-handle.open { background: var(--tint); color: var(--ink); }
 body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-select: none; }
 .drop-line { position: absolute; left: -8px; right: -8px; height: 2px; border-radius: 2px; background: var(--accent); pointer-events: none; }
@@ -319,3 +319,30 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 #storage-blocked { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 24px; }
 #storage-blocked > div { max-width: 420px; font-family: var(--prose); font-size: 18px; color: var(--ink); line-height: 1.5; }
 #storage-blocked p { margin: 0 0 10px; }
+
+/* Note categories */
+.note-types { position: fixed; left: 50%; top: 14vh; transform: translateX(-50%); z-index: 61; width: min(440px, calc(100% - 32px)); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.18); padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+.nt-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+.nt-row input[type=color] { width: 32px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: transparent; cursor: pointer; }
+.nt-row input:not([type=color]) { flex: 1; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 8px 10px; outline: none; }
+.nt-row input:not([type=color]):focus { border-color: var(--accent); }
+.note-types .actions { display: flex; justify-content: flex-end; gap: 8px; }
+.note-types > .ghost-btn { align-self: flex-start; }
+
+/* "Linked from" chips */
+.links-chip { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 99px; padding: 3px 11px; font-size: 12px; margin: -8px 0 14px; }
+.links-chip:hover { color: var(--ink); background: var(--tint); }
+.chapter-links { margin-top: 64px; }
+:root[data-view] .links-pill { display: none; }
+
+/* Display switches and focus mode */
+.switch { flex-direction: row !important; align-items: center; gap: 10px !important; color: var(--ink) !important; cursor: pointer; }
+.switch input { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+.switch .keys { margin-left: auto; color: var(--faint); font-size: 12px; }
+.view-label { margin-top: 4px; }
+.hide-links .backlinks, .hide-links .links-chip, .hide-links .links-pill,
+.focus .backlinks, .focus .links-chip, .focus .links-pill { display: none !important; }
+.hide-dots .note-gutter, .focus .note-gutter { display: none; }
+.hide-handle .block-handle, .focus .block-handle { display: none; }
+.focus .corner { opacity: 0; }
+.focus .corner:hover, .focus .corner:focus-within { opacity: 1; }

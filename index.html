@@ -19,6 +19,9 @@
       const pl = JSON.parse(localStorage.getItem('place') || 'null');
       if (pl && pl.view && pl.view !== 'write') d.dataset.view = pl.view;
       const w = localStorage.getItem('pageWidth'), z = localStorage.getItem('textSize');
+      const hide = JSON.parse(localStorage.getItem('hide') || '[]');
+      for (const h of hide) d.classList.add('hide-' + h);
+      if (localStorage.getItem('focus') === '1') d.classList.add('focus');
       if (w) d.style.setProperty('--page-width', w + 'px');
       if (z) d.style.setProperty('--text-size', z + 'px');
       else if (matchMedia('(max-width: 700px)').matches) d.style.setProperty('--text-size', '18px');
@@ -32,6 +35,7 @@
   <header class="topbar">
     <nav class="crumb" id="crumb" aria-label="Where you are"></nav>
     <span class="spacer"></span>
+    <button type="button" class="pill links-pill" id="chapter-links-chip" hidden></button>
     <span id="words"></span>
     <span id="status" role="status"></span>
     <button type="button" class="pill" id="versions" hidden title="The same text was changed on two devices"></button>
@@ -112,6 +116,7 @@
         <button type="button" class="ghost-btn" id="nb-next" aria-label="Day after">›</button>
         <label class="ghost-btn nb-date" aria-label="Go to a date"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><input type="date" id="nb-date"></label>
       </div>
+      <button type="button" class="links-chip" id="nb-links" hidden></button>
       <article id="outline-editor" aria-label="Lines"></article>
       <section class="backlinks" hidden>
         <div class="panel-label">Linked from</div>
@@ -145,6 +150,10 @@
   <main class="page">
     <div class="sheet">
       <article id="editor" aria-label="Chapter text"></article>
+      <section class="backlinks chapter-links" hidden>
+        <div class="panel-label">Linked from</div>
+        <ul id="chapter-links-list" class="ref-list"></ul>
+      </section>
       <div class="notes-layer" aria-label="Notes"></div>
     </div>
   </main>
@@ -173,16 +182,21 @@
     <ul id="palette-list" role="listbox"></ul>
   </div>
 
-  <div class="page-settings" role="dialog" aria-label="Page width and text size" hidden>
+  <div class="page-settings" role="dialog" aria-label="View settings" hidden>
     <label><span class="row"><span>Page width</span><span id="width-value"></span></span>
       <input type="range" id="page-width" min="420" max="1100" step="10"></label>
     <label><span class="row"><span>Text size</span><span id="size-value"></span></span>
       <input type="range" id="text-size" min="14" max="30" step="1"></label>
+    <div class="panel-label view-label">Show</div>
+    <label class="switch"><input type="checkbox" data-show="links"> Linked from</label>
+    <label class="switch"><input type="checkbox" data-show="dots"> Note dots in the margin</label>
+    <label class="switch"><input type="checkbox" data-show="handle"> Six-dot paragraph handle</label>
+    <label class="switch"><input type="checkbox" id="focus-mode"> Focus: just the text <span class="keys">⌘.</span></label>
     <div class="actions">
       <button type="button" class="ghost-btn" id="page-reset">Reset</button>
       <button type="button" class="pill" id="page-done">Done</button>
     </div>
-    <div class="hint">Saved on this device only, so your phone and laptop can differ. Shortcuts: Alt+[ and Alt+] for width, Alt+− and Alt+= for size.</div>
+    <div class="hint">Saved on this device only, so your phone and laptop can differ. Alt+[ ] for width, Alt+− = for size.</div>
   </div>
 
   <div class="corner">

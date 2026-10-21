@@ -13,7 +13,7 @@ import { EntryRef, TagMarks } from './outline.js';
 import { retitleLinks, freshenRefs } from './links.js';
 import { Conflicts } from './conflicts.js';
 import { vaultZip } from './vault.js';
-import { Notebook, rootOf, titleOf, dayId } from './notebook.js';
+import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
 import { openPicker } from './picker.js';
 import { ensureAreas, areas, books, bookType, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, stats, dailyMentions, ago } from './library.js';
 
@@ -233,6 +233,8 @@ async function dropEmptySeed(keep) {
 }
 
 async function applyRemote(rows) {
+  if (rows.some((r) => r.kind === 'settings')) await notes.reloadTypes();
+  if (state.chapterId && rows.some((r) => r.links?.includes(state.chapterId))) renderChapterLinks();
   const structural = rows.some((r) => ['project', 'act', 'chapter', 'area', 'page'].includes(r.kind));
   if (structural) {
     const remoteProject = rows.find((r) => r.kind === 'project' && !r.deleted);
@@ -297,6 +299,7 @@ async function openChapter(id) {
   if (book && book.id !== state.project?.id) state.project = book;
   if (state.project) state.acts = await outline(state.project.id);
   await notes.load(id);
+  await renderChapterLinks();
   await setMeta('lastChapter', id);
   if (state.project) await setMeta(`lastChapter:${state.project.id}`, id);
   if (view() === 'write') remember({ view: 'write', chapterId: id });
@@ -305,6 +308,16 @@ async function openChapter(id) {
   renderCrumb();
   editor.commands.focus('end');
 }
+
+// What links to this chapter, shown after its last paragraph.
+async function renderChapterLinks() {
+  if (!state.chapterId) return;
+  const n = await renderLinkedFrom(state.chapterId, $('.chapter-links'), $('#chapter-links-list'), openEntry);
+  const chip = $('#chapter-links-chip');
+  chip.hidden = !n || view() !== 'write';
+  chip.textContent = `Linked from ${n}`;
+}
+$('#chapter-links-chip').addEventListener('click', () => $('.chapter-links').scrollIntoView({ behavior: 'smooth', block: 'center' }));
 
 function refreshWords() {
   $('#words').textContent = view() === 'write' ? `${wordCount(editor.state.doc.textContent).toLocaleString()} words` : '';
@@ -835,6 +848,31 @@ function togglePageSettings() {
   $('#page-width').focus();
 }
 
+// Display switches, per device: anything beyond the text can be turned off.
+const hidden = () => { try { return new Set(JSON.parse(localStorage.getItem('hide') || '[]')); } catch { return new Set(); } };
+function setShown(name, on) {
+  const h = hidden();
+  if (on) h.delete(name); else h.add(name);
+  localStorage.setItem('hide', JSON.stringify([...h]));
+  root.classList.toggle(`hide-${name}`, !on);
+  syncSwitches();
+}
+function toggleFocus() {
+  const on = !root.classList.contains('focus');
+  root.classList.toggle('focus', on);
+  localStorage.setItem('focus', on ? '1' : '0');
+  body.classList.remove('show-outline', 'show-top');
+  syncSwitches();
+}
+function syncSwitches() {
+  const h = hidden();
+  document.querySelectorAll('[data-show]').forEach((c) => { c.checked = !h.has(c.dataset.show); });
+  $('#focus-mode').checked = root.classList.contains('focus');
+}
+document.querySelectorAll('[data-show]').forEach((c) => c.addEventListener('change', () => setShown(c.dataset.show, c.checked)));
+$('#focus-mode').addEventListener('change', toggleFocus);
+syncSwitches();
+
 $('#page-width').addEventListener('input', (e) => setPage(Number(e.target.value), currentSize()));
 $('#text-size').addEventListener('input', (e) => setPage(currentWidth(), Number(e.target.value)));
 $('#page-reset').addEventListener('click', () => setPage(DEFAULT_WIDTH, defaultSize()));
@@ -890,12 +928,17 @@ const commands = [
   { label: 'Link to a page…', keys: '[[', run: () => openPicker(currentEditor()), when: () => writing() || inNotebook() },
   { label: 'Sidebar (keep open)', keys: `${mod}1`, run: () => body.classList.toggle('pin-outline') },
   { label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: writing },
+  { label: 'Note categories: add, rename, recolour', keys: '', run: () => notes.editTypes() },
+  { label: 'Focus: just the text (on / off)', keys: `${mod}.`, run: toggleFocus },
+  { label: 'Show or hide "Linked from"', keys: '', run: () => setShown('links', hidden().has('links')) },
+  { label: 'Show or hide note dots', keys: '', run: () => setShown('dots', hidden().has('dots')) },
+  { label: 'Show or hide the paragraph handle', keys: '', run: () => setShown('handle', hidden().has('handle')) },
   { label: 'Add a note to this paragraph', keys: `${mod}⇧N`, run: () => notes.add(), when: writing },
   { label: 'Scene break', keys: `${mod}⇧↵`, run: () => editor.chain().focus().insertSceneBreak().run(), when: writing },
   { label: 'New chapter', keys: '', run: () => go({ view: 'write' }).then(newChapter), when: () => !!state.project },
   { label: 'New act', keys: '', run: () => go({ view: 'write' }).then(newAct), when: () => !!state.project },
   { label: 'History: earlier versions of this chapter', keys: `${mod}⇧H`, run: openHistory, when: writing },
-  { label: 'Page width and text size', keys: '', run: togglePageSettings },
+  { label: 'View: page width, text size, what to show', keys: '', run: togglePageSettings },
   { label: 'Wider page', keys: 'Alt+]', run: () => setPage(currentWidth() + 40, currentSize()) },
   { label: 'Narrower page', keys: 'Alt+[', run: () => setPage(currentWidth() - 40, currentSize()) },
   { label: 'Larger text', keys: 'Alt+=', run: () => setPage(currentWidth(), currentSize() + 1) },
@@ -1037,6 +1080,7 @@ document.addEventListener('keydown', (e) => {
   const m = e.metaKey || e.ctrlKey;
   const k = e.key.toLowerCase();
   if (m && k === 'k') { e.preventDefault(); $('.palette').hidden ? openPalette() : closePalette(); }
+  else if (m && e.key === '.') { e.preventDefault(); toggleFocus(); }
   else if (m && k === 'o') { e.preventDefault(); openPalette('go'); }
   else if (m && k === 'j') { e.preventDefault(); toggleWriteToday(); }
   else if (m && k === '1') { e.preventDefault(); body.classList.toggle('pin-outline'); }

@@ -19,6 +19,27 @@ export const dayId = (iso) => `day-${iso}`;
 const fromIso = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
 const shiftDay = (iso, n) => { const d = fromIso(iso); d.setDate(d.getDate() + n); return isoDate(d); };
 
+// Fills a "Linked from" list: every line or paragraph that links to this entry.
+export async function renderLinkedFrom(targetId, box, list, onOpen) {
+  const rows = await linkedFrom(targetId);
+  list.replaceChildren();
+  for (const row of rows) {
+    const root = await rootOf(row);
+    if (!root || root.deleted || row.id === targetId) continue;
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.innerHTML = '<span class="from"></span><span class="line"></span>';
+    b.querySelector('.from').textContent = titleOf(root);
+    b.querySelector('.line').textContent = row.text || '';
+    b.addEventListener('click', () => onOpen(row.id));
+    li.append(b);
+    list.append(li);
+  }
+  box.hidden = !list.children.length;
+  return list.children.length;
+}
+
 export function titleOf(e) {
   if (e.kind === 'day') return fromIso(e.title || e.id.slice(4)).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   return e.title || 'Untitled';
@@ -65,6 +86,7 @@ export class Notebook {
       if (line) this.open(line.dataset.day, null, line.dataset.line);
     });
     this.more = new IntersectionObserver((seen) => { if (seen.some((s) => s.isIntersecting)) this.renderPastDays(false); });
+    $('#nb-links').addEventListener('click', () => $('.backlinks').scrollIntoView({ behavior: 'smooth', block: 'start' }));
     const title = $('#nb-title');
     title.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); this.editor.commands.focus('start'); } });
     title.addEventListener('blur', () => this.rename(title.textContent.trim()));
@@ -131,24 +153,10 @@ export class Notebook {
   }
 
   async renderBacklinks() {
-    const box = $('.backlinks');
-    const list = $('#backlinks-list');
-    const rows = this.page ? await linkedFrom(this.page.id) : [];
-    list.replaceChildren();
-    for (const row of rows) {
-      const root = await rootOf(row);
-      if (!root || root.deleted) continue;
-      const li = document.createElement('li');
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.innerHTML = '<span class="from"></span><span class="line"></span>';
-      b.querySelector('.from').textContent = titleOf(root);
-      b.querySelector('.line').textContent = row.text || '';
-      b.addEventListener('click', () => this.onOpen(row.id));
-      li.append(b);
-      list.append(li);
-    }
-    box.hidden = !list.children.length;
+    const n = this.page ? await renderLinkedFrom(this.page.id, $('.backlinks'), $('#backlinks-list'), this.onOpen) : 0;
+    const chip = $('#nb-links');
+    chip.hidden = !n;
+    chip.textContent = `Linked from ${n}`;
   }
 
   // Earlier days below today's, so you can scroll back through them.
@@ -274,7 +282,7 @@ function appendInline(el, content) {
     if (n.type === 'entryRef') {
       const a = document.createElement('a');
       a.className = 'ref';
-      a.href = '#';
+      a.setAttribute('role', 'link');
       a.dataset.ref = n.attrs?.id;
       a.textContent = n.attrs?.title || 'Untitled';
       el.append(a);
