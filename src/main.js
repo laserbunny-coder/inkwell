@@ -2,6 +2,7 @@ import './style.css';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { EntryIds, SceneBreak } from './schema.js';
+import { isMac, keyLabel } from './keys.js';
 import { AltMark, ParagraphVersions, AltPanel, flip, newParagraphVersion } from './alts.js';
 import { ChapterStore } from './chapter.js';
 import { NotesLayer } from './notes.js';
@@ -981,11 +982,9 @@ $('#page-done').addEventListener('click', togglePageSettings);
 
 // ---------- command menu (⌘K) and go-to (⌘O) ----------
 
-const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 const mod = isMac ? '⌘' : 'Ctrl+';
 if (!isMac) document.querySelectorAll('.shortcuts dt, .corner [title], .rail-top .keys').forEach((el) => {
-  const fix = (t) => t.replaceAll('⌘', 'Ctrl+').replaceAll('⌥', 'Alt+').replaceAll('⇧', 'Shift+');
-  if (!el.title) el.textContent = fix(el.textContent); else el.title = fix(el.title);
+  if (!el.title) el.textContent = keyLabel(el.textContent); else el.title = keyLabel(el.title);
 });
 
 function toggleTheme() {
@@ -1209,7 +1208,7 @@ function filterPalette() {
     if (c.back) li.classList.add('back');
     if (c.stay) li.classList.add('opens');
     // While searching, say which category a command without a shortcut lives in.
-    li.lastChild.textContent = c.keys || (q && c.group ? GROUPS.find((g) => g.id === c.group).label : '');
+    li.lastChild.textContent = keyLabel(c.keys) || (q && c.group ? GROUPS.find((g) => g.id === c.group).label : '');
     li.addEventListener('click', () => runCommand(c));
     li.addEventListener('mousemove', () => selectPalette(i));
     list.append(li);
