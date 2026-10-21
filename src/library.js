@@ -79,6 +79,28 @@ export async function newBook(type, title, areaId, lines) {
   return project;
 }
 
+const LEVELS = { novel: ['Act', 'Chapter', 'Scene'], screenplay: ['Act', 'Script', 'Scene'] };
+
+// Changing what a book is never removes any of it. A manuscript stays when a
+// book becomes a notes collection (its home still lists it, and changing back
+// picks up where it was); a book that gains a manuscript gets a first chapter
+// only if it has none yet.
+export async function changeType(project, type) {
+  const now = Date.now();
+  const from = bookType(project);
+  if (type === from) return project;
+  const fields = { ...project.fields, type };
+  // Level names follow the kind unless they were renamed by hand.
+  if (LEVELS[type] && (!fields.levels || JSON.stringify(fields.levels) === JSON.stringify(LEVELS[from]))) fields.levels = LEVELS[type];
+  const rows = [{ ...project, fields, updated_at: now }];
+  if (LEVELS[type] && !(await outline(project.id)).length) {
+    const act = entry('act', { parent_id: project.id, title: type === 'screenplay' ? 'Screenplay' : 'Act One', sort: 1 });
+    rows.push(act, entry('chapter', { parent_id: act.id, title: type === 'screenplay' ? 'Script' : 'Chapter 1', sort: 1 }));
+  }
+  await putEntries(rows);
+  return rows[0];
+}
+
 export async function newPage(parentId, title = '') {
   const sort = parentId ? (await children(parentId)).filter((r) => r.kind === 'page').length + 1 : 0;
   const page = entry('page', { id: newId('pg'), parent_id: parentId || null, title, sort });
@@ -105,14 +127,12 @@ export async function bookOf(row) {
   return null;
 }
 
+// A notes collection can still hold a manuscript from when it was a novel, so it's counted too.
 export async function stats(project) {
-  if (hasManuscript(project)) {
-    const acts = await outline(project.id);
-    const chapters = acts.flatMap((a) => a.chapters);
-    const words = chapters.reduce((n, c) => n + (c.fields?.words || 0), 0);
-    return { acts, chapters, words, pages: (await pagesIn(project.id)).length };
-  }
-  return { acts: [], chapters: [], words: 0, pages: (await pagesIn(project.id)).length };
+  const acts = await outline(project.id);
+  const chapters = acts.flatMap((a) => a.chapters);
+  const words = chapters.reduce((n, c) => n + (c.fields?.words || 0), 0);
+  return { acts, chapters, words, pages: (await pagesIn(project.id)).length };
 }
 
 // Lines on daily pages that link to this book, its chapters or its pages.
