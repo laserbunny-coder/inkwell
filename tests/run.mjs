@@ -489,6 +489,63 @@ try {
     await p.keyboard.press('Escape');
   });
 
+  await check('a screenplay formats itself as you type, and keeps its elements', async () => {
+    await sleep(400);
+    await p.keyboard.press('Control+K');
+    await p.keyboard.type('New screenplay');
+    await p.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('New screenplay'));
+    await p.keyboard.press('Enter');
+    await p.waitForSelector('#lib-new', { state: 'visible' });
+    await p.fill('#lib-new-title', 'The Harbour');
+    await p.keyboard.press('Enter');
+    await p.waitForSelector('.notebook', { state: 'visible' });
+    await p.waitForFunction(() => document.querySelector('#nb-title').textContent === 'Idea');
+    await sleep(400);
+    await p.keyboard.press('Control+O');
+    await p.keyboard.type('Script · The Harbour');
+    await p.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('Script · The Harbour'));
+    await p.keyboard.press('Enter');
+    await p.waitForSelector('html.script #editor p[data-el="scene"]');
+    await p.locator('#editor p[data-el="scene"]').click();
+    await p.keyboard.type('int. lighthouse - night');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('Rain hits the glass.');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('MARA');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('Is anyone up here?');
+    await p.keyboard.press('Enter');
+    await p.keyboard.press('Tab');
+    const els = await p.$$eval('#editor .ProseMirror > p', (ps) => ps.map((x) => x.dataset.el || 'action'));
+    assert.deepEqual(els, ['scene', 'action', 'character', 'dialogue', 'character']);
+    assert.equal(await p.locator('#editor p[data-el="scene"]').evaluate((x) => getComputedStyle(x).textTransform), 'uppercase');
+    await p.waitForFunction(() => /About 1 page/.test(document.querySelector('#words').textContent));
+    await sleep(800);
+    const mara = (await all()).find((e) => e.kind === 'para' && e.text === 'MARA');
+    assert.equal(mara.fields.el, 'character');
+    // "# " starts a section, your own heading over the INT./EXT. scenes.
+    await p.keyboard.type('# ');
+    await sleep(300);
+    await p.waitForFunction(() => document.activeElement?.classList.contains('scene-title'));
+    await p.keyboard.type('The light goes out');
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => [...document.querySelectorAll('#outline-scenes .tree-scene')].map((b) => b.textContent).join('|') === 'INT. LIGHTHOUSE - NIGHT|The light goes out');
+    await sleep(800);
+    assert.ok((await all()).some((e) => e.kind === 'scene' && e.title === 'The light goes out'));
+    await p.keyboard.press('Control+K');
+    await p.keyboard.type('Read it through');
+    await p.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('Read it through'));
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => document.documentElement.classList.contains('reading'));
+    assert.equal(await p.locator('.scene-break').isVisible(), false);
+    await p.waitForFunction(() => document.activeElement?.classList.contains('ProseMirror'));
+    await p.keyboard.press('Escape');
+    await p.waitForFunction(() => !document.documentElement.classList.contains('reading') && !document.documentElement.classList.contains('focus'));
+    await p.reload();
+    await p.waitForSelector('html.script #editor p[data-el="dialogue"]');
+    assert.equal(await p.locator('#editor p[data-el="dialogue"]').innerText(), 'Is anyone up here?');
+  });
+
   await check('no page errors', async () => assert.deepEqual(errors, []));
 } finally {
   await browser.close();

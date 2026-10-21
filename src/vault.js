@@ -1,6 +1,7 @@
 import { allEntries } from './db.js';
 import { outline } from './model.js';
 import { bookMarkdown, inline } from './export.js';
+import { toFountain } from './script.js';
 import { descendants } from './outline.js';
 import { titleOf } from './notebook.js';
 
@@ -45,7 +46,11 @@ export async function vaultFiles() {
   for (const book of live.filter((r) => r.kind === 'project')) {
     const dir = `Library/${areaPath(book.area_id)}/${clean(book.title)}`;
     const acts = await outline(book.id);
-    if (acts.length) add(`${dir}/${clean(book.title)}.md`, await bookMarkdown(book, acts));
+    if (acts.length && book.fields?.type === 'screenplay') {
+      const rows = [];
+      for (const act of acts) for (const ch of act.chapters) rows.push(...live.filter((r) => r.parent_id === ch.id).sort((a, b) => a.sort - b.sort));
+      add(`${dir}/${clean(book.title)}.fountain`, toFountain(book.title, rows));
+    } else if (acts.length) add(`${dir}/${clean(book.title)}.md`, await bookMarkdown(book, acts));
     for (const p of pagesUnder(book.id)) add(`${dir}/${clean(p.title)}.md`, await pageMarkdown(p));
   }
   for (const p of pagesUnder(null)) add(`Loose pages/${clean(p.title)}.md`, await pageMarkdown(p));

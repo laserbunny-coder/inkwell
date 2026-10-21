@@ -80,6 +80,31 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 #editor .ProseMirror > p:first-child:last-child:has(> br:only-child)::before {
   content: 'Start writing…'; color: var(--faint); float: left; height: 0; pointer-events: none;
 }
+/* Screenplays: Courier, and each element laid out the way a script page is. */
+:root.script #editor .ProseMirror { font-family: 'Courier Prime', 'Courier New', monospace; font-size: calc(var(--text-size, 21px) * .82); line-height: 1.4; }
+:root.script #editor .ProseMirror p { margin: 0 0 1em -8px; }
+:root.script #editor p[data-el="scene"] { text-transform: uppercase; font-weight: 700; margin-top: 1.6em; }
+:root.script #editor .ProseMirror > p[data-el="scene"]:first-child { margin-top: 0; }
+:root.script #editor p[data-el="character"] { text-transform: uppercase; margin: 0 0 0 37%; }
+:root.script #editor p[data-el="paren"] { margin: 0 25% 0 calc(28% - 8px); }
+:root.script #editor p[data-el="dialogue"] { margin: 0 18% 1em calc(17% - 8px); }
+:root.script #editor p[data-el="dialogue"]:has(+ p[data-el="paren"]) { margin-bottom: 0; }
+:root.script #editor p[data-el="transition"] { text-transform: uppercase; text-align: right; }
+/* Sections: your own headings for stretches of story, above the INT./EXT. ones. */
+:root.script .scene-break { justify-content: flex-start; gap: 0; margin: 2.2em 0 1em -8px; padding-top: .7em; border-top: 1px solid var(--line); letter-spacing: 0; }
+:root.script .scene-break > span { display: none; }
+:root.script .scene-title { font-family: var(--ui); font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); text-align: left; width: 100%; }
+:root.script #editor .ProseMirror > .scene-break:first-child { margin-top: 0; }
+:root.reading .scene-break { display: none; }
+.tree-slug { font-size: 11px; color: var(--muted); letter-spacing: .02em; }
+/* An empty line says what it's for. */
+:root.script #editor p:has(> br:only-child)::before { color: var(--faint); float: left; height: 0; pointer-events: none; content: 'Action'; }
+:root.script #editor p[data-el="scene"]:has(> br:only-child)::before { content: 'INT. PLACE – DAY'; }
+:root.script #editor p[data-el="character"]:has(> br:only-child)::before { content: 'CHARACTER'; }
+:root.script #editor p[data-el="paren"]:has(> br:only-child)::before { content: '(how they say it)'; }
+:root.script #editor p[data-el="dialogue"]:has(> br:only-child)::before { content: 'Dialogue'; }
+:root.script #editor p[data-el="transition"]:has(> br:only-child)::before { content: 'CUT TO:'; float: right; }
+
 .scene-break { display: flex; justify-content: center; align-items: center; gap: 12px; margin: .4em 0 1.6em; color: var(--faint); font-family: var(--ui); font-size: 12px; letter-spacing: .18em; user-select: none; }
 .scene-break.ProseMirror-selectednode { color: var(--accent); }
 .scene-title { border: 0; background: transparent; color: var(--faint); font-size: 12px; letter-spacing: .04em; width: 14ch; padding: 4px; border-radius: 4px; }

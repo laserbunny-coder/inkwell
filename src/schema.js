@@ -78,7 +78,8 @@ export const SceneBreak = Node.create({
       dots.setAttribute('aria-hidden', 'true');
       const input = document.createElement('input');
       input.className = 'scene-title';
-      input.placeholder = 'scene';
+      // In a script this is a section: your own name for a stretch of story.
+      input.placeholder = document.documentElement.classList.contains('script') ? 'Section title' : 'scene';
       input.setAttribute('aria-label', 'Scene title');
       input.value = node.attrs.title;
       input.addEventListener('change', () => {

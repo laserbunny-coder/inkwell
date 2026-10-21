@@ -13,9 +13,10 @@ import { EntryRef, TagMarks } from './outline.js';
 import { retitleLinks, freshenRefs } from './links.js';
 import { Conflicts } from './conflicts.js';
 import { vaultZip } from './vault.js';
+import { ScriptElements, ELEMENTS, scriptPages, toFountain, fromFountain } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
 import { openPicker } from './picker.js';
-import { ensureAreas, areas, books, bookType, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, stats, dailyMentions, ago } from './library.js';
+import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, stats, dailyMentions, ago } from './library.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -23,8 +24,10 @@ const root = document.documentElement;
 const extensions = [
   StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false }), EntryIds, SceneBreak,
   EntryRef.configure({ onPick: openPicker, onOpen: openEntry }),
-  TagMarks.configure({ onTag: (t) => notebook.showTag(t) })
+  TagMarks.configure({ onTag: (t) => notebook.showTag(t) }),
+  ScriptElements.configure({ isScript: () => isScript() })
 ];
+const isScript = () => root.classList.contains('script');
 
 // project: the book open in the manuscript view. bookId: the book whose home is shown.
 const state = { project: null, acts: [], chapterId: null, bookId: null, libArea: null };
@@ -58,9 +61,11 @@ const blocks = new BlockHandle(editor, $('.sheet'), {
     { label: 'Add a note', keys: '⌘⇧N', when: isText, run: ({ node }) => notes.add(node.attrs.eid) },
     { label: 'Move up', keys: 'Alt+⇧↑', when: (_n, i) => i > 0, run: ({ index, handle }) => handle.move(index, index - 1) },
     { label: 'Move down', keys: 'Alt+⇧↓', when: (_n, i, count) => i < count - 1, run: ({ index, handle }) => handle.move(index, index + 2) },
-    { label: 'Make it a heading', when: (n) => n.type.name === 'paragraph', run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().setTextSelection(from + 1).setNode('heading', { level: 2 }).focus().run(); } },
+    ...ELEMENTS.map((x) => ({ label: x.label, keys: '', when: (n) => isScript() && n.type.name === 'paragraph' && (n.attrs.el || 'action') !== x.id, run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().setTextSelection(from + 1).updateAttributes('paragraph', { el: x.id }).focus().run(); } })),
+    { label: 'Make it a heading', when: (n) => !isScript() && n.type.name === 'paragraph', run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().setTextSelection(from + 1).setNode('heading', { level: 2 }).focus().run(); } },
     { label: 'Make it a paragraph', when: (n) => n.type.name === 'heading', run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().setTextSelection(from + 1).setNode('paragraph').focus().run(); } },
-    { label: 'Scene break above', run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().insertContentAt(from, { type: 'sceneBreak' }).focus().run(); } },
+    { label: 'Section above', when: () => isScript(), run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().insertContentAt(from, { type: 'sceneBreak' }).run(); requestAnimationFrame(() => editor.view.nodeDOM(from)?.querySelector('input')?.focus()); } },
+    { label: 'Scene break above', when: () => !isScript(), run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().insertContentAt(from, { type: 'sceneBreak' }).focus().run(); } },
     { label: 'Delete', run: ({ index, handle }) => { const { from, to } = handle.range(index); if (editor.state.doc.childCount > 1) editor.chain().deleteRange({ from, to }).focus().run(); else editor.chain().setContent({ type: 'doc', content: [{ type: 'paragraph' }] }).focus().run(); } }
   ]
 });
@@ -155,7 +160,7 @@ async function go(place) {
 
 async function openBook(projectId) {
   const book = await getEntry(projectId);
-  if (!book || bookType(book) !== 'novel') return go({ view: 'project', id: projectId });
+  if (!book || !hasManuscript(book)) return go({ view: 'project', id: projectId });
   const acts = await outline(projectId);
   const chapters = acts.flatMap((a) => a.chapters);
   const last = await getMeta(`lastChapter:${projectId}`);
@@ -171,7 +176,7 @@ async function lastChapterAnywhere() {
     const book = await bookOf(ch);
     if (book && !book.deleted) return ch.id;
   }
-  const novels = (await books()).filter((b) => bookType(b) === 'novel').sort((a, b) => a.created_at - b.created_at);
+  const novels = (await books()).filter(hasManuscript).sort((a, b) => a.created_at - b.created_at);
   for (const b of novels) {
     const first = (await outline(b.id)).flatMap((a) => a.chapters)[0];
     if (first) return first.id;
@@ -302,12 +307,13 @@ async function openChapter(id) {
   if (state.chapterId) await store.close(editor.state.doc);
   const { doc, recovered } = await store.load(id);
   state.chapterId = id;
+  const book = await bookOf(store.chapter);
+  if (book && book.id !== state.project?.id) state.project = book;
+  root.classList.toggle('script', bookType(book) === 'screenplay');
   editor.commands.setContent(doc, { emitUpdate: false });
   if (recovered) store.change(editor.state.doc);
   else statusEl.textContent = 'Saved';
   freshenRefs(editor);
-  const book = await bookOf(store.chapter);
-  if (book && book.id !== state.project?.id) state.project = book;
   if (state.project) state.acts = await outline(state.project.id);
   await notes.load(id);
   await renderChapterLinks();
@@ -331,7 +337,9 @@ async function renderChapterLinks() {
 $('#chapter-links-chip').addEventListener('click', () => $('.chapter-links').scrollIntoView({ behavior: 'smooth', block: 'center' }));
 
 function refreshWords() {
-  $('#words').textContent = view() === 'write' ? `${wordCount(editor.state.doc.textContent).toLocaleString()} words` : '';
+  if (view() !== 'write') { $('#words').textContent = ''; return; }
+  if (isScript()) { const n = scriptPages(editor.state.doc); $('#words').textContent = `About ${n} page${n === 1 ? '' : 's'}`; return; }
+  $('#words').textContent = `${wordCount(editor.state.doc.textContent).toLocaleString()} words`;
 }
 
 async function newChapter() {
@@ -444,7 +452,7 @@ async function drawRail() {
     out.push(btn);
     if (b.id !== current) return;
     const pad = 26 + depth * 14;
-    if (bookType(b) === 'novel') {
+    if (hasManuscript(b)) {
       const acts = b.id === state.project?.id ? state.acts : await outline(b.id);
       for (const act of acts) {
         const a = make('div', 'tree-act', act.title);
@@ -520,9 +528,12 @@ function renderScenes() {
   if (!box) return;
   box.replaceChildren();
   editor.state.doc.forEach((node, pos) => {
-    if (node.type.name !== 'sceneBreak') return;
-    const b = make('button', 'tree-scene', node.attrs.title || 'Untitled scene');
-    b.style.paddingLeft = box.style.getPropertyValue('--pad');
+    // In a script, sections are your story's own headings and the INT./EXT.
+    // scene headings sit under them.
+    const slug = isScript() && node.type.name === 'paragraph' && node.attrs.el === 'scene' && node.textContent.trim();
+    if (node.type.name !== 'sceneBreak' && !slug) return;
+    const b = make('button', slug ? 'tree-scene tree-slug' : 'tree-scene', slug ? slug.toUpperCase() : node.attrs.title || (isScript() ? 'Untitled section' : 'Untitled scene'));
+    b.style.paddingLeft = slug ? `calc(${box.style.getPropertyValue('--pad')} + 12px)` : box.style.getPropertyValue('--pad');
     b.addEventListener('click', () => {
       editor.view.nodeDOM(pos)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       editor.commands.focus(pos + node.nodeSize + 1);
@@ -604,8 +615,10 @@ async function renderLibrary() {
     const s = await stats(b);
     const card = make('button', 'card');
     const kind = make('span', 'card-kind');
-    kind.append(dot(areaColor(area)), document.createTextNode(`${area?.title || 'No area'} · ${bookType(b) === 'novel' ? 'novel' : 'notes'}`));
-    const detail = bookType(b) === 'novel'
+    kind.append(dot(areaColor(area)), document.createTextNode(`${area?.title || 'No area'} · ${{ novel: 'novel', screenplay: 'screenplay', notes: 'notes' }[bookType(b)] || 'novel'}`));
+    const detail = bookType(b) === 'screenplay'
+      ? `${s.words.toLocaleString()} words`
+      : bookType(b) === 'novel'
       ? `${s.chapters.length} chapter${s.chapters.length === 1 ? '' : 's'} · ${s.words.toLocaleString()} words`
       : `${s.pages} page${s.pages === 1 ? '' : 's'}`;
     card.append(kind, make('span', 'card-title', b.title || 'Untitled'), make('span', 'card-detail', detail), make('span', 'card-when', `Edited ${ago(b.updated_at)}`));
@@ -613,7 +626,7 @@ async function renderLibrary() {
     cards.push(card);
   }
   const add = make('button', 'card card-new');
-  add.append(make('span', 'plus', '+'), make('span', '', 'New novel or notes collection'));
+  add.append(make('span', 'plus', '+'), make('span', '', 'New novel, screenplay or notes collection'));
   add.addEventListener('click', () => showNewBook('novel'));
   cards.push(add);
   $('#lib-books').replaceChildren(...cards);
@@ -710,7 +723,7 @@ async function renderProject() {
   if (!b || b.deleted) return go({ view: 'library' });
   const allAreas = await areas();
   const s = await stats(b);
-  const novel = bookType(b) === 'novel';
+  const novel = hasManuscript(b);
   const title = $('#ph-title');
   title.textContent = b.title;
   title.contentEditable = 'true';
@@ -719,7 +732,9 @@ async function renderProject() {
     if (t && t !== b.title) { await putEntries([{ ...b, title: t, updated_at: Date.now() }]); if (state.project?.id === b.id) state.project.title = t; renderRail(); renderCrumb(); }
   };
   title.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); title.blur(); } };
-  $('#ph-stats').textContent = novel
+  $('#ph-stats').textContent = bookType(b) === 'screenplay'
+    ? `Screenplay · ${s.words.toLocaleString()} words`
+    : novel
     ? `Novel · ${s.words.toLocaleString()} words · ${s.chapters.length} chapter${s.chapters.length === 1 ? '' : 's'}`
     : `Notes collection · ${s.pages} page${s.pages === 1 ? '' : 's'}`;
   const areaSel = $('#ph-area');
@@ -870,9 +885,17 @@ function setShown(name, on) {
   root.classList.toggle(`hide-${name}`, !on);
   syncSwitches();
 }
+// Reading a script through: only the script pages, no sections, notes or tools.
+function toggleReading() {
+  const on = !root.classList.contains('reading');
+  if (on !== root.classList.contains('focus')) toggleFocus();
+  root.classList.toggle('reading', on);
+}
+
 function toggleFocus() {
   const on = !root.classList.contains('focus');
   root.classList.toggle('focus', on);
+  if (!on) root.classList.remove('reading');
   localStorage.setItem('focus', on ? '1' : '0');
   edgesQuietUntil = Date.now() + 600;
   body.classList.remove('show-outline', 'show-top');
@@ -941,6 +964,30 @@ async function exportVault() {
   download(`Inkwell vault ${isoToday()}.zip`, await vaultZip());
 }
 
+async function exportFountain() {
+  await store.close(editor.state.doc);
+  const rows = [];
+  for (const act of state.acts) for (const ch of act.chapters) rows.push(...(await children(ch.id)));
+  download(`${state.project.title}.fountain`, toFountain(state.project.title, rows));
+}
+
+// Pick a .fountain file and make it a new screenplay in the Library.
+function importFountain() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.fountain,.spmd,.txt,text/plain';
+  input.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const { title, lines } = fromFountain(await file.text());
+    const area = (await areas())[0];
+    const book = await newBook('screenplay', title || file.name.replace(/\.[^.]+$/, ''), area?.id || null, lines);
+    renderRail();
+    openBook(book.id);
+  });
+  input.click();
+}
+
 async function exportBook() {
   await store.close(editor.state.doc);
   download(`${state.project.title}.md`, await bookMarkdown(state.project, state.acts));
@@ -955,7 +1002,9 @@ const commands = [
   { group: 'go', label: 'Next chapter (or day)', keys: `${mod}⌥↓`, run: () => step(1), when: () => writing() || inNotebook() },
   { group: 'go', label: 'Previous chapter (or day)', keys: `${mod}⌥↑`, run: () => step(-1), when: () => writing() || inNotebook() },
   { group: 'new', label: 'New novel', keys: '', run: () => showNewBook('novel') },
+  { group: 'new', label: 'New screenplay', keys: '', run: () => showNewBook('screenplay') },
   { group: 'new', label: 'New notes collection', keys: '', run: () => showNewBook('notes') },
+  { group: 'new', label: 'Bring in a Fountain script (.fountain)', keys: '', run: importFountain },
   { group: 'new', label: 'New page', keys: '', run: newPageHere },
   { group: 'new', label: 'New area', keys: '', run: () => go({ view: 'library' }).then(() => [...document.querySelectorAll('#lib-areas .chip.add')].at(-1)?.click()) },
   { group: 'new', label: 'New chapter', keys: '', run: () => go({ view: 'write' }).then(newChapter), when: () => !!state.project },
@@ -963,6 +1012,8 @@ const commands = [
   { group: 'write', label: 'Zoom into this line', keys: 'click its bullet', run: () => notebook.zoomTo(notebook.currentLine()), when: inNotebook },
   { group: 'write', label: 'Zoom out', keys: 'Esc', run: () => notebook.zoomTo(null), when: () => inNotebook() && !!notebook.zoom },
   { group: 'write', label: 'Fold or unfold this line', keys: `${mod}↑ ${mod}↓`, run: () => notebook.toggleFold(), when: inNotebook },
+  ...ELEMENTS.map((x) => ({ group: 'write', label: `Script: ${x.label}`, keys: 'Tab', run: () => editor.chain().focus().updateAttributes('paragraph', { el: x.id }).run(), when: () => writing() && isScript() })),
+  { group: 'write', label: 'Script: Section (your own heading)', keys: '# ', run: () => { const at = editor.state.selection.$from.before(1); editor.chain().insertContentAt(at, { type: 'sceneBreak' }).run(); requestAnimationFrame(() => editor.view.nodeDOM(at)?.querySelector('input')?.focus()); }, when: () => writing() && isScript() },
   { group: 'write', label: 'Link to a page…', keys: '[[', run: () => openPicker(currentEditor()), when: () => writing() || inNotebook() },
   { group: 'write', label: 'Add a note to this paragraph', keys: `${mod}⇧N`, run: () => notes.add(), when: writing },
   { group: 'write', label: 'Scene break', keys: `${mod}⇧↵`, run: () => editor.chain().focus().insertSceneBreak().run(), when: writing },
@@ -970,6 +1021,7 @@ const commands = [
   { group: 'write', label: 'Note categories: add, rename, recolour', keys: '', run: () => notes.editTypes() },
   { group: 'view', label: 'Sidebar (keep open)', keys: `${mod}1`, run: () => body.classList.toggle('pin-outline') },
   { group: 'view', label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: writing },
+  { group: 'view', label: 'Read it through: just the script pages', keys: 'Esc to stop', run: toggleReading, when: () => writing() && isScript() },
   { group: 'view', label: 'Focus: just the text (on / off)', keys: `${mod}.`, run: toggleFocus },
   { group: 'view', label: 'Show or hide "Linked from"', keys: '', run: () => setShown('links', hidden().has('links')) },
   { group: 'view', label: 'Show or hide note dots', keys: '', run: () => setShown('dots', hidden().has('dots')) },
@@ -985,8 +1037,9 @@ const commands = [
   { group: 'sync', label: 'Sync now', keys: '', run: () => sync.soon(0), when: () => !!sync.user },
   { group: 'sync', label: 'Sign in to sync between devices', keys: '', run: () => sync.signIn(), when: () => sync.available && !sync.user },
   { group: 'sync', label: 'Sign out of sync', keys: '', run: () => sync.signOut(), when: () => !!sync.user },
-  { group: 'sync', label: 'Export this chapter as Markdown', keys: '', run: exportChapter, when: writing },
-  { group: 'sync', label: 'Export the whole book as Markdown', keys: '', run: exportBook, when: () => writing() && !!state.project },
+  { group: 'sync', label: 'Export this chapter as Markdown', keys: '', run: exportChapter, when: () => writing() && !isScript() },
+  { group: 'sync', label: 'Export the whole book as Markdown', keys: '', run: exportBook, when: () => writing() && !!state.project && !isScript() },
+  { group: 'sync', label: 'Export this script as Fountain', keys: '', run: exportFountain, when: () => writing() && isScript() },
   { group: 'sync', label: 'Back up everything (download all as files)', keys: '', run: exportVault },
   { group: 'sync', label: 'Two versions to check', urgent: true, keys: '', run: () => conflicts.open(), when: () => !$('#versions').hidden }
 ];
@@ -1013,7 +1066,7 @@ async function places(only) {
   for (const b of allBooks.sort((a, c) => c.updated_at - a.updated_at)) out.push({ label: b.title || 'Untitled', keys: 'book', run: () => go({ view: 'project', id: b.id }) });
   if (only === 'books') return out;
   for (const a of allAreas) out.push({ label: a.title, keys: 'area', run: () => go({ view: 'library', area: a.id }) });
-  for (const b of allBooks.filter((x) => bookType(x) === 'novel')) {
+  for (const b of allBooks.filter(hasManuscript)) {
     for (const act of await outline(b.id)) for (const ch of act.chapters) out.push({ label: `${ch.title} · ${b.title}`, keys: 'chapter', run: () => go({ view: 'write', chapterId: ch.id }) });
   }
   for (const p of (await byKind('page')).filter((x) => !x.deleted)) out.push({ label: p.title || 'Untitled page', keys: 'page', run: () => go({ view: 'notebook', pageId: p.id }) });
@@ -1182,6 +1235,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.altKey && !m && e.code === 'BracketLeft') { e.preventDefault(); setPage(currentWidth() - 40, currentSize()); }
   else if (e.altKey && !m && e.code === 'Equal') { e.preventDefault(); setPage(currentWidth(), currentSize() + 1); }
   else if (e.altKey && !m && e.code === 'Minus') { e.preventDefault(); setPage(currentWidth(), currentSize() - 1); }
+  else if (e.key === 'Escape' && root.classList.contains('reading')) toggleReading();
   else if (e.key === 'Escape') {
     if (!$('.page-settings').hidden) { $('.page-settings').hidden = true; currentEditor().commands.focus(); }
     if (!$('.history').hidden) { $('.history').hidden = true; editor.commands.focus(); }

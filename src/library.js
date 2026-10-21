@@ -38,6 +38,9 @@ export async function books() {
 }
 
 export const bookType = (p) => p?.fields?.type || 'novel';
+// Novels and screenplays are written in the manuscript view; notes collections are pages.
+export const hasManuscript = (p) => ['novel', 'screenplay'].includes(bookType(p));
+export const kindName = (p) => ({ novel: 'Novel', screenplay: 'Screenplay', notes: 'Notes collection' })[bookType(p)] || 'Novel';
 export const areaColor = (a) => a?.fields?.color || '#A39A8B';
 
 export async function newArea(title, parentId = null) {
@@ -47,14 +50,29 @@ export async function newArea(title, parentId = null) {
   return area;
 }
 
-// A new book starts with an Idea page to think it through.
-export async function newBook(type, title, areaId) {
+// A new book starts with an Idea page to think it through. A screenplay is
+// one script (a chapter) that opens on a scene heading; `lines` fills it,
+// for a script brought in from Fountain.
+export async function newBook(type, title, areaId, lines) {
   const rows = [];
-  const project = entry('project', { title, area_id: areaId, fields: { type, ...(type === 'novel' ? { levels: ['Act', 'Chapter', 'Scene'] } : {}) } });
+  const levels = type === 'novel' ? ['Act', 'Chapter', 'Scene'] : type === 'screenplay' ? ['Act', 'Script', 'Scene'] : null;
+  const project = entry('project', { title, area_id: areaId, fields: { type, ...(levels ? { levels } : {}) } });
   rows.push(project);
   if (type === 'novel') {
     const act = entry('act', { parent_id: project.id, title: 'Act One', sort: 1 });
     rows.push(act, entry('chapter', { parent_id: act.id, title: 'Chapter 1', sort: 1 }));
+  }
+  if (type === 'screenplay') {
+    const act = entry('act', { parent_id: project.id, title: 'Screenplay', sort: 1 });
+    const script = entry('chapter', { parent_id: act.id, title: 'Script', sort: 1 });
+    rows.push(act, script);
+    const body = lines?.length ? lines : [{ el: 'scene', text: '' }];
+    body.forEach((l, i) => rows.push(l.el === 'section'
+      ? entry('scene', { id: newId('sc'), parent_id: script.id, sort: (i + 1) * 1024, title: l.text })
+      : entry('para', {
+        id: newId('pa'), parent_id: script.id, sort: (i + 1) * 1024, text: l.text,
+        content: l.text ? [{ type: 'text', text: l.text }] : null, fields: { el: l.el }
+      })));
   }
   rows.push(entry('page', { id: newId('pg'), parent_id: project.id, title: 'Idea', sort: 1 }));
   await putEntries(rows);
@@ -88,7 +106,7 @@ export async function bookOf(row) {
 }
 
 export async function stats(project) {
-  if (bookType(project) === 'novel') {
+  if (hasManuscript(project)) {
     const acts = await outline(project.id);
     const chapters = acts.flatMap((a) => a.chapters);
     const words = chapters.reduce((n, c) => n + (c.fields?.words || 0), 0);

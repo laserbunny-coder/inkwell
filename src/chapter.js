@@ -98,7 +98,8 @@ export class ChapterStore {
       const content = node.toJSON().content || null;
       const prev = this.cache.get(id);
       const title = kind === 'scene' ? node.attrs.title : '';
-      const same = prev && !prev.deleted && prev.sort === index && prev.kind === kind && prev.title === title &&
+      const el = node.attrs.el || null;
+      const same = prev && !prev.deleted && prev.sort === index && prev.kind === kind && prev.title === title && (prev.fields?.el || null) === el &&
         JSON.stringify(prev.content) === JSON.stringify(content) && prev.parent_id === chapter.id;
       if (same) return;
       const row = {
@@ -115,6 +116,7 @@ export class ChapterStore {
         updated_at: now
       };
       if (kind === 'heading') row.fields = { ...row.fields, level: node.attrs.level };
+      if (kind === 'para') { const { el: _old, ...rest } = row.fields || {}; row.fields = el ? { ...rest, el } : rest; }
       rows.push(row);
     });
     for (const [id, prev] of this.cache) {
@@ -163,7 +165,7 @@ function toDoc(rows) {
   const content = rows.map((r) => {
     if (r.kind === 'scene') return { type: 'sceneBreak', attrs: { eid: r.id, title: r.title || '' } };
     if (r.kind === 'heading') return { type: 'heading', attrs: { eid: r.id, level: r.fields?.level || 2 }, ...(r.content ? { content: r.content } : {}) };
-    return { type: 'paragraph', attrs: { eid: r.id }, ...(r.content ? { content: r.content } : {}) };
+    return { type: 'paragraph', attrs: { eid: r.id, ...(r.fields?.el ? { el: r.fields.el } : {}) }, ...(r.content ? { content: r.content } : {}) };
   });
   return { type: 'doc', content: content.length ? content : [{ type: 'paragraph' }] };
 }
