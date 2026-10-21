@@ -460,6 +460,8 @@ try {
     await p.waitForSelector('.notebook', { state: 'visible' });
     await p.waitForFunction(() => document.querySelector('#nb-kind').textContent === 'Today');
     const top = p.locator('#outline-editor li', { hasText: 'Call the harbourmaster' }).first();
+    // Bullets are off by default: the dot only shows under the pointer.
+    assert.equal(await top.locator(':scope > .line-gutter .bullet').evaluate((b) => getComputedStyle(b, '::after').opacity), '0');
     const storm = p.locator('#outline-editor li p', { hasText: 'Ask about the 1912 storm' });
     await top.locator(':scope > p').click({ position: { x: 12, y: 10 } }); // away from the #tag
     await sleep(150);
@@ -592,6 +594,33 @@ try {
     assert.equal(await ph.evaluate(() => document.activeElement?.classList.contains('ProseMirror')), true, 'keyboard stays up');
     assert.equal(await ph.locator('.script-bar button.current').innerText(), 'Character');
     await phoneCtx.close();
+  });
+
+  await check('Progress shows words and pages by day, week and month', async () => {
+    await sleep(400);
+    await p.keyboard.press('Control+Shift+P');
+    await p.waitForSelector('.stats', { state: 'visible' });
+    await p.waitForFunction(() => document.querySelectorAll('.stats-list li').length >= 3);
+    const names = await p.locator('.stats-list .name').allInnerTexts();
+    assert.match(names[0], /^Everything/);
+    assert.ok(names.some((n) => /The Harbour\s+Screenplay/.test(n)), names.join(' | '));
+    assert.match(names.at(-1), /^Notes/);
+    assert.match(await p.locator('.stats-sub').innerText(), /^Today · Everything/);
+    assert.match(await p.locator('.stats-big').innerText(), /\d words?$/);
+    assert.equal(await p.locator('.stats-bars rect').count(), 14);
+    await p.locator('.stats-list button', { hasText: 'The Harbour' }).click();
+    await p.waitForFunction(() => /page/.test(document.querySelector('.stats-big').textContent));
+    await p.locator('.stats [data-unit="month"]').click();
+    await p.waitForFunction(() => /^This month/.test(document.querySelector('.stats-sub').textContent));
+    assert.equal(await p.locator('.stats-bars rect').count(), 12);
+    const tally = await p.evaluate(() => new Promise((res) => {
+      const r = indexedDB.open('writing');
+      r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').getAll(); q.onsuccess = () => res(q.result.filter((e) => e.kind === 'tally')); };
+    }));
+    assert.equal(tally.length, 1);
+    assert.ok(tally[0].fields.start && tally[0].fields.end, 'the first tally keeps where the day started');
+    await p.keyboard.press('Escape');
+    assert.equal(await p.locator('.stats').isVisible(), false);
   });
 
   await check('no page errors', async () => assert.deepEqual(errors, []));

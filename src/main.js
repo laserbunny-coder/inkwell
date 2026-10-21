@@ -3,6 +3,7 @@ import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { EntryIds, SceneBreak } from './schema.js';
 import { isMac, keyLabel, showKeysForThisComputer } from './keys.js';
+import { StatsPanel, record as recordProgress } from './stats.js';
 import { AltMark, ParagraphVersions, AltPanel, flip, newParagraphVersion } from './alts.js';
 import { ChapterStore } from './chapter.js';
 import { NotesLayer } from './notes.js';
@@ -270,8 +271,12 @@ const sync = new Sync({
   onRemote: applyRemote
 });
 const conflicts = new Conflicts({ onApplied: (rows) => applyRemote(rows) });
+// Progress keeps a small daily tally; it's noted a little after you stop typing.
+let tallyTimer = null;
+const tallySoon = (ms = 20000) => { clearTimeout(tallyTimer); tallyTimer = setTimeout(() => recordProgress().catch((e) => console.error(e)), ms); };
 onLocalWrites((rows) => {
   sync.soon();
+  if (rows.some((r) => r.kind !== 'tally')) tallySoon();
   retitleLinks(rows).then((changed) => { if (changed) { freshenRefs(editor); freshenRefs(notebook.editor); } }).catch((e) => console.error(e));
 });
 window.__sync = sync;
@@ -970,6 +975,9 @@ async function step(dir) {
   if (next) go({ view: 'write', chapterId: next.id });
 }
 
+const progressPanel = new StatsPanel($('.stats'), { onClose: () => currentEditor().commands.focus() });
+document.addEventListener('visibilitychange', () => { if (document.hidden) recordProgress().catch(() => {}); });
+setTimeout(() => recordProgress().catch((e) => console.error(e)), 4000);
 const toggleShortcuts = () => { const s = $('.shortcuts'); s.hidden = !s.hidden; if (s.hidden) currentEditor().commands.focus(); };
 document.querySelectorAll('[data-show]').forEach((c) => c.addEventListener('change', () => setShown(c.dataset.show, c.checked)));
 $('#focus-mode').addEventListener('change', toggleFocus);
@@ -1080,6 +1088,8 @@ const commands = [
   { group: 'view', label: 'Show or hide note dots', keys: '', run: () => setShown('dots', hidden().has('dots')) },
   { group: 'view', label: 'Show or hide alternate marks', keys: '', run: () => setShown('alts', hidden().has('alts')) },
   { group: 'view', label: 'Show or hide the paragraph handle', keys: '', run: () => setShown('handle', hidden().has('handle')) },
+  { group: 'view', label: 'Show or hide bullets on notebook lines', keys: '', run: () => setShown('bullets', hidden().has('bullets')) },
+  { group: 'view', label: 'Progress: words and pages over time (stats)', keys: `${mod}⇧P`, run: () => progressPanel.open() },
   { group: 'view', label: 'Keyboard shortcuts (all the keys)', keys: `${mod}/`, run: toggleShortcuts },
   { group: 'page', label: 'Page and text settings', keys: '', run: togglePageSettings },
   { group: 'page', label: 'Wider page', keys: 'Alt+]', run: () => setPage(currentWidth() + 40, currentSize()) },
@@ -1263,6 +1273,7 @@ document.addEventListener('click', (e) => {
   if (cmd === 'view') toggleWriteToday();
   if (cmd === 'focus') toggleFocus();
   if (cmd === 'shortcuts') toggleShortcuts();
+  if (cmd === 'stats') progressPanel.toggle();
   if (cmd === 'library') go({ view: 'library', area: null });
   if (cmd === 'today') go({ view: 'notebook', pageId: dayId(isoToday()) });
   if (cmd === 'close-tag') { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
@@ -1279,6 +1290,7 @@ document.addEventListener('keydown', (e) => {
   else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketLeft') { e.preventDefault(); history.back(); }
   else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketRight') { e.preventDefault(); history.forward(); }
   else if (m && (e.key === '/' || e.code === 'Slash')) { e.preventDefault(); toggleShortcuts(); }
+  else if (m && e.shiftKey && k === 'p') { e.preventDefault(); progressPanel.toggle(); }
   else if (m && k === 'j') { e.preventDefault(); toggleWriteToday(); }
   else if (m && k === '1') { e.preventDefault(); body.classList.toggle('pin-outline'); }
   else if (m && k === '2' && writing()) { e.preventDefault(); toggleNotes(); }
@@ -1301,6 +1313,7 @@ document.addEventListener('keydown', (e) => {
     if (!$('.tag-results').hidden) { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
     if (!$('.versions').hidden) conflicts.close();
     if (!$('.shortcuts').hidden) toggleShortcuts();
+    if (progressPanel.isOpen) progressPanel.close();
     body.classList.remove('show-outline', 'show-top');
   }
 });

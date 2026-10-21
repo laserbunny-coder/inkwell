@@ -113,19 +113,25 @@ export const ScriptElements = Extension.create({
   }
 });
 
-// Roughly how many script pages: lines per element at standard widths, 55 lines a page.
-export function scriptPages(doc) {
-  const WIDTH = { scene: 60, action: 60, character: 38, paren: 25, dialogue: 35, transition: 60 };
-  const GAP = { scene: 2, action: 1, character: 1, paren: 0, dialogue: 0, transition: 1 };
+// Script lines at standard widths: [{ el, n }] where n is the line's length in characters.
+const WIDTH = { scene: 60, action: 60, character: 38, paren: 25, dialogue: 35, transition: 60 };
+const GAP = { scene: 2, action: 1, character: 1, paren: 0, dialogue: 0, transition: 1 };
+export const LINES_PER_PAGE = 55;
+export function scriptLines(items) {
   let lines = 0;
-  doc.forEach((node) => {
-    if (node.type.name !== 'paragraph') return;
-    const el = node.attrs.el || 'action';
-    const n = node.textContent.length;
-    if (!n) return;
-    lines += GAP[el] + Math.ceil(n / WIDTH[el]);
-  });
-  return Math.max(1, Math.round(lines / 55));
+  for (const { el = 'action', n } of items) {
+    if (!n) continue;
+    const e = WIDTH[el] ? el : 'action';
+    lines += GAP[e] + Math.ceil(n / WIDTH[e]);
+  }
+  return lines;
+}
+
+// Roughly how many script pages: 55 lines a page.
+export function scriptPages(doc) {
+  const items = [];
+  doc.forEach((node) => { if (node.type.name === 'paragraph') items.push({ el: node.attrs.el || 'action', n: node.textContent.length }); });
+  return Math.max(1, Math.round(scriptLines(items) / LINES_PER_PAGE));
 }
 
 // ---------- Fountain ----------
