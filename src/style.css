@@ -427,3 +427,29 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .script-bar button { flex: 1 0 auto; border: 0; background: transparent; border-radius: 8px; padding: 9px 6px; font-family: var(--ui); font-size: 12px; color: var(--muted); }
 .script-bar button.current { background: var(--tint); color: var(--accent); font-weight: 600; }
 .script-bar-on .corner { display: none; }
+
+/* ---------- alternates ---------- */
+/* A faint dotted underline on words that hold other versions, and "2/3" in the
+   left margin of a paragraph that does. Both go in focus mode or when switched off. */
+#editor .alt { text-decoration: underline dotted var(--faint); text-decoration-thickness: 1px; text-underline-offset: .22em; }
+#editor [data-pv] { position: relative; }
+#editor [data-pv]::before { content: attr(data-pv); position: absolute; right: calc(100% + 14px); top: .45em; font-family: var(--ui); font-size: 11px; color: var(--faint); letter-spacing: .04em; pointer-events: none; }
+.hide-alts #editor .alt, .focus #editor .alt { text-decoration: none; }
+.hide-alts #editor [data-pv]::before, .focus #editor [data-pv]::before { display: none; }
+.alt-panel { position: fixed; z-index: 45; width: 240px; max-height: 70vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,.14); padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; font-family: var(--ui); }
+.alt-panel.sheet-mode { left: 8px !important; right: 8px; bottom: 8px; top: auto !important; width: auto; max-height: 45vh; }
+.alt-head { display: flex; align-items: center; gap: 2px; }
+.alt-head .panel-label { flex: 1; }
+.alt-head .ghost-btn { padding: 4px 6px; font-size: 12px; }
+.alt-panel ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.alt-panel li { display: flex; align-items: center; border-radius: 6px; }
+.alt-panel li.current { background: var(--tint); }
+.alt-pick { flex: 1; min-width: 0; text-align: left; border: 0; background: transparent; color: var(--ink); font-family: var(--prose); font-size: 15px; line-height: 1.4; padding: 6px 8px; border-radius: 6px; overflow-wrap: anywhere; }
+.alt-panel li:not(.current) .alt-pick { color: var(--muted); }
+.alt-panel li:not(.current) .alt-pick:hover { color: var(--ink); }
+.alt-drop { padding: 4px 8px; opacity: 0; }
+.alt-panel li:hover .alt-drop, .alt-drop:focus { opacity: 1; }
+@media (hover: none) { .alt-drop { opacity: .6; } }
+.alt-panel input { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 7px 8px; font-family: var(--prose); font-size: 15px; outline: none; }
+.alt-panel input:focus { border-color: var(--accent); }
+.focus .alt-panel { display: none; }

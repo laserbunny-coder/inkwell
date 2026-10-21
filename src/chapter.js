@@ -99,7 +99,10 @@ export class ChapterStore {
       const prev = this.cache.get(id);
       const title = kind === 'scene' ? node.attrs.title : '';
       const el = node.attrs.el || null;
+      const versions = node.attrs.versions?.length > 1 ? node.attrs.versions : null;
+      const pvi = versions ? node.attrs.pvi || 0 : 0;
       const same = prev && !prev.deleted && prev.sort === index && prev.kind === kind && prev.title === title && (prev.fields?.el || null) === el &&
+        JSON.stringify(prev.fields?.versions || null) === JSON.stringify(versions) && (prev.fields?.pvi || 0) === pvi &&
         JSON.stringify(prev.content) === JSON.stringify(content) && prev.parent_id === chapter.id;
       if (same) return;
       const row = {
@@ -117,6 +120,8 @@ export class ChapterStore {
       };
       if (kind === 'heading') row.fields = { ...row.fields, level: node.attrs.level };
       if (kind === 'para') { const { el: _old, ...rest } = row.fields || {}; row.fields = el ? { ...rest, el } : rest; }
+      // Other versions of this paragraph, kept with it but not part of the text.
+      if (kind !== 'scene') { const { versions: _v, pvi: _i, ...rest } = row.fields || {}; row.fields = versions ? { ...rest, versions, pvi } : rest; }
       rows.push(row);
     });
     for (const [id, prev] of this.cache) {
@@ -164,8 +169,9 @@ function readWal(id) {
 function toDoc(rows) {
   const content = rows.map((r) => {
     if (r.kind === 'scene') return { type: 'sceneBreak', attrs: { eid: r.id, title: r.title || '' } };
-    if (r.kind === 'heading') return { type: 'heading', attrs: { eid: r.id, level: r.fields?.level || 2 }, ...(r.content ? { content: r.content } : {}) };
-    return { type: 'paragraph', attrs: { eid: r.id, ...(r.fields?.el ? { el: r.fields.el } : {}) }, ...(r.content ? { content: r.content } : {}) };
+    const versions = r.fields?.versions ? { versions: r.fields.versions, pvi: r.fields.pvi || 0 } : {};
+    if (r.kind === 'heading') return { type: 'heading', attrs: { eid: r.id, level: r.fields?.level || 2, ...versions }, ...(r.content ? { content: r.content } : {}) };
+    return { type: 'paragraph', attrs: { eid: r.id, ...(r.fields?.el ? { el: r.fields.el } : {}), ...versions }, ...(r.content ? { content: r.content } : {}) };
   });
   return { type: 'doc', content: content.length ? content : [{ type: 'paragraph' }] };
 }
