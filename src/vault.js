@@ -12,7 +12,7 @@ import { titleOf } from './notebook.js';
 
 const clean = (s) => (s || 'Untitled').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-').replace(/^\.+/, '').trim().slice(0, 80) || 'Untitled';
 
-async function pageMarkdown(page) {
+export async function pageMarkdown(page) {
   const lines = await descendants(page.id);
   const depth = new Map([[page.id, -1]]);
   const out = [page.kind === 'day' ? `# ${titleOf(page)}` : `# ${page.title || 'Untitled'}`, ''];

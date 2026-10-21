@@ -49,6 +49,15 @@ function supabaseBackend() {
       return sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
     },
     signOut() { return sb.auth.signOut(); },
+    // Calls one of the server functions (they live with Daybook's, in the same project).
+    async invoke(name, body) {
+      const { data, error } = await sb.functions.invoke(name, { body });
+      if (error) {
+        const detail = await error.context?.json?.().catch(() => null);
+        throw new Error(detail?.error || 'Couldn’t reach Claude. Try again.');
+      }
+      return data;
+    },
     async push(rows) {
       const { data, error } = await sb.from('writing_entries').upsert(rows).select('id,updated_at');
       if (error) throw error;
@@ -116,6 +125,8 @@ export class Sync {
   }
 
   signIn() { return this.backend?.signIn(); }
+  invoke(name, body) { return this.backend.invoke(name, body); }
+
   async signOut() { await this.backend?.signOut(); this.user = null; this.onStatus('signed-out'); }
 
   // Called after every local write.

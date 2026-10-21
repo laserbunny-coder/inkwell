@@ -116,6 +116,73 @@ try {
     await page.evaluate(() => document.documentElement.classList.remove('focus'));
   });
 
+  await check('Ask Claude adds suggestions that fit, widening to fix "a" and "an"', async () => {
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => {
+      window.__asked = [];
+      window.__claude = async (body) => {
+        window.__asked.push(body);
+        await new Promise((r) => setTimeout(r, 150));
+        if (body.mode === 'paragraph') return { rewrites: ['A first rewrite.', 'A second rewrite.'] };
+        return { suggestions: [{ replace: 'a long', with: 'an endless' }, { replace: 'long', with: 'slow' }, { replace: 'nowhere', with: 'bogus' }] };
+      };
+      window.__editor.chain().focus('end').run();
+    });
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('She took a long walk.');
+    const p = page.locator('#editor .ProseMirror p').last();
+    await page.evaluate(() => { const { state } = window.__editor; const end = state.doc.content.size - 1; window.__editor.chain().focus().setTextSelection(end - 8).run(); });
+    await page.keyboard.press('Control+Shift+E');
+    await page.waitForSelector('.alt-panel:not([hidden]) .alt-ask');
+    await page.locator('.alt-panel .alt-ask').click();
+    await page.waitForSelector('.alt-panel .alt-ask:disabled');
+    await page.waitForSelector('.alt-panel li.by-claude');
+    const asked = await page.evaluate(() => window.__asked[0]);
+    assert.equal(asked.mode, 'word');
+    assert.equal(asked.paragraph, 'She took a ⟦long⟧ walk.');
+    assert.deepEqual(asked.existing, ['long']);
+    assert.match(asked.before, /harbour/);
+    assert.equal(asked.book, 'Untitled novel');
+    assert.deepEqual(await page.locator('.alt-panel .alt-pick').allInnerTexts(), ['a long', 'an endless', 'a slow']);
+    assert.equal(await page.locator('.alt-panel li.by-claude').count(), 2);
+    assert.equal(await p.innerText(), 'She took a long walk.');
+    await page.locator('.alt-panel .alt-pick', { hasText: 'an endless' }).click();
+    assert.equal(await p.innerText(), 'She took an endless walk.');
+  });
+
+  await check('?? in the add box asks too, and nothing new says so', async () => {
+    await page.evaluate(() => { window.__claude = async () => ({ suggestions: [{ replace: 'an endless', with: 'a long' }] }); });
+    await page.locator('.alt-panel input').click();
+    await page.keyboard.type('??');
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('.alt-panel .alt-note');
+    assert.match(await page.locator('.alt-panel .alt-note').innerText(), /anything new/);
+  });
+
+  await check('Ask Claude for a rewrite adds paragraph versions and keeps yours showing', async () => {
+    await page.evaluate(() => {
+      window.__claude = async (body) => { window.__asked.push(body); return { rewrites: ['A first rewrite.', 'A second rewrite.'] }; };
+    });
+    await page.locator('.alt-panel .alt-head .ghost-btn', { hasText: 'Paragraph' }).click();
+    await page.locator('.alt-panel .alt-ask').click();
+    await page.waitForFunction(() => document.querySelectorAll('.alt-panel li').length === 3);
+    assert.equal(await page.evaluate(() => window.__asked.at(-1).mode), 'paragraph');
+    assert.equal(await page.locator('#editor .ProseMirror p').last().innerText(), 'She took an endless walk.');
+    assert.equal(await page.locator('#editor .ProseMirror p').last().getAttribute('data-pv'), '1/3');
+  });
+
+  await check('a Claude error shows in the panel', async () => {
+    await page.evaluate(() => { window.__claude = async () => { throw new Error('Claude is busy right now. Try again in a minute.'); }; });
+    await page.locator('.alt-panel .alt-ask').click();
+    await page.waitForFunction(() => /busy/.test(document.querySelector('.alt-panel .alt-note')?.textContent || ''));
+  });
+
+  await check('no Ask Claude button when signed out', async () => {
+    await page.evaluate(() => { delete window.__claude; });
+    await page.locator('.alt-panel .alt-head .ghost-btn', { hasText: 'Word' }).click();
+    assert.equal(await page.locator('.alt-panel .alt-ask').count(), 0);
+  });
+
   await check('no page errors', async () => assert.deepEqual(errors, []));
 } finally {
   await browser.close();
