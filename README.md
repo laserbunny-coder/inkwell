@@ -1,61 +1,77 @@
 # Inkwell
 
-A quiet, warm writing app for novels and screenplays, built to grow into a notebook and research vault.
+A quiet, warm writing app for novels and screenplays, with a notebook and research vault built in, on a phone and a computer.
+
+- Write with nothing on screen but your words. The outline, notes and menus appear only when you reach for them.
+- Keep notes in the margin, lined up beside the paragraph they're about.
+- Write screenplays that format themselves as you type.
+- Keep one daily page for plans, ideas and research, and link any line to a chapter or page.
+- Keep every book, screenplay and research collection in one Library, in areas you organize yourself.
+- See how many words you wrote each day, week or month.
+- Install it on your phone. It works offline and syncs with your computer.
 
 Live at https://laserbunny-coder.github.io/inkwell/
 
-## What it looks like
+## A look around
 
-These are made-up books and notes, so you can see the app with something in it.
+These screenshots use made-up sample data. They're shown in dark mode, and there's a light mode too.
 
-**Writing.** Just the page. Notes sit in the margin beside the paragraph they belong to (Ctrl + 2 shows or hides them). Links to research pages show in red.
+**Writing.** Just the page. Notes sit in the margin beside the paragraph they belong to (Ctrl + 2 shows or hides them). Links to research pages show in orange.
 
-![The manuscript with margin notes](docs/screenshots/desktop-manuscript-notes.png)
+![The manuscript with margin notes](docs/screenshots/desktop-manuscript-notes.webp)
 
-**Focus mode** (Ctrl + .) hides everything but the text.
+**Focus.** Ctrl + . hides everything but the text.
 
-![Focus mode: only the text](docs/screenshots/desktop-focus.png)
+![Focus mode: only the text](docs/screenshots/desktop-focus.webp)
 
 **The outline** slides in from the left edge: areas, books, acts, chapters, scenes and pages. Ctrl + 1 keeps it open. The small dots beside the text mark paragraphs that have notes.
 
-![The outline sidebar](docs/screenshots/desktop-outline.png)
+![The outline sidebar](docs/screenshots/desktop-outline.webp)
 
-**Today's page** (Ctrl + J). One page a day for anything: plans, ideas, research, with links to chapters and pages and #tags. Earlier days scroll underneath.
+**Today's page** (Ctrl + J). One page a day for anything, with links to chapters and pages and #tags. Earlier days scroll underneath.
 
-![Today's page in the notebook](docs/screenshots/desktop-today.png)
+![Today's page in the notebook](docs/screenshots/desktop-today.webp)
 
 **The Library** (Ctrl + Shift + O) holds every novel, screenplay and notes collection, sorted into areas you make yourself.
 
-![The Library](docs/screenshots/desktop-library.png)
+![The Library](docs/screenshots/desktop-library.webp)
 
 **A book's home** shows its chapters, its research pages and every line from your daily pages that mentions it.
 
-![A book's home page](docs/screenshots/desktop-book.png)
+![A book's home page](docs/screenshots/desktop-book.webp)
 
 **Screenplays** are formatted as you type: scene headings, action, characters, dialogue.
 
-![A screenplay](docs/screenshots/desktop-screenplay.png)
+![A screenplay](docs/screenshots/desktop-screenplay.webp)
 
-**One menu for everything** (Ctrl + K), and a **Progress** panel (Ctrl + Shift + P) with words written per day, week or month.
+**One menu for everything.** Ctrl + K opens every command, grouped so it stays short.
 
-![The command menu](docs/screenshots/desktop-command-menu.png)
+![The command menu](docs/screenshots/desktop-command-menu.webp)
 
-![The Progress panel](docs/screenshots/desktop-progress.png)
+**Progress** (Ctrl + Shift + P). Words written per day, week or month, for each book and for your notes.
 
-**Dark mode** (Ctrl + Shift + L).
+![The Progress panel](docs/screenshots/desktop-progress.webp)
 
-![The manuscript in dark mode](docs/screenshots/desktop-manuscript-dark.png)
+**Light mode**, if you prefer it. Ctrl + Shift + L switches.
 
-**On a phone** it installs to the home screen, works offline and syncs with the computer.
+![The manuscript in light mode](docs/screenshots/desktop-manuscript-light.webp)
+
+### On a phone
+
+Inkwell installs to the home screen and syncs with the computer.
 
 <p>
-  <img src="docs/screenshots/phone-manuscript.png" width="24%" alt="Writing on a phone">
-  <img src="docs/screenshots/phone-today.png" width="24%" alt="Today's page on a phone">
-  <img src="docs/screenshots/phone-library.png" width="24%" alt="The Library on a phone">
-  <img src="docs/screenshots/phone-command-menu.png" width="24%" alt="The command menu on a phone">
+  <img src="docs/screenshots/phone-manuscript.webp" width="240" alt="Writing on a phone">
+  <img src="docs/screenshots/phone-today.webp" width="240" alt="Today's page on a phone">
+  <img src="docs/screenshots/phone-library.webp" width="240" alt="The Library on a phone">
+</p>
+<p>
+  <img src="docs/screenshots/phone-book.webp" width="240" alt="A book's home on a phone">
+  <img src="docs/screenshots/phone-screenplay.webp" width="240" alt="A screenplay on a phone">
+  <img src="docs/screenshots/phone-command-menu.webp" width="240" alt="The command menu on a phone">
 </p>
 
-The screenshots are made by `node docs/screenshots/capture.mjs`, which fills a fresh local copy of the app with sample writing (sync off, so no real account is touched) and photographs it.
+To retake these after the app changes, run `node docs/screenshots/capture.mjs`. It fills a fresh local copy of the app with the sample data (sync off, so no real account is touched) and saves new screenshots.
 
 ## Using it
 

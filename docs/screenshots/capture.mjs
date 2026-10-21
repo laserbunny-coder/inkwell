@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+import { writeFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 let chromium;
@@ -199,10 +200,26 @@ async function open(page, place, extra = {}) {
   await sleep(1200);
 }
 
+// Saved as WebP, desktop 2000px wide and phone 780px wide (like Daybook's), so the README loads quickly.
 const shot = async (page, name, { top = true } = {}) => {
   const { width, height } = page.viewportSize();
   await page.mouse.move(width - 8, Math.round(height * 0.6));
-  if (top) await page.evaluate(() => { scrollTo(0, 0); for (const el of document.querySelectorAll('*')) if (el.scrollTop) el.scrollTop = 0; }); await sleep(500); await page.screenshot({ path: `${OUT}${name}.png` });
+  if (top) await toTop(page);
+  await sleep(500);
+  const png = (await page.screenshot()).toString('base64');
+  const webp = await page.evaluate(async ([data, w]) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${data}`;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = Math.round(img.height * (w / img.width));
+    const g = c.getContext('2d');
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/webp', 0.9).split(',')[1];
+  }, [png, width > 600 ? 2000 : 780]);
+  writeFileSync(`${OUT}${name}.webp`, Buffer.from(webp, 'base64'));
   console.log('saved', name);
 };
 const toTop = (page) => page.evaluate(() => { scrollTo(0, 0); for (const el of document.querySelectorAll('*')) if (el.scrollTop) el.scrollTop = 0; });
@@ -216,7 +233,8 @@ const blur = (page) => page.evaluate(() => { document.activeElement?.blur(); get
 for (const theme of ['light', 'dark']) {
   const { ctx, page, ids } = await session({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, colorScheme: theme });
   const t = { theme };
-  if (theme === 'light') {
+  // Dark is the main look (it's what Michael writes in); one light shot shows the other theme.
+  if (theme === 'dark') {
     // Writing, notes beside the text.
     await open(page, { view: 'write', chapterId: ids.chapter }, t);
     await blur(page);
@@ -280,15 +298,15 @@ for (const theme of ['light', 'dark']) {
     await page.keyboard.press('Control+2');
     await sleep(800);
     await settleNotes(page);
-    await shot(page, 'desktop-manuscript-dark');
+    await shot(page, 'desktop-manuscript-light');
   }
   await ctx.close();
 }
 
 // Phone (Android-sized), touch.
 {
-  const { ctx, page, ids } = await session({ viewport: { width: 412, height: 870 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'light' });
-  const t = { theme: 'light' };
+  const { ctx, page, ids } = await session({ viewport: { width: 412, height: 870 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' });
+  const t = { theme: 'dark' };
   await open(page, { view: 'write', chapterId: ids.chapter }, t);
   await blur(page);
   await shot(page, 'phone-manuscript');
@@ -304,6 +322,13 @@ for (const theme of ['light', 'dark']) {
   await page.keyboard.press('Control+k');
   await sleep(700);
   await shot(page, 'phone-command-menu');
+
+  await open(page, { view: 'project', id: ids.book }, t);
+  await shot(page, 'phone-book');
+
+  await open(page, { view: 'write', chapterId: ids.film }, t);
+  await blur(page);
+  await shot(page, 'phone-screenplay');
   await ctx.close();
 }
 
