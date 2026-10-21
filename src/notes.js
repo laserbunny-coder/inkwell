@@ -135,7 +135,18 @@ export class NotesLayer {
     text.addEventListener('focus', () => hl(true));
     text.addEventListener('blur', () => hl(false));
 
-    card.append(select, text);
+    // Right beside the notes, a quick way to tuck them all away again.
+    const hide = document.createElement('button');
+    hide.type = 'button';
+    hide.className = 'note-hide';
+    hide.textContent = 'Hide notes';
+    hide.title = 'Hide notes (⌘2). The dots bring them back.';
+    hide.addEventListener('click', () => { this.setVisible(false); this.editor.commands.focus(); });
+    const head = document.createElement('div');
+    head.className = 'note-head';
+    head.append(select, hide);
+
+    card.append(head, text);
     return card;
   }
 

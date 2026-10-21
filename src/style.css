@@ -91,6 +91,11 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 .note select { border: 0; background: transparent; color: var(--hat); font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; padding: 0; margin-bottom: 2px; cursor: pointer; }
 .note textarea { display: block; width: 100%; resize: none; overflow: hidden; border: 0; background: transparent; color: var(--muted); font-size: 13px; line-height: 1.5; padding: 0; outline: none; }
 .note textarea:focus { color: var(--ink); }
+.note-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.note-hide { border: 0; background: transparent; padding: 0; color: var(--muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; opacity: 0; transition: opacity .15s; }
+.note:hover .note-hide, .note:focus-within .note-hide, .note-hide:focus { opacity: .8; }
+.note-hide:hover { opacity: 1; color: var(--ink); }
+@media (hover: none) { .note-hide { opacity: .6; } }
 
 /* Command menu */
 .palette-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(20,18,15,.25); }
@@ -100,6 +105,11 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 .palette li { display: flex; justify-content: space-between; gap: 12px; padding: 10px; border-radius: 8px; cursor: pointer; }
 .palette li[aria-selected="true"] { background: var(--tint); }
 .palette li .keys { color: var(--muted); font-size: 12px; }
+.palette li .label { display: flex; flex-direction: column; gap: 2px; }
+.palette li .hint { color: var(--muted); font-size: 12px; }
+.palette li.back { color: var(--muted); font-size: 13px; }
+/* No keyboard on a phone, so shortcuts would only be clutter there. */
+@media (hover: none) { .palette li:not(.opens) .keys { display: none; } }
 
 /* History */
 .history { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; }

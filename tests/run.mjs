@@ -372,6 +372,12 @@ try {
     await sleep(800);
     const note = (await all()).find((e) => e.kind === 'note' && e.text === 'Check the tide tables');
     assert.equal(note.parent_id, await paras.nth(1).getAttribute('data-eid'));
+    // Hide notes sits on the note itself; the dot brings them back.
+    await p.locator('.note').first().hover();
+    await p.locator('.note-hide').first().click();
+    await p.waitForFunction(() => !document.body.classList.contains('notes-on'));
+    await p.locator('.note-dot').first().click();
+    await p.waitForFunction(() => document.body.classList.contains('notes-on'));
   });
 
   await check('the handle stays while the mouse crosses the margin to it', async () => {
@@ -432,6 +438,24 @@ try {
     await p.locator('#focus-toggle').click({ force: true });
     assert.equal(await p.evaluate(() => document.documentElement.classList.contains('focus')), false);
     await p.keyboard.press('Control+J');
+  });
+
+  await check('the command menu opens on categories, and typing still finds everything', async () => {
+    await sleep(600);
+    await p.keyboard.press('Control+K');
+    await p.waitForSelector('.palette', { state: 'visible' });
+    const top = await p.locator('#palette-list li .label').allInnerTexts();
+    assert.equal(top.length, 6, top.join(' | '));
+    assert.match(top[3], /^View/);
+    await p.keyboard.press('ArrowDown'); await p.keyboard.press('ArrowDown'); await p.keyboard.press('ArrowDown');
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => document.querySelector('#palette-input').placeholder === 'View…');
+    assert.match(await p.locator('#palette-list li[aria-selected="true"]').innerText(), /Sidebar/);
+    await p.keyboard.press('Backspace');
+    await p.waitForFunction(() => document.querySelectorAll('#palette-list li').length === 6);
+    await p.keyboard.type('scene break');
+    assert.match(await p.locator('#palette-list li').first().innerText(), /Scene break/);
+    await p.keyboard.press('Escape');
   });
 
   await check('no page errors', async () => assert.deepEqual(errors, []));

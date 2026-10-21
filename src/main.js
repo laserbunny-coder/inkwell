@@ -937,44 +937,54 @@ async function exportBook() {
 
 const writing = () => view() === 'write';
 const commands = [
-  { label: 'Go to… a book, chapter or page', keys: `${mod}O`, run: () => openPalette('go') },
-  { label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
-  { label: 'Today’s page', keys: `${mod}J`, run: () => go({ view: 'notebook', pageId: dayId(isoToday()) }) },
-  { label: 'Back to writing', keys: `${mod}J`, run: () => go({ view: 'write' }), when: () => !writing() },
-  { label: 'Next chapter (or day)', keys: `${mod}⌥↓`, run: () => step(1), when: () => writing() || inNotebook() },
-  { label: 'Previous chapter (or day)', keys: `${mod}⌥↑`, run: () => step(-1), when: () => writing() || inNotebook() },
-  { label: 'Keyboard shortcuts', keys: `${mod}/`, run: toggleShortcuts },
-  { label: 'New novel', keys: '', run: () => showNewBook('novel') },
-  { label: 'New notes collection', keys: '', run: () => showNewBook('notes') },
-  { label: 'New page', keys: '', run: newPageHere },
-  { label: 'New area', keys: '', run: () => go({ view: 'library' }).then(() => [...document.querySelectorAll('#lib-areas .chip.add')].at(-1)?.click()) },
-  { label: 'Link to a page…', keys: '[[', run: () => openPicker(currentEditor()), when: () => writing() || inNotebook() },
-  { label: 'Sidebar (keep open)', keys: `${mod}1`, run: () => body.classList.toggle('pin-outline') },
-  { label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: writing },
-  { label: 'Note categories: add, rename, recolour', keys: '', run: () => notes.editTypes() },
-  { label: 'Focus: just the text (on / off)', keys: `${mod}.`, run: toggleFocus },
-  { label: 'Show or hide "Linked from"', keys: '', run: () => setShown('links', hidden().has('links')) },
-  { label: 'Show or hide note dots', keys: '', run: () => setShown('dots', hidden().has('dots')) },
-  { label: 'Show or hide the paragraph handle', keys: '', run: () => setShown('handle', hidden().has('handle')) },
-  { label: 'Add a note to this paragraph', keys: `${mod}⇧N`, run: () => notes.add(), when: writing },
-  { label: 'Scene break', keys: `${mod}⇧↵`, run: () => editor.chain().focus().insertSceneBreak().run(), when: writing },
-  { label: 'New chapter', keys: '', run: () => go({ view: 'write' }).then(newChapter), when: () => !!state.project },
-  { label: 'New act', keys: '', run: () => go({ view: 'write' }).then(newAct), when: () => !!state.project },
-  { label: 'History: earlier versions of this chapter', keys: `${mod}⇧H`, run: openHistory, when: writing },
-  { label: 'View: page width, text size, what to show', keys: '', run: togglePageSettings },
-  { label: 'Wider page', keys: 'Alt+]', run: () => setPage(currentWidth() + 40, currentSize()) },
-  { label: 'Narrower page', keys: 'Alt+[', run: () => setPage(currentWidth() - 40, currentSize()) },
-  { label: 'Larger text', keys: 'Alt+=', run: () => setPage(currentWidth(), currentSize() + 1) },
-  { label: 'Smaller text', keys: 'Alt+−', run: () => setPage(currentWidth(), currentSize() - 1) },
-  { label: 'Light / dark', keys: `${mod}⇧L`, run: toggleTheme },
-  { label: 'Sync now', keys: '', run: () => sync.soon(0), when: () => !!sync.user },
-  { label: 'Sign in to sync between devices', keys: '', run: () => sync.signIn(), when: () => sync.available && !sync.user },
-  { label: 'Sign out of sync', keys: '', run: () => sync.signOut(), when: () => !!sync.user },
-  { label: 'Change the writing font', keys: '', run: cycleFont },
-  { label: 'Export this chapter as Markdown', keys: '', run: exportChapter, when: writing },
-  { label: 'Export the whole book as Markdown', keys: '', run: exportBook, when: () => writing() && !!state.project },
-  { label: 'Back up everything (download all as files)', keys: '', run: exportVault },
-  { label: 'Two versions to check', keys: '', run: () => conflicts.open(), when: () => !$('#versions').hidden }
+  { group: 'go', label: 'Go to… a book, chapter or page', keys: `${mod}O`, run: () => openPalette('go') },
+  { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
+  { group: 'go', label: 'Today’s page', keys: `${mod}J`, run: () => go({ view: 'notebook', pageId: dayId(isoToday()) }) },
+  { group: 'go', label: 'Back to writing', keys: `${mod}J`, run: () => go({ view: 'write' }), when: () => !writing() },
+  { group: 'go', label: 'Next chapter (or day)', keys: `${mod}⌥↓`, run: () => step(1), when: () => writing() || inNotebook() },
+  { group: 'go', label: 'Previous chapter (or day)', keys: `${mod}⌥↑`, run: () => step(-1), when: () => writing() || inNotebook() },
+  { group: 'new', label: 'New novel', keys: '', run: () => showNewBook('novel') },
+  { group: 'new', label: 'New notes collection', keys: '', run: () => showNewBook('notes') },
+  { group: 'new', label: 'New page', keys: '', run: newPageHere },
+  { group: 'new', label: 'New area', keys: '', run: () => go({ view: 'library' }).then(() => [...document.querySelectorAll('#lib-areas .chip.add')].at(-1)?.click()) },
+  { group: 'new', label: 'New chapter', keys: '', run: () => go({ view: 'write' }).then(newChapter), when: () => !!state.project },
+  { group: 'new', label: 'New act', keys: '', run: () => go({ view: 'write' }).then(newAct), when: () => !!state.project },
+  { group: 'write', label: 'Link to a page…', keys: '[[', run: () => openPicker(currentEditor()), when: () => writing() || inNotebook() },
+  { group: 'write', label: 'Add a note to this paragraph', keys: `${mod}⇧N`, run: () => notes.add(), when: writing },
+  { group: 'write', label: 'Scene break', keys: `${mod}⇧↵`, run: () => editor.chain().focus().insertSceneBreak().run(), when: writing },
+  { group: 'write', label: 'History: earlier versions of this chapter', keys: `${mod}⇧H`, run: openHistory, when: writing },
+  { group: 'write', label: 'Note categories: add, rename, recolour', keys: '', run: () => notes.editTypes() },
+  { group: 'view', label: 'Sidebar (keep open)', keys: `${mod}1`, run: () => body.classList.toggle('pin-outline') },
+  { group: 'view', label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: writing },
+  { group: 'view', label: 'Focus: just the text (on / off)', keys: `${mod}.`, run: toggleFocus },
+  { group: 'view', label: 'Show or hide "Linked from"', keys: '', run: () => setShown('links', hidden().has('links')) },
+  { group: 'view', label: 'Show or hide note dots', keys: '', run: () => setShown('dots', hidden().has('dots')) },
+  { group: 'view', label: 'Show or hide the paragraph handle', keys: '', run: () => setShown('handle', hidden().has('handle')) },
+  { group: 'view', label: 'Keyboard shortcuts', keys: `${mod}/`, run: toggleShortcuts },
+  { group: 'page', label: 'Page and text settings', keys: '', run: togglePageSettings },
+  { group: 'page', label: 'Wider page', keys: 'Alt+]', run: () => setPage(currentWidth() + 40, currentSize()) },
+  { group: 'page', label: 'Narrower page', keys: 'Alt+[', run: () => setPage(currentWidth() - 40, currentSize()) },
+  { group: 'page', label: 'Larger text', keys: 'Alt+=', run: () => setPage(currentWidth(), currentSize() + 1) },
+  { group: 'page', label: 'Smaller text', keys: 'Alt+−', run: () => setPage(currentWidth(), currentSize() - 1) },
+  { group: 'page', label: 'Light / dark', keys: `${mod}⇧L`, run: toggleTheme },
+  { group: 'page', label: 'Change the writing font', keys: '', run: cycleFont },
+  { group: 'sync', label: 'Sync now', keys: '', run: () => sync.soon(0), when: () => !!sync.user },
+  { group: 'sync', label: 'Sign in to sync between devices', keys: '', run: () => sync.signIn(), when: () => sync.available && !sync.user },
+  { group: 'sync', label: 'Sign out of sync', keys: '', run: () => sync.signOut(), when: () => !!sync.user },
+  { group: 'sync', label: 'Export this chapter as Markdown', keys: '', run: exportChapter, when: writing },
+  { group: 'sync', label: 'Export the whole book as Markdown', keys: '', run: exportBook, when: () => writing() && !!state.project },
+  { group: 'sync', label: 'Back up everything (download all as files)', keys: '', run: exportVault },
+  { group: 'sync', label: 'Two versions to check', urgent: true, keys: '', run: () => conflicts.open(), when: () => !$('#versions').hidden }
+];
+
+// The command menu opens on these, so the phone doesn't need a long scroll; typing searches everything.
+const GROUPS = [
+  { id: 'go', label: 'Go', hint: 'Library, today, chapters, back' },
+  { id: 'new', label: 'New', hint: 'Book, page, chapter, area' },
+  { id: 'write', label: 'Write', hint: 'Links, notes, scene breaks, history' },
+  { id: 'view', label: 'View', hint: 'Focus, sidebar, notes, what shows' },
+  { id: 'page', label: 'Page and text', hint: 'Width, text size, font, light or dark' },
+  { id: 'sync', label: 'Sync and backup', hint: 'Sync, export, back up' }
 ];
 
 function isoToday() {
@@ -1003,10 +1013,12 @@ let paletteItems = [];
 let paletteMode = 'commands';
 let paletteSource = commands;
 let paletteReady = Promise.resolve();
+let paletteGroup = null;
 
 async function openPalette(mode = 'commands', only) {
   // Open and focus at once so nothing typed is lost; the list fills in after.
   paletteMode = mode;
+  paletteGroup = null;
   paletteSource = mode === 'go' ? [] : commands;
   paletteReady = Promise.resolve();
   $('.palette').hidden = false;
@@ -1032,19 +1044,48 @@ function closePalette(refocus = true) {
   if (refocus && (writing() || inNotebook())) currentEditor().commands.focus();
 }
 
+function openGroup(id) {
+  paletteGroup = id;
+  const input = $('#palette-input');
+  input.placeholder = id ? `${GROUPS.find((g) => g.id === id).label}…` : 'Type a command…';
+  input.value = '';
+  input.focus();
+  filterPalette();
+}
+
 function filterPalette() {
   const q = $('#palette-input').value.trim().toLowerCase();
-  paletteItems = paletteSource.filter((c) => (!c.when || c.when()) && (!q || c.label.toLowerCase().includes(q))).slice(0, 60);
-  paletteIndex = 0;
+  const usable = (c) => !c.when || c.when();
+  if (paletteMode === 'commands' && !q && !paletteGroup) {
+    // Anything waiting on you stays at the top; then the categories.
+    paletteItems = [
+      ...commands.filter((c) => c.urgent && usable(c)),
+      ...GROUPS.map((g) => ({ label: g.label, hint: g.hint, keys: '›', stay: true, run: () => openGroup(g.id) }))
+    ];
+  } else if (paletteMode === 'commands' && !q) {
+    paletteItems = [
+      { label: '‹ All commands', keys: '', stay: true, back: true, run: () => openGroup(null) },
+      ...commands.filter((c) => c.group === paletteGroup && usable(c))
+    ];
+  } else {
+    const inGroup = (c) => !paletteGroup || paletteMode !== 'commands' || c.group === paletteGroup;
+    paletteItems = paletteSource.filter((c) => usable(c) && inGroup(c) && c.label.toLowerCase().includes(q)).slice(0, 60);
+  }
+  // In a category, start on its first command rather than the way back.
+  paletteIndex = paletteItems[0]?.back && paletteItems.length > 1 ? 1 : 0;
   const list = $('#palette-list');
   list.replaceChildren();
   paletteItems.forEach((c, i) => {
     const li = document.createElement('li');
     li.setAttribute('role', 'option');
     li.setAttribute('aria-selected', String(i === paletteIndex));
-    li.innerHTML = '<span></span><span class="keys"></span>';
+    li.innerHTML = '<span class="label"></span><span class="keys"></span>';
     li.firstChild.textContent = c.label;
-    li.lastChild.textContent = c.keys;
+    if (c.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = c.hint; li.firstChild.append(h); }
+    if (c.back) li.classList.add('back');
+    if (c.stay) li.classList.add('opens');
+    // While searching, say which category a command without a shortcut lives in.
+    li.lastChild.textContent = c.keys || (q && c.group ? GROUPS.find((g) => g.id === c.group).label : '');
     li.addEventListener('click', () => runCommand(c));
     li.addEventListener('mousemove', () => selectPalette(i));
     list.append(li);
@@ -1058,6 +1099,7 @@ function selectPalette(i) {
 }
 
 function runCommand(c) {
+  if (c.stay) return c.run();
   closePalette(paletteMode !== 'go');
   c.run();
 }
@@ -1071,7 +1113,10 @@ $('#palette-input').addEventListener('keydown', (e) => {
     // Enter pressed before the list arrived still picks the best match.
     paletteReady.then(() => { if (paletteItems[paletteIndex]) runCommand(paletteItems[paletteIndex]); });
   }
-  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePalette(); }
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (paletteGroup && !e.target.value) openGroup(null); else closePalette(); }
+  if (e.key === 'Backspace' && paletteGroup && !e.target.value) { e.preventDefault(); openGroup(null); }
+  if (e.key === 'ArrowRight' && !e.target.value && paletteItems[paletteIndex]?.stay && !paletteItems[paletteIndex].back) { e.preventDefault(); runCommand(paletteItems[paletteIndex]); }
+  if (e.key === 'ArrowLeft' && !e.target.value && paletteGroup) { e.preventDefault(); openGroup(null); }
 });
 $('.palette-backdrop').addEventListener('click', () => closePalette());
 
