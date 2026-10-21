@@ -6,9 +6,9 @@ Live at https://laserbunny-coder.github.io/inkwell/
 
 ## What it looks like
 
-These are made-up books and notes, so you can see the app with something in it.
+These are made-up books and notes, so you can see the app with something in it. They're shown in dark mode.
 
-**Writing.** Just the page. Notes sit in the margin beside the paragraph they belong to (Ctrl + 2 shows or hides them). Links to research pages show in red.
+**Writing.** Just the page. Notes sit in the margin beside the paragraph they belong to (Ctrl + 2 shows or hides them). Links to research pages show in a warm orange.
 
 ![The manuscript with margin notes](docs/screenshots/desktop-manuscript-notes.png)
 
@@ -42,9 +42,9 @@ These are made-up books and notes, so you can see the app with something in it.
 
 ![The Progress panel](docs/screenshots/desktop-progress.png)
 
-**Dark mode** (Ctrl + Shift + L).
+**Light mode** too, if you prefer it (Ctrl + Shift + L switches).
 
-![The manuscript in dark mode](docs/screenshots/desktop-manuscript-dark.png)
+![The manuscript in light mode](docs/screenshots/desktop-manuscript-light.png)
 
 **On a phone** it installs to the home screen, works offline and syncs with the computer.
 

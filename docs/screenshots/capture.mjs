@@ -216,7 +216,8 @@ const blur = (page) => page.evaluate(() => { document.activeElement?.blur(); get
 for (const theme of ['light', 'dark']) {
   const { ctx, page, ids } = await session({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, colorScheme: theme });
   const t = { theme };
-  if (theme === 'light') {
+  // Dark is the main look (it's what Michael writes in); one light shot shows the other theme.
+  if (theme === 'dark') {
     // Writing, notes beside the text.
     await open(page, { view: 'write', chapterId: ids.chapter }, t);
     await blur(page);
@@ -280,15 +281,15 @@ for (const theme of ['light', 'dark']) {
     await page.keyboard.press('Control+2');
     await sleep(800);
     await settleNotes(page);
-    await shot(page, 'desktop-manuscript-dark');
+    await shot(page, 'desktop-manuscript-light');
   }
   await ctx.close();
 }
 
 // Phone (Android-sized), touch.
 {
-  const { ctx, page, ids } = await session({ viewport: { width: 412, height: 870 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'light' });
-  const t = { theme: 'light' };
+  const { ctx, page, ids } = await session({ viewport: { width: 412, height: 870 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' });
+  const t = { theme: 'dark' };
   await open(page, { view: 'write', chapterId: ids.chapter }, t);
   await blur(page);
   await shot(page, 'phone-manuscript');
