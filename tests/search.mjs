@@ -21,7 +21,9 @@ const search = async (q) => {
   await p.keyboard.press('Control+Shift+F');
   await p.waitForSelector('.palette', { state: 'visible' });
   await p.keyboard.type(q);
-  await sleep(400);
+  // The index is built when search opens; wait for it rather than a fixed time.
+  await p.waitForFunction(() => !document.querySelector('#palette-list')?.textContent.includes('Looking…'));
+  await sleep(150);
 };
 let failed = 0;
 async function check(name, fn) {
@@ -43,7 +45,9 @@ try {
   await p.locator('#editor .ProseMirror p').first().click();
   await p.keyboard.press('Control+J');
   await p.waitForSelector('#outline-editor .ProseMirror-focused');
+  await sleep(500); // the day page grabs focus back once it has loaded
   await p.keyboard.type('Phone the archivist about the lighthouse logbooks');
+  await p.waitForFunction(() => document.querySelector('#outline-editor').textContent.includes('lighthouse logbooks'));
   await sleep(800);
 
   await check('finds words in a chapter, a daily page and a note, in any order and without accents', async () => {
@@ -124,6 +128,27 @@ try {
     await sleep(300);
     assert.deepEqual(await p.locator('#lib-books .card-title').allInnerTexts(), ['Anchor', 'Moss', 'Zephyr']);
     assert.match(await p.locator('#outline-tree .tree-more').innerText(), /All 15 loose pages/);
+  });
+
+  await check('My order: dragging a card or Move earlier puts books where you want them, and it sticks', async () => {
+    await p.locator('#lib-sort').selectOption('custom');
+    await sleep(300);
+    const titles = () => p.locator('#lib-books .card-title').allInnerTexts();
+    assert.deepEqual(await titles(), ['Zephyr', 'Anchor', 'Moss']);
+    await p.locator('.card-wrap', { hasText: 'Moss' }).locator('.card').dragTo(p.locator('.card-wrap', { hasText: 'Zephyr' }), { targetPosition: { x: 10, y: 40 } });
+    await sleep(500);
+    assert.deepEqual(await titles(), ['Moss', 'Zephyr', 'Anchor']);
+    await p.locator('.card-wrap', { hasText: 'Anchor' }).hover();
+    await p.locator('.card-wrap', { hasText: 'Anchor' }).locator('.more-btn').click();
+    await p.locator('.pop-menu button', { hasText: 'Move earlier' }).click();
+    await sleep(500);
+    assert.deepEqual(await titles(), ['Moss', 'Anchor', 'Zephyr']);
+    await p.reload();
+    await p.waitForSelector('#editor .ProseMirror', { state: 'attached' });
+    await sleep(600);
+    await p.keyboard.press('Control+Shift+O');
+    await sleep(400);
+    assert.deepEqual(await titles(), ['Moss', 'Anchor', 'Zephyr']);
   });
 
   await check('no page errors', async () => assert.deepEqual(errors, []));

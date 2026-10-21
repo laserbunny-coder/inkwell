@@ -952,6 +952,10 @@ async function bookMenu(book) {
     { label: 'Kind', sub: KINDS.map(([id, label]) => ({ label, current: bookType(b) === id, run: () => setKind(b, id) })) },
     { label: 'Move to area', sub: (await areaOptions(all)).map(([id, label]) => ({ label: label.trim(), current: b.area_id === id, run: () => moveBookToArea(b, id) })) },
     { label: 'New page in it', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(b.id); } },
+    ...(view() === 'library' ? [
+      { label: 'Move earlier in my order', run: () => nudgeBook(b, -1) },
+      { label: 'Move later in my order', run: () => nudgeBook(b, 1) }
+    ] : []),
     'sep',
     { label: 'Move to Trash…', danger: true, run: () => toTrash(b) }
   ];
@@ -1051,6 +1055,35 @@ async function renderTrash() {
 
 // How books are ordered in the Library, per device.
 const libSort = () => { try { return localStorage.getItem('libSort') || 'recent'; } catch { return 'recent'; } };
+// Your own order: a number on each book (synced, so it's the same on every
+// device). Books never placed yet follow, most recently edited first.
+const ORDER_KEY = (b) => b.fields?.order ?? Infinity;
+const byMyOrder = (a, b) => ORDER_KEY(a) - ORDER_KEY(b) || b.updated_at - a.updated_at;
+
+// Put a book just before (or after) another one in your order.
+async function placeBook(bookId, targetId, after = false) {
+  if (bookId === targetId) return;
+  const list = (await books()).sort(byMyOrder);
+  const moving = list.find((b) => b.id === bookId);
+  const rest = list.filter((b) => b.id !== bookId);
+  const at = rest.findIndex((b) => b.id === targetId);
+  if (!moving || at < 0) return;
+  rest.splice(after ? at + 1 : at, 0, moving);
+  const now = Date.now();
+  await putEntries(rest.map((b, i) => ({ b, i })).filter(({ b, i }) => b.fields?.order !== i + 1)
+    .map(({ b, i }) => ({ ...b, fields: { ...b.fields, order: i + 1 }, updated_at: now })));
+  if (libSort() !== 'custom') { try { localStorage.setItem('libSort', 'custom'); } catch { /* full */ } }
+  await refreshViews();
+}
+
+// One step earlier or later among the books shown right now.
+async function nudgeBook(book, dir) {
+  const shown = [...document.querySelectorAll('#lib-books .card-wrap[data-id]')].map((w) => w.dataset.id);
+  const list = shown.length && shown.includes(book.id) && libSort() === 'custom' ? shown : (await books()).sort(byMyOrder).map((b) => b.id);
+  const i = list.indexOf(book.id);
+  const target = list[i + dir];
+  if (target) await placeBook(book.id, target, dir > 0);
+}
 
 async function renderLibrary() {
   const [allAreas, allBooks, loose] = await Promise.all([areas(), books(), loosePages()]);
@@ -1088,7 +1121,7 @@ async function renderLibrary() {
   const ids = sel ? subtree(sel, allAreas) : null;
   const sort = libSort();
   const shown = allBooks.filter((b) => !ids || ids.has(b.area_id))
-    .sort(sort === 'title' ? (a, b) => (a.title || '').localeCompare(b.title || '', undefined, { numeric: true }) : sort === 'made' ? (a, b) => b.created_at - a.created_at : (a, b) => b.updated_at - a.updated_at);
+    .sort(sort === 'custom' ? byMyOrder : sort === 'title' ? (a, b) => (a.title || '').localeCompare(b.title || '', undefined, { numeric: true }) : sort === 'made' ? (a, b) => b.created_at - a.created_at : (a, b) => b.updated_at - a.updated_at);
   const sortSel = $('#lib-sort');
   sortSel.value = sort;
   sortSel.onchange = () => { try { localStorage.setItem('libSort', sortSel.value); } catch { /* full */ } renderLibrary(); };
@@ -1108,7 +1141,30 @@ async function renderLibrary() {
     card.addEventListener('click', () => go({ view: 'project', id: b.id }));
     onContextMenu(card, () => bookMenu(b));
     const wrap = make('div', 'card-wrap');
+    wrap.dataset.id = b.id;
     wrap.append(card, menuButton(() => bookMenu(b), `More for ${b.title || 'this book'}`));
+    // In your own order, drag a card onto another to put it there.
+    if (sort === 'custom') {
+      card.draggable = true;
+      card.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-book', b.id); e.dataTransfer.effectAllowed = 'move'; wrap.classList.add('dragging'); });
+      card.addEventListener('dragend', () => wrap.classList.remove('dragging'));
+      wrap.addEventListener('dragover', (e) => {
+        if (!e.dataTransfer.types.includes('text/x-book')) return;
+        e.preventDefault();
+        const r = wrap.getBoundingClientRect();
+        const after = e.clientX > r.left + r.width / 2;
+        wrap.classList.toggle('drop-before', !after);
+        wrap.classList.toggle('drop-after', after);
+      });
+      wrap.addEventListener('dragleave', () => wrap.classList.remove('drop-before', 'drop-after'));
+      wrap.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const after = wrap.classList.contains('drop-after');
+        wrap.classList.remove('drop-before', 'drop-after');
+        const id = e.dataTransfer.getData('text/x-book');
+        if (id) placeBook(id, b.id, after);
+      });
+    }
     cards.push(wrap);
   }
   const add = make('button', 'card card-new');
