@@ -110,6 +110,13 @@ Every line, paragraph and page records who first wrote it and who last changed i
 
 "Connect Claude to Inkwell" in `Ctrl + K` (signed in) makes a private address. In Claude, go to Settings, then Connectors, then Add custom connector, and paste it. Claude can then read your worlds, pieces, pages and daily pages from any chat, search them, and add lines, paragraphs, pages, worlds and pieces, all marked as Claude's. It never changes or deletes anything you wrote. Making a new address turns the old one off, and "Turn off Claude's access" in the same place removes it. The connector runs on the shared Supabase project (the `inkwell-mcp` function in the Daybook repo).
 
+### Capture
+
+- **Voice.** Long-press the Inkwell icon on Android and tap Capture (or `Ctrl + K`, "Capture an idea by voice"). One big button records. The recording lands on today's page as a `#idea` line with a play button. When there's a connection it comes back written out, with Claude's short outline under it, one `#tag` and links to any film, show or book you named. Words you typed on the line meanwhile are never touched. Writing out needs the `OPENAI_API_KEY` secret in the Daybook repo; until then recordings are kept and wait.
+- **Share.** Share from Chrome, Instagram, Pinterest or any Android app, then pick Inkwell. The page, link or picture lands on today's page with an empty line under it for what it sparked. Links get a snapshot (title, picture, a one- or two-sentence summary) so they stay useful if the page goes away.
+- **Watch and read lists.** On any page, `Ctrl + K`, "Make this page a watch list" (or read list). Type titles one per line, and once you move on Claude links each to its page, leaving your words and tags as you typed them.
+- **Send to Daybook.** `Ctrl + K`, "Send this line to Daybook" puts the line in Daybook's Inbox as a task (without its #tags), with an "Open in Inkwell" link back to the line. Sending again updates the same task.
+
 ## How it's built
 
 - [Tiptap](https://tiptap.dev) (on ProseMirror) is the editor. Plain JavaScript, built with [Vite](https://vite.dev).

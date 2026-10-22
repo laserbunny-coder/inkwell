@@ -80,6 +80,16 @@ function supabaseBackend() {
       if (error) throw error;
       return data;
     },
+    // A task in Daybook's Inbox (same account, Daybook's own table). Sent
+    // again, only its words and link change: wherever it was moved, done or
+    // not, stays as Daybook has it.
+    async addTask({ id, title, notes, link }) {
+      const { error } = await sb.from('items').insert({ id, title, notes, link, parent_id: null, area_id: null, kind: null, sort: Date.now() / 1000 });
+      if (!error) return;
+      if (error.code !== '23505') throw error;
+      const again = await sb.from('items').update({ title, notes, link, deleted: false }).eq('id', id);
+      if (again.error) throw again.error;
+    },
     // Pictures and files, in the private "writing-files" bucket, one folder per person.
     async upload(path, blob, type) {
       const { error } = await sb.storage.from('writing-files').upload(path, blob, { contentType: type, upsert: true });
