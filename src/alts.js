@@ -150,6 +150,15 @@ export function flip(editor, dir) {
   return true;
 }
 
+// What the caret is on, for the row above a phone keyboard: the word's
+// alternates (which one of how many) and the paragraph's versions.
+export function altsHere(state) {
+  const alt = altAt(state);
+  const p = paragraphAt(state);
+  const pv = p?.node.attrs.versions?.length > 1 ? { i: p.node.attrs.pvi || 0, n: p.node.attrs.versions.length } : null;
+  return { word: alt ? { i: alt.mark.attrs.i, n: wordVersions(alt).length } : null, para: pv };
+}
+
 // Keeps the paragraph as it is now as one version and gives you a copy to rewrite.
 export function newParagraphVersion(editor) {
   const p = paragraphAt(editor.state);
@@ -259,6 +268,7 @@ export class AltPanel {
     this.target = null;
     editor.on('selectionUpdate', () => this.follow());
     editor.on('update', () => this.follow());
+    window.visualViewport?.addEventListener('resize', () => this.place());
     this.el.addEventListener('mousedown', (e) => { if (!e.target.closest('input')) e.preventDefault(); });
     this.el.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.close(); editor.commands.focus(); }
@@ -457,6 +467,7 @@ export class AltPanel {
 
   async askClaude() {
     if (this.busy || !this.ask || !this.target) return;
+    if (!this.canAsk()) { this.note = 'Asking Claude needs a connection and sync turned on.'; this.render(); return; }
     const { state } = this.editor;
     const word = this.scope === 'word';
     const p = paragraphAt(state, word ? this.target.from : this.target.pos + 1);
@@ -543,12 +554,22 @@ export class AltPanel {
     if (!this.target || this.el.hidden) return;
     const narrow = matchMedia('(max-width: 900px)').matches;
     this.el.classList.toggle('sheet-mode', narrow);
-    if (narrow) { this.el.style.top = ''; this.el.style.left = ''; return; }
+    if (narrow) {
+      this.el.style.top = ''; this.el.style.left = '';
+      const vv = window.visualViewport;
+      const keyboard = vv ? Math.max(0, window.innerHeight - (vv.offsetTop + vv.height)) : 0;
+      const bar = [...document.querySelectorAll('.script-bar')].find((b) => !b.hidden);
+      const barH = bar ? bar.offsetHeight : 0;
+      this.el.style.bottom = `${keyboard + barH + 8}px`;
+      this.el.style.maxHeight = `${Math.round(((vv ? vv.height : window.innerHeight) - barH) * 0.6)}px`;
+      return;
+    }
     const pos = this.scope === 'word' ? this.target.from : this.target.pos + 1;
     let top;
     try { top = this.editor.view.coordsAtPos(pos).top; } catch { return; }
     const page = this.editor.view.dom.getBoundingClientRect();
     const width = 240;
+    this.el.style.bottom = ''; this.el.style.maxHeight = '';
     this.el.style.left = `${Math.max(12, page.left - width - 48)}px`;
     this.el.style.top = `${Math.max(12, Math.min(top - 12, window.innerHeight - this.el.offsetHeight - 12))}px`;
   }

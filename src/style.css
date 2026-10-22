@@ -464,6 +464,12 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .outline-bar button[data-do="zoom"], .outline-bar button[data-do="link"], .outline-bar button[data-do="done"], .outline-bar button[data-do="move"] { font-size: 12px; }
 .outline-bar button[data-do="undo"], .outline-bar button[data-do="redo"] { font-size: 18px; }
 .outline-bar button:disabled { opacity: .35; }
+.script-bar .alt-gap { flex: 0 0 1px; margin: 6px 4px; background: var(--line); }
+/* Off a script the row holds only the alternates buttons; with alternates
+   switched off (or in Focus) it holds only the script ones. */
+.script-bar:not(.scripting) [data-el], .script-bar:not(.scripting) .alt-gap,
+.script-bar.no-alts [data-alt], .script-bar.no-alts .alt-gap { display: none; }
+.script-bar button.idle { opacity: .4; }
 .outline-bar .bar-gap { flex: 0 0 1px; margin: 6px 4px; background: var(--line); }
 
 /* ---------- alternates ---------- */

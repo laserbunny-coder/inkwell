@@ -183,6 +183,49 @@ try {
     assert.equal(await page.locator('.alt-panel .alt-ask').count(), 0);
   });
 
+  await check('on a phone, the alternates buttons ride at the end of the row above the keyboard', async () => {
+    const phoneCtx = await browser.newContext({ viewport: { width: 390, height: 780 }, hasTouch: true, isMobile: true });
+    const ph = await phoneCtx.newPage();
+    ph.on('pageerror', (e) => errors.push(e.message));
+    await ph.goto(`http://localhost:${PORT}/`);
+    await ph.waitForSelector('#editor .ProseMirror');
+    await sleep(500);
+    await ph.locator('#editor .ProseMirror').tap();
+    await ph.keyboard.type('She walked home.');
+    await ph.waitForSelector('.script-bar', { state: 'visible' });
+    // A prose chapter: only the alternates buttons, no script ones.
+    const shown = () => ph.locator('.script-bar button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => b.dataset.alt || b.dataset.el));
+    assert.deepEqual(await shown(), ['word', 'ask', 'para', 'prev', 'next']);
+    assert.equal(await ph.locator('.script-bar [data-alt="prev"]').evaluate((b) => b.classList.contains('idle')), true);
+    // Alternates: the sheet opens for the word at the caret, and the keyboard stays up.
+    await ph.evaluate(() => window.__editor.chain().focus().setTextSelection(7).run());
+    await ph.locator('.script-bar [data-alt="word"]').tap();
+    await ph.waitForSelector('.alt-panel.sheet-mode:not([hidden])');
+    assert.equal(await ph.evaluate(() => document.activeElement?.classList.contains('ProseMirror')), true, 'keyboard stays up');
+    const sheet = await ph.locator('.alt-panel').boundingBox();
+    const bar = await ph.locator('.script-bar:not(.outline-bar)').boundingBox();
+    assert.ok(sheet.y + sheet.height <= bar.y + 1, 'the sheet sits above the row');
+    // Ask Claude from the row.
+    await ph.evaluate(() => { window.__claude = async () => ({ suggestions: [{ replace: 'walked', with: 'wandered' }] }); });
+    await ph.locator('.script-bar [data-alt="ask"]').tap();
+    await ph.waitForFunction(() => [...document.querySelectorAll('.alt-panel .alt-pick')].some((b) => b.textContent === 'wandered'));
+    await ph.waitForFunction(() => document.querySelector('.script-bar [data-alt="word"]').textContent === 'Alternates · 2');
+    // ‹ › flip the word in place.
+    await ph.locator('.script-bar [data-alt="next"]').tap();
+    await ph.waitForFunction(() => window.__editor.state.doc.textContent === 'She wandered home.');
+    await ph.locator('.script-bar [data-alt="prev"]').tap();
+    await ph.waitForFunction(() => window.__editor.state.doc.textContent === 'She walked home.');
+    // Turning alternates off hides the row on prose.
+    await ph.evaluate(() => { localStorage.setItem('hide', JSON.stringify(['alts'])); });
+    await ph.reload();
+    await ph.waitForSelector('#editor .ProseMirror');
+    await sleep(500);
+    await ph.locator('#editor .ProseMirror').tap();
+    await sleep(300);
+    assert.equal(await ph.locator('.script-bar:not(.outline-bar)').isHidden(), true);
+    await phoneCtx.close();
+  });
+
   await check('no page errors', async () => assert.deepEqual(errors, []));
 } finally {
   await browser.close();
