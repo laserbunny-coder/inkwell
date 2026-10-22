@@ -236,6 +236,10 @@ export class Notebook {
     this.editor.commands.setContent(doc, { emitUpdate: false });
     this.store.noteShown(this.editor.state.doc, !recovered);
     if (recovered) this.store.change(this.editor.state.doc);
+    // Caret in place now, not after everything below has loaded: by then you
+    // may be typing, or have opened the [[ picker, which mustn't lose it.
+    if (focusLine) this.focusLine(focusLine);
+    else this.editor.commands.focus('end');
     await this.noteOrigins();
     freshenRefs(this.editor);
     this.renderHead();
@@ -243,8 +247,6 @@ export class Notebook {
     await Promise.all([this.renderBacklinks(), this.renderPastDays()]);
     await this.gather();
     this.onChange();
-    if (focusLine) this.focusLine(focusLine);
-    else this.editor.commands.focus('end');
   }
 
   focusLine(eid) {

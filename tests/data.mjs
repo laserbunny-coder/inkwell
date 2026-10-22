@@ -70,6 +70,8 @@ try {
     await p.waitForSelector('#outline-editor .ProseMirror-focused');
     await p.keyboard.type('See [[');
     await p.waitForSelector('.picker', { state: 'visible' });
+    // On a slow machine the picker can show a moment before its box has the caret.
+    await p.waitForFunction(() => document.activeElement === document.querySelector('.picker input'));
     await p.keyboard.type('Harbour');
     // Under load the list can lag the typing; wait until the list has caught up.
     await p.waitForFunction(() => /Harbour/.test(document.querySelector('.picker li[aria-selected="true"]')?.textContent || ''));
