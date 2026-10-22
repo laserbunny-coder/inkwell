@@ -1,14 +1,15 @@
-import { keyLabel } from './keys.js';
+import { openHandleMenu, closeHandleMenu } from './handlemenu.js';
 // The six-dot handle beside each paragraph: drag it to move the paragraph,
-// click or tap it for that paragraph's actions.
+// click it (or right-click, or tap it on a phone) for that paragraph's actions.
+// On a phone it's for the menu only; dragging there was too fiddly.
 
 const GRIP = '<svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/><circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/><circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/></g></svg>';
 
 export class BlockHandle {
-  constructor(editor, sheet, { actions }) {
+  constructor(editor, sheet, { menu }) {
     this.editor = editor;
     this.sheet = sheet;
-    this.actions = actions;
+    this.menu = menu;
     this.index = -1;
 
     this.handle = document.createElement('button');
@@ -20,17 +21,13 @@ export class BlockHandle {
     this.line = document.createElement('div');
     this.line.className = 'drop-line';
     this.line.hidden = true;
-    this.menu = document.createElement('div');
-    this.menu.className = 'block-menu';
-    this.menu.setAttribute('role', 'menu');
-    this.menu.hidden = true;
-    sheet.append(this.handle, this.line, this.menu);
+    sheet.append(this.handle, this.line);
 
     // The whole row counts, margin included, so the handle stays put while
     // you move from the text over to it.
     const zone = sheet.closest('.page') || sheet;
     zone.addEventListener('mousemove', (e) => {
-      if (this.dragging || !this.menu.hidden) return;
+      if (this.dragging || this.menuOpen) return;
       if (e.target === this.handle || this.handle.contains(e.target)) return;
       const box = sheet.getBoundingClientRect();
       if (e.clientX < box.left - 80 || e.clientX > box.right + 20) { this.hide(); return; }
@@ -41,15 +38,19 @@ export class BlockHandle {
     zone.addEventListener('mouseleave', () => this.hide());
     // On a phone, the handle shows for the paragraph you're typing in.
     editor.on('selectionUpdate', () => {
-      if (this.dragging || !this.menu.hidden) return;
+      if (this.dragging || this.menuOpen) return;
       const i = editor.state.selection.$from.index(0);
       if (matchMedia('(hover: none)').matches) this.show(i);
     });
-    this.handle.addEventListener('pointerdown', (e) => this.startDrag(e));
-    document.addEventListener('pointerdown', (e) => {
-      if (!this.menu.hidden && !this.menu.contains(e.target) && e.target !== this.handle && !this.handle.contains(e.target)) this.closeMenu();
+    this.handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      if (e.pointerType === 'touch') { e.preventDefault(); this.tap(e); }
+      else this.startDrag(e);
     });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !this.menu.hidden) { e.stopPropagation(); this.closeMenu(); } }, true);
+    this.handle.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (!this.menuOpen) this.toggleMenu();
+    });
   }
 
   blockIndexAt(target) {
@@ -71,7 +72,7 @@ export class BlockHandle {
   }
 
   hide() {
-    if (this.dragging || !this.menu.hidden) return;
+    if (this.dragging || this.menuOpen) return;
     this.handle.classList.remove('visible');
   }
 
@@ -108,6 +109,18 @@ export class BlockHandle {
     tr.setSelection(this.editor.state.selection.constructor.near(tr.doc.resolve(pos + 1)));
     this.editor.view.dispatch(tr.scrollIntoView());
     this.editor.view.focus();
+    this.index = target;
+    if (!this.handle.hidden) this.show(target);
+  }
+
+  // A tap on a phone: the menu, once the finger lifts without sliding away.
+  tap(e) {
+    const y0 = e.clientY;
+    const up = (ev) => {
+      document.removeEventListener('pointerup', up);
+      if (Math.abs(ev.clientY - y0) < 12) this.toggleMenu();
+    };
+    document.addEventListener('pointerup', up);
   }
 
   startDrag(e) {
@@ -150,32 +163,20 @@ export class BlockHandle {
   }
 
   toggleMenu() {
-    if (!this.menu.hidden) return this.closeMenu();
-    const i = this.index;
-    const { node } = this.range(i);
-    const count = this.editor.state.doc.childCount;
-    this.menu.replaceChildren();
-    for (const a of this.actions) {
-      if (a.when && !a.when(node, i, count)) continue;
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.setAttribute('role', 'menuitem');
-      b.innerHTML = '<span></span><span class="keys"></span>';
-      b.firstChild.textContent = a.label;
-      b.lastChild.textContent = keyLabel(a.keys) || '';
-      b.addEventListener('click', () => { this.closeMenu(); a.run({ node, index: i, handle: this }); });
-      this.menu.append(b);
-    }
-    this.menu.style.top = `${parseFloat(this.handle.style.top) + 30}px`;
-    this.menu.hidden = false;
+    if (this.menuOpen) return closeHandleMenu();
     this.handle.classList.add('open');
-    this.menu.querySelector('button')?.focus();
+    openHandleMenu({
+      anchor: this.handle,
+      editor: this.editor,
+      build: () => {
+        const i = Math.min(this.index, this.editor.state.doc.childCount - 1);
+        return this.menu({ node: this.range(i).node, index: i, count: this.editor.state.doc.childCount, handle: this });
+      },
+      onClose: () => this.handle.classList.remove('open')
+    });
   }
 
-  closeMenu() {
-    this.menu.hidden = true;
-    this.handle.classList.remove('open');
-  }
+  closeMenu() { if (this.menuOpen) closeHandleMenu(); }
 
   // Keyboard: move the paragraph the cursor is in.
   moveCurrent(dir) {

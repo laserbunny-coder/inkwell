@@ -429,12 +429,57 @@ html.focus #outline-editor p.gathers::after, html.focus #outline-editor li.mirro
 .block-handle:hover, .block-handle.open { background: var(--tint); color: var(--ink); }
 body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-select: none; }
 .drop-line { position: absolute; left: -8px; right: -8px; height: 2px; border-radius: 2px; background: var(--accent); pointer-events: none; }
-.block-menu { position: absolute; left: -38px; z-index: 30; min-width: 220px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,.16); padding: 4px; display: flex; flex-direction: column; }
-.block-menu button { display: flex; justify-content: space-between; gap: 16px; border: 0; background: transparent; padding: 8px 10px; border-radius: 6px; text-align: left; }
-.block-menu button:hover, .block-menu button:focus { background: var(--tint); outline: none; }
-.block-menu .keys { color: var(--faint); font-size: 12px; }
 @media (hover: none) { .block-handle { opacity: .6; } }
-@media (max-width: 760px) { .block-handle { left: -30px; } .block-menu { left: -12px; } }
+@media (max-width: 760px) { .block-handle { left: -30px; } }
+
+/* The handle's menu, the same for paragraphs, script lines and notebook lines.
+   On a computer it drops from the handle; on a phone it's a sheet at the bottom. */
+.handle-menu { position: fixed; z-index: 60; width: 272px; max-width: calc(100vw - 16px); max-height: 80vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,.22); padding: 4px; display: flex; flex-direction: column; font: 14px/1.35 var(--ui); color: var(--ink); }
+.handle-menu .head { padding: 7px 10px 5px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.handle-menu .item { display: flex; justify-content: space-between; gap: 16px; border: 0; background: transparent; color: inherit; font: inherit; padding: 7px 10px; border-radius: 6px; text-align: left; cursor: pointer; }
+.handle-menu .item:hover, .handle-menu .item:focus-visible, .handle-menu .hm-chip:focus-visible { background: var(--tint); outline: none; }
+.handle-menu .item.danger { color: #B3412E; }
+:root[data-theme="dark"] .handle-menu .item.danger { color: #E07A62; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .handle-menu .item.danger { color: #E07A62; } }
+.handle-menu .keys { color: var(--faint); font-size: 12px; white-space: nowrap; }
+.handle-menu .sep { border-top: 1px solid var(--line); margin: 4px 6px; }
+.handle-menu .turn-label { padding: 5px 10px 2px; font-size: 12px; color: var(--faint); }
+.handle-menu .hm-chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px 6px; }
+.handle-menu .hm-chip { font: 12px/1.3 var(--ui); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; }
+.handle-menu .hm-chip:hover { color: var(--ink); border-color: var(--faint); }
+.handle-menu .hm-chip.current { border-color: var(--accent); color: var(--accent); }
+.handle-menu.as-sheet { left: 0; right: 0; width: auto; max-width: none; border-radius: 16px 16px 0 0; border-width: 1px 0 0; padding: 6px 8px calc(12px + env(safe-area-inset-bottom, 0px)); font-size: 15px; box-shadow: 0 -12px 40px rgba(0,0,0,.25); z-index: 80; }
+.handle-menu.as-sheet .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin: 2px auto 6px; flex: none; }
+.handle-menu.as-sheet .item { padding: 11px 12px; }
+.handle-menu.as-sheet .item .keys { display: none; }
+.handle-menu.as-sheet .hm-chip { font-size: 14px; padding: 8px 12px; }
+.handle-menu .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 3px 4px; }
+.handle-menu .pair .item { justify-content: center; border: 1px solid var(--line); border-radius: 8px; padding: 9px 6px; }
+.handle-menu .item:disabled { opacity: .35; cursor: default; }
+
+/* A notebook line's dot is its handle too: six dots on hover, like a paragraph's. */
+#outline-editor .bullet .grip { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 10px; height: 16px; color: var(--faint); opacity: 0; transition: opacity .12s; pointer-events: none; }
+#outline-editor .bullet { border-radius: 6px; }
+@media (hover: hover) {
+  :root:not(.hide-handle):not(.focus) #outline-editor .line-gutter:hover .bullet .grip,
+  :root:not(.hide-handle):not(.focus) #outline-editor li:has(> p:hover) > .line-gutter .bullet .grip,
+  :root:not(.hide-handle):not(.focus) #outline-editor li.menu-open > .line-gutter .bullet .grip { opacity: 1; }
+  :root:not(.hide-handle):not(.focus) #outline-editor .line-gutter:hover .bullet::after,
+  :root:not(.hide-handle):not(.focus) #outline-editor li:has(> p:hover) > .line-gutter .bullet::after,
+  :root:not(.hide-handle):not(.focus) #outline-editor li.menu-open > .line-gutter .bullet::after { opacity: 0; }
+  :root:not(.hide-handle):not(.focus) #outline-editor .bullet:hover,
+  :root:not(.hide-handle):not(.focus) #outline-editor li.menu-open > .line-gutter .bullet { background: var(--tint); }
+  :root:not(.hide-handle):not(.focus) #outline-editor .bullet:hover .grip { color: var(--ink); }
+}
+/* On a phone, the line you're on shows its handle (tap for the menu) in the dot's spot. There's no room
+   for its fold arrow too, so Fold leads its menu, and a folded line's handle takes the accent colour. */
+@media (hover: none) {
+  :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .bullet { display: block; }
+  :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .bullet .grip { opacity: .6; }
+  :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .bullet::after { opacity: 0; }
+  :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .fold { display: none; }
+  :root:not(.hide-handle):not(.focus) #outline-editor li.here.folded > .line-gutter .bullet .grip { color: var(--accent); opacity: 1; }
+}
 @media (max-width: 700px) { .page { padding-left: 36px; } }
 
 #storage-blocked { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 24px; }

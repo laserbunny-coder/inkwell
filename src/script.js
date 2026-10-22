@@ -9,10 +9,10 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 // every screenwriting app reads.
 
 export const ELEMENTS = [
-  { id: 'scene', label: 'Scene heading' },
+  { id: 'scene', label: 'Scene heading', short: 'Scene' },
   { id: 'action', label: 'Action' },
   { id: 'character', label: 'Character' },
-  { id: 'paren', label: 'Parenthetical' },
+  { id: 'paren', label: 'Parenthetical', short: 'Paren' },
   { id: 'dialogue', label: 'Dialogue' },
   { id: 'transition', label: 'Transition' }
 ];
