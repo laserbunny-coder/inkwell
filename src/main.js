@@ -1809,6 +1809,11 @@ async function renderProject() {
   $('#ph-pieces').replaceChildren(...inside.map((x) => pieceRow(x, 0)));
   $('#ph-new-piece').onclick = () => addPiece(b.id);
   const pages = await pagesIn(b.id);
+  // Empty sections stay out of the way: just the two ways to add one.
+  $('#ph-pieces-head').hidden = !inside.length;
+  $('#ph-new-piece-quiet').hidden = inside.length > 0;
+  $('#ph-new-piece-quiet').onclick = () => addPiece(b.id);
+  $('#ph-pages-label').style.visibility = pages.length ? '' : 'hidden';
   $('#ph-pages').replaceChildren(...pages.map((p) => {
     const li = make('li');
     const open = make('button', 'loose-title', p.title || 'Untitled page');
