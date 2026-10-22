@@ -37,8 +37,8 @@ const fake = () => {
   };
 };
 const browser = await chromium.launch();
-async function device() {
-  const ctx = await browser.newContext({ viewport: { width: 1300, height: 850 } });
+async function device(viewport = { width: 1300, height: 850 }) {
+  const ctx = await browser.newContext({ viewport, hasTouch: viewport.width < 700 });
   await ctx.exposeFunction('__remote', remote);
   await ctx.addInitScript(fake);
   const p = await ctx.newPage();
@@ -203,6 +203,33 @@ try {
     await b.locator('#history-list button').filter({ hasText: /first kept/ }).click();
     await sleep(300);
     assert.ok(await b.locator('.hb').count() > 0);
+  });
+
+  await check('on a phone, a long version scrolls to its end', async () => {
+    const ph = await device({ width: 390, height: 800 });
+    const long = Array.from({ length: 60 }, (_, k) => `Line ${k + 1} of a long day, with enough words to wrap onto a second row.`);
+    await setText(ph, long);
+    await sleep(600);
+    await openHistory(ph);
+    await closeHistory(ph);
+    await ph.evaluate(() => {
+      const ed = window.__editor;
+      const json = ed.getJSON();
+      json.content[json.content.length - 1].content[0].text = 'The very last line, changed.';
+      ed.commands.setContent(json, { emitUpdate: true });
+    });
+    await sleep(600);
+    await openHistory(ph);
+    await ph.locator('#history-list button').filter({ hasText: '900 words' }).click();
+    await sleep(300);
+    const last = ph.locator('.hb-chg').last();
+    await last.scrollIntoViewIfNeeded();
+    await sleep(200);
+    const box = await last.boundingBox();
+    assert.ok(box && box.y + box.height <= 800, `last change sits at ${box && Math.round(box.y)}px, below the screen`);
+    const scrolled = await ph.evaluate(() => document.querySelector('.history-preview').scrollTop);
+    assert.ok(scrolled > 0, 'the version scrolls');
+    await ph.context().close();
   });
 
   await check('no page errors', async () => assert.deepEqual([...a.errors, ...b.errors], []));
