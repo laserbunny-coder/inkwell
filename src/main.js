@@ -20,9 +20,10 @@ import { EntryRef, TagMarks } from './outline.js';
 import { retitleLinks, freshenRefs } from './links.js';
 import { Conflicts } from './conflicts.js';
 import { vaultZip, pageMarkdown } from './vault.js';
-import { ScriptElements, ELEMENTS, scriptPages, toFountain, fromFountain } from './script.js';
+import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
-import { moveLine, toggleDone } from './outline.js';
+import { moveLine, toggleDone, foldKey } from './outline.js';
+import { openHandleMenu } from './handlemenu.js';
 import { openPicker } from './picker.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType } from './library.js';
@@ -78,21 +79,48 @@ const alts = new AltPanel(editor, {
 });
 
 const isText = (n) => n.type.name === 'paragraph' || n.type.name === 'heading';
-const blocks = new BlockHandle(editor, $('.sheet'), {
-  actions: [
-    { label: 'Add a note', keys: '⌘⇧N', when: isText, run: ({ node }) => notes.add(node.attrs.eid) },
-    { label: 'Versions of this paragraph', keys: '', when: isText, run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().setTextSelection(from + 1).focus().run(); alts.open({ scope: 'para' }); } },
-    { label: 'New version to rewrite', keys: '⌘⇧D', when: isText, run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().setTextSelection(from + 1).focus().run(); newParagraphVersion(editor); } },
-    { label: 'Move up', keys: 'Alt+⇧↑', when: (_n, i) => i > 0, run: ({ index, handle }) => handle.move(index, index - 1) },
-    { label: 'Move down', keys: 'Alt+⇧↓', when: (_n, i, count) => i < count - 1, run: ({ index, handle }) => handle.move(index, index + 2) },
-    ...ELEMENTS.map((x) => ({ label: x.label, keys: '', when: (n) => isScript() && n.type.name === 'paragraph' && (n.attrs.el || 'action') !== x.id, run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().setTextSelection(from + 1).updateAttributes('paragraph', { el: x.id }).focus().run(); } })),
-    { label: 'Make it a heading', when: (n) => !isScript() && n.type.name === 'paragraph', run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().setTextSelection(from + 1).setNode('heading', { level: 2 }).focus().run(); } },
-    { label: 'Make it a paragraph', when: (n) => n.type.name === 'heading', run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().setTextSelection(from + 1).setNode('paragraph').focus().run(); } },
-    { label: 'Section above', when: () => isScript(), run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().insertContentAt(from, { type: 'sceneBreak' }).run(); requestAnimationFrame(() => editor.view.nodeDOM(from)?.querySelector('input')?.focus()); } },
-    { label: 'Scene break above', when: () => !isScript(), run: ({ index, handle }) => { const { from } = handle.range(index); editor.chain().insertContentAt(from, { type: 'sceneBreak' }).focus().run(); } },
-    { label: 'Delete', run: ({ index, handle }) => { const { from, to } = handle.range(index); if (editor.state.doc.childCount > 1) editor.chain().deleteRange({ from, to }).focus().run(); else editor.chain().setContent({ type: 'doc', content: [{ type: 'paragraph' }] }).focus().run(); } }
-  ]
-});
+// The six-dot handle's menu for a paragraph (or script line). Same order as
+// the notebook's: work on this one, turn into, add above, move, delete.
+function paragraphMenu({ node, index, count, handle }) {
+  const script = isScript();
+  const kind = node.type.name;
+  const text = isText(node);
+  const el = kind === 'paragraph' ? node.attrs.el || 'action' : null;
+  const at = (fn) => () => fn(handle.range(index).from);
+  const into = (fn) => at((from) => fn(editor.chain().setTextSelection(from + 1)).focus().run());
+  const title = kind === 'heading' ? 'Heading' : kind === 'sceneBreak' ? (script ? 'Section' : 'Scene break') : script ? elementLabel(el) : 'Paragraph';
+  const turn = !text ? null : script
+    ? { label: 'Turn into', chips: ELEMENTS.map((x) => ({ label: x.short || x.label, current: el === x.id, run: into((c) => (kind === 'heading' ? c.setNode('paragraph') : c).updateAttributes('paragraph', { el: x.id })) })) }
+    : { label: 'Turn into', chips: [
+      { label: 'Paragraph', current: kind === 'paragraph', run: into((c) => c.setNode('paragraph')) },
+      { label: 'Heading', current: kind === 'heading', run: into((c) => c.setNode('heading', { level: 2 })) }
+    ] };
+  return {
+    title,
+    sections: [
+      [
+        text && { label: 'Add a note', keys: '⌘⇧N', run: () => notes.add(node.attrs.eid) },
+        text && { label: script ? 'Versions of this line' : 'Versions of this paragraph', run: at((from) => { editor.chain().setTextSelection(from + 1).focus().run(); alts.open({ scope: 'para' }); }) },
+        text && { label: 'New version to rewrite', keys: '⌘⇧D', run: at((from) => { editor.chain().setTextSelection(from + 1).focus().run(); newParagraphVersion(editor); }) }
+      ],
+      [turn],
+      [script
+        ? { label: 'Section above', run: at((from) => { editor.chain().insertContentAt(from, { type: 'sceneBreak' }).run(); requestAnimationFrame(() => editor.view.nodeDOM(from)?.querySelector('input')?.focus()); }) }
+        : { label: 'Scene break above', run: at((from) => editor.chain().insertContentAt(from, { type: 'sceneBreak' }).focus().run()) }],
+      [
+        { label: 'Move up', keys: 'Alt+⇧↑', stay: true, half: 'move', off: index === 0, run: () => handle.move(index, index - 1) },
+        { label: 'Move down', keys: 'Alt+⇧↓', stay: true, half: 'move', off: index >= count - 1, run: () => handle.move(index, index + 2) }
+      ],
+      [{ label: 'Delete', danger: true, run: () => {
+        const { from, to } = handle.range(index);
+        if (editor.state.doc.childCount > 1) editor.chain().deleteRange({ from, to }).focus().run();
+        else editor.chain().setContent({ type: 'doc', content: [{ type: 'paragraph' }] }).focus().run();
+        toast(`${title} deleted`, { label: 'Undo', run: () => editor.chain().focus().undo().run() });
+      } }]
+    ]
+  };
+}
+const blocks = new BlockHandle(editor, $('.sheet'), { menu: paragraphMenu });
 
 // ---------- script bar ----------
 
@@ -243,6 +271,77 @@ tapBar(outlineBar, 'button[data-do]', (b) => {
   else if (act === 'zoom') { const here = notebook.currentLine(); notebook.zoomTo(notebook.zoom && here === notebook.zoom ? null : here); ed.commands.focus(); }
   placeOutlineBar();
 });
+// The six-dot handle's menu for a notebook line (a right-click on its handle,
+// or a tap on a phone). Everything here also has a key or a button on the
+// phone row; the menu is where you find them.
+function findLine(eid) {
+  let hit = null;
+  notebook.editor.state.doc.descendants((n, pos) => {
+    if (hit) return false;
+    if (n.type.name === 'listItem' && n.attrs.eid === eid) { hit = { node: n, pos, $pos: notebook.editor.state.doc.resolve(pos) }; return false; }
+    return true;
+  });
+  return hit;
+}
+function lineMenu(eid) {
+  const ed = notebook.editor;
+  const line = findLine(eid);
+  if (!line) return { sections: [] };
+  const { node, pos, $pos } = line;
+  const kids = node.lastChild?.type.name === 'bulletList' ? node.lastChild : null;
+  let under = 0;
+  node.descendants((n) => { if (n.type.name === 'listItem') under++; });
+  const folded = !!kids && foldKey.getState(ed.state)?.folded.has(eid);
+  const index = $pos.index();
+  const siblings = $pos.parent.childCount;
+  const nested = $pos.depth > 1;
+  const lines = (n) => `${n} line${n === 1 ? '' : 's'}`;
+  // Line actions work on the line the caret is in, so put it there first.
+  const here = () => {
+    const now = findLine(eid);
+    if (!now) return false;
+    if (notebook.currentLine() !== eid) ed.commands.setTextSelection(now.pos + 1 + now.node.firstChild.nodeSize - 1);
+    return true;
+  };
+  const on = (fn) => () => { if (here()) fn(); };
+  const zoom = { label: 'Zoom in', run: () => { notebook.zoomTo(eid); ed.commands.focus(); } };
+  const fold = kids && { label: folded ? `Unfold the ${lines(under)} under it` : `Fold the ${lines(under)} under it`, keys: folded ? '⌘↓' : '⌘↑', run: () => { ed.view.dispatch(ed.state.tr.setMeta(foldKey, { fold: eid, on: !folded })); ed.commands.focus(); } };
+  return {
+    title: `Line${under ? ` · ${lines(under)} under it` : ''}`,
+    sections: [
+      [
+        // On a phone the handle covers the line's fold arrow, so Fold comes first there.
+        ...(touch.matches ? [fold, zoom] : [zoom, fold]),
+        { label: node.attrs.done ? 'Not done' : 'Mark done', keys: '⌘↵', run: on(() => { toggleDone(ed); ed.commands.focus(); }) }
+      ],
+      [
+        { label: 'Outdent', keys: '⇧Tab', stay: true, half: 'indent', off: !nested, run: on(() => ed.chain().focus().liftListItem('listItem').scrollIntoView().run()) },
+        { label: 'Indent', keys: 'Tab', stay: true, half: 'indent', off: index === 0, run: on(() => ed.chain().focus().sinkListItem('listItem').scrollIntoView().run()) },
+        { label: 'Move up', keys: 'Alt+⇧↑', stay: true, half: 'move', off: index === 0, run: on(() => moveLine(ed, -1)) },
+        { label: 'Move down', keys: 'Alt+⇧↓', stay: true, half: 'move', off: index >= siblings - 1, run: on(() => moveLine(ed, 1)) },
+        { label: 'Move to another page…', run: on(moveLinePicker) }
+      ],
+      [{ label: under ? `Delete line and the ${lines(under)} under it` : 'Delete line', danger: true, run: () => {
+        const now = findLine(eid);
+        if (!now) return;
+        const tr = ed.state.tr;
+        // The page always keeps at least one line.
+        if (now.$pos.depth === 1 && now.$pos.parent.childCount === 1) tr.replaceWith(now.pos, now.pos + now.node.nodeSize, ed.schema.nodes.listItem.create(null, ed.schema.nodes.paragraph.create()));
+        else tr.delete(now.pos, now.pos + now.node.nodeSize);
+        ed.view.dispatch(tr);
+        ed.commands.focus();
+        toast(under ? `Deleted a line and the ${lines(under)} under it` : 'Line deleted', { label: 'Undo', run: () => ed.chain().focus().undo().run() });
+      } }]
+    ]
+  };
+}
+notebook.editor.view.dom.addEventListener('line-menu', (e) => {
+  const { eid, anchor, at } = e.detail;
+  const li = anchor.closest('li');
+  li?.classList.add('menu-open');
+  openHandleMenu({ anchor, at, editor: notebook.editor, build: () => lineMenu(eid), onClose: () => { li?.classList.remove('menu-open'); placeOutlineBar(); } });
+});
+
 // On a phone, a standing rule: the caret always sits clear above the keyboard
 // and the row, with a line to spare, however it got there (a tap, typing,
 // zooming, moving a line, or the keyboard opening). The page only moves when
@@ -1803,7 +1902,7 @@ const commands = [
   { group: 'new', label: 'New area', keys: '', run: () => go({ view: 'library' }).then(() => [...document.querySelectorAll('#lib-areas .chip.add')].at(-1)?.click()) },
   { group: 'new', label: 'New chapter', keys: '', run: () => go({ view: 'write' }).then(newChapter), when: () => !!state.project },
   { group: 'new', label: 'New act', keys: '', run: () => go({ view: 'write' }).then(newAct), when: () => !!state.project },
-  { group: 'write', label: 'Zoom into this line', keys: 'click its bullet', run: () => notebook.zoomTo(notebook.currentLine()), when: inNotebook },
+  { group: 'write', label: 'Zoom into this line', keys: 'click its handle', run: () => notebook.zoomTo(notebook.currentLine()), when: inNotebook },
   { group: 'write', label: 'Zoom out', keys: 'Esc', run: () => notebook.zoomTo(null), when: () => inNotebook() && !!notebook.zoom },
   { group: 'write', label: 'Fold or unfold this line', keys: `${mod}↑ ${mod}↓`, run: () => notebook.toggleFold(), when: inNotebook },
   ...ELEMENTS.map((x) => ({ group: 'write', label: `Script: ${x.label}`, keys: 'Tab', run: () => editor.chain().focus().updateAttributes('paragraph', { el: x.id }).run(), when: () => writing() && isScript() })),
@@ -1825,7 +1924,7 @@ const commands = [
   { group: 'view', label: 'Show or hide "Linked from"', keys: '', run: () => setShown('links', hidden().has('links')) },
   { group: 'view', label: 'Show or hide note dots', keys: '', run: () => setShown('dots', hidden().has('dots')) },
   { group: 'view', label: 'Show or hide alternate marks', keys: '', run: () => setShown('alts', hidden().has('alts')) },
-  { group: 'view', label: 'Show or hide the paragraph handle', keys: '', run: () => setShown('handle', hidden().has('handle')) },
+  { group: 'view', label: 'Show or hide the six-dot handle', keys: '', run: () => setShown('handle', hidden().has('handle')) },
   { group: 'view', label: 'Show or hide bullets on notebook lines', keys: '', run: () => setShown('bullets', hidden().has('bullets')) },
   { group: 'view', label: 'Progress: words and pages over time (stats)', keys: `${mod}⇧P`, run: () => progressPanel.open() },
   { group: 'write', label: 'Move this line to another page or day…', keys: '', run: moveLinePicker, when: inNotebook },

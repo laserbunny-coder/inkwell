@@ -542,7 +542,7 @@ try {
     assert.match(await text2(), /^Second line\.\s+Snow on the harbour wall\./);
     await paras.nth(1).hover();
     await p.locator('.block-handle').click();
-    await p.locator('.block-menu button', { hasText: 'Add a note' }).click();
+    await p.locator('.handle-menu button', { hasText: 'Add a note' }).click();
     await sleep(300);
     await p.keyboard.type('Check the tide tables');
     await sleep(800);
@@ -554,6 +554,24 @@ try {
     await p.waitForFunction(() => !document.body.classList.contains('notes-on'));
     await p.locator('.note-dot').first().click();
     await p.waitForFunction(() => document.body.classList.contains('notes-on'));
+  });
+
+  await check('a right-click on the handle opens the same menu, with Turn into chips', async () => {
+    const para = p.locator('#editor .ProseMirror > p').first();
+    await para.hover();
+    await p.locator('.block-handle').click({ button: 'right' });
+    await p.waitForSelector('.handle-menu', { state: 'visible' });
+    assert.equal(await p.locator('.handle-menu .head').innerText(), 'PARAGRAPH');
+    assert.deepEqual(await p.locator('.handle-menu .hm-chip').allInnerTexts(), ['Paragraph', 'Heading']);
+    assert.equal(await p.locator('.handle-menu .hm-chip.current').innerText(), 'Paragraph');
+    await p.locator('.handle-menu .hm-chip', { hasText: 'Heading' }).click();
+    await p.waitForSelector('#editor .ProseMirror > h2');
+    assert.equal(await p.locator('.handle-menu').count(), 0, 'the menu closes');
+    await p.locator('#editor .ProseMirror > h2').hover();
+    await p.locator('.block-handle').click();
+    assert.equal(await p.locator('.handle-menu .head').innerText(), 'HEADING');
+    await p.locator('.handle-menu .hm-chip', { hasText: 'Paragraph' }).click();
+    await p.waitForFunction(() => !document.querySelector('#editor .ProseMirror > h2'));
   });
 
   await check('the handle stays while the mouse crosses the margin to it', async () => {
@@ -663,6 +681,35 @@ try {
     assert.equal(await p.locator('#nb-title').isVisible(), true);
   });
 
+  await check('a notebook line shows six dots on hover; a right-click opens its menu', async () => {
+    const top = p.locator('#outline-editor li', { hasText: 'Call the harbourmaster' }).first();
+    await top.locator(':scope > p').hover({ position: { x: 12, y: 10 } });
+    await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li')].find((li) => li.querySelector(':scope > p')?.textContent.startsWith('Call the harbourmaster'))?.querySelector(':scope > .line-gutter .grip') && getComputedStyle([...document.querySelectorAll('#outline-editor li')].find((li) => li.querySelector(':scope > p')?.textContent.startsWith('Call the harbourmaster')).querySelector(':scope > .line-gutter .grip')).opacity === '1');
+    await top.locator(':scope > .line-gutter .bullet').click({ button: 'right' });
+    await p.waitForSelector('.handle-menu', { state: 'visible' });
+    assert.equal(await p.locator('.notebook.zoomed').count(), 0, 'a right-click does not zoom');
+    assert.match(await p.locator('.handle-menu .head').innerText(), /^LINE · \d+ LINES? UNDER IT$/);
+    const labels = await p.locator('.handle-menu .item > span:first-child').allInnerTexts();
+    assert.equal(labels[0], 'Zoom in');
+    assert.ok(labels.some((l) => /^Fold the \d+ lines? under it$/.test(l)), labels.join(' | '));
+    assert.ok(labels.includes('Move to another page…'));
+    assert.match(labels.at(-1), /^Delete line and the \d+ lines? under it$/);
+    await p.locator('.handle-menu .item', { hasText: 'Mark done' }).click();
+    await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li[data-done] > p')].some((x) => x.textContent.startsWith('Call the harbourmaster')));
+    await top.locator(':scope > .line-gutter .bullet').click({ button: 'right' });
+    await p.locator('.handle-menu .item', { hasText: 'Not done' }).click();
+    await p.waitForFunction(() => ![...document.querySelectorAll('#outline-editor li[data-done] > p')].some((x) => x.textContent.startsWith('Call the harbourmaster')));
+    await top.locator(':scope > .line-gutter .bullet').click({ button: 'right' });
+    await p.keyboard.press('Escape');
+    assert.equal(await p.locator('.handle-menu').count(), 0);
+    // Switched off, the line goes back to a plain dot.
+    await p.evaluate(() => document.documentElement.classList.add('hide-handle'));
+    await top.locator(':scope > p').hover({ position: { x: 12, y: 10 } });
+    await sleep(300);
+    assert.equal(await top.locator(':scope > .line-gutter .grip').evaluate((g) => getComputedStyle(g).opacity), '0');
+    await p.evaluate(() => document.documentElement.classList.remove('hide-handle'));
+  });
+
   await check('the command menu opens on categories, and typing still finds everything', async () => {
     await sleep(600);
     await p.keyboard.press('Control+K');
@@ -768,6 +815,15 @@ try {
     await ph.waitForSelector('#editor p[data-el="character"]');
     assert.equal(await ph.evaluate(() => document.activeElement?.classList.contains('ProseMirror')), true, 'keyboard stays up');
     assert.equal(await ph.locator('.script-bar button.current').innerText(), 'Character');
+    // The handle beside the line opens the menu as a sheet (no dragging on a phone).
+    await ph.locator('.block-handle').tap();
+    await ph.waitForSelector('.handle-menu.as-sheet', { state: 'visible' });
+    assert.equal(await ph.locator('.handle-menu .head').innerText(), 'CHARACTER');
+    assert.deepEqual(await ph.locator('.handle-menu .hm-chip').allInnerTexts(), ['Scene', 'Action', 'Character', 'Paren', 'Dialogue', 'Transition']);
+    await ph.locator('.handle-menu .hm-chip', { hasText: 'Dialogue' }).tap();
+    await ph.waitForSelector('#editor p[data-el="dialogue"]');
+    await ph.locator('.script-bar button[data-el="character"]').tap();
+    await ph.waitForSelector('#editor p[data-el="character"]');
     // The alternates buttons come last, after every script button.
     const row = await ph.locator('.script-bar:not(.outline-bar) button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => b.dataset.alt || b.dataset.el));
     assert.deepEqual(row, ['scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'section', 'word', 'ask', 'para', 'prev', 'next']);
@@ -798,6 +854,22 @@ try {
     assert.equal(await ph.evaluate(() => document.activeElement?.closest('#outline-editor') !== null), true, 'keyboard stays up');
     // Undo and Redo come first in the row.
     assert.deepEqual((await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do))).slice(0, 3), ['undo', 'redo', 'outdent']);
+    // The line you're on shows its handle; a tap brings its menu up from the bottom.
+    // Move down keeps the sheet open so it can be tapped again.
+    const here = ph.locator('#outline-editor li.here > .line-gutter .bullet');
+    await here.waitFor({ state: 'visible' });
+    await here.tap();
+    await ph.waitForSelector('.handle-menu.as-sheet', { state: 'visible' });
+    assert.equal(await ph.locator('.notebook.zoomed').count(), 0, 'a tap on the handle does not zoom');
+    await ph.locator('.handle-menu .pair .item', { hasText: 'Move down' }).tap();
+    await ph.waitForFunction(() => {
+      const t = [...document.querySelectorAll('#outline-editor .ProseMirror > ul > li > p')].map((p) => p.textContent);
+      return t.indexOf('Tides #sea') > t.indexOf('Boats');
+    });
+    assert.equal(await ph.locator('.handle-menu.as-sheet').isVisible(), true, 'the sheet stays for another move');
+    await ph.locator('#outline-editor li > p', { hasText: /^Tides #sea$/ }).tap();
+    assert.equal(await ph.locator('.handle-menu').count(), 0, 'a tap elsewhere closes it');
+    await ph.keyboard.press('End');
     await tap('undo');
     await ph.waitForFunction(() => ![...document.querySelectorAll('#outline-editor li > p')].some((p) => p.textContent === 'Tides #sea'));
     await tap('redo');
@@ -875,7 +947,11 @@ try {
     assert.ok(Number(await caret.evaluate((b) => getComputedStyle(b).opacity)) > 0.3, 'caret shows on a phone');
     await caret.tap();
     await ph.waitForSelector('#outline-editor li.folded');
-    await caret.tap();
+    // The caret stepped up onto the folded line, so its handle is there now; Unfold leads its menu.
+    await ph.locator('#outline-editor li.here.folded > .line-gutter .bullet').tap();
+    await ph.waitForSelector('.handle-menu.as-sheet', { state: 'visible' });
+    assert.match(await ph.locator('.handle-menu .item').first().innerText(), /^Unfold the \d+ lines under it/);
+    await ph.locator('.handle-menu .item').first().tap();
     await ph.waitForFunction(() => !document.querySelector('#outline-editor li.folded'));
     await phoneCtx.close();
   });

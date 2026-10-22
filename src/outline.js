@@ -280,6 +280,13 @@ function hiddenRanges(doc, { folded, zoom }) {
   return { ranges, root };
 }
 
+// Each line's dot doubles as its six-dot handle (shown on hover, unless the
+// handle is switched off). Its menu is built by the app, which listens for
+// 'line-menu' on the editor.
+const GRIP = '<svg class="grip" width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/><circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/><circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/></g></svg>';
+const handleShown = () => !['hide-handle', 'focus'].some((c) => document.documentElement.classList.contains(c));
+const lineMenu = (view, anchor, eid, at) => view.dom.dispatchEvent(new CustomEvent('line-menu', { detail: { eid, anchor, at } }));
+
 // Moves the line you're on (with everything under it) past its neighbour, up or down.
 export function moveLine(editor, dir) {
   const { state } = editor;
@@ -496,12 +503,16 @@ export const OutlineFold = Extension.create({
           const st = foldKey.getState(state);
           const decos = [];
           const { root } = hiddenRanges(state.doc, st);
+          // The line the caret is in: on a phone its handle stands in for the dot.
+          const { $head } = state.selection;
+          let here = -1;
+          for (let d = $head.depth; d > 0; d--) if ($head.node(d).type.name === 'listItem') { here = $head.before(d); break; }
           state.doc.descendants((node, pos) => {
             if (node.type.name !== 'listItem') return;
             const eid = node.attrs.eid;
             const kids = kidsOf(node);
             const folded = kids && st.folded.has(eid) && eid !== st.zoom;
-            const cls = [kids ? 'has-kids' : '', folded ? 'folded' : ''];
+            const cls = [kids ? 'has-kids' : '', folded ? 'folded' : '', pos === here ? 'here' : ''];
             if (root) {
               if (eid === st.zoom) cls.push('zoom-root');
               else if (pos < root.from && pos + node.nodeSize > root.to) cls.push('zoom-path');
@@ -512,7 +523,7 @@ export const OutlineFold = Extension.create({
               const w = document.createElement('span');
               w.className = 'line-gutter';
               w.contentEditable = 'false';
-              w.innerHTML = `${kids ? '<button type="button" class="fold" tabindex="-1" aria-label="Fold or unfold"></button>' : ''}<button type="button" class="bullet" tabindex="-1" aria-label="Zoom in"></button>`;
+              w.innerHTML = `${kids ? '<button type="button" class="fold" tabindex="-1" aria-label="Fold or unfold"></button>' : ''}<button type="button" class="bullet" tabindex="-1" aria-label="Zoom in, or right-click for this line's actions">${GRIP}</button>`;
               w.dataset.eid = eid || '';
               return w;
             }, { side: -1, key: `g-${eid}-${kids ? 1 : 0}`, ignoreSelection: true }));
@@ -527,9 +538,20 @@ export const OutlineFold = Extension.create({
             const eid = b.parentElement.dataset.eid;
             if (!eid) return true;
             if (b.classList.contains('fold')) view.dispatch(view.state.tr.setMeta(foldKey, { fold: eid }));
-            // A click (or tap) zooms in; with a mouse, a drag moves the line. On a phone the row's arrows move it.
-            else if (event.pointerType === 'touch') view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid }));
-            else startDrag(view, b.closest('li'), event, { onClick: () => view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid })) });
+            else if (event.button !== 0) return true; // a right-click opens the menu (below)
+            // A click zooms in; with a mouse, a drag moves the line. On a phone,
+            // the handle beside the line you're on opens its menu; other dots zoom.
+            else if (event.pointerType === 'touch') {
+              if (b.closest('li').classList.contains('here') && handleShown()) lineMenu(view, b, eid);
+              else view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid }));
+            } else startDrag(view, b.closest('li'), event, { onClick: () => view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid })) });
+            return true;
+          },
+          contextmenu(view, event) {
+            const b = event.target.closest?.('.line-gutter');
+            if (!b?.dataset.eid) return false;
+            event.preventDefault();
+            lineMenu(view, b.querySelector('.bullet') || b, b.dataset.eid, { left: event.clientX, top: event.clientY });
             return true;
           },
           mousedown(_view, event) {
