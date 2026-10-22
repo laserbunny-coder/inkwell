@@ -241,6 +241,7 @@
   </div>
 
   <div class="script-bar" role="toolbar" aria-label="Script elements and alternates" hidden>
+    <button type="button" data-ins="1" aria-label="Insert (time, date, link…)">+</button>
     <button type="button" data-el="scene">Scene</button>
     <button type="button" data-el="action">Action</button>
     <button type="button" data-el="character">Character</button>
@@ -260,6 +261,7 @@
     <button type="button" data-do="undo" aria-label="Undo">↶</button>
     <button type="button" data-do="redo" aria-label="Redo">↷</button>
     <span class="bar-gap" aria-hidden="true"></span>
+    <button type="button" data-do="insert" aria-label="Insert (time, date, link…)">+</button>
     <button type="button" data-do="outdent" aria-label="Outdent">⇤</button>
     <button type="button" data-do="indent" aria-label="Indent">⇥</button>
     <button type="button" data-do="up" aria-label="Move line up">↑</button>
@@ -308,6 +310,9 @@
     <h3>Writing</h3>
     <dl>
       <dt>⌘⇧N</dt><dd>Add a note to this paragraph</dd>
+      <dt>/</dt><dd>Insert: the time, a date, a link, a tag…</dd>
+      <dt>⌘⇧;</dt><dd>The time</dd>
+      <dt>⌘;</dt><dd>Today’s date</dd>
       <dt>[[</dt><dd>Link to a page</dd>
       <dt>⌘⇧E</dt><dd>Alternates for this word or selection</dd>
       <dt>⌥↑ ⌥↓</dt><dd>Flip to the next or previous alternate</dd>

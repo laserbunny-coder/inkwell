@@ -314,6 +314,15 @@ a.ref:hover { background: var(--tint); }
 .picker li { display: flex; justify-content: space-between; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
 .picker li[aria-selected="true"] { background: var(--tint); }
 .picker li .keys { color: var(--faint); font-size: 11px; }
+.slash { position: fixed; z-index: 62; width: 280px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,.16); overflow: hidden; font-family: var(--ui); font-size: 13px; }
+.slash[hidden] { display: none; }
+.slash ul { list-style: none; margin: 0; padding: 4px; max-height: 260px; overflow-y: auto; }
+.slash li { display: flex; align-items: baseline; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+.slash li[aria-selected="true"] { background: var(--tint); }
+.slash .label { flex: 0 0 auto; }
+.slash .hint { flex: 1 1 auto; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slash .keys { color: var(--faint); font-size: 11px; }
+@media (hover: none) { .slash .keys { display: none; } .slash li { padding: 10px 8px; } }
 
 @media (max-width: 700px) {
   .notebook { padding: 48px 20px 40vh; }
@@ -566,6 +575,7 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .outline-bar button { font-size: 15px; min-width: 40px; }
 .outline-bar button[data-do="zoom"], .outline-bar button[data-do="link"], .outline-bar button[data-do="done"], .outline-bar button[data-do="move"] { font-size: 12px; }
 .outline-bar button[data-do="undo"], .outline-bar button[data-do="redo"] { font-size: 18px; }
+.script-bar button[data-ins], .outline-bar button[data-do="insert"] { font-size: 18px; min-width: 40px; }
 .outline-bar button:disabled { opacity: .35; }
 .script-bar .alt-gap { flex: 0 0 1px; margin: 6px 4px; background: var(--line); }
 /* Off a script the row holds only the alternates buttons; with alternates
