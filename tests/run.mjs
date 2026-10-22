@@ -323,7 +323,7 @@ try {
     assert.match(await text2(), /Snow on the harbour wall\./);
   });
 
-  await check('earlier days show below today and open when clicked', async () => {
+  await check('earlier days stay closed behind the line under today, open on a click, and are remembered', async () => {
     await p.evaluate(() => new Promise((res) => {
       const d = new Date(); d.setDate(d.getDate() - 1);
       const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -338,9 +338,19 @@ try {
       };
     }));
     await p.keyboard.press('Control+J');
-    await p.waitForSelector('.past-days', { state: 'visible' });
-    assert.match(await p.locator('.past-days').innerText(), /Yesterday’s thought/);
-    await p.locator('.past-days p', { hasText: 'Yesterday’s thought' }).click();
+    await p.waitForSelector('.past-toggle', { state: 'visible' });
+    assert.equal(await p.locator('.past-day').count(), 0, 'closed by default');
+    await p.locator('.past-toggle').click();
+    await p.waitForSelector('.past-day', { state: 'visible' });
+    assert.match(await p.locator('.past-list').innerText(), /Yesterday’s thought/);
+    assert.equal(await p.evaluate(() => localStorage.getItem('pastDays')), 'open');
+    await p.locator('.past-toggle').click();
+    await sleep(200);
+    assert.equal(await p.locator('.past-day').count(), 0, 'closed again');
+    assert.equal(await p.evaluate(() => localStorage.getItem('pastDays')), null);
+    await p.locator('.past-toggle').click();
+    await p.waitForSelector('.past-day', { state: 'visible' });
+    await p.locator('.past-list p', { hasText: 'Yesterday’s thought' }).click();
     await sleep(500);
     assert.equal(await p.locator('#nb-kind').innerText(), 'DAILY PAGE');
     assert.match(await outlineText(), /Yesterday’s thought/);
@@ -833,9 +843,9 @@ try {
     await ph.waitForSelector('#editor p[data-el="dialogue"]');
     await ph.locator('.script-bar button[data-el="character"]').tap();
     await ph.waitForSelector('#editor p[data-el="character"]');
-    // The alternates buttons come last, after every script button.
-    const row = await ph.locator('.script-bar:not(.outline-bar) button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => b.dataset.alt || b.dataset.el));
-    assert.deepEqual(row, ['scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'section', 'word', 'ask', 'para', 'prev', 'next']);
+    // + (the insert menu) first, then the script buttons; alternates come last.
+    const row = await ph.locator('.script-bar:not(.outline-bar) button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => (b.dataset.ins ? 'insert' : b.dataset.alt || b.dataset.el)));
+    assert.deepEqual(row, ['insert', 'scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'section', 'word', 'ask', 'para', 'prev', 'next']);
 
     // Outlines get their own row: indent, outdent, move, tag.
     await ph.keyboard.press('Control+J');
@@ -861,8 +871,8 @@ try {
     await ph.keyboard.type('sea');
     await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].some((p) => p.textContent === 'Tides #sea'));
     assert.equal(await ph.evaluate(() => document.activeElement?.closest('#outline-editor') !== null), true, 'keyboard stays up');
-    // Undo and Redo come first in the row.
-    assert.deepEqual((await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do))).slice(0, 3), ['undo', 'redo', 'outdent']);
+    // Undo and Redo come first in the row, then + (the insert menu).
+    assert.deepEqual((await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do))).slice(0, 4), ['undo', 'redo', 'insert', 'outdent']);
     // The line you're on shows its handle; a tap brings its menu up from the bottom.
     // Move down keeps the sheet open so it can be tapped again.
     const here = ph.locator('#outline-editor li.here > .line-gutter .bullet');
