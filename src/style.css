@@ -749,3 +749,30 @@ body.line-dragging, body.line-dragging * { user-select: none; }
 .ask-piece .ask-input { margin-bottom: 10px; }
 .ask-piece .hint { margin: 4px 0 8px; }
 .ask-choices { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.file-embed.chip.audio { align-items: center; padding: 1px 10px 1px 3px; }
+.file-embed.chip.audio .play { width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0; background: var(--accent); position: relative; flex: none; }
+.file-embed.chip.audio .play::before { content: ''; position: absolute; left: 8px; top: 6px; border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent var(--bg); }
+.file-embed.chip.audio.playing .play::before { left: 7px; top: 7px; width: 3px; height: 8px; border: 0; border-left: 3px solid var(--bg); border-right: 3px solid var(--bg); }
+.file-embed.chip.audio small { font-variant-numeric: tabular-nums; }
+.file-embed.chip.audio .note { margin-left: -6px; }
+
+/* Capture: one big button, nothing else to think about. */
+.capture { position: fixed; inset: 0; z-index: 80; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: max(16px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom)); font-family: var(--ui); }
+html.capturing body { overflow: hidden; }
+.cap-cancel { position: absolute; top: max(14px, env(safe-area-inset-top)); left: 14px; background: none; border: 0; color: var(--muted); font-size: 15px; padding: 10px 12px; border-radius: 8px; }
+.cap-cancel:hover { color: var(--ink); background: var(--tint); }
+.cap-middle { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.cap-big { position: relative; z-index: 1; width: min(46vw, 200px); height: min(46vw, 200px); border-radius: 50%; border: 0; background: var(--accent); color: var(--bg); display: grid; place-items: center; box-shadow: 0 10px 40px rgba(0,0,0,.25); transition: transform .15s ease, border-radius .2s ease; -webkit-tap-highlight-color: transparent; }
+.cap-big:active { transform: scale(.97); }
+.cap-big:focus-visible { outline: none; }
+/* A microphone when ready; a square (stop) while recording. */
+.cap-big svg { width: 42%; height: 42%; }
+.cap-stop, .capture[data-state="recording"] .cap-mic, .capture[data-state="saving"] .cap-mic { display: none; }
+.capture[data-state="recording"] .cap-stop, .capture[data-state="saving"] .cap-stop { display: block; }
+.cap-level { position: absolute; z-index: 0; top: 0; left: 50%; width: min(46vw, 200px); height: min(46vw, 200px); border-radius: 50%; background: var(--accent); opacity: .18; transform: translateX(-50%) scale(calc(1 + var(--lvl, 0) * .45)); transition: transform 80ms linear; pointer-events: none; }
+.capture:not([data-state="recording"]) .cap-level { opacity: 0; }
+.cap-time { margin: 18px 0 0; min-height: 1.3em; font-size: 28px; font-variant-numeric: tabular-nums; color: var(--ink); letter-spacing: .02em; }
+.cap-hint { margin: 0; color: var(--muted); font-size: 16px; text-align: center; max-width: 30ch; min-height: 1.4em; }
+.capture[data-state="error"] .cap-hint { color: var(--accent); }
+.cap-auto { position: absolute; bottom: max(22px, env(safe-area-inset-bottom)); left: 16px; right: 16px; text-align: center; color: var(--faint); font-size: 13px; display: flex; gap: 8px; align-items: center; justify-content: center; }
+.capture[data-state="recording"] .cap-auto, .capture[data-state="saving"] .cap-auto { visibility: hidden; }

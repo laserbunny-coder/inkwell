@@ -1,10 +1,19 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { addFile, fileUrl, isImage, sizeLabel, MAX_BYTES } from './files.js';
+import { addFile, fileUrl, isImage, isAudio, sizeLabel, lengthLabel, MAX_BYTES } from './files.js';
 
 // A picture or file in a paragraph or line. Pictures show in the text at
 // reading width; other files show as a small chip that opens the file.
 // Paste or drop to add one, or use "Add a picture or file…" in Ctrl + K.
+// A recording shows as a chip with a play button and its length.
+
+// A short word after a recording's length while something is being done with
+// it ("writing out…"), on every chip that shows it.
+const notes = new Map();
+export function setFileNote(id, text) {
+  if (text) notes.set(id, text); else notes.delete(id);
+  for (const el of document.querySelectorAll(`[data-file="${CSS.escape(id)}"] .note`)) el.textContent = text ? ` · ${text}` : '';
+}
 
 export const FileEmbed = Node.create({
   name: 'file',
@@ -21,7 +30,8 @@ export const FileEmbed = Node.create({
       id: { default: null, parseHTML: (el) => el.getAttribute('data-file'), renderHTML: () => ({}) },
       name: { default: '', parseHTML: (el) => el.getAttribute('data-name') || '', renderHTML: () => ({}) },
       type: { default: '', parseHTML: (el) => el.getAttribute('data-type') || '', renderHTML: () => ({}) },
-      size: { default: 0, parseHTML: (el) => Number(el.getAttribute('data-size')) || 0, renderHTML: () => ({}) }
+      size: { default: 0, parseHTML: (el) => Number(el.getAttribute('data-size')) || 0, renderHTML: () => ({}) },
+      duration: { default: 0, parseHTML: (el) => Number(el.getAttribute('data-duration')) || 0, renderHTML: () => ({}) }
     };
   },
   // Not words: a picture doesn't change a word count or show in search text.
@@ -30,7 +40,7 @@ export const FileEmbed = Node.create({
   parseHTML() { return [{ tag: 'span[data-file]' }]; },
   renderHTML({ node, HTMLAttributes }) {
     const a = node.attrs;
-    return ['span', mergeAttributes(HTMLAttributes, { 'data-file': a.id, 'data-name': a.name, 'data-type': a.type, 'data-size': a.size, class: 'file-embed' }), a.name];
+    return ['span', mergeAttributes(HTMLAttributes, { 'data-file': a.id, 'data-name': a.name, 'data-type': a.type, 'data-size': a.size, ...(a.duration ? { 'data-duration': a.duration } : {}), class: 'file-embed' }), a.name];
   },
   renderText({ node }) { return `[${node.attrs.name}]`; },
   addNodeView() {
@@ -53,6 +63,33 @@ export const FileEmbed = Node.create({
           if (tries < 4) setTimeout(() => { if (dom.isConnected) show(tries + 1); }, [5, 30, 120, 600][tries] * 1000);
         });
         show(0);
+      } else if (isAudio(a.type)) {
+        dom.className = 'file-embed chip audio';
+        const play = document.createElement('button');
+        play.type = 'button';
+        play.className = 'play';
+        play.setAttribute('aria-label', 'Play the recording');
+        const label = document.createElement('small');
+        label.textContent = lengthLabel(a.duration) || 'Recording';
+        const note = document.createElement('small');
+        note.className = 'note';
+        note.textContent = notes.has(a.id) ? ` · ${notes.get(a.id)}` : '';
+        dom.append(play, label, note);
+        let audio = null;
+        play.addEventListener('mousedown', (e) => e.preventDefault());
+        play.addEventListener('click', async (e) => {
+          e.preventDefault();
+          if (audio && !audio.paused) { audio.pause(); return; }
+          if (!audio) {
+            const url = await fileUrl(a.id);
+            if (!url) { dom.title = 'This recording hasn’t reached this device yet'; return; }
+            audio = new Audio(url);
+            audio.addEventListener('play', () => dom.classList.add('playing'));
+            audio.addEventListener('pause', () => dom.classList.remove('playing'));
+            audio.addEventListener('ended', () => dom.classList.remove('playing'));
+          }
+          audio.play().catch(() => {});
+        });
       } else {
         dom.className = 'file-embed chip';
         const link = document.createElement('a');

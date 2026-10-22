@@ -69,7 +69,8 @@ const extOf = (type, name) => {
 };
 
 // Keeps a dropped or pasted file and returns its entry, or null if too big.
-export async function addFile(file) {
+// `extra` adds fields to the entry (a recording's length, say).
+export async function addFile(file, extra = {}) {
   if (!file || file.size > MAX_BYTES) return null;
   const { blob, w, h } = await shrink(file);
   const type = blob.type || file.type || 'application/octet-stream';
@@ -78,7 +79,7 @@ export async function addFile(file) {
   else if (blob !== file && type === 'image/jpeg') name = name.replace(/\.\w+$/, '') + '.jpg';
   const id = newId('fi');
   await keep({ id, blob, type, uploaded: false, added: Date.now() });
-  const row = entry('file', { id, title: name, fields: { type, size: blob.size, ...(w ? { w, h } : {}) } });
+  const row = entry('file', { id, title: name, fields: { type, size: blob.size, ...(w ? { w, h } : {}), ...extra } });
   await putEntries([row]);
   uploadPending();
   return row;
@@ -156,6 +157,15 @@ export async function fileUrl(id) {
 }
 
 export const isImage = (type) => /^image\//.test(type || '');
+export const isAudio = (type) => /^audio\//.test(type || '');
+
+// "0:42", "12:05", "1:02:09"
+export function lengthLabel(ms) {
+  if (!ms) return '';
+  const s = Math.round(ms / 1000);
+  const two = (n) => String(n).padStart(2, '0');
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${two(Math.floor(s / 60) % 60)}:${two(s % 60)}` : `${Math.floor(s / 60)}:${two(s % 60)}`;
+}
 
 export function sizeLabel(n) {
   if (!n) return '';
