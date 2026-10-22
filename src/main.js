@@ -18,6 +18,7 @@ import { ensureSeed, outline, entry, wordCount } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
 import { EntryRef, TagMarks } from './outline.js';
 import { retitleLinks, freshenRefs } from './links.js';
+import { keepStorage, oldestUnsent, unsentLabel, STALE_AFTER } from './keep.js';
 import { Conflicts } from './conflicts.js';
 import { vaultZip, pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, scriptPages, toFountain, fromFountain } from './script.js';
@@ -412,11 +413,31 @@ const sync = new Sync({
     syncEl.hidden = s === 'off';
     syncEl.textContent = SYNC_LABELS[s] || '';
     syncEl.dataset.state = s;
+    delete syncEl.dataset.stale;
     document.body.dataset.sync = s;
     if (s === 'synced') conflicts.count();
+    else if (s !== 'syncing') checkUnsent();
   },
   onRemote: applyRemote
 });
+// Changes that have waited a day or more for the cloud are called out on the
+// sync button, and the top bar peeks out once so it's seen.
+let warnedUnsent = false;
+async function checkUnsent() {
+  const since = await oldestUnsent();
+  const state = syncEl.dataset.state;
+  if (!since || Date.now() - since < STALE_AFTER || state === 'synced' || state === 'syncing' || state === 'off') return;
+  syncEl.hidden = false;
+  syncEl.textContent = state === 'signed-out' ? `${unsentLabel(since)} · Sign in` : unsentLabel(since);
+  syncEl.dataset.stale = 'true';
+  if (!warnedUnsent) {
+    warnedUnsent = true;
+    body.classList.add('show-top');
+    setTimeout(() => { if (!document.querySelector('.topbar:hover')) body.classList.remove('show-top'); }, 6000);
+  }
+}
+setInterval(() => checkUnsent().catch(() => {}), 36e5);
+
 const conflicts = new Conflicts({ onApplied: (rows) => applyRemote(rows) });
 // Progress keeps a small daily tally; it's noted a little after you stop typing.
 let tallyTimer = null;
@@ -2201,6 +2222,7 @@ async function start() {
   conflicts.count();
   // Deleted things are remembered for six months, then this device lets go of them.
   forgetDeleted(Date.now() - 182 * 864e5).catch((e) => console.warn(e));
+  keepStorage();
   // Old versions thin out: all from two days, hourly for two weeks, daily after.
   setTimeout(() => tidyHistory().catch((e) => console.warn(e)), 8000);
   if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('./sw.js');
