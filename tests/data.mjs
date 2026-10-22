@@ -67,6 +67,9 @@ try {
 
   await check('renaming a page updates the links to it', async () => {
     await p.keyboard.press('Control+J');
+    // Wait for today's page itself: the editor takes focus at once, before
+    // the page has loaded in, and typing then would be replaced by it.
+    await p.waitForFunction(() => document.querySelector('#nb-kind')?.textContent === 'Today');
     await p.waitForSelector('#outline-editor .ProseMirror-focused');
     await p.keyboard.type('See [[');
     await p.waitForSelector('.picker', { state: 'visible' });
