@@ -22,7 +22,9 @@ import { retitleLinks, freshenRefs } from './links.js';
 import { keepStorage, oldestUnsent, unsentLabel, STALE_AFTER } from './keep.js';
 import { setMoveHooks, moveEntries } from './move.js';
 import { Conflicts } from './conflicts.js';
-import { vaultZip, pageMarkdown } from './vault.js';
+import { FileEmbed, insertFiles } from './filenode.js';
+import { MAX_BYTES } from './files.js';
+import { vaultZip, vaultFiles, pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
 import { moveLine, toggleDone, foldKey } from './outline.js';
@@ -38,9 +40,11 @@ const extensions = [
   StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false }), EntryIds, SceneBreak, AltMark, ParagraphVersions,
   EntryRef.configure({ onPick: openPicker, onOpen: openEntry }),
   TagMarks.configure({ onTag: (t) => notebook.showTag(t) }),
-  ScriptElements.configure({ isScript: () => isScript() })
+  ScriptElements.configure({ isScript: () => isScript() }),
+  FileEmbed.configure({ onTooBig: tooBig })
 ];
 const isScript = () => root.classList.contains('script');
+function tooBig(f) { toast(`“${f.name}” is too big to add (the limit is ${Math.round(MAX_BYTES / 1048576)} MB)`); }
 // Deleted, missing, or in the Trash.
 const gone = (r) => !r || r.deleted || isTrashed(r);
 
@@ -565,6 +569,7 @@ onLocalWrites((rows) => {
 });
 window.__sync = sync;
 window.__notebook = notebook;
+window.__vaultFiles = vaultFiles;
 syncEl.addEventListener('click', () => { if (syncEl.dataset.state === 'signed-out') sync.signIn(); else sync.soon(0); });
 
 // An untouched starter book on a new device gives way to the real one from the cloud.
@@ -1986,6 +1991,7 @@ const commands = [
   { group: 'sync', label: 'Export the whole book as Markdown', keys: '', run: exportBook, when: () => writing() && !!state.project && !isScript() },
   { group: 'sync', label: 'Export this script as Fountain', keys: '', run: exportFountain, when: () => writing() && isScript() },
   { group: 'sync', label: 'Back up everything (download all as files)', keys: '', run: exportVault },
+  { group: 'write', label: 'Add a picture or file…', keys: '', run: () => setTimeout(pickFiles, 120), when: () => writing() || inNotebook() },
   { group: 'tidy', label: 'Send selection to… a chapter, page or day', keys: '', run: () => setTimeout(sendSelectionPicker, 120), when: () => writing() || inNotebook() },
   { group: 'tidy', label: 'This book: rename, move, change kind or trash…', keys: '', run: async () => popMenu(null, await bookMenu(await currentBook()), menuSpot()), when: () => !!currentBookId() },
   { group: 'tidy', label: 'Change what this book is (novel, screenplay, notes)…', keys: '', run: async () => { const b = await currentBook(); popMenu(null, KINDS.map(([id, label]) => ({ label, current: bookType(b) === id, run: () => setKind(b, id) })), menuSpot()); }, when: () => !!currentBookId() },
@@ -1997,6 +2003,19 @@ const commands = [
 ];
 
 // The command menu opens on these, so the phone doesn't need a long scroll; typing searches everything.
+// Pictures and files from this device, put in where the caret is.
+function pickFiles() {
+  const ed = currentEditor();
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.multiple = true;
+  input.addEventListener('change', () => {
+    const files = [...input.files];
+    if (files.length) insertFiles(ed.view, ed.schema.nodes.file, files, null, tooBig);
+  });
+  input.click();
+}
+
 const GROUPS = [
   { id: 'go', label: 'Go', hint: 'Library, today, chapters, back' },
   { id: 'new', label: 'New', hint: 'Book, page, chapter, area' },

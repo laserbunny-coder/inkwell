@@ -266,6 +266,15 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 #outline-editor ol { margin: 0; padding-left: 1.4em; }
 #outline-editor ol > li::before { display: none; }
 
+/* Pictures sit in the text at reading width; other files are a small chip. */
+.file-embed.picture { display: block; margin: .4em 0; line-height: 0; }
+.file-embed.picture img { max-width: 100%; max-height: 75vh; border-radius: 6px; display: block; }
+.file-embed.picture.missing { line-height: 1.4; min-height: 3em; border: 1px dashed var(--line); border-radius: 6px; }
+.file-embed.picture.missing::after { content: 'Picture on its way'; display: block; padding: .8em 1em; font: 13px var(--ui); color: var(--faint); }
+.file-embed.chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); font: 13px/1.6 var(--ui); vertical-align: 1px; }
+.file-embed.chip a { color: var(--accent); cursor: pointer; text-decoration: none; }
+.file-embed.chip small { color: var(--faint); font-size: 12px; }
+.ProseMirror-selectednode.file-embed.picture img, .ProseMirror-selectednode.file-embed.chip { outline: 2px solid var(--accent); outline-offset: 2px; }
 a.ref { color: var(--accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); cursor: pointer; }
 a.ref::before { content: '↗ '; font-size: .7em; opacity: .7; }
 a.ref:hover { background: var(--tint); }
