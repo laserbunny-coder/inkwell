@@ -5,6 +5,7 @@ import { OutlineDoc, LineIds, EntryRef, TagMarks, GatherBadge, mirrorKey, Outlin
 import { getEntry, linkedFrom, byKind, byTag, putEntries, children, isTrashed } from './db.js';
 import { entry } from './model.js';
 import { bySort } from './order.js';
+import { moveEntry } from './move.js';
 import { newPage } from './library.js';
 import { freshenRefs } from './links.js';
 
@@ -118,32 +119,12 @@ export class Notebook {
     return null;
   }
 
-  // Sends a line, with everything under it, to the end of another page or day.
+  // Sends a line, with everything under it, to the end of another page, day or chapter.
   async moveLineTo(eid, targetId, fallback) {
     if (!eid || !targetId || targetId === this.page?.id) return false;
-    const ed = this.editor;
-    let pos = -1;
-    ed.state.doc.descendants((n, p) => { if (pos < 0 && n.type.name === 'listItem' && n.attrs.eid === eid) pos = p; return pos < 0; });
-    if (pos < 0) return false;
-    await this.store.flush(ed.state.doc);
-    const top = await getEntry(eid);
-    if (!top) return false;
-    const under = await descendants(eid);
-    const node = ed.state.doc.nodeAt(pos);
-    const $pos = ed.state.doc.resolve(pos);
-    const tr = ed.state.tr;
-    // The page always keeps at least one line.
-    if ($pos.parent.childCount === 1 && $pos.depth === 1) tr.replaceWith(pos, pos + node.nodeSize, ed.schema.nodes.listItem.create(null, ed.schema.nodes.paragraph.create()));
-    else tr.delete(pos, pos + node.nodeSize);
-    ed.view.dispatch(tr);
-    await this.store.flush(ed.state.doc);
-    if (fallback && !(await getEntry(targetId))) await putEntries([{ ...fallback, updated_at: Date.now() }]);
-    const there = (await children(targetId)).filter((r) => r.kind === 'line' && !r.deleted);
-    const sort = there.reduce((m, r) => Math.max(m, r.sort || 0), 0) + 1024;
-    const now = Date.now();
-    await putEntries([{ ...top, parent_id: targetId, sort, deleted: false, updated_at: now }, ...under.map((r) => ({ ...r, deleted: false, updated_at: now }))]);
-    ed.commands.focus();
-    return true;
+    const ok = await moveEntry(eid, targetId, { fallback });
+    this.editor.commands.focus();
+    return ok;
   }
 
   toggleFold() {

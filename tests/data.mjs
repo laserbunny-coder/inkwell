@@ -141,6 +141,65 @@ try {
     assert.ok(ids.includes('old_unsent'));
   });
 
+  await check('a paragraph sent to today becomes a line there, keeping its id', async () => {
+    if (await p.evaluate(() => document.documentElement.dataset.view)) await p.keyboard.press('Control+J');
+    await p.waitForSelector('#editor .ProseMirror', { state: 'visible' });
+    await p.locator('#editor .ProseMirror p').last().click();
+    await p.keyboard.press('End');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('Send me to the notebook.');
+    await sleep(800);
+    const before = (await paras()).find((e) => e.text === 'Send me to the notebook.');
+    await command('Send selection to');
+    await sleep(400);
+    await p.keyboard.type('Today');
+    await sleep(300);
+    await p.keyboard.press('Enter');
+    await sleep(1000);
+    const now = (await all()).find((e) => e.id === before.id);
+    assert.equal(now.kind, 'line');
+    assert.equal(now.deleted, false);
+    assert.match(now.parent_id, /^day-/);
+    assert.doesNotMatch(await p.locator('#editor .ProseMirror').innerText(), /Send me to the notebook/);
+  });
+
+  await check('a line with lines under it sent to a chapter becomes paragraphs in order', async () => {
+    await p.keyboard.press('Control+J');
+    await p.waitForSelector('#outline-editor .ProseMirror', { state: 'visible' });
+    await sleep(400);
+    assert.match(await p.locator('#outline-editor').innerText(), /Send me to the notebook/);
+    await p.locator('#outline-editor li').last().click();
+    await p.keyboard.press('End');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('Parent line');
+    await p.keyboard.press('Enter');
+    await p.keyboard.press('Tab');
+    await p.keyboard.type('Child line');
+    await sleep(800);
+    await p.locator('#outline-editor p', { hasText: 'Parent line' }).click();
+    const chapter = (await all()).find((e) => e.kind === 'chapter' && !e.deleted);
+    await command('Send selection to');
+    await sleep(400);
+    await p.keyboard.type(chapter.title);
+    await sleep(300);
+    await p.keyboard.press('Enter');
+    await sleep(1200);
+    const rows = await all();
+    const parent = rows.find((e) => e.text === 'Parent line');
+    const child = rows.find((e) => e.text === 'Child line');
+    assert.equal(parent.kind, 'para');
+    assert.equal(child.kind, 'para');
+    assert.equal(parent.parent_id, chapter.id);
+    assert.equal(child.parent_id, chapter.id);
+    assert.ok(parent.sort < child.sort, 'parent comes first');
+    assert.ok(!parent.deleted && !child.deleted);
+    assert.doesNotMatch(await p.locator('#outline-editor').innerText(), /Parent line/);
+    await p.keyboard.press('Control+J');
+    await p.waitForSelector('#editor .ProseMirror', { state: 'visible' });
+    await sleep(800);
+    assert.match(await p.locator('#editor .ProseMirror').innerText(), /Parent line\s+Child line/);
+  });
+
   await check('no page errors', async () => assert.deepEqual(errors, []));
 } finally {
   await browser.close();
