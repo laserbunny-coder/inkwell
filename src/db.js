@@ -255,7 +255,18 @@ export async function setMeta(key, value) {
   return done(tx);
 }
 
-export async function allEntries() {
+// Every entry. Saved versions (History's full copies of a chapter or page)
+// are left out unless asked for: they pile up over the years, and lists,
+// search and the Trash never need them. They're read straight from the kind
+// index on both sides of 'version', so they aren't even loaded.
+export async function allEntries({ versions = false } = {}) {
   const db = await open();
-  return result(db.transaction('entries').objectStore('entries').getAll());
+  const tx = db.transaction('entries');
+  if (versions) return result(tx.objectStore('entries').getAll());
+  const kind = tx.objectStore('entries').index('kind');
+  const [before, after] = await Promise.all([
+    result(kind.getAll(IDBKeyRange.upperBound('version', true))),
+    result(kind.getAll(IDBKeyRange.lowerBound('version', true)))
+  ]);
+  return before.concat(after);
 }
