@@ -25,7 +25,7 @@ export async function pageMarkdown(page) {
 }
 
 export async function vaultFiles() {
-  const rows = await allEntries();
+  const rows = await allEntries({ versions: true });
   const live = rows.filter((r) => !r.deleted);
   // The Trash is kept in vault.json, but not written out as files.
   const shown = live.filter((r) => !r.fields?.trashed);
