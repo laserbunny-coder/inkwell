@@ -32,6 +32,7 @@ import { SlashMenu, setSlashItems } from './slash.js';
 import { openHandleMenu } from './handlemenu.js';
 import { openPicker } from './picker.js';
 import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
+import { takeShares, snapshotPending } from './share.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf } from './library.js';
 
@@ -2877,7 +2878,25 @@ const askServer = (body) => (window.__claude ? window.__claude(body) : sync.invo
 const canAskServer = () => !!window.__claude || (!!sync.user && navigator.onLine && !!sync.backend?.invoke);
 // Until writing-out is set up, the recording's chip says so; nothing else nags.
 function writeOut() {
-  return writeOutPending({ ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows) });
+  const opts = { ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows) };
+  return Promise.all([writeOutPending(opts), snapshotPending(opts)]);
+}
+// Things shared into Inkwell from other apps land on today's page, with the
+// caret on the empty line under the last one, for what it sparked.
+let landing = null;
+function landShares() {
+  landing ||= landSharesNow().finally(() => { landing = null; });
+  return landing;
+}
+async function landSharesNow() {
+  const added = await takeShares().catch((e) => { console.error(e); return []; });
+  if (!added.length) return;
+  await Promise.all([store.close(editor.state.doc), notebook.close()]);
+  await applyRemote(added.flatMap((a) => a.rows));
+  const last = added.at(-1);
+  await go({ view: 'notebook', pageId: last.line.parent_id, line: last.spark.id });
+  toast(added.length === 1 ? 'Kept on today’s page' : `${added.length} things kept on today’s page`);
+  writeOut();
 }
 // Lands a capture on today's page and shows it there.
 async function showCapture({ line, rows }) {
@@ -2897,6 +2916,8 @@ async function openCapture(opts) {
   capture.show(opts);
 }
 window.addEventListener('online', () => writeOut());
+// Sharing again while Inkwell is already open brings it to the front.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) landShares(); });
 
 // ---------- start ----------
 
@@ -2921,11 +2942,11 @@ async function start() {
   const recovered = await recoverRecording().catch((e) => { console.error(e); return null; });
   if (recovered) { toast('A recording that was cut short is kept on today’s page'); await showCapture(recovered); }
   // The home-screen shortcut (long-press the icon, then Capture) opens straight in.
-  const asked = new URLSearchParams(location.search).get('capture');
-  if (asked) {
-    history.replaceState(history.state, '', location.pathname);
-    openCapture();
-  }
+  const asked = new URLSearchParams(location.search);
+  if (asked.has('capture') || asked.has('share')) history.replaceState(history.state, '', location.pathname);
+  if (asked.get('capture')) openCapture();
+  // Shared from another app (or shared earlier and not yet placed).
+  await landShares();
   sync.start();
   conflicts.count();
   // Deleted things are remembered for six months, then this device lets go of them.

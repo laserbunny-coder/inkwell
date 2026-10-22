@@ -776,3 +776,5 @@ html.capturing body { overflow: hidden; }
 .capture[data-state="error"] .cap-hint { color: var(--accent); }
 .cap-auto { position: absolute; bottom: max(22px, env(safe-area-inset-bottom)); left: 16px; right: 16px; text-align: center; color: var(--faint); font-size: 13px; display: flex; gap: 8px; align-items: center; justify-content: center; }
 .capture[data-state="recording"] .cap-auto, .capture[data-state="saving"] .cap-auto { visibility: hidden; }
+/* Links on lines and in the writing: the accent colour, a quiet underline. */
+.ProseMirror a[href] { color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); text-underline-offset: 3px; }
