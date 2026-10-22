@@ -71,8 +71,11 @@ try {
     await p.keyboard.type('See [[');
     await p.waitForSelector('.picker', { state: 'visible' });
     await p.keyboard.type('Harbour');
+    // Under load the list can lag the typing; wait until the list has caught up.
+    await p.waitForFunction(() => /Harbour/.test(document.querySelector('.picker li[aria-selected="true"]')?.textContent || ''));
     await p.keyboard.press('Enter');
-    await sleep(700);
+    await p.waitForSelector('#outline-editor a.ref');
+    await sleep(300);
     await p.locator('#outline-editor a.ref').click();
     await sleep(500);
     assert.equal(await p.locator('#nb-title').innerText(), 'Harbour');
