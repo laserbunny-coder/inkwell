@@ -321,6 +321,30 @@ try {
     assert.ok([...table.values()].some((r) => !r.deleted && r.text === 'Book for Leo #gift' && !r.fields?.mirror), 'the original Book line is still there');
   });
 
+  await check('changes that have waited days for the cloud are called out', async () => {
+    const ctx = await browser.newContext();
+    await ctx.addInitScript(() => {
+      window.__syncBackend = { user: async () => null, onAuth() {}, signIn() {}, signOut() {}, push: async () => [], pull: async () => [], subscribe() {}, unsubscribe() {} };
+    });
+    const p = await ctx.newPage();
+    await p.goto(URL);
+    await p.waitForSelector('#editor .ProseMirror');
+    await p.evaluate(() => new Promise((res) => {
+      const r = indexedDB.open('writing');
+      r.onsuccess = () => {
+        const tx = r.result.transaction(['entries', 'outbox'], 'readwrite');
+        const old = Date.now() - 3 * 864e5;
+        tx.objectStore('entries').put({ id: 'pa_old', kind: 'para', parent_id: 'x', sort: 1, text: 'Old', tags: [], links: [], created_at: old, updated_at: old });
+        tx.objectStore('outbox').put({ id: 'pa_old' });
+        tx.oncomplete = () => res();
+      };
+    }));
+    await p.reload();
+    await p.waitForFunction(() => /Not synced for 3 days/.test(document.querySelector('#sync').textContent), null, { timeout: 5000 });
+    assert.match(await p.locator('#sync').textContent(), /Sign in/);
+    await ctx.close();
+  });
+
   await check('no page errors', async () => assert.deepEqual([...laptop.errors, ...phone.errors], []));
 } finally {
   await browser.close();
