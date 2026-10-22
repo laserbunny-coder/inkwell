@@ -11,6 +11,7 @@ import { BlockHandle } from './blocks.js';
 import { getMeta, setMeta, putEntries, children, getEntry, snapshots, byKind, onLocalWrites, forgetDeleted, isTrashed } from './db.js';
 import { trash, restore, trashed, deleteForever, contents } from './trash.js';
 import { searchIndex } from './search.js';
+import { keep, versionsOf, tidyHistory, blocks as docBlocks, compare, deletedFrom, bringBack } from './history.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, toast, closeMenu } from './menu.js';
 import { Sync } from './sync.js';
 import { ensureSeed, outline, entry, wordCount } from './model.js';
@@ -989,6 +990,7 @@ async function pageMenu(page) {
   return [
     { label: 'Open', run: () => go({ view: 'notebook', pageId: p.id }) },
     { label: 'Rename…', run: () => rename(p) },
+    { label: 'History…', run: async () => { await go({ view: 'notebook', pageId: p.id }); await openHistory(); } },
     { label: 'Move to', sub: [{ label: 'Loose pages (no book)', current: !p.parent_id, run: () => movePage(p, null) }, ...all.map((b) => ({ label: b.title || 'Untitled', current: p.parent_id === b.id, run: () => movePage(p, b.id) }))] },
     'sep',
     { label: 'Move to Trash', danger: true, run: () => toTrash(p) }
@@ -1003,6 +1005,7 @@ async function chapterMenu(chapter) {
   return [
     { label: 'Open', run: () => go({ view: 'write', chapterId: ch.id }) },
     { label: 'Rename…', run: () => rename(ch) },
+    { label: 'History…', run: async () => { await go({ view: 'write', chapterId: ch.id }); await openHistory(); } },
     { label: 'Move up', run: () => moveChapter(ch, -1) },
     { label: 'Move down', run: () => moveChapter(ch, 1) },
     ...(acts.length > 1 ? [{ label: `Move to ${level.toLowerCase()}`, sub: acts.map((a) => ({ label: a.title, current: a.id === ch.parent_id, run: () => moveChapterToAct(ch, a) })) }] : []),
@@ -1388,53 +1391,214 @@ document.addEventListener('pointerdown', (e) => {
   if (e.pointerType !== 'mouse' && !e.target.closest('.outline, .edge-left')) body.classList.remove('show-outline');
 });
 
-// ---------- history ----------
+// ---------- history: every version, what changed, and bringing things back ----------
 
-let historyPreview = null;
-let historyPick = null;
+// What history is about right now: the chapter being written, or the page open in the notebook.
+function historyTarget() {
+  if (inNotebook() && notebook.page) {
+    return {
+      root: notebook.page, name: titleOf(notebook.page), ed: notebook.editor,
+      save: () => notebook.close(),
+      reload: async () => { const doc = await notebook.store.refresh(); notebook.replaceDoc(doc, false); },
+      replace: (doc) => notebook.replaceDoc(doc, true)
+    };
+  }
+  if (writing() && state.chapterId) {
+    return {
+      root: store.chapter, name: store.chapter?.title || 'this chapter', ed: editor,
+      save: () => store.close(editor.state.doc),
+      reload: async () => { await store.close(editor.state.doc); editor.commands.setContent(await store.refresh(), { emitUpdate: false }); notes.layout(); refreshWords(); },
+      replace: (doc) => editor.commands.setContent(doc, { emitUpdate: true })
+    };
+  }
+  return null;
+}
+
+let historyAt = null;
+let historyMode2 = 'changes';
+
+const dayLabel = (ms) => {
+  const d = new Date(ms);
+  const today = new Date();
+  const y = new Date(); y.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === y.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', ...(d.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {}) });
+};
 
 async function openHistory() {
   const panel = $('.history');
-  if (!panel.hidden) { panel.hidden = true; editor.commands.focus(); return; }
-  await store.close(editor.state.doc);
+  if (!panel.hidden) { closeHistory(); return; }
+  const t = historyTarget();
+  if (!t) { toast('Open a chapter or a page to see its history'); return; }
+  await t.save();
+  historyAt = t;
   panel.hidden = false;
+  $('#history-title').textContent = `History · ${t.name}`;
+  await renderHistoryList();
+}
+
+function closeHistory() {
+  $('.history').hidden = true;
+  historyAt = null;
+  currentEditor().commands.focus();
+}
+
+async function renderHistoryList(pick) {
+  const t = historyAt;
+  if (!t) return;
   const list = $('#history-list');
   list.replaceChildren();
-  const rows = await snapshots(state.chapterId);
-  if (!rows.length) {
-    $('#history-meta').textContent = 'No earlier versions yet. A version is kept every time you pause typing.';
-  }
-  for (const snap of rows) {
-    const li = document.createElement('li');
-    const b = document.createElement('button');
-    b.type = 'button';
-    const when = new Date(snap.at);
-    b.innerHTML = `<div class="when"></div><div class="meta"></div>`;
-    b.querySelector('.when').textContent = when.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    b.querySelector('.meta').textContent = `${snap.words.toLocaleString()} words`;
-    b.addEventListener('click', () => showSnapshot(snap, b));
+  const [versions, deleted] = await Promise.all([versionsOf(t.root.id), deletedFrom(t.root)]);
+  const item = (cls, top, sub, run) => {
+    const li = make('li');
+    const b = make('button', cls);
+    b.append(make('div', 'when', top), make('div', 'meta', sub));
+    b.addEventListener('click', () => { list.querySelectorAll('button').forEach((x) => x.classList.toggle('current', x === b)); run(); });
     li.append(b);
     list.append(li);
+    return b;
+  };
+  let first = null;
+  if (deleted.length) {
+    const what = t.root.kind === 'chapter' ? 'paragraph' : 'line';
+    const b = item('history-deleted', `Deleted ${what}s`, `${deleted.length} you can bring back`, () => showDeleted(deleted));
+    if (pick === 'deleted') first = b;
+  }
+  let day = '';
+  versions.forEach((v, i) => {
+    const label = dayLabel(v.at);
+    if (label !== day) { day = label; list.append(Object.assign(make('li', 'history-day'), { textContent: label })); }
+    const older = versions[i + 1];
+    const diff = older ? v.words - older.words : 0;
+    const change = !older ? 'first kept' : diff > 0 ? `+${diff.toLocaleString()} words` : diff < 0 ? `−${(-diff).toLocaleString()} words` : 'words changed';
+    const time = new Date(v.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const b = item('', `${time}${v.label ? ` · ${v.label}` : ''}`, `${v.words.toLocaleString()} words · ${change}`, () => showVersion(v));
+    if (!first && i === 0 && pick !== 'deleted') first = b;
+  });
+  if (!versions.length && !deleted.length) {
+    list.append(Object.assign(make('li', 'hint'), { textContent: 'Nothing yet. A version is kept each time you pause typing.' }));
+    $('#history-meta').textContent = '';
+    $('#history-doc').replaceChildren();
+    $('.history-actions').hidden = true;
+    $('.history-modes').hidden = true;
+  }
+  first?.click();
+}
+
+let historyPick = null;
+function showVersion(v) {
+  historyPick = v;
+  $('.history-modes').hidden = false;
+  $('.history-actions').hidden = false;
+  $('#history-meta').textContent = `${dayLabel(v.at)}, ${new Date(v.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} · ${v.words.toLocaleString()} words`;
+  document.querySelectorAll('.history-modes button').forEach((b) => b.classList.toggle('on', b.dataset.mode === historyMode2));
+  const box = $('#history-doc');
+  box.replaceChildren();
+  box.classList.toggle('outline-like', historyAt.root.kind !== 'chapter');
+  if (historyMode2 === 'read') {
+    for (const bl of docBlocks(v.doc)) box.append(blockEl(bl, 'same'));
+    return;
+  }
+  const changes = compare(v.doc, historyAt.ed.getJSON());
+  if (changes.every((c) => c.op === 'same')) box.append(make('p', 'hint', 'This is the same as now.'));
+  for (const c of changes) {
+    const el = blockEl(c.block, c.op, c.words);
+    if (c.op === 'del') {
+      const back = make('button', 'ghost-btn history-back', 'Bring back');
+      back.addEventListener('click', async () => {
+        insertBlock(historyAt, c.block, c.after);
+        await historyAt.save();
+        back.replaceWith(make('span', 'hint', 'Back in the text'));
+        el.classList.add('brought');
+      });
+      el.append(back);
+    }
+    box.append(el);
   }
 }
 
-function showSnapshot(snap, button) {
-  document.querySelectorAll('#history-list button').forEach((x) => x.classList.toggle('current', x === button));
-  historyPick = snap;
-  if (!historyPreview) historyPreview = new Editor({ element: $('#history-doc'), extensions, editable: false });
-  historyPreview.commands.setContent(snap.doc, { emitUpdate: false });
-  $('#history-meta').textContent = new Date(snap.at).toLocaleString();
-  $('.history-actions').hidden = false;
+// One paragraph or line of a version, marked by how it changed since.
+function blockEl(bl, op, wordsDiff) {
+  const p = make('div', `hb hb-${op}${bl.scene ? ' hb-scene' : ''}`);
+  if (bl.line) p.style.paddingLeft = `${bl.depth * 22}px`;
+  const text = make('span', 'hb-text');
+  if (op === 'chg' && wordsDiff) for (const w of wordsDiff) text.append(w.op === '=' ? document.createTextNode(w.t) : make(w.op === '-' ? 'del' : 'ins', '', w.t));
+  else text.textContent = bl.scene ? `§ ${bl.text || 'Scene'}` : bl.text || ' ';
+  p.append(text);
+  if (op === 'del') p.title = 'Taken out since this version';
+  if (op === 'ins') p.title = 'Added since this version';
+  return p;
 }
 
-$('#history-restore').addEventListener('click', () => {
-  if (!historyPick) return;
-  editor.commands.setContent(historyPick.doc, { emitUpdate: true });
-  $('.history').hidden = true;
-  editor.commands.focus('end');
+// Put a paragraph (or line) from an old version back into the text, after the
+// one it used to follow.
+function insertBlock(t, bl, afterEid) {
+  const ed = t.ed;
+  let node = bl.node;
+  if (node.type === 'listItem') node = { ...node, content: (node.content || []).filter((c) => c.type !== 'bulletList') };
+  let at = null;
+  ed.state.doc.descendants((n, pos) => {
+    if (at !== null) return false;
+    if (afterEid && n.attrs?.eid === afterEid && (n.type.name === 'listItem' || !node.type.startsWith('list'))) { at = pos + n.nodeSize; return false; }
+    return true;
+  });
+  if (at === null) at = node.type === 'listItem' ? 1 : 0;
+  ed.chain().insertContentAt(at, node).run();
+}
+
+function showDeleted(rows) {
+  historyPick = null;
+  $('.history-modes').hidden = true;
+  $('.history-actions').hidden = true;
+  const what = historyAt.root.kind === 'chapter' ? 'paragraphs' : 'lines';
+  $('#history-meta').textContent = `Deleted ${what}, newest first. Each comes back where it was.`;
+  const box = $('#history-doc');
+  box.replaceChildren();
+  box.classList.remove('outline-like');
+  for (const r of rows) {
+    const p = make('div', 'hb hb-del');
+    p.append(make('span', 'hb-text', r.text), make('span', 'hb-when', `deleted ${ago(r.updated_at)}`));
+    const back = make('button', 'ghost-btn history-back', 'Bring back');
+    back.addEventListener('click', async () => {
+      await historyAt.save();
+      await bringBack(r, historyAt.root);
+      await historyAt.reload();
+      back.replaceWith(make('span', 'hint', 'Back in the text'));
+      p.classList.add('brought');
+    });
+    p.append(back);
+    box.append(p);
+  }
+}
+
+$('.history-modes').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-mode]');
+  if (!b || !historyPick) return;
+  historyMode2 = b.dataset.mode;
+  showVersion(historyPick);
+});
+
+$('#history-restore').addEventListener('click', async () => {
+  const t = historyAt;
+  if (!historyPick || !t) return;
+  const ok = await ask({
+    title: 'Go back to this version?',
+    body: 'The text as it is now is kept in the history first, so you can come back to it.',
+    ok: 'Go back to it'
+  });
+  if (!ok) return;
+  await t.save();
+  const now = t.ed.getJSON();
+  await keep(t.root.id, now, t.ed.getText(), { force: true, label: 'Before going back' });
+  t.replace(historyPick.doc);
+  await t.save();
+  closeHistory();
+  toast('Back to the earlier version. The one before is in History.');
 });
 $('#history-copy').addEventListener('click', () => {
-  if (historyPreview) navigator.clipboard.writeText(historyPreview.getText({ blockSeparator: '\n\n' }));
+  if (historyPick) navigator.clipboard.writeText(docBlocks(historyPick.doc).map((b) => b.text).join('\n\n'));
+  toast('Copied');
 });
 
 // ---------- page width and text size (per device) ----------
@@ -1612,7 +1776,7 @@ const commands = [
   { group: 'write', label: 'Next alternate (word, or else paragraph)', keys: '⌥↓', run: () => flip(editor, 1), when: writing },
   { group: 'write', label: 'Previous alternate', keys: '⌥↑', run: () => flip(editor, -1), when: writing },
   { group: 'write', label: 'Scene break', keys: `${mod}⇧↵`, run: () => editor.chain().focus().insertSceneBreak().run(), when: writing },
-  { group: 'write', label: 'History: earlier versions of this chapter', keys: `${mod}⇧H`, run: openHistory, when: writing },
+  { group: 'write', label: 'History: earlier versions, and what was deleted (this chapter or page)', keys: `${mod}⇧H`, run: openHistory, when: () => writing() || (inNotebook() && !!notebook.page) },
   { group: 'write', label: 'Note categories: add, rename, recolour', keys: '', run: () => notes.editTypes() },
   { group: 'view', label: 'Sidebar (keep open)', keys: `${mod}1`, run: () => body.classList.toggle('pin-outline') },
   { group: 'view', label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: writing },
@@ -1953,7 +2117,7 @@ document.addEventListener('keydown', (e) => {
   else if (m && e.shiftKey && k === 'e' && writing()) { e.preventDefault(); editor.commands.focus(); alts.toggle({ scope: 'word', focusAdd: true }); }
   else if (m && e.shiftKey && k === 'd' && writing() && editor.isFocused) { e.preventDefault(); newParagraphVersion(editor); }
   else if (e.altKey && !e.shiftKey && !m && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && writing() && editor.isFocused) { if (flip(editor, e.key === 'ArrowDown' ? 1 : -1)) e.preventDefault(); }
-  else if (m && e.shiftKey && k === 'h' && writing()) { e.preventDefault(); openHistory(); }
+  else if (m && e.shiftKey && k === 'h' && (writing() || inNotebook())) { e.preventDefault(); openHistory(); }
   else if (m && e.shiftKey && k === 'l') { e.preventDefault(); toggleTheme(); }
   else if (e.altKey && !m && e.code === 'BracketRight') { e.preventDefault(); setPage(currentWidth() + 40, currentSize()); }
   else if (e.altKey && !m && e.code === 'BracketLeft') { e.preventDefault(); setPage(currentWidth() - 40, currentSize()); }
@@ -1963,7 +2127,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape') {
     if (alts.isOpen) alts.close();
     if (!$('.page-settings').hidden) { $('.page-settings').hidden = true; currentEditor().commands.focus(); }
-    if (!$('.history').hidden) { $('.history').hidden = true; editor.commands.focus(); }
+    if (!$('.history').hidden) closeHistory();
     if (!$('.tag-results').hidden) { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
     if (!$('.versions').hidden) conflicts.close();
     if (!$('.shortcuts').hidden) toggleShortcuts();
@@ -1998,6 +2162,8 @@ async function start() {
   conflicts.count();
   // Deleted things are remembered for six months, then this device lets go of them.
   forgetDeleted(Date.now() - 182 * 864e5).catch((e) => console.warn(e));
+  // Old versions thin out: all from two days, hourly for two weeks, daily after.
+  setTimeout(() => tidyHistory().catch((e) => console.warn(e)), 8000);
   if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('./sw.js');
 }
 

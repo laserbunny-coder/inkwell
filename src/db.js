@@ -230,6 +230,18 @@ export async function snapshots(chapterId) {
   return rows.sort((a, b) => b.at - a.at);
 }
 
+export async function allSnapshots() {
+  const db = await open();
+  return result(db.transaction('snapshots').objectStore('snapshots').getAll());
+}
+
+export async function dropSnapshots(ids) {
+  const db = await open();
+  const tx = db.transaction('snapshots', 'readwrite');
+  for (const id of ids) tx.objectStore('snapshots').delete(id);
+  return done(tx);
+}
+
 export async function getMeta(key) {
   const db = await open();
   const row = await result(db.transaction('meta').objectStore('meta').get(key));

@@ -1,4 +1,5 @@
-import { children, getEntry, putEntries, addSnapshot, snapshots } from './db.js';
+import { children, getEntry, putEntries, snapshots } from './db.js';
+import { keep } from './history.js';
 import { tagsIn, wordCount } from './model.js';
 import { refsIn } from './outline.js';
 import { placeSorts } from './order.js';
@@ -145,7 +146,7 @@ export class ChapterStore {
     const s = JSON.stringify(json);
     if (!this.chapter || s === this.lastSnapshot) return;
     this.lastSnapshot = s;
-    await addSnapshot({ chapter_id: this.chapter.id, at: Date.now(), words: wordCount(text), doc: json });
+    await keep(this.chapter.id, json, text);
   }
 
   // Let go of the chapter without saving anything more to it (it went to the Trash).

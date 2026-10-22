@@ -588,3 +588,27 @@ body.line-dragging, body.line-dragging * { user-select: none; }
 .card-wrap.drop-before::before, .card-wrap.drop-after::after { content: ''; position: absolute; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--accent); }
 .card-wrap.drop-before::before { left: -9px; }
 .card-wrap.drop-after::after { right: -9px; }
+
+/* History: a timeline by day, and what changed since each version */
+#history-list .history-day { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 14px 10px 4px; }
+#history-list .history-deleted .when { color: var(--accent); }
+.history-modes { display: flex; gap: 4px; border: 1px solid var(--line); border-radius: 99px; padding: 3px; }
+.history-modes button { border: 0; background: transparent; color: var(--muted); border-radius: 99px; padding: 6px 12px; }
+.history-modes button.on { background: var(--ink); color: var(--bg); }
+.hb { position: relative; margin: 0 0 .9em; padding: 2px 8px; border-radius: 4px; }
+#history-doc.outline-like .hb { margin-bottom: .35em; font-size: .92em; }
+.hb-same { color: var(--muted); }
+.hb-ins { background: rgba(70, 140, 80, .14); }
+.hb-del { background: rgba(190, 70, 50, .12); }
+.hb-del .hb-text { text-decoration: line-through; text-decoration-color: rgba(190, 70, 50, .6); }
+.hb-del.brought { background: var(--tint); }
+.hb-del.brought .hb-text { text-decoration: none; }
+.hb ins { background: rgba(70, 140, 80, .2); text-decoration: none; border-radius: 2px; }
+.hb del { background: rgba(190, 70, 50, .18); text-decoration: line-through; border-radius: 2px; }
+.hb-scene { text-align: center; font-size: .8em; letter-spacing: .08em; text-transform: uppercase; }
+.hb-when { display: block; font-family: var(--ui); font-size: 12px; color: var(--faint); margin-top: 2px; }
+.history-back { font-family: var(--ui); font-size: 13px; padding: 4px 8px; margin-left: 6px; color: var(--accent); }
+@media (max-width: 700px) {
+  #history-list { width: 100%; max-height: 34vh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .history-preview { padding: 18px 16px; }
+}

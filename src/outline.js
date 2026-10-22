@@ -2,7 +2,8 @@ import { Node, Extension, InputRule, mergeAttributes } from '@tiptap/core';
 import Document from '@tiptap/extension-document';
 import { Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import { children, getEntry, putEntries } from './db.js';
+import { children, getEntry, putEntries, snapshots } from './db.js';
+import { keep } from './history.js';
 import { newId, tagsIn } from './model.js';
 import { placeSorts, bySort } from './order.js';
 
@@ -572,12 +573,26 @@ export class OutlineStore {
     this.version = 0;
     this.savedVersion = 0;
     this.timer = null;
+    this.snapTimer = null;
+    this.lastSnapshot = '';
     this.saving = Promise.resolve();
   }
 
   get idle() { return this.version === this.savedVersion; }
 
+  // A version for the page's history, kept when typing pauses (see history.js).
+  async snapshot(json, text) {
+    const s = JSON.stringify(json);
+    if (!this.page || s === this.lastSnapshot) return;
+    if (!this.lastSnapshot) this.lastSnapshot = JSON.stringify((await snapshots(this.page.id))[0]?.doc || null);
+    if (s === this.lastSnapshot) return;
+    this.lastSnapshot = s;
+    await keep(this.page.id, json, text);
+  }
+
   async load(pageId, fallback) {
+    clearTimeout(this.snapTimer);
+    this.lastSnapshot = '';
     this.page = (await getEntry(pageId)) || fallback;
     const rows = await descendants(pageId);
     this.cache = new Map(rows.map((r) => [r.id, r]));
@@ -625,6 +640,8 @@ export class OutlineStore {
     this.onStatus('saving');
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.flush(doc), 300);
+    clearTimeout(this.snapTimer);
+    this.snapTimer = setTimeout(() => this.snapshot(doc.toJSON(), doc.textContent), 4000);
   }
 
   flush(doc) {
@@ -637,6 +654,7 @@ export class OutlineStore {
 
   async close(doc) {
     if (this.page && !this.idle) await this.flush(doc);
+    if (this.page && this.snapTimer) { clearTimeout(this.snapTimer); this.snapTimer = null; await this.snapshot(doc.toJSON(), doc.textContent); }
   }
 
   async write(page, doc, version) {
