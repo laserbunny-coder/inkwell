@@ -34,6 +34,7 @@ import { openPicker } from './picker.js';
 import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
 import { takeShares, snapshotPending } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
+import { sendToDaybook, sendPending } from './daybook.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf } from './library.js';
 
@@ -568,7 +569,7 @@ const sync = new Sync({
     syncEl.dataset.state = s;
     delete syncEl.dataset.stale;
     document.body.dataset.sync = s;
-    if (s === 'synced') { conflicts.count(); checkSpace().catch(() => {}); writeOut(); }
+    if (s === 'synced') { conflicts.count(); checkSpace().catch(() => {}); writeOut(); openAsked(); }
     if (s !== 'syncing') checkUnsent().catch(() => {});
   },
   onRemote: applyRemote
@@ -2418,6 +2419,7 @@ const commands = [
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
   ...Object.entries(LISTS).map(([list, name]) => ({ group: 'page', label: `Make this page a ${name.toLowerCase()} (Claude links each title)`, keys: '', run: () => makeList(list), when: () => inNotebook() && notebook.page?.kind === 'page' && listOf(notebook.page) !== list })),
+  { group: 'tidy', label: 'Send this line to Daybook (a task in its Inbox, linked back here)', keys: '', run: sendLineToDaybook, when: () => inNotebook() && !!notebook.currentLine() },
   { group: 'page', label: 'Stop Claude linking titles on this page', keys: '', run: () => makeList(null), when: () => inNotebook() && !!listOf(notebook.page) },
   { group: 'tidy', label: 'This page: rename, move to a world or trash…', keys: '', run: async () => popMenu(null, await pageMenu(notebook.page), menuSpot()), when: () => inNotebook() && notebook.page?.kind === 'page' },
   { group: 'tidy', label: 'This area: rename, move or trash…', keys: '', run: async () => popMenu(null, await areaMenu({ id: state.libArea }), menuSpot()), when: () => view() === 'library' && !!state.libArea },
@@ -2885,7 +2887,30 @@ const canAskServer = () => !!window.__claude || (!!sync.user && navigator.onLine
 // Until writing-out is set up, the recording's chip says so; nothing else nags.
 function writeOut() {
   const opts = { ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows) };
-  return Promise.all([writeOutPending(opts), snapshotPending(opts)]);
+  return Promise.all([writeOutPending(opts), snapshotPending(opts), sendPending({ send: sendTask, canSend: canSendTask })]);
+}
+// Send a line to Daybook, as a task in its Inbox that links back here.
+const sendTask = (task) => (window.__daybook ? window.__daybook(task) : sync.backend.addTask(task));
+const canSendTask = () => !!window.__daybook || (!!sync.user && navigator.onLine && !!sync.backend?.addTask);
+async function sendLineToDaybook() {
+  const id = notebook.currentLine();
+  if (!id) return;
+  await notebook.close();
+  const row = await sendToDaybook(id, location.origin + location.pathname);
+  if (!row) { toast('Write something on the line first'); return; }
+  await applyRemote([row]);
+  const sent = await sendPending({ send: sendTask, canSend: canSendTask });
+  toast(sent ? 'Sent to Daybook’s Inbox' : 'It’ll go to Daybook’s Inbox once you’re online and signed in');
+}
+// A link from Daybook (or anywhere) to ?open=<id> opens that line where it
+// lives, once this device has it.
+let asking = null;
+async function openAsked() {
+  if (!asking) return;
+  const row = await getEntry(asking);
+  if (!row) return;
+  asking = null;
+  openEntry(row.id);
 }
 // Things shared into Inkwell from other apps land on today's page, with the
 // caret on the empty line under the last one, for what it sparked.
@@ -2969,8 +2994,9 @@ async function start() {
   if (recovered) { toast('A recording that was cut short is kept on today’s page'); await showCapture(recovered); }
   // The home-screen shortcut (long-press the icon, then Capture) opens straight in.
   const asked = new URLSearchParams(location.search);
-  if (asked.has('capture') || asked.has('share')) history.replaceState(history.state, '', location.pathname);
+  if (asked.has('capture') || asked.has('share') || asked.has('open')) history.replaceState(history.state, '', location.pathname);
   if (asked.get('capture')) openCapture();
+  if (asked.get('open')) { asking = asked.get('open'); await openAsked(); }
   // Shared from another app (or shared earlier and not yet placed).
   await landShares();
   sync.start();
