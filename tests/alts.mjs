@@ -38,6 +38,7 @@ try {
     await page.evaluate(() => window.__editor.chain().focus().setTextSelection(7).run());
     await page.keyboard.press('Control+Shift+E');
     await page.waitForSelector('.alt-panel:not([hidden]) input');
+    await page.waitForFunction(() => document.activeElement?.matches('.alt-panel input'));
     await page.keyboard.type('drifted');
     await page.keyboard.press('Enter');
     await page.keyboard.type('marched');
@@ -103,6 +104,8 @@ try {
     await page.evaluate(() => window.__editor.chain().focus().setTextSelection(7).run());
     await page.keyboard.press('Control+Shift+E');
     await page.waitForSelector('.alt-panel:not([hidden]) input');
+    // The panel takes focus a moment after it shows; typing before then lands in the text.
+    await page.waitForFunction(() => document.activeElement?.matches('.alt-panel input'));
     await page.keyboard.type('port');
     await page.keyboard.press('Enter');
     await page.keyboard.press('Escape');
