@@ -111,7 +111,8 @@ function paragraphMenu({ node, index, count, handle }) {
         : { label: 'Scene break above', run: at((from) => editor.chain().insertContentAt(from, { type: 'sceneBreak' }).focus().run()) }],
       [
         { label: 'Move up', keys: 'Alt+⇧↑', stay: true, half: 'move', off: index === 0, run: () => handle.move(index, index - 1) },
-        { label: 'Move down', keys: 'Alt+⇧↓', stay: true, half: 'move', off: index >= count - 1, run: () => handle.move(index, index + 2) }
+        { label: 'Move down', keys: 'Alt+⇧↓', stay: true, half: 'move', off: index >= count - 1, run: () => handle.move(index, index + 2) },
+        node.attrs.eid && { label: 'Move to…', run: () => setTimeout(() => sendSelectionPicker([node.attrs.eid]), 120) }
       ],
       [{ label: 'Delete', danger: true, run: () => {
         const { from, to } = handle.range(index);
@@ -321,7 +322,7 @@ function lineMenu(eid) {
         { label: 'Indent', keys: 'Tab', stay: true, half: 'indent', off: index === 0, run: on(() => ed.chain().focus().sinkListItem('listItem').scrollIntoView().run()) },
         { label: 'Move up', keys: 'Alt+⇧↑', stay: true, half: 'move', off: index === 0, run: on(() => moveLine(ed, -1)) },
         { label: 'Move down', keys: 'Alt+⇧↓', stay: true, half: 'move', off: index >= siblings - 1, run: on(() => moveLine(ed, 1)) },
-        { label: 'Move to another page…', run: on(moveLinePicker) }
+        { label: 'Move to…', run: () => setTimeout(() => sendSelectionPicker([eid]), 120) }
       ],
       [{ label: under ? `Delete line and the ${lines(under)} under it` : 'Delete line', danger: true, run: () => {
         const now = findLine(eid);
@@ -2054,9 +2055,8 @@ function selectedIds(ed) {
   return ids;
 }
 
-function sendSelectionPicker() {
-  const ed = currentEditor();
-  const ids = selectedIds(ed);
+// ids: the paragraphs or lines to send (the six-dot menu passes its own one).
+function sendSelectionPicker(ids = selectedIds(currentEditor())) {
   if (!ids.length) return;
   const here = inNotebook() ? notebook.page?.id : state.chapterId;
   const send = (id, fallback) => async () => {
