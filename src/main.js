@@ -33,6 +33,7 @@ import { openHandleMenu } from './handlemenu.js';
 import { openPicker } from './picker.js';
 import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
 import { takeShares, snapshotPending } from './share.js';
+import { LISTS, listOf, setList, fillList } from './lists.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf } from './library.js';
 
@@ -245,7 +246,10 @@ let railTimer;
 const notebook = new Notebook({
   onPick: openPicker,
   onOpen: openEntry,
-  onStatus: (s) => { if (inNotebook()) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved'; },
+  onStatus: (s) => {
+    if (inNotebook()) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved';
+    if (s === 'saved') listSoon();
+  },
   onChange: () => { clearTimeout(railTimer); railTimer = setTimeout(renderRail, 100); },
   // A mirror edited a paragraph of the chapter that's open behind the notebook.
   onSources: (rows) => { if (rows.some((r) => r.parent_id === state.chapterId)) applyRemoteChapter(); },
@@ -2413,6 +2417,8 @@ const commands = [
   { group: 'view', label: 'Show or hide scene numbers', keys: '', run: () => setShown('codes', hidden().has('codes')), when: () => writing() && isScript() },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
+  ...Object.entries(LISTS).map(([list, name]) => ({ group: 'page', label: `Make this page a ${name.toLowerCase()} (Claude links each title)`, keys: '', run: () => makeList(list), when: () => inNotebook() && notebook.page?.kind === 'page' && listOf(notebook.page) !== list })),
+  { group: 'page', label: 'Stop Claude linking titles on this page', keys: '', run: () => makeList(null), when: () => inNotebook() && !!listOf(notebook.page) },
   { group: 'tidy', label: 'This page: rename, move to a world or trash…', keys: '', run: async () => popMenu(null, await pageMenu(notebook.page), menuSpot()), when: () => inNotebook() && notebook.page?.kind === 'page' },
   { group: 'tidy', label: 'This area: rename, move or trash…', keys: '', run: async () => popMenu(null, await areaMenu({ id: state.libArea }), menuSpot()), when: () => view() === 'library' && !!state.libArea },
   { group: 'tidy', label: 'Trash: bring things back', keys: '', run: showTrash },
@@ -2916,6 +2922,26 @@ async function openCapture(opts) {
   capture.show(opts);
 }
 window.addEventListener('online', () => writeOut());
+
+// Watch and read lists: once typing pauses, Claude links the titles you've
+// moved on from (never the line you're on).
+let listTimer;
+function listSoon(ms = 4000) {
+  clearTimeout(listTimer);
+  listTimer = setTimeout(() => {
+    if (!inNotebook() || !listOf(notebook.page)) return;
+    fillList(notebook.page, { ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows), skip: notebook.editor.isFocused ? notebook.currentLine() : null });
+  }, ms);
+}
+async function makeList(list) {
+  if (!notebook.page) return;
+  await notebook.close();
+  const page = await setList(notebook.page.id, list);
+  if (!page) return;
+  notebook.page = notebook.store.page = page;
+  toast(list ? `Claude will link each title on this ${LISTS[list].toLowerCase()}` : 'Claude won’t link titles on this page');
+  listSoon(500);
+}
 // Sharing again while Inkwell is already open brings it to the front.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) landShares(); });
 

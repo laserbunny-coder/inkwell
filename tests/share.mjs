@@ -33,7 +33,7 @@ function remote(op, arg) {
       bucket.set('u1/fi_snapshot1', { path: 'u1/fi_snapshot1', type: 'image/png', data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' });
       return { title: 'Ninja reel by @studio', summary: 'A short reel of a ninja failing to hide behind a lamppost.', site: 'Instagram', image: { id: 'fi_snapshot1', type: 'image/png', size: 68, name: 'Ninja reel.png' } };
     }
-    return { title: 'Somebody else’s title', summary: 'A fan wiki about the Ninja Bunch.', site: 'example.com', image: null };
+    return { title: 'Somebody else’s title', summary: 'A fan wiki about the Ninja Bunch.', site: 'example.com', image: null, tag: '#research' };
   }
 }
 const fake = () => {
@@ -117,12 +117,14 @@ try {
     assert.ok(spark, 'what it sparked is written under it');
   });
 
-  await check('the snapshot keeps its summary under the link, and a name you gave isn’t replaced', async () => {
+  await check('the snapshot keeps its summary under the link, Claude adds one tag, and a name you gave isn’t replaced', async () => {
     await page.waitForFunction(() => /fan wiki about the Ninja Bunch/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''), null, { timeout: 8000 });
     const all = await lines(page);
     const top = all.find((l) => l.fields?.url === 'https://example.com/ninjas');
     assert.equal(top.fields.snapshot.summary, 'A fan wiki about the Ninja Bunch.');
-    assert.match(top.text, /The Ninja Bunch fan wiki/);
+    assert.match(top.text, /The Ninja Bunch fan wiki.* #research$/);
+    assert.equal(top.fields.claude_tag, 'research');
+    assert.ok(top.tags.includes('research'));
     const kids = all.filter((l) => l.parent_id === top.id).sort((a, b) => a.sort - b.sort);
     assert.match(kids[0].text, /fight list/, 'your line first');
     assert.equal(kids[1].fields.by, 'claude');
