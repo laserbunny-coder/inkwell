@@ -176,7 +176,7 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 .corner:hover, .corner:focus-within { opacity: 1; }
 
 /* Page width and text size */
-.page-settings { position: fixed; left: 50%; top: 14vh; transform: translateX(-50%); z-index: 61; width: min(420px, calc(100% - 32px)); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.18); padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.page-settings { position: fixed; left: 50%; top: 14vh; max-height: 82vh; overflow-y: auto; transform: translateX(-50%); z-index: 61; width: min(420px, calc(100% - 32px)); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.18); padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
 .page-settings label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
 .page-settings .row { display: flex; justify-content: space-between; }
 .page-settings input[type=range] { width: 100%; accent-color: var(--accent); min-height: 32px; }
@@ -185,8 +185,10 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 .font-groups { display: flex; gap: 2px; }
 .font-groups button { border: 0; background: transparent; padding: 3px 10px; border-radius: 99px; color: var(--muted); font-size: 12px; }
 .font-groups button.current { background: var(--tint); color: var(--accent); font-weight: 600; }
-.font-list { display: flex; flex-wrap: wrap; gap: 6px; }
-.font-list button { font-family: var(--prose); border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 6px 11px; font-size: 16px; line-height: 1.3; color: var(--ink); }
+.font-list { display: flex; flex-direction: column; gap: 4px; }
+.font-list button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 7px 11px; color: var(--ink); }
+.font-list .font-name { font-family: var(--prose); font-size: 17px; line-height: 1.3; }
+.font-list .font-about { font-family: var(--ui); font-size: 12px; line-height: 1.4; color: var(--muted); }
 .font-list button:hover { border-color: var(--faint); }
 .font-list button.current { border-color: var(--accent); color: var(--accent); }
 
