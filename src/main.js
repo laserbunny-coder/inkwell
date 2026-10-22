@@ -19,6 +19,7 @@ import { chapterMarkdown, bookMarkdown, download } from './export.js';
 import { EntryRef, TagMarks } from './outline.js';
 import { retitleLinks, freshenRefs } from './links.js';
 import { keepStorage, oldestUnsent, unsentLabel, STALE_AFTER } from './keep.js';
+import { setMoveHooks, moveEntries } from './move.js';
 import { Conflicts } from './conflicts.js';
 import { vaultZip, pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain } from './script.js';
@@ -537,6 +538,13 @@ async function checkUnsent() {
 }
 setInterval(() => checkUnsent().catch(() => {}), 36e5);
 
+setMoveHooks({
+  open: () => [
+    { rootId: state.chapterId, editor, store },
+    { rootId: notebook.page?.id, editor: notebook.editor, store: notebook.store }
+  ],
+  refresh: (rows) => applyRemote(rows)
+});
 const conflicts = new Conflicts({ onApplied: (rows) => applyRemote(rows) });
 // Progress keeps a small daily tally; it's noted a little after you stop typing.
 let tallyTimer = null;
@@ -1968,6 +1976,7 @@ const commands = [
   { group: 'sync', label: 'Export the whole book as Markdown', keys: '', run: exportBook, when: () => writing() && !!state.project && !isScript() },
   { group: 'sync', label: 'Export this script as Fountain', keys: '', run: exportFountain, when: () => writing() && isScript() },
   { group: 'sync', label: 'Back up everything (download all as files)', keys: '', run: exportVault },
+  { group: 'tidy', label: 'Send selection to… a chapter, page or day', keys: '', run: () => setTimeout(sendSelectionPicker, 120), when: () => writing() || inNotebook() },
   { group: 'tidy', label: 'This book: rename, move, change kind or trash…', keys: '', run: async () => popMenu(null, await bookMenu(await currentBook()), menuSpot()), when: () => !!currentBookId() },
   { group: 'tidy', label: 'Change what this book is (novel, screenplay, notes)…', keys: '', run: async () => { const b = await currentBook(); popMenu(null, KINDS.map(([id, label]) => ({ label, current: bookType(b) === id, run: () => setKind(b, id) })), menuSpot()); }, when: () => !!currentBookId() },
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
@@ -2028,6 +2037,45 @@ function moveLinePicker() {
     for (const pg of (await byKind('page')).filter((x) => !x.deleted && x.id !== notebook.page?.id).sort((a, c) => c.updated_at - a.updated_at)) out.push({ label: pg.title || 'Untitled page', keys: 'page', run: send(pg.id) });
     const days = (await byKind('day')).filter((d) => !d.deleted && d.id !== notebook.page?.id).sort((a, c) => (a.title < c.title ? 1 : -1)).slice(0, 30);
     for (const d of days) out.push({ label: titleOf(d), keys: 'day', run: send(d.id) });
+    return out;
+  });
+}
+
+// Send selection to…: the paragraphs or lines the selection touches (or the
+// one the caret is in) move together to a chapter, page or day.
+function selectedIds(ed) {
+  const { from, to } = ed.state.selection;
+  const ids = [];
+  ed.state.doc.descendants((node, pos) => {
+    if (pos + node.nodeSize < from || pos > to) return false;
+    if (node.attrs?.eid && (node.type.name === 'listItem' || node.isBlock)) { ids.push(node.attrs.eid); return false; }
+    return true;
+  });
+  return ids;
+}
+
+function sendSelectionPicker() {
+  const ed = currentEditor();
+  const ids = selectedIds(ed);
+  if (!ids.length) return;
+  const here = inNotebook() ? notebook.page?.id : state.chapterId;
+  const send = (id, fallback) => async () => {
+    const n = await moveEntries(ids, id, { fallback });
+    if (n) statusEl.textContent = `Moved ${n === 1 ? '' : `${n} `}to ${fallback ? titleOf(fallback) : titleOf(await getEntry(id))}`;
+  };
+  const day = (offset) => { const d = new Date(); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  openPalette('move', async () => {
+    const out = [];
+    for (const [label, iso] of [['Today', day(0)], ['Tomorrow', day(1)], ['Yesterday', day(-1)]]) {
+      const id = dayId(iso);
+      if (id !== here) out.push({ label, keys: 'day', run: send(id, entry('day', { id, title: iso })) });
+    }
+    for (const ch of (await byKind('chapter')).filter((x) => !gone(x) && x.id !== here).sort((a, c) => c.updated_at - a.updated_at)) {
+      const book = await bookOf(ch);
+      if (book && !gone(book)) out.push({ label: `${ch.title || 'Untitled'} · ${book.title || 'Untitled'}`, keys: 'chapter', run: send(ch.id) });
+    }
+    for (const pg of (await byKind('page')).filter((x) => !gone(x) && x.id !== here).sort((a, c) => c.updated_at - a.updated_at)) out.push({ label: pg.title || 'Untitled page', keys: 'page', run: send(pg.id) });
+    for (const d of (await byKind('day')).filter((x) => !x.deleted && x.id !== here).sort((a, c) => (a.title < c.title ? 1 : -1)).slice(0, 30)) out.push({ label: titleOf(d), keys: 'day', run: send(d.id) });
     return out;
   });
 }
