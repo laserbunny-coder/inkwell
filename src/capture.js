@@ -1,4 +1,4 @@
-import { putEntries, getEntry, children, getMeta, setMeta, CLAUDE } from './db.js';
+import { putEntries, getEntry, children, getMeta, setMeta, topTags, CLAUDE } from './db.js';
 import { entry, tagsIn } from './model.js';
 import { GAP } from './order.js';
 import { addFile, localFile, uploadPending, lengthLabel } from './files.js';
@@ -111,7 +111,7 @@ export function writeOutPending({ ask, canAsk, onRows }) {
       setFileNote(it.file, 'writing out…');
       let answer;
       try {
-        answer = await ask({ mode: 'capture', file: it.file, duration: it.duration || 0 });
+        answer = await ask({ mode: 'capture', file: it.file, duration: it.duration || 0, tags: await topTags(40) });
       } catch (e) {
         setFileNote(it.file, e.code === 'no-transcriber' ? 'waiting for writing-out to be set up' : 'waiting to be written out');
         if (e.code === 'no-transcriber') break;
@@ -131,29 +131,47 @@ export function writeOutPending({ ask, canAsk, onRows }) {
   return busy;
 }
 
+// Claude's one #tag goes at the end of a line (unless it's there already),
+// and the line remembers it was Claude's (fields.claude_tag).
+export function withTag(row, tag) {
+  const t = String(tag || '').toLowerCase().replace(/^#/, '').replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-+|-+$/g, '');
+  if (!t || (row.tags || []).includes(t)) return row;
+  const content = [...(row.content || []), { type: 'text', text: ` #${t}` }];
+  const text = textOf(content);
+  return { ...row, content, text, tags: tagsIn(text), fields: { ...row.fields, claude_tag: t } };
+}
+
+// A link to something the capture named (a film, a book), as Claude's line.
+export const linkContent = (label, url) => [{ type: 'text', text: label, marks: [{ type: 'link', attrs: { href: url } }] }];
+
 // The words go into the capture's line (after the recording, before #idea).
 // If you've already written on that line, they go just under it instead, so
-// nothing you typed is touched. Claude's outline lines go under that.
-export async function placeWriteOut(it, { transcript = '', outline = [] }) {
+// nothing you typed is touched. Claude's outline lines go under that, then
+// links to anything it named; Claude's #tag goes on the line.
+export async function placeWriteOut(it, { transcript = '', outline = [], tag = '', refs = [] }) {
   const line = await getEntry(it.line);
   if (!line || line.deleted) return [];
   const words = transcript.trim();
   const rows = [];
   const kids = await children(line.id);
   let sort = kids.length ? Math.max(...kids.map((k) => k.sort || 0)) : 0;
-  const child = (id, text, by) => {
+  const child = (id, text, by, content = text ? [{ type: 'text', text }] : null) => {
     sort += GAP;
     const prev = kids.find((k) => k.id === id);
-    return { ...(prev || entry('line', { id })), kind: 'line', parent_id: line.id, sort: prev?.sort ?? sort, text, content: text ? [{ type: 'text', text }] : null, tags: tagsIn(text), links: [], deleted: false, updated_at: Date.now(), fields: { ...(prev?.fields || {}), done: false, gather: null, gathered: null, mirror: null }, ...(by ? { _by: by } : {}) };
+    return { ...(prev || entry('line', { id })), kind: 'line', parent_id: line.id, sort: prev?.sort ?? sort, text, content, tags: tagsIn(text), links: [], deleted: false, updated_at: Date.now(), fields: { ...(prev?.fields || {}), done: false, gather: null, gathered: null, mirror: null }, ...(by ? { _by: by } : {}) };
   };
+  let top = line;
   if (words) {
     if (line.text === it.wrote) {
       const content = [...(line.content || []).filter((n) => n.type !== 'text'), { type: 'text', text: ` ${words} #idea` }];
       const text = textOf(content);
-      rows.push({ ...line, content, text, tags: tagsIn(text), updated_at: Date.now() });
+      top = { ...line, content, text, tags: tagsIn(text) };
     } else rows.push(child(`${line.id}-t`, words));
   }
+  const tagged = withTag(top, tag);
+  if (tagged !== line) rows.unshift({ ...tagged, updated_at: Date.now() });
   outline.filter((s) => typeof s === 'string' && s.trim()).slice(0, 12).forEach((s, i) => rows.push(child(`${line.id}-o${i + 1}`, s.trim(), CLAUDE)));
+  refs.filter((r) => r?.label && /^https?:\/\//.test(r.url || '')).slice(0, 6).forEach((r, i) => rows.push(child(`${line.id}-r${i + 1}`, r.label, CLAUDE, linkContent(r.label, r.url))));
   if (rows.length) await putEntries(rows);
   return rows;
 }

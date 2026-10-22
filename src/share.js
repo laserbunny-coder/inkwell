@@ -1,4 +1,5 @@
-import { putEntries, getEntry, children, getMeta, setMeta, CLAUDE } from './db.js';
+import { putEntries, getEntry, children, getMeta, setMeta, topTags, CLAUDE } from './db.js';
+import { withTag } from './capture.js';
 import { entry, tagsIn } from './model.js';
 import { GAP } from './order.js';
 import { addFile } from './files.js';
@@ -113,7 +114,7 @@ export function snapshotPending({ ask, canAsk, onRows }) {
     for (const it of items) {
       let snap;
       try {
-        snap = await ask({ mode: 'snapshot', url: it.url });
+        snap = await ask({ mode: 'snapshot', url: it.url, words: it.wrote || '', tags: await topTags(40) });
       } catch (e) {
         // A page that can't be read stays a plain link; anything else tries again later.
         if (e.status && e.status < 500 && e.status !== 429) await unqueue(it.line);
@@ -130,7 +131,7 @@ export function snapshotPending({ ask, canAsk, onRows }) {
 // The snapshot is kept on the line (fields.snapshot). If the line is as it was
 // shared, a better name goes on the link and the page's picture goes in front;
 // the short summary goes under it as Claude's line, after yours.
-export async function placeSnapshot(it, { title = '', summary = '', site = '', image = null }) {
+export async function placeSnapshot(it, { title = '', summary = '', site = '', image = null, tag = '' }) {
   const line = await getEntry(it.line);
   if (!line || line.deleted) return [];
   const rows = [];
@@ -145,7 +146,7 @@ export async function placeSnapshot(it, { title = '', summary = '', site = '', i
     }
   }
   const text = textOf(content);
-  rows.push({ ...line, content, text, tags: tagsIn(text), fields: { ...line.fields, snapshot: { title, summary, site, image: image?.id || null, at: now } }, updated_at: now });
+  rows.push(withTag({ ...line, content, text, tags: tagsIn(text), fields: { ...line.fields, snapshot: { title, summary, site, image: image?.id || null, at: now } }, updated_at: now }, tag));
   if (summary) {
     const kids = await children(line.id);
     const id = `${line.id}-s`;
