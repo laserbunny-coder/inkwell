@@ -2,7 +2,7 @@ import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { AltMark } from './alts.js';
 import { OutlineDoc, LineIds, EntryRef, TagMarks, GatherBadge, mirrorKey, OutlineFold, foldKey, OutlineStore, descendants } from './outline.js';
-import { getEntry, linkedFrom, byKind, byTag, putEntries, children, isTrashed } from './db.js';
+import { getEntry, getMany, linkedFrom, byKind, byTag, putEntries, children, isTrashed } from './db.js';
 import { entry } from './model.js';
 import { bySort } from './order.js';
 import { moveEntry } from './move.js';
@@ -25,8 +25,9 @@ const shiftDay = (iso, n) => { const d = fromIso(iso); d.setDate(d.getDate() + n
 export async function renderLinkedFrom(targetId, box, list, onOpen) {
   const rows = await linkedFrom(targetId);
   list.replaceChildren();
+  const roots = await rootsOf(rows);
   for (const row of rows) {
-    const root = await rootOf(row);
+    const root = roots.get(row.id);
     if (!root || root.deleted || row.id === targetId) continue;
     const li = document.createElement('li');
     const b = document.createElement('button');
@@ -52,6 +53,30 @@ export async function rootOf(row) {
   let r = row;
   for (let i = 0; r && i < 50 && !ROOTS.includes(r.kind); i++) r = await getEntry(r.parent_id);
   return r;
+}
+
+// The same for many rows at once: one read per level instead of one per
+// row, so a tag or a page linked from a thousand lines still opens quickly.
+// Returns a Map from each row's id to its home (or undefined).
+export async function rootsOf(rows) {
+  const known = new Map(rows.map((r) => [r.id, r]));
+  const out = new Map();
+  let walking = rows.map((r) => ({ id: r.id, at: r }));
+  for (let depth = 0; walking.length && depth < 50; depth++) {
+    const next = [];
+    const need = new Set();
+    for (const w of walking) {
+      if (!w.at || ROOTS.includes(w.at.kind)) { out.set(w.id, w.at); continue; }
+      next.push(w);
+      if (w.at.parent_id && !known.has(w.at.parent_id)) need.add(w.at.parent_id);
+    }
+    if (need.size) {
+      const ids = [...need];
+      (await getMany(ids)).forEach((r, i) => known.set(ids[i], r));
+    }
+    walking = next.map((w) => ({ id: w.id, at: w.at.parent_id ? known.get(w.at.parent_id) : undefined }));
+  }
+  return out;
 }
 
 // The same short id for the same gathering line and original, on any device.
@@ -307,9 +332,10 @@ export class Notebook {
     for (const { gather: tag } of spots) {
       if (found.has(tag)) continue;
       const rows = [];
-      for (const row of await byTag(tag)) {
-        if (row.kind !== 'line' && row.kind !== 'para') continue;
-        const root = await rootOf(row);
+      const tagged = (await byTag(tag)).filter((row) => row.kind === 'line' || row.kind === 'para');
+      const roots = await rootsOf(tagged);
+      for (const row of tagged) {
+        const root = roots.get(row.id);
         if (root && !root.deleted && !isTrashed(root) && root.id !== page.id) rows.push(row);
       }
       found.set(tag, rows.sort((a, b) => a.created_at - b.created_at));
@@ -442,18 +468,35 @@ export class Notebook {
     $('#tag-results-title').textContent = `#${tag}`;
     const list = $('#tag-results-list');
     list.replaceChildren();
-    for (const row of rows) {
-      const root = await rootOf(row);
-      const li = document.createElement('li');
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.innerHTML = '<span class="from"></span><span class="line"></span>';
-      b.querySelector('.from').textContent = root ? titleOf(root) : '';
-      b.querySelector('.line').textContent = row.text;
-      b.addEventListener('click', () => { panel.hidden = true; this.onOpen(row.id); });
-      li.append(b);
-      list.append(li);
-    }
+    // The newest few hundred first; the rest a tap away, so a tag used for
+    // years still opens at once.
+    const show = async (from, to) => {
+      const part = rows.slice(from, to);
+      const roots = await rootsOf(part);
+      for (const row of part) {
+        const root = roots.get(row.id);
+        const li = document.createElement('li');
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.innerHTML = '<span class="from"></span><span class="line"></span>';
+        b.querySelector('.from').textContent = root ? titleOf(root) : '';
+        b.querySelector('.line').textContent = row.text;
+        b.addEventListener('click', () => { panel.hidden = true; this.onOpen(row.id); });
+        li.append(b);
+        list.append(li);
+      }
+      if (to < rows.length) {
+        const li = document.createElement('li');
+        const more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'more';
+        more.textContent = `Show ${Math.min(500, rows.length - to).toLocaleString()} more of ${(rows.length - to).toLocaleString()}`;
+        more.addEventListener('click', () => { li.remove(); show(to, to + 500); });
+        li.append(more);
+        list.append(li);
+      }
+    };
+    await show(0, 300);
     panel.hidden = false;
   }
 

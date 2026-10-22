@@ -1,4 +1,4 @@
-import { allEntries, isTrashed } from './db.js';
+import { eachEntry, isTrashed } from './db.js';
 import { titleOf } from './notebook.js';
 
 // Search inside everything written: paragraphs in chapters, lines on pages and
@@ -10,18 +10,57 @@ const fold = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 const TEXT = ['para', 'heading', 'line', 'note', 'scene'];
 const NAMED = ['project', 'chapter', 'page', 'area'];
 
-export async function searchIndex() {
-  const rows = (await allEntries()).filter((r) => !r.deleted && !isTrashed(r));
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  const items = [];
+// The index is built once (the first time you search) and then kept up to
+// date as things are written, here or on another device, so every search
+// after the first is immediate however much you've written. It keeps only
+// what a search shows: the words, the kind, and where each piece lives.
+let index = null;
+let building = null;
+let waiting = [];
+
+const slim = (r) => ({ id: r.id, kind: r.kind, parent_id: r.parent_id, title: r.title, updated_at: r.updated_at, mirror: !!r.fields?.mirror });
+
+function itemFor(r) {
+  // A mirror's words are its original's, which is found already.
+  if (r.deleted || isTrashed(r) || r.fields?.mirror) return null;
+  const text = TEXT.includes(r.kind) ? (r.kind === 'scene' ? r.title : r.text) : NAMED.includes(r.kind) ? r.title : '';
+  return text && text.trim() ? { row: slim(r), text, key: fold(text), named: NAMED.includes(r.kind) } : null;
+}
+
+// Rows written or received since the index was built.
+export function searchChanged(rows) {
+  // Changes while it's being built are applied once it's ready.
+  if (!index) { if (building) waiting.push(...rows); return; }
   for (const r of rows) {
-    // A mirror's words are its original's, which is found already.
-    if (r.fields?.mirror) continue;
-    const text = TEXT.includes(r.kind) ? (r.kind === 'scene' ? r.title : r.text) : NAMED.includes(r.kind) ? r.title : '';
-    if (text && text.trim()) items.push({ row: r, text, key: fold(text), named: NAMED.includes(r.kind) });
+    if (r.kind === 'version' || r.kind === 'tally') continue;
+    if (r.deleted || isTrashed(r)) index.byId.delete(r.id); else index.byId.set(r.id, slim(r));
+    const it = itemFor(r);
+    if (it) index.items.set(r.id, it); else index.items.delete(r.id);
   }
+  index.whereCache.clear();
+  index.last = null;
+}
+
+export async function searchIndex() {
+  if (!index) {
+    const byId = new Map();
+    const items = new Map();
+    // A slice at a time, so typing elsewhere is never held up by it.
+    building ||= eachEntry((r) => {
+      if (r.deleted || isTrashed(r)) return;
+      byId.set(r.id, slim(r));
+      const it = itemFor(r);
+      if (it) items.set(r.id, it);
+    }).then(() => {
+      index = { byId, items, whereCache: new Map() };
+      const late = waiting;
+      waiting = [];
+      searchChanged(late);
+    }).finally(() => { building = null; waiting = []; });
+    await building;
+  }
+  const { byId, items, whereCache } = index;
   // Where a piece lives: "Chapter 3 · My Novel", "Harbour (page)", "Tuesday, October 21".
-  const whereCache = new Map();
   const where = (r) => {
     if (whereCache.has(r.id)) return whereCache.get(r.id);
     let home = r.kind === 'note' ? byId.get(r.parent_id) : r;
@@ -41,11 +80,17 @@ export async function searchIndex() {
     return label;
   };
   return {
-    size: items.length,
+    size: items.size,
     find(query, limit = 50) {
       const words = fold(query).split(/\s+/).filter(Boolean);
       if (!words.length || query.trim().length < 2) return [];
-      const hits = items.filter((it) => words.every((w) => it.key.includes(w)));
+      // Typing on narrows the last search rather than starting over.
+      const q = words.join(' ');
+      const last = index.last;
+      const pool = last && q.startsWith(last.q) ? last.hits : items.values();
+      const hits = [];
+      for (const it of pool) if (words.every((w) => it.key.includes(w))) hits.push(it);
+      index.last = { q, hits };
       // Names first, then whole-phrase matches, then the most recently changed.
       const phrase = words.join(' ');
       hits.sort((a, b) => (b.named - a.named) || (b.key.includes(phrase) - a.key.includes(phrase)) || (b.row.updated_at - a.row.updated_at));

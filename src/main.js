@@ -8,9 +8,10 @@ import { AltMark, ParagraphVersions, AltPanel, flip, newParagraphVersion, altsHe
 import { ChapterStore } from './chapter.js';
 import { NotesLayer } from './notes.js';
 import { BlockHandle } from './blocks.js';
-import { getMeta, setMeta, putEntries, children, getEntry, snapshots, byKind, onLocalWrites, forgetDeleted, isTrashed } from './db.js';
+import { bySort } from './order.js';
+import { getMeta, setMeta, putEntries, children, getEntry, snapshots, byKind, onLocalWrites, forgetDeleted, isTrashed, topTags } from './db.js';
 import { trash, restore, trashed, deleteForever, contents } from './trash.js';
-import { searchIndex } from './search.js';
+import { searchIndex, searchChanged } from './search.js';
 import { keep, versionsOf, tidyHistory, blocks as docBlocks, compare, deletedFrom, bringBack } from './history.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, toast, closeMenu } from './menu.js';
 import { Sync } from './sync.js';
@@ -548,9 +549,17 @@ setMoveHooks({
 const conflicts = new Conflicts({ onApplied: (rows) => applyRemote(rows) });
 // Progress keeps a small daily tally; it's noted a little after you stop typing.
 let tallyTimer = null;
-const tallySoon = (ms = 20000) => { clearTimeout(tallyTimer); tallyTimer = setTimeout(() => recordProgress().catch((e) => console.error(e)), ms); };
+// It counts everything, so while you keep writing it's noted at most every ten
+// minutes (and whenever the app is put away), not after every pause.
+let tallyAt = 0;
+const tallySoon = (ms = 20000) => {
+  clearTimeout(tallyTimer);
+  const wait = Math.max(ms, tallyAt + 10 * 60000 - Date.now());
+  tallyTimer = setTimeout(() => { tallyAt = Date.now(); recordProgress().catch((e) => console.error(e)); }, wait);
+};
 onLocalWrites((rows) => {
   sync.soon();
+  searchChanged(rows);
   if (rows.some((r) => r.kind !== 'tally')) tallySoon();
   retitleLinks(rows).then((changed) => { if (changed) { freshenRefs(editor); freshenRefs(notebook.editor); } }).catch((e) => console.error(e));
 });
@@ -571,6 +580,7 @@ async function dropEmptySeed(keep) {
 }
 
 async function applyRemote(rows) {
+  searchChanged(rows);
   if (rows.some((r) => r.kind === 'settings')) await notes.reloadTypes();
   if (state.chapterId && rows.some((r) => r.links?.includes(state.chapterId))) renderChapterLinks();
   const structural = rows.some((r) => ['project', 'act', 'chapter', 'area', 'page'].includes(r.kind));
@@ -844,14 +854,13 @@ async function drawRail() {
   tree.replaceChildren(...out);
   renderScenes();
 
-  const tags = new Map();
-  for (const l of await byKind('line')) if (!l.deleted) for (const t of l.tags || []) tags.set(t, (tags.get(t) || 0) + 1);
-  $('#shelves-tags').replaceChildren(...[...tags].sort((a, b) => b[1] - a[1]).slice(0, 30).map(([t]) => {
+  const tags = await topTags(30);
+  $('#shelves-tags').replaceChildren(...tags.map((t) => {
     const b = make('button', 'tag-chip', `#${t}`);
     b.addEventListener('click', () => notebook.showTag(t));
     return b;
   }));
-  $('#shelves-tags-label').hidden = !tags.size;
+  $('#shelves-tags-label').hidden = !tags.length;
 }
 
 let scenesTimer;
@@ -1810,7 +1819,8 @@ async function step(dir) {
 
 const progressPanel = new StatsPanel($('.stats'), { onClose: () => currentEditor().commands.focus() });
 document.addEventListener('visibilitychange', () => { if (document.hidden) recordProgress().catch(() => {}); });
-setTimeout(() => recordProgress().catch((e) => console.error(e)), 4000);
+// Once things have settled after opening.
+setTimeout(() => recordProgress().catch((e) => console.error(e)), 20000);
 const toggleShortcuts = () => { const s = $('.shortcuts'); s.hidden = !s.hidden; if (s.hidden) currentEditor().commands.focus(); };
 document.querySelectorAll('[data-show]').forEach((c) => c.addEventListener('change', () => setShown(c.dataset.show, c.checked)));
 $('#focus-mode').addEventListener('change', toggleFocus);
@@ -2121,8 +2131,13 @@ async function places(only) {
   for (const b of allBooks.sort((a, c) => c.updated_at - a.updated_at)) out.push({ label: b.title || 'Untitled', keys: 'book', run: () => go({ view: 'project', id: b.id }) });
   if (only === 'books') return out;
   for (const a of allAreas) out.push({ label: a.title, keys: 'area', run: () => go({ view: 'library', area: a.id }) });
+  // Every act and chapter in two reads, rather than a read per book and act.
+  const [allActs, allChapters] = await Promise.all([byKind('act'), byKind('chapter')]);
+  const under = new Map();
+  for (const r of [...allActs, ...allChapters]) (under.get(r.parent_id) || under.set(r.parent_id, []).get(r.parent_id)).push(r);
+  const inOrder = (id) => (under.get(id) || []).sort(bySort);
   for (const b of allBooks.filter(hasManuscript)) {
-    for (const act of await outline(b.id)) for (const ch of act.chapters) out.push({ label: `${ch.title} · ${b.title}`, keys: 'chapter', run: () => go({ view: 'write', chapterId: ch.id }) });
+    for (const act of inOrder(b.id)) if (act.kind === 'act') for (const ch of inOrder(act.id)) out.push({ label: `${ch.title} · ${b.title}`, keys: 'chapter', run: () => go({ view: 'write', chapterId: ch.id }) });
   }
   for (const p of (await byKind('page')).filter((x) => !x.deleted)) out.push({ label: p.title || 'Untitled page', keys: 'page', run: () => go({ view: 'notebook', pageId: p.id }) });
   const days = (await byKind('day')).filter((d) => !d.deleted).sort((a, c) => (a.title < c.title ? 1 : -1)).slice(0, 30);
@@ -2220,7 +2235,16 @@ function filterPalette() {
     }
   } else {
     const inGroup = (c) => !paletteGroup || paletteMode !== 'commands' || c.group === paletteGroup;
-    paletteItems = paletteSource.filter((c) => usable(c) && inGroup(c) && c.label.toLowerCase().includes(q)).slice(0, 60);
+    // Best matches first: the whole name, then names starting with it, then a
+    // word starting with it, then anywhere (so "Page 3" isn't lost behind "Page 30").
+    const rank = (label) => {
+      const l = label.toLowerCase();
+      if (l === q) return 0;
+      if (l.startsWith(q)) return l[q.length] === ' ' ? 1 : 2;
+      return l.includes(` ${q}`) ? 3 : 4;
+    };
+    paletteItems = paletteSource.filter((c) => usable(c) && inGroup(c) && c.label.toLowerCase().includes(q))
+      .map((c, i) => ({ c, i, r: q ? rank(c.label) : 0 })).sort((a, b) => a.r - b.r || a.i - b.i).slice(0, 60).map((x) => x.c);
     // Not a title? Offer to look inside the writing too.
     if (paletteMode === 'go' && q.length > 1) {
       const text = $('#palette-input').value.trim();
@@ -2372,6 +2396,8 @@ async function start() {
   keepStorage();
   // Old versions thin out: all from two days, hourly for two weeks, daily after.
   setTimeout(() => tidyHistory().catch((e) => console.warn(e)), 8000);
+  // Search reads everything once; do it while idle so the first search is quick.
+  setTimeout(() => (window.requestIdleCallback || setTimeout)(() => searchIndex().catch((e) => console.warn(e))), 15000);
   if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('./sw.js');
 }
 

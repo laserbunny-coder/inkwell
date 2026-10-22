@@ -1,4 +1,4 @@
-import { allEntries, putEntries } from './db.js';
+import { allEntries, eachEntry, putEntries } from './db.js';
 import { entry, wordCount } from './model.js';
 import { scriptLines, LINES_PER_PAGE } from './script.js';
 
@@ -14,9 +14,22 @@ const dateOf = (day) => { const [y, m, d] = day.split('-').map(Number); return n
 const addDays = (day, n) => { const d = dateOf(day); d.setDate(d.getDate() + n); return dayOf(d.getTime()); };
 const MANUSCRIPT = ['novel', 'screenplay'];
 
+// A paragraph, line or note boiled down to what counting needs, so a big
+// vault can be read a slice at a time without holding every word in memory.
+// Everything else (books, acts, chapters, tallies) is kept as it is.
+const COUNTED = ['para', 'heading', 'line', 'note'];
+function brief(r) {
+  if (r.deleted) return null;
+  if (!COUNTED.includes(r.kind)) return r;
+  const text = r.text || '';
+  return { id: r.id, kind: r.kind, parent_id: r.parent_id, w: wordCount(text), n: text.trim().length, el: r.fields?.el, day: dayOf(r.created_at || r.updated_at || 0) };
+}
+
 // What everything comes to now, plus each piece of writing with the day it was started.
-export function measure(rows) {
-  const live = new Map(rows.filter((r) => !r.deleted).map((r) => [r.id, r]));
+export function measure(rows) { return tally(rows.map(brief).filter(Boolean)); }
+
+function tally(items) {
+  const live = new Map(items.map((r) => [r.id, r]));
   const bookCache = new Map();
   const bookOf = (r) => {
     const seen = [];
@@ -36,22 +49,19 @@ export function measure(rows) {
   let notes = 0;
   const pieces = [];
   for (const r of live.values()) {
-    const text = r.text || '';
     if (r.kind === 'para' || r.kind === 'heading') {
       const book = bookOf(r);
       const type = book?.fields?.type || 'novel';
       if (!book || !MANUSCRIPT.includes(type)) continue;
-      const w = wordCount(text);
-      const l = type === 'screenplay' && r.kind === 'para' ? scriptLines([{ el: r.fields?.el || 'action', n: text.trim().length }]) : 0;
+      const l = type === 'screenplay' && r.kind === 'para' ? scriptLines([{ el: r.el || 'action', n: r.n }]) : 0;
       books[book.id] ||= { w: 0, l: 0 };
-      books[book.id].w += w;
+      books[book.id].w += r.w;
       books[book.id].l += l;
       info[book.id] = { title: book.title || 'Untitled', type };
-      pieces.push({ scope: book.id, day: dayOf(r.created_at || r.updated_at || 0), w, l });
+      pieces.push({ scope: book.id, day: r.day, w: r.w, l });
     } else if (r.kind === 'line' || r.kind === 'note') {
-      const w = wordCount(text);
-      notes += w;
-      pieces.push({ scope: 'notes', day: dayOf(r.created_at || r.updated_at || 0), w, l: 0 });
+      notes += r.w;
+      pieces.push({ scope: 'notes', day: r.day, w: r.w, l: 0 });
     }
   }
   return { books, notes, info, pieces };
@@ -71,8 +81,10 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // Notes today's totals, if they changed. The first tally ever also keeps where the day started.
 export async function record(now = Date.now()) {
-  const rows = await allEntries();
-  const m = measure(rows);
+  // Read a slice at a time, so saving never waits behind a count of everything.
+  const rows = [];
+  await eachEntry((r) => { const b = brief(r); if (b) rows.push(b); });
+  const m = tally(rows);
   const day = dayOf(now);
   const id = `tally-${day}`;
   const end = { books: m.books, notes: m.notes };
