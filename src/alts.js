@@ -36,6 +36,9 @@ export const ParagraphVersions = Extension.create({
       types: ['paragraph', 'heading'],
       attributes: {
         versions: { default: null, keepOnSplit: false, rendered: false },
+        // The rewrites Claude suggested (their words), so a paragraph showing
+        // one of them is saved as Claude's writing until you change it.
+        pclaude: { default: null, keepOnSplit: false, rendered: false },
         pvi: {
           default: 0,
           keepOnSplit: false,
@@ -543,6 +546,9 @@ export class AltPanel {
     const fresh = texts.filter((t) => !have.has(t));
     if (!fresh.length) { this.note = 'Claude didn’t come up with a new rewrite. Try again.'; return; }
     for (const t of fresh) versions.push([{ type: 'text', text: t }]);
+    const { state } = this.editor;
+    this.editor.view.dispatch(state.tr.setNodeMarkup(p.pos, undefined, { ...p.node.attrs, pclaude: [...(p.node.attrs.pclaude || []), ...fresh] }));
+    p = paragraphById(this.editor.state, p.node.attrs.eid);
     setParagraph(this.editor, p, versions, p.node.attrs.pvi || 0);
     this.target = { pos: p.pos };
     this.note = `Added ${fresh.length === 1 ? 'a rewrite' : `${fresh.length} rewrites`}. Pick one, or flip with ⌥↑ ⌥↓.`;

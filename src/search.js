@@ -8,7 +8,7 @@ import { titleOf } from './notebook.js';
 
 const fold = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const TEXT = ['para', 'heading', 'line', 'note', 'scene'];
-const NAMED = ['project', 'chapter', 'page', 'area'];
+const NAMED = ['world', 'project', 'chapter', 'page', 'area'];
 
 // The index is built once (the first time you search) and then kept up to
 // date as things are written, here or on another device, so every search
@@ -65,7 +65,7 @@ export async function searchIndex() {
     if (whereCache.has(r.id)) return whereCache.get(r.id);
     let home = r.kind === 'note' ? byId.get(r.parent_id) : r;
     const seen = new Set();
-    while (home && !['chapter', 'page', 'day', 'project', 'area'].includes(home.kind) && !seen.has(home.id)) { seen.add(home.id); home = byId.get(home.parent_id); }
+    while (home && !['chapter', 'page', 'day', 'project', 'world', 'area'].includes(home.kind) && !seen.has(home.id)) { seen.add(home.id); home = byId.get(home.parent_id); }
     let label = '';
     if (home?.kind === 'chapter') {
       let b = byId.get(home.parent_id);
@@ -73,7 +73,8 @@ export async function searchIndex() {
       label = r.id === home.id ? `Chapter · ${b?.title || ''}` : `${home.title} · ${b?.title || ''}`;
     } else if (home?.kind === 'page') label = r.id === home.id ? (byId.get(home.parent_id)?.title ? `Page · ${byId.get(home.parent_id).title}` : 'Page') : home.title || 'Untitled page';
     else if (home?.kind === 'day') label = titleOf(home);
-    else if (home?.kind === 'project') label = 'Book';
+    else if (home?.kind === 'project') label = r.id === home.id ? home.fields?.label || 'Piece' : home.title || 'Untitled';
+    else if (home?.kind === 'world') label = 'World';
     else if (home?.kind === 'area') label = 'Area';
     if (r.kind === 'note') label = `Note · ${label}`;
     whereCache.set(r.id, label);

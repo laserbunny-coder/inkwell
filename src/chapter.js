@@ -102,8 +102,11 @@ export class ChapterStore {
       const el = node.attrs.el || null;
       const versions = node.attrs.versions?.length > 1 ? node.attrs.versions : null;
       const pvi = versions ? node.attrs.pvi || 0 : 0;
+      const claude = versions && node.attrs.pclaude?.length ? node.attrs.pclaude : null;
+      const code = node.attrs.code || null;
       const same = prev && !prev.deleted && prev.sort === index && prev.kind === kind && prev.title === title && (prev.fields?.el || null) === el &&
         JSON.stringify(prev.fields?.versions || null) === JSON.stringify(versions) && (prev.fields?.pvi || 0) === pvi &&
+        JSON.stringify(prev.fields?.claude || null) === JSON.stringify(claude) && (prev.fields?.code || null) === code &&
         JSON.stringify(prev.content) === JSON.stringify(content) && prev.parent_id === chapter.id;
       if (same) return;
       const row = {
@@ -119,10 +122,13 @@ export class ChapterStore {
         deleted: false,
         updated_at: now
       };
+      delete row._by;
       if (kind === 'heading') row.fields = { ...row.fields, level: node.attrs.level };
-      if (kind === 'para') { const { el: _old, ...rest } = row.fields || {}; row.fields = el ? { ...rest, el } : rest; }
+      if (kind === 'para') { const { el: _old, code: _c, ...rest } = row.fields || {}; row.fields = { ...rest, ...(el ? { el } : {}), ...(code ? { code } : {}) }; }
       // Other versions of this paragraph, kept with it but not part of the text.
-      if (kind !== 'scene') { const { versions: _v, pvi: _i, ...rest } = row.fields || {}; row.fields = versions ? { ...rest, versions, pvi } : rest; }
+      if (kind !== 'scene') { const { versions: _v, pvi: _i, claude: _cl, ...rest } = row.fields || {}; row.fields = versions ? { ...rest, versions, pvi, ...(claude ? { claude } : {}) } : rest; }
+      // Showing a rewrite Claude suggested: these are Claude's words.
+      if (claude && claude.includes(text) && (!prev || prev.text !== text)) row._by = 'claude';
       rows.push(row);
     });
     for (const [id, prev] of this.cache) {
@@ -179,9 +185,9 @@ function readWal(id) {
 function toDoc(rows) {
   const content = rows.map((r) => {
     if (r.kind === 'scene') return { type: 'sceneBreak', attrs: { eid: r.id, title: r.title || '' } };
-    const versions = r.fields?.versions ? { versions: r.fields.versions, pvi: r.fields.pvi || 0 } : {};
+    const versions = r.fields?.versions ? { versions: r.fields.versions, pvi: r.fields.pvi || 0, ...(r.fields.claude ? { pclaude: r.fields.claude } : {}) } : {};
     if (r.kind === 'heading') return { type: 'heading', attrs: { eid: r.id, level: r.fields?.level || 2, ...versions }, ...(r.content ? { content: r.content } : {}) };
-    return { type: 'paragraph', attrs: { eid: r.id, ...(r.fields?.el ? { el: r.fields.el } : {}), ...versions }, ...(r.content ? { content: r.content } : {}) };
+    return { type: 'paragraph', attrs: { eid: r.id, ...(r.fields?.el ? { el: r.fields.el } : {}), ...(r.fields?.code ? { code: r.fields.code } : {}), ...versions }, ...(r.content ? { content: r.content } : {}) };
   });
   return { type: 'doc', content: content.length ? content : [{ type: 'paragraph' }] };
 }

@@ -1,9 +1,14 @@
 import { byKind, children, getEntry, putEntries, linkedFrom, getMeta, setMeta } from './db.js';
 import { entry, newId, outline } from './model.js';
 
-// How the vault is organized: areas (Writing, Filmmaking…) hold books and
-// notes collections; a book holds its manuscript and its own note pages.
-// Pages with no book yet are "loose" until they're moved somewhere.
+// How the vault is organized: areas (Writing, Filmmaking…) hold worlds. A
+// world is everything about one story or show: its bible (pages, which can
+// hold pages of their own) and its pieces. A piece is anything made in that
+// world at any size (a gag, an episode, a novel, a film), written as prose, a
+// script or an outline, and it can hold smaller pieces (a season holds its
+// episodes). A piece is kind 'project' (it used to be a whole book, so all
+// the manuscript code still works on it); a world is kind 'world'. Pages with
+// nowhere to live yet are "loose" until they're moved somewhere.
 
 // Starter areas, the same as Daybook's plus Writing. Fixed ids, so two devices
 // that both start fresh end up with the same areas instead of doubles.
@@ -25,7 +30,7 @@ export async function ensureAreas() {
     if (rows.length) await putEntries(rows, { fromSync: true });
     await setMeta('areasSeeded', true);
   }
-  const homeless = (await byKind('project')).filter((p) => !p.deleted && !p.area_id);
+  const homeless = [...(await byKind('world')), ...(await byKind('project')).filter((p) => !p.parent_id)].filter((p) => !p.deleted && !p.area_id);
   if (homeless.length) await putEntries(homeless.map((p) => ({ ...p, area_id: 'area-writing', updated_at: Date.now() })));
 }
 
@@ -33,14 +38,29 @@ export async function areas() {
   return (await byKind('area')).filter((a) => !a.deleted).sort((a, b) => (a.sort || 0) - (b.sort || 0) || a.title.localeCompare(b.title));
 }
 
+// Every piece, in every world (books, before worlds).
 export async function books() {
   return (await byKind('project')).filter((p) => !p.deleted);
 }
 
+export async function worlds() {
+  return (await byKind('world')).filter((w) => !w.deleted);
+}
+
+// How a piece is written: prose and scripts in the manuscript view, an
+// outline in the notebook. 'notes' is a book from before worlds that only
+// held pages.
 export const bookType = (p) => p?.fields?.type || 'novel';
-// Novels and screenplays are written in the manuscript view; notes collections are pages.
 export const hasManuscript = (p) => ['novel', 'screenplay'].includes(bookType(p));
-export const kindName = (p) => ({ novel: 'Novel', screenplay: 'Screenplay', notes: 'Notes collection' })[bookType(p)] || 'Novel';
+export const FORMATS = [['novel', 'Prose'], ['screenplay', 'Script'], ['lines', 'Outline']];
+export const formatName = (p) => ({ novel: 'Prose', screenplay: 'Script', lines: 'Outline', notes: 'Pages' })[bookType(p)] || 'Prose';
+// What a piece is, in your own words (Gag, Episode, Season…); until it has
+// one, what its format suggests.
+export const defaultLabel = (type) => ({ novel: 'Novel', screenplay: 'Screenplay', lines: 'Outline', notes: 'Notes' })[type] || 'Piece';
+export const kindName = (p) => p?.fields?.label || defaultLabel(bookType(p));
+// Where a piece is on its way out into the world.
+export const STAGES = ['Idea', 'Written', 'Boarded', 'Generated', 'Edited', 'Posted'];
+export const stageOf = (p) => p?.fields?.stage || 'Idea';
 export const areaColor = (a) => a?.fields?.color || '#A39A8B';
 
 export async function newArea(title, parentId = null) {
@@ -50,13 +70,34 @@ export async function newArea(title, parentId = null) {
   return area;
 }
 
-// A new book starts with an Idea page to think it through. A screenplay is
-// one script (a chapter) that opens on a scene heading; `lines` fills it,
-// for a script brought in from Fountain.
+// A new world starts with an Idea page in its bible, to think it through.
+export async function newWorld(title, areaId) {
+  const world = entry('world', { id: newId('wd'), title, area_id: areaId || null });
+  const idea = entry('page', { id: newId('pg'), parent_id: world.id, title: 'Idea', sort: 1 });
+  await putEntries([world, idea]);
+  return world;
+}
+
+// A new book is a new world with the book as its first piece.
 export async function newBook(type, title, areaId, lines) {
+  const world = await newWorld(title, areaId);
+  return newPiece(world.id, type, title, lines);
+}
+
+// A piece in a world, or inside another piece. A screenplay is one script (a
+// chapter) that opens on a scene heading; `lines` fills it, for a script
+// brought in from Fountain.
+export async function newPiece(parentId, type, title, lines, label) {
   const rows = [];
   const levels = type === 'novel' ? ['Act', 'Chapter', 'Scene'] : type === 'screenplay' ? ['Act', 'Script', 'Scene'] : null;
-  const project = entry('project', { title, area_id: areaId, fields: { type, ...(levels ? { levels } : {}) } });
+  const siblings = (await children(parentId)).filter((r) => r.kind === 'project');
+  const world = await worldOf({ parent_id: parentId });
+  // A script brought in with its scene numbers stays numbered.
+  const numbered = lines?.some((l) => l.code);
+  const project = entry('project', {
+    title, parent_id: parentId, area_id: world?.area_id || null, sort: (siblings.at(-1)?.sort || 0) + 1,
+    fields: { type, ...(levels ? { levels } : {}), ...(label ? { label } : {}), ...(numbered ? { numbered: true } : {}) }
+  });
   rows.push(project);
   if (type === 'novel') {
     const act = entry('act', { parent_id: project.id, title: 'Act One', sort: 1 });
@@ -71,12 +112,99 @@ export async function newBook(type, title, areaId, lines) {
       ? entry('scene', { id: newId('sc'), parent_id: script.id, sort: (i + 1) * 1024, title: l.text })
       : entry('para', {
         id: newId('pa'), parent_id: script.id, sort: (i + 1) * 1024, text: l.text,
-        content: l.text ? [{ type: 'text', text: l.text }] : null, fields: { el: l.el }
+        content: l.text ? [{ type: 'text', text: l.text }] : null, fields: { el: l.el, ...(l.code ? { code: l.code } : {}) }
       })));
   }
-  rows.push(entry('page', { id: newId('pg'), parent_id: project.id, title: 'Idea', sort: 1 }));
   await putEntries(rows);
   return project;
+}
+
+// The world anything belongs to (a piece, a page, a chapter, a line), if any.
+export async function worldOf(row) {
+  let r = row;
+  for (let i = 0; r && i < 80; i++) {
+    if (r.kind === 'world') return r;
+    if (r.kind === 'day') return null;
+    r = r.parent_id ? await getEntry(r.parent_id) : null;
+  }
+  return null;
+}
+
+// Pieces right inside a world or a piece, in order.
+export async function piecesIn(id) {
+  return (await children(id)).filter((r) => r.kind === 'project');
+}
+
+// Every piece inside a world (pieces in pieces) and its bible pages (pages in
+// pages), in order, each with how deep it sits. Pages a piece keeps for itself
+// come back separately.
+export async function worldTree(id) {
+  const pieces = [];
+  const pages = [];
+  const piecePages = [];
+  const walkPages = async (pid, depth, list) => {
+    for (const r of await children(pid)) if (r.kind === 'page') { list.push({ row: r, depth }); await walkPages(r.id, depth + 1, list); }
+  };
+  const walkPieces = async (pid, depth) => {
+    for (const r of await piecesIn(pid)) {
+      pieces.push({ row: r, depth });
+      await walkPages(r.id, 0, piecePages);
+      await walkPieces(r.id, depth + 1);
+    }
+  };
+  await walkPieces(id, 0);
+  await walkPages(id, 0, pages);
+  return { pieces, pages, piecePages };
+}
+
+// The labels already given to pieces, most used first, to offer again.
+export async function usedLabels() {
+  const n = new Map();
+  for (const p of await books()) {
+    const l = kindName(p);
+    n.set(l, (n.get(l) || 0) + 1);
+  }
+  for (const d of ['Novel', 'Screenplay', 'Short', 'Gag', 'Episode', 'Season', 'Film']) if (!n.has(d)) n.set(d, 0);
+  return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([l]) => l);
+}
+
+// Every book from before worlds becomes a world. A book with a manuscript
+// gets a world around it (same name and area) and its pages move up into the
+// world's bible; the book itself, its chapters and its id stay as they are, so
+// links, progress and history carry on. A book that only ever held pages
+// becomes a world in place. Ids are fixed (wd-<book id>), so two devices that
+// both do this agree, and it runs again for any old book that arrives later
+// from a device still on an older version. Nothing is deleted.
+export async function ensureWorlds() {
+  const all = await byKind('project', { withTrash: true });
+  const now = Date.now();
+  const rows = [];
+  for (const p of all) {
+    if (p.deleted || p.parent_id) continue;
+    const acts = (await children(p.id, { withTrash: true })).filter((r) => r.kind === 'act');
+    const trashed = p.fields?.trashed ? { trashed: p.fields.trashed, trashedWith: p.fields.trashedWith } : null;
+    // When each was really last changed, so "Recently edited" keeps its order.
+    const kept = (r) => ({ edited: r.fields?.edited || r.updated_at, moved: now });
+    if (bookType(p) === 'notes' && !acts.length) {
+      const { type: _t, levels: _l, ...fields } = p.fields || {};
+      rows.push({ ...p, kind: 'world', fields: { ...fields, ...kept(p) }, updated_at: now });
+      continue;
+    }
+    const id = `wd-${p.id}`;
+    const have = await getEntry(id);
+    const { order, ...fields } = p.fields || {};
+    if (!have || have.deleted) {
+      rows.push(entry('world', {
+        id, title: p.title, area_id: p.area_id || null, created_at: p.created_at,
+        fields: { ...(order !== undefined ? { order } : {}), ...(trashed || {}), ...kept(p) }
+      }));
+    }
+    rows.push({ ...p, parent_id: id, fields: { ...fields, ...kept(p) }, updated_at: now });
+    // Pages anywhere in the Trash keep their own group, so they come back the same way.
+    for (const pg of (await children(p.id, { withTrash: true })).filter((r) => r.kind === 'page')) rows.push({ ...pg, parent_id: id, fields: { ...pg.fields, ...kept(pg) }, updated_at: now });
+  }
+  if (rows.length) await putEntries(rows, { stamp: false });
+  return rows.length;
 }
 
 const LEVELS = { novel: ['Act', 'Chapter', 'Scene'], screenplay: ['Act', 'Script', 'Scene'] };
@@ -135,10 +263,35 @@ export async function stats(project) {
   return { acts, chapters, words, pages: (await pagesIn(project.id)).length };
 }
 
-// Lines on daily pages that link to this book, its chapters or its pages.
+// When something was last really changed: becoming part of a world doesn't count.
+export const editedAt = (r) => (r.fields?.moved && r.updated_at - r.fields.moved < 15 * 60000 ? r.fields.edited || r.updated_at : r.updated_at);
+
+// What a world comes to: its pieces and pages, and the words in its manuscripts.
+export async function worldStats(world) {
+  const { pieces, pages, piecePages } = await worldTree(world.id);
+  let words = 0;
+  const chapters = [];
+  for (const { row } of pieces) {
+    const s = await stats(row);
+    words += s.words;
+    chapters.push(...s.chapters);
+  }
+  const all = [...pages, ...piecePages];
+  // Last written in: the world, its pieces and pages, or any chapter.
+  const edited = Math.max(editedAt(world), ...pieces.map((p) => editedAt(p.row)), ...all.map((p) => editedAt(p.row)), ...chapters.map((c) => c.updated_at));
+  return { pieces, pages: all, words, chapters, edited };
+}
+
+// Lines on daily pages that link to this book (or world), its chapters, pieces or pages.
 export async function dailyMentions(project, limit = 8) {
-  const { chapters } = await stats(project);
-  const targets = [project, ...chapters, ...(await pagesIn(project.id))];
+  let targets;
+  if (project.kind === 'world') {
+    const { pieces, pages, chapters } = await worldStats(project);
+    targets = [project, ...pieces.map((p) => p.row), ...chapters, ...pages.map((p) => p.row)];
+  } else {
+    const { chapters } = await stats(project);
+    targets = [project, ...chapters, ...(await pagesIn(project.id))];
+  }
   const seen = new Map();
   for (const t of targets) for (const row of await linkedFrom(t.id)) seen.set(row.id, row);
   const out = [];

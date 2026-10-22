@@ -7,7 +7,7 @@ import { titleOf } from './notebook.js';
 // sync. Opening a page also checks its links, in case a rename arrived from
 // elsewhere while this device was away.
 
-const RENAMEABLE = new Set(['page', 'chapter', 'project', 'area']);
+const RENAMEABLE = new Set(['page', 'chapter', 'project', 'world', 'area']);
 
 function retitle(nodes, id, title) {
   let changed = false;
@@ -38,7 +38,8 @@ export async function retitleLinks(rows) {
       if (content) out.push({ ...from, content, text: textOf(content), updated_at: Date.now() });
     }
   }
-  if (out.length) await putEntries(out);
+  // Only a name inside a link changed: whoever wrote the line still did.
+  if (out.length) await putEntries(out, { stamp: false });
   return out.length > 0;
 }
 

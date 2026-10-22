@@ -1,5 +1,5 @@
-// Tidying up: the Trash (with Undo and Restore), changing what a book is,
-// moving chapters and pages, and both of those reaching another device. Also
+// Tidying up: the Trash (with Undo and Restore), changing how a piece is
+// written and what it's called, moving chapters and pages, and both of those reaching another device. Also
 // that note cards line up with their paragraphs when notes are switched on.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
@@ -68,6 +68,7 @@ const menuPick = async (p, ...labels) => {
 const openTrash = (p) => p.evaluate(() => { document.querySelector('#lib-trash-box').open = true; });
 const cardTitles = (p) => p.locator('#lib-books .card-title').allInnerTexts();
 const book = async (p, title) => (await all(p)).find((e) => e.kind === 'project' && e.title === title && !e.deleted);
+const world = async (p, title) => (await all(p)).find((e) => e.kind === 'world' && e.title === title && !e.deleted);
 
 let failed = 0;
 const pages = {};
@@ -84,7 +85,7 @@ try {
   const b = await device();
   Object.assign(pages, { a, b });
 
-  await check('a new book made as the wrong kind can be changed to a notes collection', async () => {
+  await check('a piece can change how it is written, and takes a label of your own', async () => {
     await a.locator('#editor .ProseMirror').click();
     await a.keyboard.type('It was a bright cold day in April, and the clocks were striking thirteen.');
     await sleep(800);
@@ -94,29 +95,41 @@ try {
     await a.locator('#lib-new-title').fill('Research');
     await a.locator('#lib-new button[type=submit]').click();
     await sleep(600);
-    // It opened on its Idea page; go to the book's page and change its kind.
-    await command(a, 'This book: rename');
-    await menuPick(a, 'Kind', 'Notes collection');
-    await sleep(400);
-    assert.equal((await book(a, 'Research')).fields.type, 'notes');
+    // It opened on its Idea page; go to the world and change its piece.
     await a.keyboard.press('Control+Shift+O');
     await sleep(400);
-    assert.match(await a.locator('#lib-books').innerText(), /notes/);
+    await a.locator('#lib-books .card', { hasText: 'Research' }).click();
+    await a.waitForSelector('.world-home', { state: 'visible' });
+    await a.locator('#wh-pieces li', { hasText: 'Research' }).locator('.more-btn').click();
+    await menuPick(a, 'Written as', 'Outline');
+    await sleep(400);
+    assert.equal((await book(a, 'Research')).fields.type, 'lines');
+    await a.locator('#wh-pieces li .loose-title', { hasText: 'Research' }).click();
+    await a.waitForSelector('.project-home', { state: 'visible' });
+    await a.locator('#ph-label').fill('Gag');
+    await a.locator('#ph-label').press('Enter');
+    await sleep(400);
+    assert.equal((await book(a, 'Research')).fields.label, 'Gag');
+    await a.keyboard.press('Control+Shift+O');
+    await sleep(400);
+    assert.match(await a.locator('#lib-books .card', { hasText: 'Research' }).innerText(), /gag/);
   });
 
-  await check('making a book with writing in it a notes collection asks first and keeps the manuscript', async () => {
+  await check('writing a piece with words in it as an outline asks first and keeps the manuscript', async () => {
     await a.locator('#lib-books .card', { hasText: 'Untitled novel' }).click();
-    await sleep(400);
-    await a.locator('#ph-kind').selectOption('notes');
+    await a.waitForSelector('.world-home', { state: 'visible' });
+    await a.locator('#wh-pieces li .loose-title', { hasText: 'Untitled novel' }).click();
+    await a.waitForSelector('.project-home', { state: 'visible' });
+    await a.locator('#ph-kind').selectOption('lines');
     await a.waitForSelector('.ask');
     assert.match(await a.locator('.ask').innerText(), /stays exactly as it is/);
     await a.locator('.ask .ghost-btn', { hasText: 'Cancel' }).click();
     await sleep(300);
     assert.equal((await book(a, 'Untitled novel')).fields.type || 'novel', 'novel');
-    await a.locator('#ph-kind').selectOption('notes');
+    await a.locator('#ph-kind').selectOption('lines');
     await a.locator('.ask .pill', { hasText: 'Change it' }).click();
     await sleep(500);
-    assert.equal((await book(a, 'Untitled novel')).fields.type, 'notes');
+    assert.equal((await book(a, 'Untitled novel')).fields.type, 'lines');
     assert.match(await a.locator('#ph-manuscript').innerText(), /Chapter 1/);
     await a.locator('#ph-kind').selectOption('novel');
     await sleep(500);
@@ -127,7 +140,7 @@ try {
     assert.equal(chapters.length, 1, 'changing back did not add a second first chapter');
   });
 
-  await check('a book goes to the Trash, Undo brings it straight back', async () => {
+  await check('a world goes to the Trash, Undo brings it straight back', async () => {
     await a.keyboard.press('Control+Shift+O');
     await sleep(400);
     await a.locator('.card-wrap', { hasText: 'Research' }).hover();
@@ -143,12 +156,12 @@ try {
     assert.ok(await a.locator('#lib-trash-box').isHidden());
   });
 
-  await check('a book with writing asks before it goes, and comes back whole from the Trash', async () => {
+  await check('a world with writing asks before it goes, and comes back whole from the Trash', async () => {
     await a.locator('#lib-books .card', { hasText: 'Untitled novel' }).click();
     await sleep(300);
-    await a.locator('#ph-continue').click();
+    await a.locator('#wh-continue').click();
     await sleep(500);
-    await command(a, 'This book: rename');
+    await command(a, 'This world: rename');
     await menuPick(a, 'Move to Trash');
     await a.waitForSelector('.ask');
     assert.match(await a.locator('.ask').innerText(), /14 words/);
@@ -167,7 +180,7 @@ try {
     await sleep(500);
     await a.locator('#lib-books .card', { hasText: 'Untitled novel' }).click();
     await sleep(300);
-    await a.locator('#ph-continue').click();
+    await a.locator('#wh-continue').click();
     await sleep(600);
     assert.match(await a.locator('#editor .ProseMirror').innerText(), /clocks were striking thirteen/);
     const paras = (await all(a)).filter((e) => e.kind === 'para' && !e.deleted);
@@ -199,8 +212,8 @@ try {
     assert.deepEqual(await rows(), ['Chapter 2', 'Chapter 1']);
   });
 
-  await check('a page moves to another book, and goes to the Trash from its own ⋯', async () => {
-    const research = await book(a, 'Research');
+  await check('a page moves to another world, and goes to the Trash from its own ⋯', async () => {
+    const research = await world(a, 'Research');
     const idea = (await all(a)).find((e) => e.kind === 'page' && e.parent_id === research.id);
     await a.evaluate((id) => window.dispatchEvent(new PopStateEvent('popstate', { state: { view: 'notebook', pageId: id } })), idea.id);
     await sleep(500);
@@ -209,25 +222,25 @@ try {
     await a.locator('#nb-more .more-btn').click();
     await menuPick(a, 'Move to', 'Untitled novel');
     await sleep(300);
-    const novel = await book(a, 'Untitled novel');
+    const novel = await world(a, 'Untitled novel');
     assert.equal((await all(a)).find((e) => e.id === idea.id).parent_id, novel.id);
     await a.locator('#nb-more .more-btn').click();
     await menuPick(a, 'Move to Trash');
     await sleep(600);
-    assert.equal(await a.evaluate(() => document.documentElement.dataset.view), 'project');
-    assert.ok(!(await a.locator('#ph-pages').innerText()).includes('Idea'));
+    assert.equal(await a.evaluate(() => document.documentElement.dataset.view), 'world');
+    assert.ok(!(await a.locator('#wh-pages').innerText()).includes('Idea'));
     const row = (await all(a)).find((e) => e.id === idea.id);
     assert.equal(row.fields.trashedWith, idea.id);
     const line = (await all(a)).find((e) => e.kind === 'line' && e.text === 'A thought worth keeping');
     assert.equal(line.fields.trashedWith, idea.id, 'its lines went with it');
   });
 
-  await check('an area with a book in it asks first, and Restore brings both back', async () => {
+  await check('an area with a world in it asks first, and Restore brings both back', async () => {
     await a.keyboard.press('Control+Shift+O');
     await sleep(300);
     await a.locator('#lib-areas .chip', { hasText: 'Business' }).click();
     await sleep(300);
-    const research = await book(a, 'Research');
+    const research = await world(a, 'Research');
     await a.evaluate(async (id) => {
       const r = indexedDB.open('writing');
       await new Promise((res) => { r.onsuccess = res; });
@@ -239,7 +252,7 @@ try {
     await command(a, 'This area');
     await menuPick(a, 'Move to Trash');
     await a.waitForSelector('.ask');
-    assert.match(await a.locator('.ask').innerText(), /1 book/);
+    assert.match(await a.locator('.ask').innerText(), /1 world/);
     await a.locator('.ask .pill', { hasText: 'Move to Trash' }).click();
     await sleep(500);
     assert.ok(!(await a.locator('#lib-areas').innerText()).includes('Business'));
@@ -277,7 +290,7 @@ try {
   await check('the open chapter going to the Trash on another device moves you off it', async () => {
     await b.locator('#lib-books .card', { hasText: 'Untitled novel' }).click();
     await sleep(300);
-    await b.locator('#ph-continue').click();
+    await b.locator('#wh-continue').click();
     await sleep(600);
     assert.equal(await b.evaluate(() => document.documentElement.dataset.view || 'write'), 'write');
     const ch = (await all(a)).find((e) => e.kind === 'chapter' && e.title === 'Chapter 2');

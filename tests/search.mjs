@@ -98,9 +98,9 @@ try {
       const r = indexedDB.open('writing');
       r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').getAll(); q.onsuccess = () => res(q.result.find((e) => e.kind === 'project')); };
     }));
-    await p.evaluate((id) => window.dispatchEvent(new PopStateEvent('popstate', { state: { view: 'project', id } })), book.id);
+    await p.evaluate((id) => window.dispatchEvent(new PopStateEvent('popstate', { state: { view: 'world', id } })), book.parent_id);
     await sleep(500);
-    await p.locator('#ph-more .more-btn').click();
+    await p.locator('#wh-more .more-btn').click();
     await p.locator('.pop-menu button', { hasText: 'Move to Trash' }).click();
     await p.locator('.ask .pill', { hasText: 'Move to Trash' }).click();
     await sleep(600);
