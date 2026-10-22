@@ -572,6 +572,13 @@ try {
     assert.equal(await p.locator('.handle-menu .head').innerText(), 'HEADING');
     await p.locator('.handle-menu .hm-chip', { hasText: 'Paragraph' }).click();
     await p.waitForFunction(() => !document.querySelector('#editor .ProseMirror > h2'));
+    // Move to… opens the same picker as "Send selection to…", with pages and days.
+    await p.locator('#editor .ProseMirror > p').first().hover();
+    await p.locator('.block-handle').click({ button: 'right' });
+    await p.locator('.handle-menu .item', { hasText: 'Move to…' }).click();
+    await p.waitForSelector('.palette', { state: 'visible' });
+    await p.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.startsWith('Today'));
+    await p.keyboard.press('Escape');
   });
 
   await check('the handle stays while the mouse crosses the margin to it', async () => {
@@ -692,7 +699,7 @@ try {
     const labels = await p.locator('.handle-menu .item > span:first-child').allInnerTexts();
     assert.equal(labels[0], 'Zoom in');
     assert.ok(labels.some((l) => /^Fold the \d+ lines? under it$/.test(l)), labels.join(' | '));
-    assert.ok(labels.includes('Move to another page…'));
+    assert.ok(labels.includes('Move to…'));
     assert.match(labels.at(-1), /^Delete line and the \d+ lines? under it$/);
     await p.locator('.handle-menu .item', { hasText: 'Mark done' }).click();
     await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li[data-done] > p')].some((x) => x.textContent.startsWith('Call the harbourmaster')));
