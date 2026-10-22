@@ -19,11 +19,11 @@ import { ensureSeed, outline, entry, wordCount } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
 import { EntryRef, TagMarks } from './outline.js';
 import { retitleLinks, freshenRefs } from './links.js';
-import { keepStorage, oldestUnsent, unsentLabel, STALE_AFTER } from './keep.js';
+import { keepStorage, oldestUnsent, unsentLabel, unsentFilesLabel, spaceWarning, mb, STALE_AFTER } from './keep.js';
 import { setMoveHooks, moveEntries } from './move.js';
 import { Conflicts } from './conflicts.js';
 import { FileEmbed, insertFiles } from './filenode.js';
-import { MAX_BYTES } from './files.js';
+import { MAX_BYTES, SPACE, spaceUsed, unsentFiles } from './files.js';
 import { vaultZip, vaultFiles, pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
@@ -520,8 +520,8 @@ const sync = new Sync({
     syncEl.dataset.state = s;
     delete syncEl.dataset.stale;
     document.body.dataset.sync = s;
-    if (s === 'synced') conflicts.count();
-    else if (s !== 'syncing') checkUnsent();
+    if (s === 'synced') { conflicts.count(); checkSpace().catch(() => {}); }
+    if (s !== 'syncing') checkUnsent().catch(() => {});
   },
   onRemote: applyRemote
 });
@@ -529,17 +529,36 @@ const sync = new Sync({
 // sync button, and the top bar peeks out once so it's seen.
 let warnedUnsent = false;
 async function checkUnsent() {
-  const since = await oldestUnsent();
   const state = syncEl.dataset.state;
-  if (!since || Date.now() - since < STALE_AFTER || state === 'synced' || state === 'syncing' || state === 'off') return;
+  if (state === 'syncing' || state === 'off') return;
+  const since = await oldestUnsent();
+  let label = null;
+  if (since && Date.now() - since >= STALE_AFTER && state !== 'synced') label = state === 'signed-out' ? `${unsentLabel(since)} · Sign in` : unsentLabel(since);
+  else {
+    // Pictures go up after the words, so they can be stuck while the words are synced.
+    const files = await unsentFiles();
+    if (files.since && Date.now() - files.since >= STALE_AFTER) label = `${unsentFilesLabel(files.count, files.since)}${state === 'signed-out' ? ' · Sign in' : ''}`;
+  }
+  if (!label) return;
   syncEl.hidden = false;
-  syncEl.textContent = state === 'signed-out' ? `${unsentLabel(since)} · Sign in` : unsentLabel(since);
+  syncEl.textContent = label;
   syncEl.dataset.stale = 'true';
   if (!warnedUnsent) {
     warnedUnsent = true;
     body.classList.add('show-top');
     setTimeout(() => { if (!document.querySelector('.topbar:hover')) body.classList.remove('show-top'); }, 6000);
   }
+}
+// The cloud's file space: a notice once it's 80% full, and again at 95%.
+async function checkSpace() {
+  const { bytes } = await spaceUsed();
+  let warned = 0;
+  try { warned = Number(localStorage.getItem('spaceWarned')) || 0; } catch { /* private window */ }
+  const w = spaceWarning(bytes, SPACE, warned);
+  if (bytes < SPACE * 0.8 && warned) try { localStorage.removeItem('spaceWarned'); } catch { /* ignore */ }
+  if (!w) return;
+  try { localStorage.setItem('spaceWarned', String(w.level)); } catch { /* ignore */ }
+  toast(w.text);
 }
 setInterval(() => checkUnsent().catch(() => {}), 36e5);
 
@@ -565,6 +584,7 @@ onLocalWrites((rows) => {
   sync.soon();
   searchChanged(rows);
   if (rows.some((r) => r.kind !== 'tally')) tallySoon();
+  if (rows.some((r) => r.kind === 'file')) checkSpace().catch(() => {});
   retitleLinks(rows).then((changed) => { if (changed) { freshenRefs(editor); freshenRefs(notebook.editor); } }).catch((e) => console.error(e));
 });
 window.__sync = sync;
@@ -1991,6 +2011,7 @@ const commands = [
   { group: 'sync', label: 'Export the whole book as Markdown', keys: '', run: exportBook, when: () => writing() && !!state.project && !isScript() },
   { group: 'sync', label: 'Export this script as Fountain', keys: '', run: exportFountain, when: () => writing() && isScript() },
   { group: 'sync', label: 'Back up everything (download all as files)', keys: '', run: exportVault },
+  { group: 'sync', label: 'Pictures and files: space used', keys: '', run: showSpace },
   { group: 'write', label: 'Add a picture or file…', keys: '', run: () => setTimeout(pickFiles, 120), when: () => writing() || inNotebook() },
   { group: 'tidy', label: 'Send selection to… a chapter, page or day', keys: '', run: () => setTimeout(sendSelectionPicker, 120), when: () => writing() || inNotebook() },
   { group: 'tidy', label: 'This book: rename, move, change kind or trash…', keys: '', run: async () => popMenu(null, await bookMenu(await currentBook()), menuSpot()), when: () => !!currentBookId() },
@@ -2003,6 +2024,12 @@ const commands = [
 ];
 
 // The command menu opens on these, so the phone doesn't need a long scroll; typing searches everything.
+async function showSpace() {
+  const { bytes, count } = await spaceUsed();
+  const { count: waiting } = await unsentFiles();
+  toast(`Pictures and files: ${mb(bytes)} of ${mb(SPACE)} used · ${count === 1 ? '1 file' : `${count} files`}${waiting ? ` · ${waiting} still to upload from here` : ''}`);
+}
+
 // Pictures and files from this device, put in where the caret is.
 function pickFiles() {
   const ed = currentEditor();
