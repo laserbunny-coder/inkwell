@@ -841,9 +841,9 @@ try {
     await ph.waitForSelector('#editor p[data-el="dialogue"]');
     await ph.locator('.script-bar button[data-el="character"]').tap();
     await ph.waitForSelector('#editor p[data-el="character"]');
-    // The alternates buttons come last, after every script button.
-    const row = await ph.locator('.script-bar:not(.outline-bar) button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => b.dataset.alt || b.dataset.el));
-    assert.deepEqual(row, ['scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'section', 'word', 'ask', 'para', 'prev', 'next']);
+    // + (the insert menu) first, then the script buttons; alternates come last.
+    const row = await ph.locator('.script-bar:not(.outline-bar) button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => (b.dataset.ins ? 'insert' : b.dataset.alt || b.dataset.el)));
+    assert.deepEqual(row, ['insert', 'scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'section', 'word', 'ask', 'para', 'prev', 'next']);
 
     // Outlines get their own row: indent, outdent, move, tag.
     await ph.keyboard.press('Control+J');
@@ -869,8 +869,8 @@ try {
     await ph.keyboard.type('sea');
     await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].some((p) => p.textContent === 'Tides #sea'));
     assert.equal(await ph.evaluate(() => document.activeElement?.closest('#outline-editor') !== null), true, 'keyboard stays up');
-    // Undo and Redo come first in the row.
-    assert.deepEqual((await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do))).slice(0, 3), ['undo', 'redo', 'outdent']);
+    // Undo and Redo come first in the row, then + (the insert menu).
+    assert.deepEqual((await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do))).slice(0, 4), ['undo', 'redo', 'insert', 'outdent']);
     // The line you're on shows its handle; a tap brings its menu up from the bottom.
     // Move down keeps the sheet open so it can be tapped again.
     const here = ph.locator('#outline-editor li.here > .line-gutter .bullet');

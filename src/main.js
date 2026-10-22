@@ -28,6 +28,7 @@ import { vaultZip, vaultFiles, pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
 import { moveLine, toggleDone, foldKey } from './outline.js';
+import { SlashMenu, setSlashItems } from './slash.js';
 import { openHandleMenu } from './handlemenu.js';
 import { openPicker } from './picker.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
@@ -41,7 +42,7 @@ const extensions = [
   EntryRef.configure({ onPick: openPicker, onOpen: openEntry }),
   TagMarks.configure({ onTag: (t) => notebook.showTag(t) }),
   ScriptElements.configure({ isScript: () => isScript() }),
-  FileEmbed.configure({ onTooBig: tooBig })
+  FileEmbed.configure({ onTooBig: tooBig }), SlashMenu
 ];
 const isScript = () => root.classList.contains('script');
 function tooBig(f) { toast(`“${f.name}” is too big to add (the limit is ${Math.round(MAX_BYTES / 1048576)} MB)`); }
@@ -162,6 +163,14 @@ function placeScriptBar() {
   button('para').classList.toggle('current', alts.isOpen && alts.scope === 'para');
   for (const name of ['prev', 'next']) button(name).classList.toggle('idle', !here.word && !here.para);
 }
+// Types # or / at the caret, with a space before it if it would touch a word
+// (the + on the phone rows types the / that opens the insert menu).
+function typeHere(ed, ch) {
+  const { $from } = ed.state.selection;
+  const before = $from.parent.textBetween(Math.max(0, $from.parentOffset - 1), $from.parentOffset);
+  ed.chain().focus().insertContent(before && before !== ' ' ? ` ${ch}` : ch).run();
+}
+
 // The rows above the keyboard: a quick tap runs a button; holding (or sliding)
 // scrolls the row instead, so a thumb resting on a button never sets it off.
 // pointerdown is held back so the keyboard stays up.
@@ -201,9 +210,10 @@ function tapBar(bar, selector, run) {
   });
   bar.addEventListener('pointercancel', () => { end(); start = null; });
 }
-tapBar(scriptBar, 'button[data-el], button[data-alt]', (b) => {
+tapBar(scriptBar, 'button[data-el], button[data-alt], button[data-ins]', (b) => {
   const what = b.dataset.alt;
-  if (what === 'word' || what === 'para') alts.toggle({ scope: what });
+  if (b.dataset.ins) typeHere(editor, '/');
+  else if (what === 'word' || what === 'para') alts.toggle({ scope: what });
   else if (what === 'ask') {
     if (!alts.isOpen) alts.open({ scope: 'word' });
     alts.askClaude();
@@ -271,11 +281,9 @@ tapBar(outlineBar, 'button[data-do]', (b) => {
   else if (act === 'indent') ed.chain().focus().sinkListItem('listItem').scrollIntoView().run();
   else if (act === 'outdent') ed.chain().focus().liftListItem('listItem').scrollIntoView().run();
   else if (act === 'up' || act === 'down') moveLine(ed, act === 'up' ? -1 : 1);
-  else if (act === 'tag') {
-    const { $from } = ed.state.selection;
-    const before = $from.parent.textBetween(Math.max(0, $from.parentOffset - 1), $from.parentOffset);
-    ed.chain().focus().insertContent(before && before !== ' ' ? ' #' : '#').run();
-  } else if (act === 'link') openPicker(ed);
+  else if (act === 'tag') typeHere(ed, '#');
+  else if (act === 'insert') typeHere(ed, '/');
+  else if (act === 'link') openPicker(ed);
   else if (act === 'zoom') { const here = notebook.currentLine(); notebook.zoomTo(notebook.zoom && here === notebook.zoom ? null : here); ed.commands.focus(); }
   placeOutlineBar();
 });
@@ -491,6 +499,8 @@ function focusParagraph(eid) {
 // where it lives.
 async function openEntry(id) {
   const row = await getEntry(id);
+  // A link to a day that hasn't been written on yet still opens that day.
+  if (!row && id?.startsWith('day-')) return go({ view: 'notebook', pageId: id });
   if (gone(row)) return;
   if (row.kind === 'project') return go({ view: 'project', id: row.id });
   if (row.kind === 'area') return go({ view: 'library', area: row.id });
@@ -1972,6 +1982,9 @@ const commands = [
   { group: 'write', label: 'Fold or unfold this line', keys: `${mod}↑ ${mod}↓`, run: () => notebook.toggleFold(), when: inNotebook },
   ...ELEMENTS.map((x) => ({ group: 'write', label: `Script: ${x.label}`, keys: 'Tab', run: () => editor.chain().focus().updateAttributes('paragraph', { el: x.id }).run(), when: () => writing() && isScript() })),
   { group: 'write', label: 'Script: Section (your own heading)', keys: '# ', run: () => { const at = editor.state.selection.$from.before(1); editor.chain().insertContentAt(at, { type: 'sceneBreak' }).run(); requestAnimationFrame(() => editor.view.nodeDOM(at)?.querySelector('input')?.focus()); }, when: () => writing() && isScript() },
+  { group: 'write', label: 'Insert the time', keys: `${mod}⇧;`, run: () => insertTime(currentEditor()), when: () => writing() || inNotebook() },
+  { group: 'write', label: 'Insert today’s date', keys: `${mod};`, run: () => insertDay(currentEditor(), 0), when: () => writing() || inNotebook() },
+  { group: 'write', label: 'Insert something (time, date, link…)', keys: '/', run: () => typeHere(currentEditor(), '/'), when: () => writing() || inNotebook() },
   { group: 'write', label: 'Link to a page…', keys: '[[', run: () => openPicker(currentEditor()), when: () => writing() || inNotebook() },
   { group: 'write', label: 'Add a note to this paragraph', keys: `${mod}⇧N`, run: () => notes.add(), when: writing },
   { group: 'write', label: 'Alternates for this word (or the selection)', keys: `${mod}⇧E`, run: () => alts.open({ scope: 'word', focusAdd: true }), when: writing },
@@ -2033,6 +2046,56 @@ async function showSpace() {
 }
 
 // Pictures and files from this device, put in where the caret is.
+// ---------- quick inserts (the / menu, Ctrl+Shift+; and Ctrl+;) ----------
+
+const timeNow = () => new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, ' ').toLowerCase();
+const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+function dayFrom(n) { const d = new Date(); d.setDate(d.getDate() + n); return d; }
+const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const shortDay = (d) => d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+
+function insertTime(ed) { ed.chain().focus().insertContent(`${timeNow()} `).run(); }
+// A date is a link to that day's page (made when you first write on it).
+function insertDay(ed, n) {
+  const id = dayId(isoOf(dayFrom(n)));
+  ed.chain().focus().insertContent([{ type: 'entryRef', attrs: { id, title: titleOf({ kind: 'day', id }) } }, { type: 'text', text: ' ' }]).run();
+}
+// The time on its own line with the caret on a fresh line under it, ready
+// for an entry (tucked in a level on the notebook).
+function timeHeading(ed) {
+  const outline = ed === notebook.editor;
+  const empty = !ed.state.selection.$from.parent.textContent.trim();
+  const c = ed.chain().focus();
+  if (!empty) (outline ? c.splitListItem('listItem') : c.splitBlock());
+  c.insertContent(timeNow()).run();
+  if (outline) ed.chain().splitListItem('listItem').sinkListItem('listItem').scrollIntoView().run();
+  else ed.chain().splitBlock().scrollIntoView().run();
+}
+
+setSlashItems((ed) => {
+  const outline = ed === notebook.editor;
+  const inScript = !outline && isScript();
+  const days = WEEKDAYS.map((name, w) => {
+    const ahead = ((w - new Date().getDay() + 7) % 7) || 7;
+    return { id: name, label: name[0].toUpperCase() + name.slice(1), hint: shortDay(dayFrom(ahead)), more: true, run: (e) => insertDay(e, ahead) };
+  });
+  return [
+    { id: 'time', label: 'Time', hint: timeNow(), keys: '⌘⇧;', run: insertTime },
+    { id: 'now', label: 'Time heading', hint: 'a line to write under', words: ['journal', 'entry', 'log'], run: timeHeading },
+    { id: 'today', label: 'Today', hint: shortDay(new Date()), keys: '⌘;', words: ['date'], run: (e) => insertDay(e, 0) },
+    { id: 'tomorrow', label: 'Tomorrow', hint: shortDay(dayFrom(1)), words: ['date'], run: (e) => insertDay(e, 1) },
+    { id: 'yesterday', label: 'Yesterday', hint: shortDay(dayFrom(-1)), words: ['date'], run: (e) => insertDay(e, -1) },
+    { id: 'link', label: 'Link to a page', keys: '[[', words: ['page'], run: (e) => openPicker(e) },
+    { id: 'tag', label: 'Tag', keys: '#', run: (e) => e.chain().focus().insertContent('#').run() },
+    !outline && { id: 'note', label: 'Note on this paragraph', keys: '⌘⇧N', words: ['comment'], run: () => notes.add() },
+    { id: 'picture', label: 'Picture or file', words: ['image', 'photo', 'file', 'attach'], run: () => setTimeout(pickFiles, 120) },
+    outline && { id: 'done', label: 'Done', hint: 'strike the line through', keys: '⌘↵', words: ['todo', 'check'], run: (e) => toggleDone(e) },
+    !outline && !inScript && { id: 'scene', label: 'Scene break', keys: '⌘⇧↵', words: ['break', 'divider'], run: (e) => e.chain().focus().insertSceneBreak().run() },
+    inScript && { id: 'section', label: 'Section', hint: 'your own heading', words: ['act', 'sequence', 'heading'], run: () => { const at = editor.state.selection.$from.before(1); editor.chain().insertContentAt(at, { type: 'sceneBreak' }).run(); requestAnimationFrame(() => editor.view.nodeDOM(at)?.querySelector('input')?.focus()); } },
+    ...days
+  ].filter(Boolean);
+});
+
 function pickFiles() {
   const ed = currentEditor();
   const input = document.createElement('input');
@@ -2386,6 +2449,7 @@ document.addEventListener('keydown', (e) => {
   else if (m && e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); step(e.key === 'ArrowDown' ? 1 : -1); }
   else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketLeft') { e.preventDefault(); history.back(); }
   else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketRight') { e.preventDefault(); history.forward(); }
+  else if (m && !e.altKey && e.code === 'Semicolon' && (writing() || inNotebook()) && currentEditor().isFocused) { e.preventDefault(); if (e.shiftKey) insertTime(currentEditor()); else insertDay(currentEditor(), 0); }
   else if (m && (e.key === '/' || e.code === 'Slash')) { e.preventDefault(); toggleShortcuts(); }
   else if (m && e.shiftKey && k === 'p') { e.preventDefault(); progressPanel.toggle(); }
   else if (m && k === 'j') { e.preventDefault(); toggleWriteToday(); }
