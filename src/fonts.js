@@ -3,21 +3,21 @@
 // only when it is picked or the panel opens.
 
 export const FONTS = [
-  { id: 'newsreader', name: 'Newsreader', group: 'serif' },
-  { id: 'literata', name: 'Literata', group: 'serif' },
-  { id: 'charis', name: 'Charis', group: 'serif', family: 'Charis SIL', spec: 'ital,wght@0,400;0,700;1,400;1,700' },
-  { id: 'garamond', name: 'EB Garamond', group: 'serif', family: 'EB Garamond', spec: 'ital,wght@0,400;0,500;0,700;1,400' },
-  { id: 'georgia', name: 'Georgia', group: 'serif' },
-  { id: 'inter', name: 'Inter', group: 'sans' },
-  { id: 'geist', name: 'Geist', group: 'sans', family: 'Geist', spec: 'wght@400;500;700' },
-  { id: 'atkinson', name: 'Atkinson Hyperlegible', group: 'sans', family: 'Atkinson Hyperlegible Next', spec: 'ital,wght@0,400;0,500;0,700;1,400' },
-  { id: 'plexsans', name: 'IBM Plex Sans', group: 'sans', family: 'IBM Plex Sans', spec: 'ital,wght@0,400;0,500;0,700;1,400' },
+  { id: 'newsreader', name: 'Newsreader', group: 'serif', about: "Inkwell's default. Made for long reading on screens, warm and calm." },
+  { id: 'literata', name: 'Literata', group: 'serif', about: 'The closest free match to a Kindle. Google made it for its e-book app.' },
+  { id: 'charis', name: 'Charis', group: 'serif', about: 'A sturdy, classic book face based on Charter. Clear even at small sizes.', family: 'Charis SIL', spec: 'ital,wght@0,400;0,700;1,400;1,700' },
+  { id: 'garamond', name: 'EB Garamond', group: 'serif', about: 'Old-style printed book, centuries-old shapes. Elegant and literary.', family: 'EB Garamond', spec: 'ital,wght@0,400;0,500;0,700;1,400' },
+  { id: 'georgia', name: 'Georgia', group: 'serif', about: 'The familiar web serif. Built into Windows and Android, so nothing to load.' },
+  { id: 'inter', name: 'Inter', group: 'sans', about: "Inkwell's interface font. Neutral and very clean." },
+  { id: 'geist', name: 'Geist', group: 'sans', about: 'The modern favorite right now. Crisp, geometric and quiet.', family: 'Geist', spec: 'wght@400;500;700' },
+  { id: 'atkinson', name: 'Atkinson Hyperlegible', group: 'sans', about: 'Designed for the easiest possible reading. Every letter is distinct.', family: 'Atkinson Hyperlegible Next', spec: 'ital,wght@0,400;0,500;0,700;1,400' },
+  { id: 'plexsans', name: 'IBM Plex Sans', group: 'sans', about: 'A sans with some character. Slightly technical, very even.', family: 'IBM Plex Sans', spec: 'ital,wght@0,400;0,500;0,700;1,400' },
   // The two iA Writer fonts ship with the app (src/fonts), so they work offline from the start.
-  { id: 'iamono', name: 'iA Writer Mono', group: 'mono' },
-  { id: 'iaquattro', name: 'iA Writer Quattro', group: 'mono' },
-  { id: 'jetbrains', name: 'JetBrains Mono', group: 'mono', family: 'JetBrains Mono', spec: 'ital,wght@0,400;0,500;0,700;1,400' },
-  { id: 'geistmono', name: 'Geist Mono', group: 'mono', family: 'Geist Mono', spec: 'wght@400;500;700' },
-  { id: 'courier', name: 'Courier Prime', group: 'mono' },
+  { id: 'iamono', name: 'iA Writer Mono', group: 'mono', about: "The iA Writer app's font, loved by writers. Focused, typewriter-like but softer." },
+  { id: 'iaquattro', name: 'iA Writer Quattro', group: 'mono', about: "iA Writer's in-between: mostly fixed-width, but wide letters get more room. Easy on long drafts." },
+  { id: 'jetbrains', name: 'JetBrains Mono', group: 'mono', about: 'The most popular coding mono. Tall letters, very clear.', family: 'JetBrains Mono', spec: 'ital,wght@0,400;0,500;0,700;1,400' },
+  { id: 'geistmono', name: 'Geist Mono', group: 'mono', about: "Geist's mono sibling. Minimal and modern.", family: 'Geist Mono', spec: 'wght@400;500;700' },
+  { id: 'courier', name: 'Courier Prime', group: 'mono', about: 'The classic typewriter look, the screenplay standard.' },
 ];
 export const FONT_GROUPS = [['serif', 'Serif'], ['sans', 'Sans'], ['mono', 'Mono']];
 export const DEFAULT_FONT = 'newsreader';

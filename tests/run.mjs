@@ -183,7 +183,9 @@ try {
     assert.match(await family(), /JetBrains Mono/);
     assert.equal(await p.locator('#font-value').innerText(), 'JetBrains Mono');
     // Each button is drawn in its own font.
-    assert.match(await p.locator('.font-list button', { hasText: 'Courier Prime' }).evaluate((el) => getComputedStyle(el).fontFamily), /Courier Prime/);
+    assert.match(await p.locator('.font-list button', { hasText: 'Courier Prime' }).locator('.font-name').evaluate((el) => getComputedStyle(el).fontFamily), /Courier Prime/);
+    // and says a little about it.
+    assert.match(await p.locator('.font-list button', { hasText: 'JetBrains Mono' }).locator('.font-about').innerText(), /coding/);
     await p.reload();
     await p.waitForSelector('#editor .ProseMirror');
     assert.match(await family(), /JetBrains Mono/);

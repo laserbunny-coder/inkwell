@@ -1708,7 +1708,11 @@ function showFonts() {
   }));
   $('.font-list').replaceChildren(...FONTS.filter((f) => f.group === fontGroup).map((f) => {
     const b = document.createElement('button');
-    b.type = 'button'; b.textContent = f.name; b.dataset.font = f.id; b.setAttribute('role', 'radio');
+    b.type = 'button'; b.dataset.font = f.id; b.setAttribute('role', 'radio');
+    const name = document.createElement('span'), about = document.createElement('span');
+    name.className = 'font-name'; name.textContent = f.name;
+    about.className = 'font-about'; about.textContent = f.about;
+    b.append(name, about);
     b.classList.toggle('current', f === cur);
     b.setAttribute('aria-checked', String(f === cur));
     b.addEventListener('click', () => pickFont(f.id));
