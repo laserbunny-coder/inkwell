@@ -31,6 +31,7 @@ import { moveLine, toggleDone, foldKey } from './outline.js';
 import { SlashMenu, setSlashItems } from './slash.js';
 import { openHandleMenu } from './handlemenu.js';
 import { openPicker } from './picker.js';
+import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf } from './library.js';
 
@@ -562,7 +563,7 @@ const sync = new Sync({
     syncEl.dataset.state = s;
     delete syncEl.dataset.stale;
     document.body.dataset.sync = s;
-    if (s === 'synced') { conflicts.count(); checkSpace().catch(() => {}); }
+    if (s === 'synced') { conflicts.count(); checkSpace().catch(() => {}); writeOut(); }
     if (s !== 'syncing') checkUnsent().catch(() => {});
   },
   onRemote: applyRemote
@@ -2341,6 +2342,7 @@ const commands = [
   { group: 'go', label: 'Back to writing', keys: `${mod}J`, run: () => go({ view: 'write' }), when: () => !writing() },
   { group: 'go', label: 'Next chapter (or day)', keys: `${mod}⌥↓`, run: () => step(1), when: () => writing() || inNotebook() },
   { group: 'go', label: 'Previous chapter (or day)', keys: `${mod}⌥↑`, run: () => step(-1), when: () => writing() || inNotebook() },
+  { group: 'new', label: 'Capture an idea by voice', keys: '', run: () => openCapture() },
   { group: 'new', label: 'New novel', keys: '', run: () => showNewBook('novel') },
   { group: 'new', label: 'New screenplay', keys: '', run: () => showNewBook('screenplay') },
   { group: 'new', label: 'New notes collection', keys: '', run: () => showNewBook('notes') },
@@ -2869,6 +2871,33 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('visibilitychange', () => { if (document.hidden) { store.close(editor.state.doc); notebook.close(); } });
 window.addEventListener('pagehide', () => { store.close(editor.state.doc); notebook.close(); });
 
+// ---------- capture: talk, and it lands on today's page ----------
+
+const askServer = (body) => (window.__claude ? window.__claude(body) : sync.invoke('inkwell', body));
+const canAskServer = () => !!window.__claude || (!!sync.user && navigator.onLine && !!sync.backend?.invoke);
+// Until writing-out is set up, the recording's chip says so; nothing else nags.
+function writeOut() {
+  return writeOutPending({ ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows) });
+}
+// Lands a capture on today's page and shows it there.
+async function showCapture({ line, rows }) {
+  await applyRemote(rows);
+  await go({ view: 'notebook', pageId: line.parent_id, line: line.id });
+  writeOut();
+}
+const capture = new CaptureScreen($('.capture'), {
+  onSaved: (saved) => { toast('Kept on today’s page'); showCapture(saved); },
+  onClose: () => currentEditor().commands.focus(),
+  toast
+});
+async function openCapture(opts) {
+  if (!$('.palette').hidden) closePalette(false);
+  // Anything typed is saved first, so the new line can't clash with it.
+  await Promise.all([store.close(editor.state.doc), notebook.close()]);
+  capture.show(opts);
+}
+window.addEventListener('online', () => writeOut());
+
 // ---------- start ----------
 
 async function start() {
@@ -2888,6 +2917,15 @@ async function start() {
   if (place.view !== 'write') delete root.dataset.view;
   await go(place);
   historyMode = 'push';
+  // A recording cut short (the app closed, the phone died) is kept, not lost.
+  const recovered = await recoverRecording().catch((e) => { console.error(e); return null; });
+  if (recovered) { toast('A recording that was cut short is kept on today’s page'); await showCapture(recovered); }
+  // The home-screen shortcut (long-press the icon, then Capture) opens straight in.
+  const asked = new URLSearchParams(location.search).get('capture');
+  if (asked) {
+    history.replaceState(history.state, '', location.pathname);
+    openCapture();
+  }
   sync.start();
   conflicts.count();
   // Deleted things are remembered for six months, then this device lets go of them.

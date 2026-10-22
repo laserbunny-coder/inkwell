@@ -55,7 +55,10 @@ function supabaseBackend() {
       const { data, error } = await sb.functions.invoke(name, { body });
       if (error) {
         const detail = await error.context?.json?.().catch(() => null);
-        throw new Error(detail?.error || 'Couldn’t reach Claude. Try again.');
+        const e = new Error(detail?.error || 'Couldn’t reach Claude. Try again.');
+        e.code = detail?.code || null;
+        e.status = error.context?.status || 0;
+        throw e;
       }
       return data;
     },

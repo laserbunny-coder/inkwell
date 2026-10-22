@@ -230,6 +230,17 @@
     </div>
   </aside>
 
+  <div class="capture" role="dialog" aria-label="Capture an idea" hidden>
+    <button type="button" class="cap-cancel" aria-label="Close without keeping">Cancel</button>
+    <div class="cap-middle">
+      <span class="cap-level" aria-hidden="true"></span>
+      <button type="button" class="cap-big" aria-label="Start talking"><svg class="cap-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><svg class="cap-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg></button>
+      <p class="cap-time" aria-live="off"></p>
+      <p class="cap-hint" aria-live="polite">Tap to talk</p>
+    </div>
+    <label class="cap-auto"><input type="checkbox"> Start recording as soon as Capture opens</label>
+  </div>
+
   <div class="palette-backdrop" hidden></div>
   <div class="palette" role="dialog" aria-label="Command menu" hidden>
     <input id="palette-input" placeholder="Type a command…" aria-label="Command" autocomplete="off">
