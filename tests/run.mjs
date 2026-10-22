@@ -321,7 +321,7 @@ try {
     assert.match(await text2(), /Snow on the harbour wall\./);
   });
 
-  await check('earlier days show below today and open when clicked', async () => {
+  await check('earlier days stay closed behind the line under today, open on a click, and are remembered', async () => {
     await p.evaluate(() => new Promise((res) => {
       const d = new Date(); d.setDate(d.getDate() - 1);
       const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -336,9 +336,19 @@ try {
       };
     }));
     await p.keyboard.press('Control+J');
-    await p.waitForSelector('.past-days', { state: 'visible' });
-    assert.match(await p.locator('.past-days').innerText(), /Yesterday’s thought/);
-    await p.locator('.past-days p', { hasText: 'Yesterday’s thought' }).click();
+    await p.waitForSelector('.past-toggle', { state: 'visible' });
+    assert.equal(await p.locator('.past-day').count(), 0, 'closed by default');
+    await p.locator('.past-toggle').click();
+    await p.waitForSelector('.past-day', { state: 'visible' });
+    assert.match(await p.locator('.past-list').innerText(), /Yesterday’s thought/);
+    assert.equal(await p.evaluate(() => localStorage.getItem('pastDays')), 'open');
+    await p.locator('.past-toggle').click();
+    await sleep(200);
+    assert.equal(await p.locator('.past-day').count(), 0, 'closed again');
+    assert.equal(await p.evaluate(() => localStorage.getItem('pastDays')), null);
+    await p.locator('.past-toggle').click();
+    await p.waitForSelector('.past-day', { state: 'visible' });
+    await p.locator('.past-list p', { hasText: 'Yesterday’s thought' }).click();
     await sleep(500);
     assert.equal(await p.locator('#nb-kind').innerText(), 'DAILY PAGE');
     assert.match(await outlineText(), /Yesterday’s thought/);
