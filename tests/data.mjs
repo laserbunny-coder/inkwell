@@ -133,12 +133,24 @@ try {
       { id: 'old_unsent', kind: 'para', parent_id: 'x', sort: 2, deleted: true, updated_at: 1000, created_at: 1000, tags: [], links: [] }
     ]);
     await put('outbox', [{ id: 'old_unsent' }]);
+    // As on a device whose clean-up hasn't run yet.
+    await put('meta', [{ key: 'forgotThrough', value: 0 }]);
     await p.reload();
     await p.waitForSelector('#editor .ProseMirror');
     await sleep(800);
-    const ids = (await all()).map((e) => e.id);
+    let ids = (await all()).map((e) => e.id);
     assert.ok(!ids.includes('old_sent'));
     assert.ok(ids.includes('old_unsent'));
+    // Once it's sent, the next pass forgets it too.
+    await p.evaluate(() => new Promise((res) => {
+      const r = indexedDB.open('writing');
+      r.onsuccess = () => { const tx = r.result.transaction('outbox', 'readwrite'); tx.objectStore('outbox').delete('old_unsent'); tx.oncomplete = () => res(); };
+    }));
+    await p.reload();
+    await p.waitForSelector('#editor .ProseMirror');
+    await sleep(800);
+    ids = (await all()).map((e) => e.id);
+    assert.ok(!ids.includes('old_unsent'));
   });
 
   await check('a paragraph sent to today becomes a line there, keeping its id', async () => {

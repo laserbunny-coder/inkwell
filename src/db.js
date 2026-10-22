@@ -120,6 +120,42 @@ export async function byTag(tag) {
   return rows.filter(live);
 }
 
+// The most used tags, most first. Counts from the tags index's keys alone
+// (no rows read), then checks each has at least one live entry, so a big
+// vault doesn't load every line to draw the shelf.
+export async function topTags(limit = 30) {
+  const db = await open();
+  const index = db.transaction('entries').objectStore('entries').index('tags');
+  const counts = new Map();
+  await new Promise((resolve, reject) => {
+    const req = index.openKeyCursor();
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const c = req.result;
+      if (!c) return resolve();
+      counts.set(c.key, (counts.get(c.key) || 0) + 1);
+      c.continue();
+    };
+  });
+  const ranked = [...counts].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]))).map(([t]) => t);
+  const hasLive = (tag) => new Promise((resolve, reject) => {
+    const req = db.transaction('entries').objectStore('entries').index('tags').openCursor(tag);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const c = req.result;
+      if (!c) return resolve(false);
+      if (live(c.value)) return resolve(true);
+      c.continue();
+    };
+  });
+  const out = [];
+  for (const t of ranked) {
+    if (out.length >= limit) break;
+    if (await hasLive(t)) out.push(t);
+  }
+  return out;
+}
+
 export async function byKind(kind, { withTrash = false } = {}) {
   const db = await open();
   const rows = await result(db.transaction('entries').objectStore('entries').index('kind').getAll(kind));
@@ -134,13 +170,24 @@ export function onLocalWrites(fn) { onLocalWrite = fn; }
 export async function putEntries(rows, { fromSync = false } = {}) {
   if (!rows.length) return;
   const db = await open();
-  const tx = db.transaction(['entries', 'outbox'], 'readwrite');
+  // A deletion dated before the clean-up's last pass (one restored from a
+  // backup, say) moves that mark back, so the next pass still sees it.
+  const oldest = Math.min(...rows.filter((r) => r.deleted).map((r) => r.updated_at || 0));
+  const late = oldest < Date.now() - 7 * 864e5;
+  const tx = db.transaction(late ? ['entries', 'outbox', 'meta'] : ['entries', 'outbox'], 'readwrite');
   const store = tx.objectStore('entries');
   const outbox = tx.objectStore('outbox');
   for (const r of rows) {
     const { chapters, ...row } = r;
     store.put(row);
     if (!fromSync) outbox.put({ id: row.id });
+  }
+  if (late) {
+    const meta = tx.objectStore('meta');
+    meta.get('forgotThrough').onsuccess = (e) => {
+      const was = e.target.result?.value;
+      if (was !== undefined && oldest < was) meta.put({ key: 'forgotThrough', value: oldest });
+    };
   }
   await done(tx);
   if (!fromSync) onLocalWrite(rows);
@@ -199,22 +246,59 @@ export async function dropConflict(key) {
 // Once a marker is old and already sent to the cloud, this device can forget
 // it. The cloud keeps its copy, so a device that's been away still learns.
 export async function forgetDeleted(olderThan) {
+  // Only what's newly old since the last pass is looked at, a few thousand at
+  // a time, so this never holds up reading and writing.
+  const since = (await getMeta('forgotThrough')) || 0;
+  if (since >= olderThan) return 0;
   const db = await open();
   const tx = db.transaction(['entries', 'outbox'], 'readwrite');
   const entries = tx.objectStore('entries');
   const outbox = tx.objectStore('outbox');
   let count = 0;
-  entries.index('updated_at').openCursor(IDBKeyRange.upperBound(olderThan)).onsuccess = (e) => {
+  let seen = 0;
+  let through = olderThan;
+  let waiting = Infinity;
+  entries.index('updated_at').openCursor(IDBKeyRange.bound(since, olderThan)).onsuccess = (e) => {
     const c = e.target.result;
     if (!c) return;
+    if (seen >= 5000) { through = c.key; return; }
+    seen += 1;
     const row = c.value;
     if (row.deleted) {
-      outbox.getKey(row.id).onsuccess = (ev) => { if (ev.target.result === undefined) { entries.delete(row.id); count += 1; } };
+      const at = c.key;
+      outbox.getKey(row.id).onsuccess = (ev) => {
+        if (ev.target.result === undefined) { entries.delete(row.id); count += 1; }
+        // Not sent yet: look at it again next time.
+        else waiting = Math.min(waiting, at);
+      };
     }
     c.continue();
   };
   await done(tx);
+  await setMeta('forgotThrough', Math.min(through, waiting));
   return count;
+}
+
+// Every entry except old versions, handed to `fn` a slice at a time with a
+// pause between slices, so saves and other reads get through meanwhile.
+export async function eachEntry(fn, { batch = 2000 } = {}) {
+  const db = await open();
+  let after = null;
+  for (;;) {
+    const range = after === null ? null : IDBKeyRange.lowerBound(after, true);
+    const rows = await result(db.transaction('entries').objectStore('entries').getAll(range, batch));
+    for (const r of rows) if (r.kind !== 'version') fn(r);
+    if (rows.length < batch) return;
+    after = rows[rows.length - 1].id;
+    await new Promise((res) => setTimeout(res, 0));
+  }
+}
+
+// Several entries in one go (missing ones come back undefined).
+export async function getMany(ids) {
+  const db = await open();
+  const store = db.transaction('entries').objectStore('entries');
+  return Promise.all(ids.map((id) => result(store.get(id))));
 }
 
 export async function addSnapshot(snap) {

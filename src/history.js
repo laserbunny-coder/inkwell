@@ -60,6 +60,10 @@ export function thin(list, now = Date.now()) {
 }
 
 export async function tidyHistory(now = Date.now()) {
+  // Once a day is plenty, and it reads every version, so not on every start.
+  const last = (await getMeta('tidiedAt')) || 0;
+  if (now - last < 20 * HOUR) return 0;
+  await setMeta('tidiedAt', now);
   const snaps = await allSnapshots();
   const localDrop = thin(snaps.map((s) => ({ id: s.id, root: s.chapter_id, at: s.at, label: s.label })), now);
   if (localDrop.length) await dropSnapshots(localDrop);
