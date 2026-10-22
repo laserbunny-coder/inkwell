@@ -102,10 +102,10 @@ export async function getEntry(id) {
   return result(db.transaction('entries').objectStore('entries').get(id));
 }
 
-export async function children(parentId) {
+export async function children(parentId, { withTrash = false } = {}) {
   const db = await open();
   const rows = await result(db.transaction('entries').objectStore('entries').index('parent_id').getAll(parentId));
-  return rows.filter(live).sort(bySort);
+  return rows.filter((r) => !r.deleted && (withTrash || !isTrashed(r))).sort(bySort);
 }
 
 export async function linkedFrom(id) {
@@ -165,9 +165,34 @@ export async function byKind(kind, { withTrash = false } = {}) {
 let onLocalWrite = () => {};
 export function onLocalWrites(fn) { onLocalWrite = fn; }
 
+// Who is writing on this device: the signed-in person's id once sync knows
+// it, 'me' (the owner of this vault) before that. Claude's words carry
+// 'claude'. Every entry keeps who made it (fields.by) and who last changed
+// its words (fields.edited_by); entries from before this have neither and
+// are the owner's.
+let writer = 'me';
+export function setWriter(id) { writer = id || 'me'; }
+export const CLAUDE = 'claude';
+
+// A row may say who wrote it this time (`_by`, for words Claude wrote);
+// otherwise it's whoever is writing here, but only when its words changed,
+// so moving, sorting or trashing something keeps its author.
+function stamp(row, prev, by) {
+  const fields = row.fields || {};
+  const who = by || writer;
+  if (!prev) return { ...row, fields: { ...fields, by: fields.by || who, edited_by: by || fields.edited_by || fields.by || who } };
+  // A copy of the row from before it was last saved still keeps the authors.
+  const kept = { ...fields };
+  if (!kept.by && prev.fields?.by) kept.by = prev.fields.by;
+  if (!kept.edited_by && prev.fields?.edited_by) kept.edited_by = prev.fields.edited_by;
+  const changed = (row.text || '') !== (prev.text || '') || (row.title || '') !== (prev.title || '');
+  if (changed || by) kept.edited_by = who;
+  return { ...row, fields: kept };
+}
+
 // Writes many entries in one transaction, so a save either lands whole or not
 // at all. Local writes are also queued for the cloud in the same transaction.
-export async function putEntries(rows, { fromSync = false } = {}) {
+export async function putEntries(rows, { fromSync = false, stamp: stamping = !fromSync } = {}) {
   if (!rows.length) return;
   const db = await open();
   // A deletion dated before the clean-up's last pass (one restored from a
@@ -178,8 +203,9 @@ export async function putEntries(rows, { fromSync = false } = {}) {
   const store = tx.objectStore('entries');
   const outbox = tx.objectStore('outbox');
   for (const r of rows) {
-    const { chapters, ...row } = r;
-    store.put(row);
+    const { chapters, _by, ...row } = r;
+    if (stamping) store.get(row.id).onsuccess = (e) => store.put(stamp(row, e.target.result, _by));
+    else store.put(row);
     if (!fromSync) outbox.put({ id: row.id });
   }
   if (late) {

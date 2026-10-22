@@ -6,7 +6,10 @@ A quiet, warm writing app for novels and screenplays, with a notebook and resear
 - Keep notes in the margin, lined up beside the paragraph they're about.
 - Write screenplays that format themselves as you type.
 - Keep one daily page for plans, ideas and research, and link any line to a chapter or page.
-- Keep every book, screenplay and research collection in one Library, in areas you organize yourself.
+- Keep every story as a world: a bible of pages that nest, and pieces of any size inside it (a novel, a film, a season of episodes, a single gag), each with your own label and a stage.
+- Every line and paragraph remembers who wrote it, you or Claude.
+- Give a script stable scene numbers (3A, A1) once it heads into production.
+- Let Claude read your writing and add to it from any chat, through Inkwell's own connector.
 - See how many words you wrote each day, week or month.
 - Install it on your phone. It works offline and syncs with your computer.
 
@@ -32,15 +35,19 @@ These screenshots use made-up sample data. They're shown in dark mode, and there
 
 ![Today's page in the notebook](docs/screenshots/desktop-today.webp)
 
-**The Library** (Ctrl + Shift + O) holds every novel, screenplay and notes collection, sorted into areas you make yourself.
+**The Library** (Ctrl + Shift + O) holds every world, sorted into areas you make yourself.
 
 ![The Library](docs/screenshots/desktop-library.webp)
 
-**A book's home** shows its chapters, its research pages and every line from your daily pages that mentions it.
+**A world** holds its pieces, each with a label you choose (Short film, Season, Reel, Gag…) and a stage from Idea to Posted, and its bible: pages for characters, places and research, nested as deep as you like.
 
-![A book's home page](docs/screenshots/desktop-book.webp)
+![A world's home page](docs/screenshots/desktop-world.webp)
 
-**Screenplays** are formatted as you type: scene headings, action, characters, dialogue.
+**A piece's home** shows its chapters, how it's written (prose, script or outline), its stage and every line from your daily pages that mentions it.
+
+![A piece's home page](docs/screenshots/desktop-book.webp)
+
+**Screenplays** are formatted as you type: scene headings, action, characters, dialogue. Scene numbers appear only once you choose "Number the scenes".
 
 ![A screenplay](docs/screenshots/desktop-screenplay.webp)
 
@@ -66,7 +73,7 @@ Inkwell installs to the home screen and syncs with the computer.
   <img src="docs/screenshots/phone-library.webp" width="240" alt="The Library on a phone">
 </p>
 <p>
-  <img src="docs/screenshots/phone-book.webp" width="240" alt="A book's home on a phone">
+  <img src="docs/screenshots/phone-world.webp" width="240" alt="A world on a phone">
   <img src="docs/screenshots/phone-screenplay.webp" width="240" alt="A screenplay on a phone">
   <img src="docs/screenshots/phone-command-menu.webp" width="240" alt="The command menu on a phone">
 </p>
@@ -87,10 +94,27 @@ When you write, the screen shows only your text. Everything else is a hover or a
 - `Ctrl + Shift + H` opens earlier versions of the chapter. A version is kept every time you pause typing.
 - `Ctrl + Shift + L` switches light and dark.
 
+### Worlds and pieces
+
+Every project is a world. A world has a bible (pages that can hold pages, like Characters › Del) and pieces. A piece can be any size and can hold other pieces, so a Season holds its Episodes. Each piece is written as prose, a script or an outline, and carries a label you type yourself (earlier labels are offered) and a stage: Idea, Written, Boarded, Generated, Edited or Posted. "+ Piece" on a world's home adds one; the piece's `···` menu changes how it's written, its stage or where it lives. Nothing is ever deleted by changing these.
+
+### Scene numbers
+
+Scripts have no numbers while you draft. When a script is heading into production, choose "Number the scenes (for production)" from `Ctrl + K` or the piece's `···` menu. Each scene heading gets a number that never changes after that: a scene added between 3 and 4 becomes 3A, one before scene 1 becomes A1. "Show or hide scene numbers" in `Ctrl + K` hides them on screen, and focus mode hides them too. Turning numbering off only hides them; they come back as they were. Fountain export writes them as `#3A#`, and Fountain import reads them back.
+
+### Who wrote what
+
+Every line, paragraph and page records who first wrote it and who last changed it: you, or Claude (a Claude rewrite you keep, or anything Claude adds through the connector). Entries from before this was recorded count as yours.
+
+### Claude connector
+
+"Connect Claude to Inkwell" in `Ctrl + K` (signed in) makes a private address. In Claude, go to Settings, then Connectors, then Add custom connector, and paste it. Claude can then read your worlds, pieces, pages and daily pages from any chat, search them, and add lines, paragraphs, pages, worlds and pieces, all marked as Claude's. It never changes or deletes anything you wrote. Making a new address turns the old one off, and "Turn off Claude's access" in the same place removes it. The connector runs on the shared Supabase project (the `inkwell-mcp` function in the Daybook repo).
+
 ## How it's built
 
 - [Tiptap](https://tiptap.dev) (on ProseMirror) is the editor. Plain JavaScript, built with [Vite](https://vite.dev).
-- **Everything is an entry.** Projects, acts, chapters, every paragraph, scene breaks and notes are all rows of one shape (`src/model.js`) with a stable id, tags (`#words` in the text) and room for links and typed fields. Daily-page lines and vault captures will use the same shape, so anything can link to anything.
+- **Everything is an entry.** Worlds, pieces, acts, chapters, every paragraph, scene breaks, pages, lines and notes are all rows of one shape (`src/model.js`) with a stable id, tags (`#words` in the text) and room for links and typed fields, so anything can link to anything. A world is `kind: 'world'`; a piece is `kind: 'project'` whose parent is a world or another piece, with `fields.type` (how it's written), `fields.label` and `fields.stage`. Bible pages sit under the world. `fields.by` and `fields.edited_by` record authors (the account id, `'me'` before sign-in, or `'claude'`), and a numbered scene heading keeps its number in `fields.code`.
+- **Books from before worlds** are brought up to date on first open after sync (`ensureWorlds` in `src/library.js`): each gets a world of the same name (id `wd-<book id>`, so every device makes the same one) and its pages move into the world's bible; a notes collection becomes a world itself. Nothing is deleted, and it's safe to run again.
 - **Saving never loses text** (`src/chapter.js`). Each change is written at once to a local write-ahead copy, then only the changed paragraphs are saved to the browser's database (IndexedDB). If the tab dies mid-save, the write-ahead copy is picked up on the next open.
 - **Past versions** live in their own store so they never slow down the draft.
 - It installs to the home screen and works offline (`public/sw.js`).
@@ -115,4 +139,4 @@ Ctrl + J switches between the manuscript and today's page. Every day has a page,
 
 ## Library
 
-Everything lives in the Library (Ctrl + O jumps to anything by name; the left edge shows the whole tree). Areas can nest as deep as you like, e.g. Writing › Novels › Working. Each area holds books (novels) and notes collections. A new book starts with an Idea page. A book's home shows its manuscript, its pages and the lines from daily pages that link to it. Pages with no book yet are listed as loose pages until you move them. The daily page scrolls back through earlier days, and the app reopens wherever you last were.
+Everything lives in the Library (Ctrl + O jumps to anything by name; the left edge shows the whole tree). Areas can nest as deep as you like, e.g. Writing › Novels › Working. Each area holds worlds. A new world starts with an Idea page. A world's home shows its pieces, its bible and the lines from daily pages that link to it. Pages that aren't in a world yet are listed as loose pages until you move them. The daily page scrolls back through earlier days, and the app reopens wherever you last were.

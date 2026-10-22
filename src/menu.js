@@ -127,7 +127,8 @@ export function toast(text, action) {
 }
 
 // Ask for a name. Resolves the new text, or null if left alone.
-export function askText({ title, value = '', ok = 'Save', placeholder = '' }) {
+// `list` offers earlier answers to pick from as you type.
+export function askText({ title, value = '', ok = 'Save', placeholder = '', body = '', list = null }) {
   return new Promise((resolve) => {
     const back = make('div', 'ask-backdrop');
     const box = make('form', 'ask');
@@ -138,12 +139,20 @@ export function askText({ title, value = '', ok = 'Save', placeholder = '' }) {
     input.placeholder = placeholder;
     input.setAttribute('aria-label', title);
     input.autocomplete = 'off';
+    const extra = [];
+    if (list?.length) {
+      const dl = make('datalist');
+      dl.id = `ask-list-${Date.now()}`;
+      dl.append(...list.map((v) => Object.assign(make('option'), { value: v })));
+      input.setAttribute('list', dl.id);
+      extra.push(dl);
+    }
     const row = make('div', 'ask-actions');
     const no = make('button', 'ghost-btn', 'Cancel');
     const yes = make('button', 'pill primary', ok);
     yes.type = 'submit';
     row.append(no, yes);
-    box.append(make('h2', '', title), input, row);
+    box.append(make('h2', '', title), ...(body ? [make('p', '', body)] : []), input, ...extra, row);
     back.append(box);
     document.body.append(back);
     const done = (v) => { back.remove(); resolve(v); };
@@ -151,6 +160,97 @@ export function askText({ title, value = '', ok = 'Save', placeholder = '' }) {
     box.addEventListener('submit', (e) => { e.preventDefault(); const t = input.value.trim(); done(t && t !== value ? t : null); });
     back.addEventListener('pointerdown', (e) => { if (e.target === back) done(null); });
     box.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); } });
+    input.focus();
+    input.select();
+  });
+}
+
+// A new piece: its name, what it is in your own words, and how it's written.
+// Resolves { title, label, type } or null.
+export function askPiece({ title, labels = [], formats }) {
+  return new Promise((resolve) => {
+    const back = make('div', 'ask-backdrop');
+    const box = make('form', 'ask ask-piece');
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    const name = make('input', 'ask-input');
+    name.placeholder = 'Name, like “Reel 4: The Dentist”';
+    name.setAttribute('aria-label', 'Name');
+    name.autocomplete = 'off';
+    const label = make('input', 'ask-input');
+    label.placeholder = 'What it is: Gag, Short, Episode, Season…';
+    label.setAttribute('aria-label', 'What it is');
+    label.autocomplete = 'off';
+    const dl = make('datalist');
+    dl.id = `piece-labels-${Date.now()}`;
+    dl.append(...labels.map((v) => Object.assign(make('option'), { value: v })));
+    label.setAttribute('list', dl.id);
+    const how = make('div', 'ask-choices');
+    how.setAttribute('role', 'radiogroup');
+    how.setAttribute('aria-label', 'Written as');
+    let type = formats[0][0];
+    for (const [id, text, hint] of formats) {
+      const b = make('button', 'chip' + (id === type ? ' on' : ''), text);
+      b.title = hint || '';
+      b.dataset.type = id;
+      b.setAttribute('role', 'radio');
+      b.addEventListener('click', () => { type = id; how.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c.dataset.type === id)); });
+      how.append(b);
+    }
+    const row = make('div', 'ask-actions');
+    const no = make('button', 'ghost-btn', 'Cancel');
+    const yes = make('button', 'pill primary', 'Create');
+    yes.type = 'submit';
+    row.append(no, yes);
+    box.append(make('h2', '', title), name, label, dl, make('p', 'hint', 'Written as'), how, row);
+    back.append(box);
+    document.body.append(back);
+    const done = (v) => { back.remove(); resolve(v); };
+    no.addEventListener('click', () => done(null));
+    box.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const t = name.value.trim();
+      if (!t) { name.focus(); return; }
+      done({ title: t, label: label.value.trim(), type });
+    });
+    back.addEventListener('pointerdown', (e) => { if (e.target === back) done(null); });
+    box.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); } });
+    name.focus();
+  });
+}
+
+// Something to copy, like an address: shown once, with a Copy button.
+export function showCopy({ title, body, value, ok = 'Copy', extra = null }) {
+  return new Promise((resolve) => {
+    const back = make('div', 'ask-backdrop');
+    const box = make('div', 'ask');
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    const input = make('input', 'ask-input');
+    input.readOnly = true;
+    input.value = value;
+    input.setAttribute('aria-label', title);
+    const row = make('div', 'ask-actions');
+    const no = make('button', 'ghost-btn', 'Done');
+    const yes = make('button', 'pill primary', ok);
+    if (extra) {
+      const x = make('button', 'ghost-btn' + (extra.danger ? ' danger' : ''), extra.label);
+      x.addEventListener('click', () => { back.remove(); resolve('extra'); });
+      row.append(x);
+    }
+    row.append(no, yes);
+    box.append(make('h2', '', title), ...(body ? [make('p', '', body)] : []), input, row);
+    back.append(box);
+    document.body.append(back);
+    const done = (v) => { back.remove(); resolve(v); };
+    no.addEventListener('click', () => done(false));
+    yes.addEventListener('click', async () => {
+      input.select();
+      try { await navigator.clipboard.writeText(value); } catch { document.execCommand?.('copy'); }
+      yes.textContent = 'Copied';
+    });
+    back.addEventListener('pointerdown', (e) => { if (e.target === back) done(false); });
+    box.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); } });
     input.focus();
     input.select();
   });

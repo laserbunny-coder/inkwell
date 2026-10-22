@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import config from './config.js';
-import { getEntry, putEntries, outboxIds, clearOutbox, addConflict, getMeta, setMeta } from './db.js';
+import { getEntry, putEntries, outboxIds, clearOutbox, addConflict, getMeta, setMeta, setWriter } from './db.js';
 import { setFileBackend, uploadPending } from './files.js';
 
 // Keeps this device's entries in step with the cloud (the Supabase project
@@ -59,6 +59,13 @@ function supabaseBackend() {
       }
       return data;
     },
+    // A database function, such as the one that makes the connector address.
+    async rpc(name) {
+      const { data, error } = await sb.rpc(name);
+      if (error) throw error;
+      return data;
+    },
+    functionsUrl: `${config.supabaseUrl}/functions/v1`,
     async push(rows) {
       const { data, error } = await sb.from('writing_entries').upsert(rows).select('id,updated_at');
       if (error) throw error;
@@ -128,6 +135,7 @@ export class Sync {
   }
 
   async begin() {
+    setWriter(this.user.id);
     setFileBackend(this.backend, this.user.id);
     this.backend.subscribe(this.user.id, () => this.soon(400));
     window.addEventListener('online', () => this.soon(0));

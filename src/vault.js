@@ -7,7 +7,7 @@ import { descendants } from './outline.js';
 import { titleOf } from './notebook.js';
 
 // The whole vault as one download: plain Markdown files in folders (Library >
-// areas > books, daily pages, loose pages) that open in any app, plus
+// areas > worlds > pieces and bible, daily pages, loose pages) that open in any app, plus
 // vault.json with every entry exactly as stored, so nothing depends on this
 // app alone.
 
@@ -46,19 +46,39 @@ export async function vaultFiles() {
     for (let a = areas.get(id), i = 0; a && i < 50; a = areas.get(a.parent_id), i++) parts.unshift(clean(a.title));
     return parts.length ? parts.join('/') : 'No area';
   };
-  const pagesUnder = (pid) => shown.filter((r) => r.kind === 'page' && r.parent_id === pid);
-
-  for (const book of shown.filter((r) => r.kind === 'project')) {
-    const dir = `Library/${areaPath(book.area_id)}/${clean(book.title)}`;
+  const under = (pid, kind) => shown.filter((r) => r.kind === kind && r.parent_id === pid).sort((a, b) => a.sort - b.sort);
+  // A page with pages inside it gets a folder of the same name for them.
+  const pages = async (pid, dir) => {
+    for (const p of under(pid, 'page')) {
+      add(`${dir}/${clean(p.title)}.md`, await pageMarkdown(p));
+      if (under(p.id, 'page').length) await pages(p.id, `${dir}/${clean(p.title)}`);
+    }
+  };
+  // A piece: its manuscript (Markdown, or Fountain for a script), its
+  // outline, its own pages, and the pieces inside it, in its folder.
+  const piece = async (book, dir) => {
     const acts = await outline(book.id);
     if (acts.length && book.fields?.type === 'screenplay') {
       const rows = [];
       for (const act of acts) for (const ch of act.chapters) rows.push(...shown.filter((r) => r.parent_id === ch.id).sort((a, b) => a.sort - b.sort));
       add(`${dir}/${clean(book.title)}.fountain`, toFountain(book.title, rows));
     } else if (acts.length) add(`${dir}/${clean(book.title)}.md`, await bookMarkdown(book, acts));
-    for (const p of pagesUnder(book.id)) add(`${dir}/${clean(p.title)}.md`, await pageMarkdown(p));
+    if ((await descendants(book.id)).length) add(`${dir}/${clean(book.title)} (outline).md`, await pageMarkdown(book));
+    await pages(book.id, dir);
+    for (const p of under(book.id, 'project')) await piece(p, `${dir}/${clean(p.title)}`);
+  };
+
+  // Library > area > world > its bible pages, and a folder per piece.
+  for (const world of shown.filter((r) => r.kind === 'world')) {
+    const dir = `Library/${areaPath(world.area_id)}/${clean(world.title)}`;
+    const kids = under(world.id, 'project');
+    // A world that is one book of the same name keeps the book's files right in its folder.
+    for (const p of kids) await piece(p, kids.length === 1 && clean(p.title) === clean(world.title) ? dir : `${dir}/${clean(p.title)}`);
+    await pages(world.id, kids.length ? `${dir}/Bible` : dir);
   }
-  for (const p of pagesUnder(null)) add(`Loose pages/${clean(p.title)}.md`, await pageMarkdown(p));
+  // Books from before worlds, if an older device sent one that hasn't been brought up to date yet.
+  for (const book of shown.filter((r) => r.kind === 'project' && !r.parent_id)) await piece(book, `Library/${areaPath(book.area_id)}/${clean(book.title)}`);
+  await pages(null, 'Loose pages');
   for (const d of shown.filter((r) => r.kind === 'day').sort((a, b) => (a.title < b.title ? -1 : 1))) {
     const md = await pageMarkdown(d);
     if (md.includes('\n- ')) add(`Daily pages/${clean(d.title)}.md`, md);

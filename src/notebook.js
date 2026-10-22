@@ -272,7 +272,7 @@ export class Notebook {
     title.contentEditable = this.isDay ? 'false' : 'true';
     $('#nb-prev').hidden = $('#nb-next').hidden = !this.isDay;
     $('#nb-today').hidden = this.isDay && this.page.title === isoDate();
-    $('#nb-kind').textContent = this.isDay ? (this.page.title === isoDate() ? 'Today' : 'Daily page') : 'Page';
+    $('#nb-kind').textContent = this.isDay ? (this.page.title === isoDate() ? 'Today' : 'Daily page') : this.page?.kind === 'project' ? (this.page.fields?.label || 'Outline') : 'Page';
   }
 
   async renderBacklinks() {

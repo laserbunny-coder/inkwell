@@ -67,10 +67,16 @@ export async function ensureSeed() {
   // Books in the Trash count: putting your only book there shouldn't make a new one.
   const projects = await byKind('project', { withTrash: true });
   if (projects.length) return projects[0];
+  if ((await byKind('world', { withTrash: true })).length) return null;
   const project = entry('project', { title: 'Untitled novel', fields: { levels: ['Act', 'Chapter', 'Scene'] } });
+  // Its world has the id a book from before worlds would get, so a device
+  // that started fresh ends up the same as one that was brought up to date.
+  const world = entry('world', { id: `wd-${project.id}`, title: project.title, area_id: 'area-writing' });
+  project.parent_id = world.id;
+  project.area_id = 'area-writing';
   const act = entry('act', { parent_id: project.id, title: 'Act One', sort: 1 });
   const chapter = entry('chapter', { parent_id: act.id, title: 'Chapter 1', sort: 1 });
-  await putEntries([project, act, chapter]);
+  await putEntries([world, project, act, chapter]);
   await setMeta('noteTypes', DEFAULT_NOTE_TYPES);
   await setMeta('lastChapter', chapter.id);
   return project;

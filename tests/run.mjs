@@ -286,15 +286,17 @@ try {
     const rows = await all();
     const novels = rows.find((e) => e.kind === 'area' && e.title === 'Novels');
     const book = rows.find((e) => e.kind === 'project' && e.title === 'Winter Harbour');
+    const world = rows.find((e) => e.kind === 'world' && e.title === 'Winter Harbour');
     assert.equal(novels.parent_id, 'area-writing');
-    assert.equal(book.area_id, novels.id);
-    assert.ok(rows.some((e) => e.kind === 'page' && e.title === 'Idea' && e.parent_id === book.id));
+    assert.equal(world.area_id, novels.id);
+    assert.equal(book.parent_id, world.id, 'the book is the first piece in its world');
+    assert.ok(rows.some((e) => e.kind === 'page' && e.title === 'Idea' && e.parent_id === world.id), 'the Idea page is in the world’s bible');
 
     await p.mouse.move(600, 4);
     await sleep(300);
     await p.locator('#crumb .crumb-part', { hasText: /^Winter Harbour$/ }).click();
-    await p.waitForSelector('.project-home', { state: 'visible' });
-    await p.locator('#ph-continue').click();
+    await p.waitForSelector('.world-home', { state: 'visible' });
+    await p.locator('#wh-continue').click();
     await p.waitForSelector('#editor .ProseMirror', { state: 'visible' });
     await sleep(300);
     await p.keyboard.type('Snow on the harbour wall.');

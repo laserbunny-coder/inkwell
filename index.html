@@ -79,13 +79,13 @@
       <div id="lib-books" class="cards"></div>
       <form id="lib-new" class="lib-new" hidden>
         <input id="lib-new-title" placeholder="Title" aria-label="Title" autocomplete="off" required>
-        <select id="lib-new-type" aria-label="Kind"><option value="novel">Novel</option><option value="screenplay">Screenplay</option><option value="notes">Notes collection</option></select>
+        <select id="lib-new-type" aria-label="Starts with"><option value="novel">Novel</option><option value="screenplay">Screenplay</option><option value="lines">Outline (a gag, a short…)</option><option value="world">Pages only (notes, a bible)</option></select>
         <select id="lib-new-area" aria-label="Area"></select>
         <button type="submit" class="pill">Create</button>
         <button type="button" class="ghost-btn" id="lib-new-cancel">Cancel</button>
       </form>
       <section id="lib-loose-box" hidden>
-        <div class="panel-label">Loose pages, not in a book yet</div>
+        <div class="panel-label">Loose pages, not in a world yet</div>
         <ul id="lib-loose" class="loose-list"></ul>
       </section>
       <details id="lib-trash-box" class="lib-trash" hidden>
@@ -103,7 +103,8 @@
         <button type="button" class="pill" id="ph-continue">Continue writing</button>
         <span id="ph-more"></span>
       </div>
-      <div class="ph-meta"><label><select id="ph-kind" aria-label="What this book is"></select></label> · <span id="ph-stats"></span> · <label>Area <select id="ph-area"></select></label></div>
+      <div class="ph-meta"><input id="ph-label" class="ph-label" list="piece-labels" aria-label="What this is (Novel, Gag, Episode…)" autocomplete="off" spellcheck="false"> · <label>Written as <select id="ph-kind" aria-label="How it's written"></select></label> · <label>Stage <select id="ph-stage" aria-label="Stage"></select></label> · <span id="ph-stats"></span> · <span id="ph-world"></span></div>
+      <datalist id="piece-labels"></datalist>
       <div class="ph-grid">
         <section>
           <div class="panel-label" id="ph-ms-label">Manuscript</div>
@@ -113,8 +114,36 @@
           <div class="hint" id="ph-daily-empty">Link a line on a daily page to this book or its pages with [[ and it shows here.</div>
         </section>
         <section>
-          <div class="ph-row"><span class="panel-label">Pages</span><button type="button" class="ghost-btn" data-cmd="new-page">+ Page</button></div>
+          <div class="ph-row" id="ph-pieces-head"><span class="panel-label">Pieces inside</span><button type="button" class="ghost-btn" id="ph-new-piece">+ Piece</button></div>
+          <ul id="ph-pieces" class="loose-list"></ul>
+          <div class="ph-row"><span class="panel-label" id="ph-pages-label">Pages</span><span><button type="button" class="ghost-btn" id="ph-new-piece-quiet">+ Piece</button><button type="button" class="ghost-btn" data-cmd="new-page">+ Page</button></span></div>
           <ul id="ph-pages" class="loose-list"></ul>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <main class="world-home" aria-label="World">
+    <div class="lib-sheet">
+      <div class="ph-head">
+        <h1 id="wh-title" spellcheck="false"></h1>
+        <button type="button" class="pill" id="wh-continue" hidden>Continue writing</button>
+        <span id="wh-more"></span>
+      </div>
+      <div class="ph-meta"><span id="wh-stats"></span> · <label>Area <select id="wh-area"></select></label></div>
+      <div class="ph-grid">
+        <section>
+          <div class="ph-row"><span class="panel-label">Pieces</span><button type="button" class="ghost-btn" id="wh-new-piece">+ Piece</button></div>
+          <ul id="wh-pieces" class="loose-list tree-list"></ul>
+          <div class="hint" id="wh-pieces-empty">Anything you make in this world, at any size: a gag, a short, an episode, a novel, a film.</div>
+          <div class="panel-label ph-gap">From your daily pages</div>
+          <ul id="wh-daily" class="ref-list"></ul>
+          <div class="hint" id="wh-daily-empty">Link a line on a daily page to this world, its pieces or its pages with [[ and it shows here.</div>
+        </section>
+        <section>
+          <div class="ph-row"><span class="panel-label">Bible</span><button type="button" class="ghost-btn" data-cmd="new-page">+ Page</button></div>
+          <ul id="wh-pages" class="loose-list tree-list"></ul>
+          <div class="hint" id="wh-pages-empty">Characters, places, rules, running gags: a page for each, and pages inside pages.</div>
         </section>
       </div>
     </div>

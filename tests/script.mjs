@@ -1,6 +1,6 @@
 // Fountain in and out, without a browser.
 import assert from 'node:assert/strict';
-import { fromFountain, toFountain, detect } from '../src/script.js';
+import { fromFountain, toFountain, detect, assignCodes, codeOrder } from '../src/script.js';
 
 let failed = 0;
 const check = (name, fn) => { try { fn(); console.log(`ok   ${name}`); } catch (e) { failed++; console.log(`FAIL ${name}\n     ${e.message}`); } };
@@ -54,6 +54,42 @@ check('spots scene headings, transitions and character names as you type', () =>
   assert.equal(detect('MARA'), 'character');
   assert.equal(detect('She waits.'), null);
   assert.equal(detect('BANG!'), null);
+});
+
+check('numbers scenes 1, 2, 3 the first time', () => {
+  assert.deepEqual(assignCodes([null, null, null]), ['1', '2', '3']);
+});
+
+check('a scene added later never renumbers the others: 3A between 3 and 4, A1 before 1, the next number at the end', () => {
+  assert.deepEqual(assignCodes(['1', '2', '3', null, '4']), ['1', '2', '3', '3A', '4']);
+  assert.deepEqual(assignCodes(['1', '2', '3', '3A', null, '4']), ['1', '2', '3', '3A', '3B', '4']);
+  assert.deepEqual(assignCodes([null, '1', '2']), ['A1', '1', '2']);
+  assert.deepEqual(assignCodes(['1', '2', null, null]), ['1', '2', '3', '4']);
+  assert.deepEqual(assignCodes(['1', '3', null]), ['1', '3', '4']);
+});
+
+check('scene numbers carry on across chapters', () => {
+  assert.deepEqual(assignCodes([null, null], { before: '7', used: ['1', '2', '3', '4', '5', '6', '7'] }), ['8', '9']);
+  assert.deepEqual(assignCodes([null], { before: '7', after: '8', used: ['7', '8'] }), ['7A']);
+});
+
+check('a pasted copy of a scene gets its own number, and the first keeps its own', () => {
+  assert.deepEqual(assignCodes(['1', '2', '2', '3']), ['1', '2', '2A', '3']);
+  assert.deepEqual(assignCodes(['5'], { used: ['5'] }).length, 1);
+  assert.notEqual(assignCodes(['5'], { used: ['5'] })[0], '5');
+});
+
+check('scene numbers sort the way a script reads them', () => {
+  assert.deepEqual(['10', '3A', 'A1', '1', '3', '2', '3B'].sort(codeOrder), ['A1', '1', '2', '3', '3A', '3B', '10']);
+});
+
+check('scene numbers go out to Fountain as #3A# and come back in', () => {
+  const rows = [{ kind: 'para', fields: { el: 'scene', code: '3A' }, content: [{ type: 'text', text: 'INT. DOJO - NIGHT' }] }];
+  const out = toFountain('Pilot', rows);
+  assert.match(out, /INT\. DOJO - NIGHT #3A#/);
+  const back = fromFountain(out).lines[0];
+  assert.equal(back.text, 'INT. DOJO - NIGHT');
+  assert.equal(back.code, '3A');
 });
 
 console.log(failed ? `\n${failed} failed` : '\nall passed');

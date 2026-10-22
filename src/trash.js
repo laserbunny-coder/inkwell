@@ -1,8 +1,8 @@
 import { allEntries, putEntries, getEntry, isTrashed } from './db.js';
 
 // The Trash. Putting something in it never deletes anything: the item and
-// everything inside it (a book's chapters, paragraphs, notes and pages; an
-// area's books and smaller areas) are marked with when and with what they went,
+// everything inside it (a world's pieces and bible; a piece's chapters,
+// paragraphs, notes and pages; an area's worlds and smaller areas) are marked with when and with what they went,
 // and every list stops showing them. Restoring clears the mark on exactly that
 // group, so it all comes back as it was, on every device. Only "Delete forever"
 // removes anything, and only from the Trash.
@@ -15,7 +15,8 @@ function inside(root, rows) {
   for (const r of rows) {
     if (r.deleted) continue;
     if (r.parent_id) (byParent.get(r.parent_id) || byParent.set(r.parent_id, []).get(r.parent_id)).push(r);
-    if (r.kind === 'project' && r.area_id) (byArea.get(r.area_id) || byArea.set(r.area_id, []).get(r.area_id)).push(r);
+    // Worlds (and books from before worlds) are filed in an area rather than inside something.
+    if ((r.kind === 'world' || (r.kind === 'project' && !r.parent_id)) && r.area_id) (byArea.get(r.area_id) || byArea.set(r.area_id, []).get(r.area_id)).push(r);
   }
   const out = [];
   const seen = new Set([root.id]);
@@ -45,6 +46,7 @@ export async function contents(root) {
   return {
     words,
     books: rows.filter((r) => r.kind === 'project' && r.id !== root.id).length,
+    worlds: rows.filter((r) => r.kind === 'world' && r.id !== root.id).length,
     chapters: rows.filter((r) => r.kind === 'chapter' && r.id !== root.id).length,
     pages: rows.filter((r) => r.kind === 'page' && r.id !== root.id).length,
     areas: rows.filter((r) => r.kind === 'area' && r.id !== root.id).length,
@@ -67,7 +69,7 @@ export async function restore(id) {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const groups = new Set([id]);
   for (let r = byId.get(id), i = 0; r && i < 60; i++) {
-    const up = byId.get(r.parent_id) || (r.kind === 'project' ? byId.get(r.area_id) : null);
+    const up = byId.get(r.parent_id) || (['project', 'world'].includes(r.kind) ? byId.get(r.area_id) : null);
     if (up && isTrashed(up)) groups.add(up.fields.trashedWith);
     r = up;
   }

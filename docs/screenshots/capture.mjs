@@ -46,7 +46,9 @@ function seed() {
     const research = area('ar_research', 'Research', '#7A5BA8', 'area-writing', 2);
 
     // ----- a novel -----
-    const book = add('project', { title: 'The Salt Keeper', area_id: working.id, fields: { type: 'novel', levels: ['Act', 'Chapter', 'Scene'] }, created_at: now - 40 * DAY });
+    // A world holds the pieces and the bible pages they share.
+    const saltWorld = add('world', { title: 'The Salt Keeper', area_id: working.id, created_at: now - 40 * DAY });
+    const book = add('project', { title: 'The Salt Keeper', parent_id: saltWorld.id, area_id: working.id, fields: { type: 'novel', levels: ['Act', 'Chapter', 'Scene'], label: 'Novel', stage: 'Written' }, created_at: now - 40 * DAY });
     const acts = [['Act One', ['The Logbook', 'Low Tide', 'What the Gulls Knew']], ['Act Two', ['The Mainland', 'Fog Signal', 'A Letter Unsent']], ['Act Three', ['Lamp Room']]];
     let mainChapter;
     acts.forEach(([title, chapters], i) => {
@@ -63,9 +65,9 @@ function seed() {
     });
 
     // Research pages the novel links to.
-    const lensPage = add('page', { parent_id: book.id, title: 'Fresnel lens', sort: 2048 });
-    const ideaPage = add('page', { parent_id: book.id, title: 'Idea', sort: 1024 });
-    const marenPage = add('page', { parent_id: book.id, title: 'Maren (character)', sort: 3072 });
+    const lensPage = add('page', { parent_id: saltWorld.id, title: 'Fresnel lens', sort: 2048 });
+    const ideaPage = add('page', { parent_id: saltWorld.id, title: 'Idea', sort: 1024 });
+    const marenPage = add('page', { parent_id: saltWorld.id, title: 'Maren (character)', sort: 3072 });
 
     const paras = [
       [txt('The logbook was heavier than she expected, the way a sleeping cat is heavier than a cat. Maren carried it down the iron stairs with both arms, counting the steps out of habit, and set it on the kitchen table beside the cold kettle.')],
@@ -118,24 +120,32 @@ function seed() {
     ]);
 
     // ----- a screenplay -----
-    const film = add('project', { title: 'Night Ferry', area_id: 'area-filmmaking', fields: { type: 'screenplay', levels: ['Act', 'Script', 'Scene'] }, created_at: now - 20 * DAY });
+    const ferry = add('world', { title: 'Night Ferry', area_id: 'area-filmmaking', created_at: now - 20 * DAY });
+    const film = add('project', { title: 'Night Ferry', parent_id: ferry.id, area_id: 'area-filmmaking', fields: { type: 'screenplay', levels: ['Act', 'Script', 'Scene'], label: 'Short film', stage: 'Boarded', numbered: true }, sort: 1, created_at: now - 20 * DAY });
     const fa = add('act', { parent_id: film.id, title: 'Screenplay', sort: 1024 });
     const script = add('chapter', { parent_id: fa.id, title: 'Script', sort: 1024 });
     [['scene', 'EXT. HARBOUR - NIGHT'], ['action', 'Rain on black water. A single ferry idles at the dock, its windows yellow. DEL (60s), oilskin coat, unties the last rope.'],
       ['character', 'DEL'], ['paren', '(to no one)'], ['dialogue', 'Last one out. Always the last one out.'],
       ['action', 'Up on the headland, the lighthouse beam swings past. Then stops.'], ['character', 'DEL'], ['dialogue', 'That’s not right.'],
       ['transition', 'CUT TO:'], ['scene', 'INT. LAMP ROOM - CONTINUOUS'], ['action', 'TOM (40s) stands at the dark lens, a match burning down to his fingers.']]
-      .forEach(([el, text], i) => add('para', { parent_id: script.id, sort: (i + 1) * 1024, text, content: [txt(text)], fields: { el }, created_at: now - 8 * DAY }));
-    add('page', { parent_id: film.id, title: 'Idea', sort: 1024 });
+      .forEach(([el, text], i) => add('para', { parent_id: script.id, sort: (i + 1) * 1024, text, content: [txt(text)], fields: { el, ...(el === 'scene' ? { code: text.startsWith('EXT') ? '1' : '2' } : {}) }, created_at: now - 8 * DAY }));
+    add('page', { parent_id: ferry.id, title: 'Idea', sort: 1024 });
+    const cast = add('page', { parent_id: ferry.id, title: 'Characters', sort: 2048 });
+    ['Del', 'Tom'].forEach((title, i) => add('page', { parent_id: cast.id, title, sort: (i + 1) * 1024 }));
+    add('page', { parent_id: ferry.id, title: 'Locations', sort: 3072 });
+    // Smaller pieces from the same world, each with its own label and stage.
+    const reels = add('project', { title: 'Harbour reels', parent_id: ferry.id, area_id: 'area-filmmaking', fields: { type: 'lines', label: 'Season', stage: 'Idea' }, sort: 2 });
+    [['Last one out', 'Reel', 'Posted'], ['The beam stops', 'Reel', 'Generated'], ['Del’s rope trick', 'Gag', 'Written']].forEach(([title, label, stage], i) =>
+      add('project', { title, parent_id: reels.id, area_id: 'area-filmmaking', fields: { type: 'screenplay', label, stage }, sort: i + 1 }));
 
     // ----- a notes collection and a loose page -----
-    const coll = add('project', { title: 'Coastal research', area_id: research.id, fields: { type: 'notes' } });
+    const coll = add('world', { title: 'Coastal research', area_id: research.id });
     const tides = add('page', { parent_id: coll.id, title: 'Tide tables', sort: 1024 });
     lines(tides.id, ['Spring tides twice a month, at new and full moon. #research', 'The causeway floods two hours either side of high water.']);
     add('page', { parent_id: coll.id, title: 'Shipwrecks 1890–1930', sort: 2048 });
-    const shorts = add('project', { title: 'Short stories', area_id: novels.id, fields: { type: 'notes' } });
+    const shorts = add('world', { title: 'Short stories', area_id: novels.id });
     ['The Ferryman’s Wife', 'Small Hours', 'Weather Report'].forEach((title, i) => add('page', { parent_id: shorts.id, title, sort: (i + 1) * 1024 }));
-    const pitch = add('project', { title: 'Documentary pitch', area_id: 'area-filmmaking', fields: { type: 'notes' } });
+    const pitch = add('world', { title: 'Documentary pitch', area_id: 'area-filmmaking' });
     ['Logline', 'Interview list'].forEach((title, i) => add('page', { parent_id: pitch.id, title, sort: (i + 1) * 1024 }));
     add('page', { parent_id: null, title: 'Books to read', sort: 1024 });
 
@@ -164,14 +174,16 @@ function seed() {
     for (const ch of rows.filter((r) => r.kind === 'chapter')) {
       ch.fields = { ...ch.fields, words: rows.filter((r) => r.parent_id === ch.id && r.kind === 'para').reduce((n, r) => n + wordCount(r.text), 0) };
     }
-    const ago = { 'Night Ferry': 2, 'Coastal research': 3, 'Short stories': 9, 'Documentary pitch': 16, 'Books to read': 5, 'Fresnel lens': 1, 'Maren (character)': 4, 'Idea': 1 };
+    const ago = { 'Night Ferry': 2, 'Coastal research': 3, 'Short stories': 9, 'Documentary pitch': 16, 'Books to read': 5, 'Fresnel lens': 1, 'Maren (character)': 4, 'Idea': 1,
+      Characters: 6, Del: 6, Tom: 6, Locations: 7, 'Harbour reels': 3, 'Last one out': 3, 'The beam stops': 4, 'Del’s rope trick': 5,
+      'Tide tables': 3, 'Shipwrecks 1890–1930': 8, 'The Ferryman’s Wife': 9, 'Small Hours': 12, 'Weather Report': 10, Logline: 16, 'Interview list': 18 };
     for (const r of rows) if (r.title in ago) r.updated_at = now - ago[r.title] * DAY - 3600e3;
     await putEntries(rows, { fromSync: true });
     await setMeta('areasSeeded', true);
     await setMeta('noteTypes', DEFAULT_NOTE_TYPES);
     await setMeta('lastChapter', mainChapter.id);
     await setMeta(`lastChapter:${book.id}`, mainChapter.id);
-    return { chapter: mainChapter.id, book: book.id, film: script.id, lens: lensPage.id, idea: ideaPage.id, today: `day-${iso(now)}` };
+    return { chapter: mainChapter.id, book: book.id, world: ferry.id, film: script.id, lens: lensPage.id, idea: ideaPage.id, today: `day-${iso(now)}` };
   })();
 }
 
@@ -277,7 +289,11 @@ for (const theme of ['light', 'dark']) {
     await open(page, { view: 'library', area: null }, t);
     await shot(page, 'desktop-library');
 
-    // A book's home.
+    // A world's home: its pieces, each with a label and stage, and its bible.
+    await open(page, { view: 'world', id: ids.world }, t);
+    await shot(page, 'desktop-world');
+
+    // A piece's home.
     await open(page, { view: 'project', id: ids.book }, t);
     await shot(page, 'desktop-book');
 
@@ -322,6 +338,9 @@ for (const theme of ['light', 'dark']) {
   await page.keyboard.press('Control+k');
   await sleep(700);
   await shot(page, 'phone-command-menu');
+
+  await open(page, { view: 'world', id: ids.world }, t);
+  await shot(page, 'phone-world');
 
   await open(page, { view: 'project', id: ids.book }, t);
   await shot(page, 'phone-book');

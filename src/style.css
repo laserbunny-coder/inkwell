@@ -204,11 +204,11 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 }
 
 /* Views: the manuscript (default), the notebook, the library and a book's home */
-.notebook, .library, .project-home { display: none; }
+.notebook, .library, .project-home, .world-home { display: none; }
 :root[data-view] .page { display: none; }
 :root[data-view] #notes-toggle, :root[data-view] .when-write { display: none; }
-:root[data-view="notebook"] .notebook, :root[data-view="library"] .library, :root[data-view="project"] .project-home { display: flex; }
-:root[data-view="library"] #view-toggle, :root[data-view="project"] #view-toggle { display: inline; }
+:root[data-view="notebook"] .notebook, :root[data-view="library"] .library, :root[data-view="project"] .project-home, :root[data-view="world"] .world-home { display: flex; }
+:root[data-view="library"] #view-toggle, :root[data-view="project"] #view-toggle, :root[data-view="world"] #view-toggle { display: inline; }
 :root[data-view="library"] #library-toggle { display: none; }
 
 .notebook { justify-content: center; padding: 72px 32px 40vh; }
@@ -354,7 +354,7 @@ button.tree-area:hover { color: var(--ink); }
 .dot { width: 8px; height: 8px; border-radius: 2px; flex: none; display: inline-block; }
 
 /* Library and a book's home */
-.library, .project-home { justify-content: center; padding: 72px 32px 20vh; }
+.library, .project-home, .world-home { justify-content: center; padding: 72px 32px 20vh; }
 .lib-sheet { width: 100%; max-width: 1000px; }
 .lib-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
 .lib-head h1, .ph-head h1 { font-family: var(--prose); font-weight: 500; font-size: 38px; margin: 0; flex: 1; outline: none; }
@@ -428,7 +428,7 @@ html.focus .past-days:not(.open) { display: none !important; }
 .past-more { height: 1px; }
 
 @media (max-width: 760px) {
-  .library, .project-home { padding: 48px 18px 20vh; }
+  .library, .project-home, .world-home { padding: 48px 18px 20vh; }
   .ph-grid { grid-template-columns: 1fr; }
   .chips, .chip-row { align-items: flex-start; justify-content: flex-start; }
   #lib-path { text-align: left; }
@@ -665,7 +665,7 @@ body.line-dragging, body.line-dragging * { user-select: none; }
   .card-wrap > .more-btn, .ms-row .more-btn, .loose-list .more-btn, .ms-act-title .more-btn { opacity: .7; }
 }
 #lib-path .more-btn { opacity: .8; vertical-align: middle; }
-.ph-head #ph-more { align-self: center; }
+.ph-head #ph-more, .ph-head #wh-more { align-self: center; }
 #ph-kind { font: inherit; color: var(--ink); }
 .pop-menu { position: fixed; z-index: 60; min-width: 220px; max-width: min(320px, calc(100vw - 16px)); max-height: 70vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 5px; box-shadow: 0 12px 34px rgba(0,0,0,.18); }
 .pop-item, .pop-back { display: flex; align-items: center; justify-content: space-between; width: 100%; border: 0; background: transparent; color: var(--ink); text-align: left; padding: 8px 10px; border-radius: 6px; font-size: 14px; }
@@ -727,3 +727,25 @@ body.line-dragging, body.line-dragging * { user-select: none; }
   #history-list { flex: none; width: auto; max-height: 34vh; border-right: 0; border-bottom: 1px solid var(--line); }
   .history-preview { flex: 1 1 auto; min-height: 0; padding: 18px 16px; }
 }
+
+/* Worlds: pieces and bible pages as quiet nested lists. */
+.tree-list li { padding-left: calc(var(--depth, 0) * 18px); }
+.tree-list .piece-kind { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.tree-list .stage { color: var(--muted); font-size: 12px; border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; white-space: nowrap; }
+.ph-label { border: none; border-bottom: 1px dashed var(--line); background: transparent; color: var(--ink); font: inherit; width: 9em; padding: 2px 0; }
+.ph-label:focus { outline: none; border-bottom-color: var(--ink); }
+#ph-world button { background: none; border: none; padding: 0; color: inherit; font: inherit; text-decoration: underline; text-decoration-color: var(--line); cursor: pointer; }
+.tree-world { font-weight: 500; }
+
+/* Scene numbers, once a script is numbered: in the margin on both sides, as on a production script. */
+:root.script.numbered #editor p[data-el="scene"][data-code] { position: relative; }
+:root.script.numbered #editor p[data-el="scene"][data-code]::before,
+:root.script.numbered #editor p[data-el="scene"][data-code]::after { content: attr(data-code); position: absolute; top: 0; color: var(--faint); font-weight: 400; }
+:root.script.numbered #editor p[data-el="scene"][data-code]::before { right: calc(100% + 18px); }
+:root.script.numbered #editor p[data-el="scene"][data-code]::after { left: calc(100% + 18px); }
+:root.hide-codes #editor p[data-code]::before, :root.hide-codes #editor p[data-code]::after,
+:root.focus #editor p[data-code]::before, :root.focus #editor p[data-code]::after { content: none; }
+
+.ask-piece .ask-input { margin-bottom: 10px; }
+.ask-piece .hint { margin: 4px 0 8px; }
+.ask-choices { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }

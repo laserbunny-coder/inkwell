@@ -113,6 +113,106 @@ export const ScriptElements = Extension.create({
   }
 });
 
+// ---------- scene numbers ----------
+
+// Scene numbers for production, given only when you ask ("Number the
+// scenes"). Once a scene has one it keeps it for good, the way locked
+// Hollywood scripts do, so file names and shot lists never point at the wrong
+// scene: a scene added between 3 and 4 becomes 3A, one before 1 becomes A1,
+// and new scenes at the end carry on from the highest number.
+
+const CODE = /^([A-Z]*)(\d+)([A-Z]*)$/;
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+export function codeOrder(a, b) {
+  const x = CODE.exec(a);
+  const y = CODE.exec(b);
+  if (!x || !y) return String(a).localeCompare(String(b));
+  return Number(x[2]) - Number(y[2]) || (x[1] ? 0 : 1) - (y[1] ? 0 : 1) || x[1].localeCompare(y[1]) || (x[3] < y[3] ? -1 : x[3] > y[3] ? 1 : 0);
+}
+const highest = (codes) => codes.reduce((n, c) => Math.max(n, Number(CODE.exec(c)?.[2] || 0)), 0);
+
+// codes: each scene's code (or null) in script order. before/after: the
+// nearest codes in the chapters around this one; used: every code elsewhere.
+// Returns the codes with every gap filled; a code used twice (a pasted scene)
+// stays with the first and the copy gets its own.
+export function assignCodes(codes, { before = null, after = null, used = [] } = {}) {
+  const taken = new Set(used);
+  const out = codes.map((c) => {
+    if (!c || taken.has(c)) return null;
+    taken.add(c);
+    return c;
+  });
+  for (let i = 0; i < out.length; i++) {
+    if (out[i]) continue;
+    let prev = before;
+    for (let j = i - 1; j >= 0; j--) if (out[j]) { prev = out[j]; break; }
+    let next = after;
+    for (let j = i + 1; j < out.length; j++) if (out[j]) { next = out[j]; break; }
+    const fits = (c) => !taken.has(c) && (!prev || codeOrder(prev, c) < 0) && (!next || codeOrder(c, next) < 0);
+    const tries = [];
+    if (!next) tries.push(String(highest([...taken, ...(prev ? [prev] : [])]) + 1));
+    if (prev) {
+      const m = CODE.exec(prev);
+      if (m?.[3]) { const last = m[3].slice(-1); const k = LETTERS.indexOf(last); for (const L of LETTERS.slice(k + 1)) tries.push(prev.slice(0, -1) + L); }
+      for (const L of LETTERS) tries.push(prev + L);
+    } else if (next) {
+      const m = CODE.exec(next);
+      if (m && !m[1]) for (const L of LETTERS) tries.push(L + m[2]);
+    }
+    let code = tries.find(fits);
+    // Somewhere very crowded: any free code will do rather than none.
+    for (let n = 0; !code; n++) if (!taken.has(`X${n}`)) code = `X${n}`;
+    taken.add(code);
+    out[i] = code;
+  }
+  return out;
+}
+
+// Keeps a numbered script numbered as you write: a new scene heading gets
+// its code as soon as it's one. `numbering()` gives the chapters-around
+// context, or null while the script isn't numbered.
+export const NUMBER_SCENES = new PluginKey('numberScenes');
+export const SceneCodes = Extension.create({
+  name: 'sceneCodes',
+  addOptions() { return { numbering: () => null }; },
+  addGlobalAttributes() {
+    return [{
+      types: ['paragraph'],
+      attributes: {
+        code: {
+          default: null,
+          keepOnSplit: false,
+          parseHTML: (el) => el.getAttribute('data-code'),
+          renderHTML: (a) => (a.code && a.el === 'scene' ? { 'data-code': a.code } : {})
+        }
+      }
+    }];
+  },
+  addProseMirrorPlugins() {
+    const opts = this.options;
+    return [new Plugin({
+      key: NUMBER_SCENES,
+      appendTransaction(trs, _old, state) {
+        if (!trs.some((tr) => tr.docChanged || tr.getMeta(NUMBER_SCENES))) return null;
+        const ctx = opts.numbering();
+        if (!ctx) return null;
+        const scenes = [];
+        // A scene heading gets its number once something is typed in it.
+        state.doc.forEach((node, pos) => { if (node.type.name === 'paragraph' && node.attrs.el === 'scene' && node.textContent.trim()) scenes.push({ node, pos }); });
+        const codes = assignCodes(scenes.map((s) => s.node.attrs.code), ctx);
+        let tr = null;
+        scenes.forEach((s, i) => {
+          if (s.node.attrs.code === codes[i]) return;
+          tr = tr || state.tr;
+          tr.setNodeMarkup(s.pos, undefined, { ...s.node.attrs, code: codes[i] });
+        });
+        if (tr) tr.setMeta('addToHistory', false);
+        return tr;
+      }
+    })];
+  }
+});
+
 // Script lines at standard widths: [{ el, n }] where n is the line's length in characters.
 const WIDTH = { scene: 60, action: 60, character: 38, paren: 25, dialogue: 35, transition: 60 };
 const GAP = { scene: 2, action: 1, character: 1, paren: 0, dialogue: 0, transition: 1 };
@@ -159,7 +259,8 @@ export function toFountain(title, rows) {
     if (!text) continue;
     const joined = el === 'paren' || el === 'dialogue';
     if (!(joined && ['character', 'paren', 'dialogue'].includes(prev))) out.push('');
-    if (el === 'scene') out.push(SCENE.test(text) ? text.toUpperCase() : `.${text.toUpperCase()}`);
+    // A numbered scene carries its number the Fountain way: INT. HOUSE - DAY #3A#
+    if (el === 'scene') out.push((SCENE.test(text) ? text.toUpperCase() : `.${text.toUpperCase()}`) + (r.fields?.code ? ` #${r.fields.code}#` : ''));
     else if (el === 'character') out.push(text.toUpperCase());
     else if (el === 'paren') out.push(text.startsWith('(') ? text : `(${text})`);
     else if (el === 'dialogue') out.push(text);
@@ -189,8 +290,10 @@ export function fromFountain(src) {
     if (!rows.length) continue;
     const first = rows[0].trim();
     if (/^===+$/.test(first)) continue;
-    if (/^\.[^.]/.test(first)) { lines.push({ el: 'scene', text: first.slice(1).trim() }); continue; }
-    if (SCENE.test(first) && rows.length === 1) { lines.push({ el: 'scene', text: first.replace(/\s+#[^#]+#$/, '') }); continue; }
+    // A scene number (#3A#) comes in as the scene's code.
+    const scene = (t) => { const m = t.match(/\s+#([^#\s]+)#$/); lines.push({ el: 'scene', text: t.replace(/\s+#[^#]+#$/, ''), ...(m ? { code: m[1].toUpperCase() } : {}) }); };
+    if (/^\.[^.]/.test(first)) { scene(first.slice(1).trim()); continue; }
+    if (SCENE.test(first) && rows.length === 1) { scene(first); continue; }
     if (/^>/.test(first) && !/<$/.test(first)) { lines.push({ el: 'transition', text: first.slice(1).trim() }); continue; }
     if (rows.length === 1 && isTransition(first)) { lines.push({ el: 'transition', text: first }); continue; }
     const name = first.startsWith('@') ? first.slice(1).trim() : first.replace(/\s*\^$/, '');
