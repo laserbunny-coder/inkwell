@@ -24,6 +24,7 @@ import { ScriptElements, ELEMENTS, scriptPages, toFountain, fromFountain } from 
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
 import { moveLine, toggleDone } from './outline.js';
 import { openPicker } from './picker.js';
+import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType } from './library.js';
 
 const $ = (s) => document.querySelector(s);
@@ -1631,6 +1632,8 @@ function togglePageSettings() {
   const panel = $('.page-settings');
   if (!panel.hidden) { panel.hidden = true; currentEditor().commands.focus(); return; }
   setPage(currentWidth(), currentSize());
+  loadPreviews();
+  showFonts();
   panel.hidden = false;
   $('#page-width').focus();
 }
@@ -1687,7 +1690,37 @@ syncSwitches();
 
 $('#page-width').addEventListener('input', (e) => setPage(Number(e.target.value), currentSize()));
 $('#text-size').addEventListener('input', (e) => setPage(currentWidth(), Number(e.target.value)));
-$('#page-reset').addEventListener('click', () => setPage(DEFAULT_WIDTH, defaultSize()));
+$('#page-reset').addEventListener('click', () => { setPage(DEFAULT_WIDTH, defaultSize()); pickFont(DEFAULT_FONT); });
+
+// Font picker: Serif / Sans / Mono, then each font written in its own face.
+let fontGroup = null;
+function showFonts() {
+  const cur = currentFont();
+  fontGroup ||= cur.group;
+  $('#font-value').textContent = cur.name;
+  $('.font-groups').replaceChildren(...FONT_GROUPS.map(([g, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = label; b.setAttribute('role', 'tab');
+    b.classList.toggle('current', g === fontGroup);
+    b.setAttribute('aria-selected', String(g === fontGroup));
+    b.addEventListener('click', () => { fontGroup = g; showFonts(); });
+    return b;
+  }));
+  $('.font-list').replaceChildren(...FONTS.filter((f) => f.group === fontGroup).map((f) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = f.name; b.dataset.font = f.id; b.setAttribute('role', 'radio');
+    b.classList.toggle('current', f === cur);
+    b.setAttribute('aria-checked', String(f === cur));
+    b.addEventListener('click', () => pickFont(f.id));
+    return b;
+  }));
+}
+function pickFont(id) {
+  setFont(id);
+  fontGroup = currentFont().group;
+  showFonts();
+  notes.layout();
+}
 $('#page-done').addEventListener('click', togglePageSettings);
 
 // ---------- command menu (⌘K) and go-to (⌘O) ----------
@@ -1703,11 +1736,9 @@ function toggleTheme() {
 }
 
 function cycleFont() {
-  const fonts = ['newsreader', 'literata', 'georgia'];
-  const cur = document.documentElement.dataset.font || 'newsreader';
-  const next = fonts[(fonts.indexOf(cur) + 1) % fonts.length];
-  document.documentElement.dataset.font = next;
-  localStorage.setItem('font', next);
+  const i = FONTS.indexOf(currentFont());
+  setFont(FONTS[(i + 1) % FONTS.length].id);
+  toast(currentFont().name);
 }
 
 async function exportChapter() {
@@ -2148,8 +2179,7 @@ window.addEventListener('pagehide', () => { store.close(editor.state.doc); noteb
 // ---------- start ----------
 
 async function start() {
-  const font = localStorage.getItem('font');
-  if (font) document.documentElement.dataset.font = font;
+  if (localStorage.getItem('font')) setFont(localStorage.getItem('font'));
   await ensureSeed();
   await ensureAreas();
   let place = null;

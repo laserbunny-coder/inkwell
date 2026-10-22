@@ -20,6 +20,9 @@
     try {
       const d = document.documentElement, t = localStorage.getItem('theme');
       if (t) d.dataset.theme = t;
+      const f = localStorage.getItem('font'), fh = localStorage.getItem('fontHref');
+      if (f) d.dataset.font = f;
+      if (f && fh) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.id = 'font-' + f; l.href = fh; document.head.appendChild(l); }
       const pl = JSON.parse(localStorage.getItem('place') || 'null');
       if (pl && pl.view && pl.view !== 'write') d.dataset.view = pl.view;
       const w = localStorage.getItem('pageWidth'), z = localStorage.getItem('textSize');
@@ -203,6 +206,11 @@
       <input type="range" id="page-width" min="420" max="1100" step="10"></label>
     <label><span class="row"><span>Text size</span><span id="size-value"></span></span>
       <input type="range" id="text-size" min="14" max="30" step="1"></label>
+    <div class="font-pick">
+      <span class="row"><span>Font</span><span id="font-value"></span></span>
+      <div class="font-groups" role="tablist" aria-label="Kind of font"></div>
+      <div class="font-list" role="radiogroup" aria-label="Writing font"></div>
+    </div>
     <div class="panel-label view-label">Show</div>
     <label class="switch"><input type="checkbox" data-show="links"> Linked from</label>
     <label class="switch"><input type="checkbox" data-show="dots"> Note dots in the margin</label>
