@@ -130,15 +130,16 @@ function placeScriptBar() {
 // pointerdown is held back so the keyboard stays up.
 const TAP_MS = 280;
 
-// Room kept below the caret when the page scrolls to it: whatever the keyboard
-// and the row above it cover, plus a couple of lines, so the caret never hides.
+// Room kept below the caret when the page scrolls to it: the row above the
+// keyboard plus a line or so. (ProseMirror measures the visual viewport, which
+// already ends at the keyboard, so the keyboard isn't counted again here.)
+const ROOM_ABOVE = 60;
+const ROOM_BELOW = 48;
 const caretRoom = {
-  top: 60, left: 5, right: 5,
+  top: ROOM_ABOVE, left: 5, right: 5,
   get bottom() {
-    const vv = window.visualViewport;
-    const keyboard = vv ? Math.max(0, window.innerHeight - (vv.offsetTop + vv.height)) : 0;
     const bar = [scriptBar, $('.outline-bar')].find((b) => b && !b.hidden);
-    return keyboard + (bar ? bar.offsetHeight : 0) + 72;
+    return (bar ? bar.offsetHeight : 0) + ROOM_BELOW;
   }
 };
 
@@ -241,25 +242,28 @@ tapBar(outlineBar, 'button[data-do]', (b) => {
   else if (act === 'zoom') { const here = notebook.currentLine(); notebook.zoomTo(notebook.zoom && here === notebook.zoom ? null : here); ed.commands.focus(); }
   placeOutlineBar();
 });
-for (const ed of [editor, notebook.editor]) ed.view.setProps({ scrollMargin: caretRoom, scrollThreshold: caretRoom });
-// When the keyboard or a row appears, bring the caret back above them.
 // On a phone, a standing rule: the caret always sits clear above the keyboard
-// and the row, with a couple of lines to spare, however it got there (a tap,
-// typing, zooming, moving a line, or the keyboard opening).
-function keepCaretInView() {
-  const ed = currentEditor();
-  if (!touch.matches || !ed?.isFocused) return;
+// and the row, with a line to spare, however it got there (a tap, typing,
+// zooming, moving a line, or the keyboard opening). The page only moves when
+// the caret would be hidden, and only as far as it must, so typing never
+// makes it jump. ProseMirror's own scrolling defers to this on a phone.
+for (const ed of [editor, notebook.editor]) {
+  ed.view.setProps({ scrollMargin: caretRoom, scrollThreshold: caretRoom, handleScrollToSelection: () => touch.matches && keepCaretInView(ed) });
+}
+function keepCaretInView(ed = currentEditor()) {
+  if (!touch.matches || !ed?.isFocused) return false;
   let r;
-  try { r = ed.view.coordsAtPos(ed.state.selection.head); } catch { return; }
+  try { r = ed.view.coordsAtPos(ed.state.selection.head); } catch { return false; }
   const vv = window.visualViewport;
   const bar = [scriptBar, outlineBar].find((b) => !b.hidden);
-  const floor = (bar ? bar.getBoundingClientRect().top : vv ? vv.offsetTop + vv.height : window.innerHeight) - 72;
-  const ceiling = (vv ? vv.offsetTop : 0) + 60;
+  const floor = (bar ? bar.getBoundingClientRect().top : vv ? vv.offsetTop + vv.height : window.innerHeight) - ROOM_BELOW;
+  const ceiling = (vv ? vv.offsetTop : 0) + ROOM_ABOVE;
   if (r.bottom > floor) window.scrollBy(0, r.bottom - floor);
   else if (r.top < ceiling) window.scrollBy(0, r.top - ceiling);
+  return true;
 }
 let caretTimer;
-const caretSoon = (ms = 60) => { clearTimeout(caretTimer); caretTimer = setTimeout(() => requestAnimationFrame(keepCaretInView), ms); };
+const caretSoon = (ms = 60) => { clearTimeout(caretTimer); caretTimer = setTimeout(() => requestAnimationFrame(() => keepCaretInView()), ms); };
 for (const ed of [editor, notebook.editor]) { ed.on('selectionUpdate', () => caretSoon()); ed.on('focus', () => caretSoon(250)); }
 window.visualViewport?.addEventListener('resize', () => caretSoon(120));
 window.visualViewport?.addEventListener('scroll', () => caretSoon(200));
@@ -422,6 +426,7 @@ onLocalWrites((rows) => {
   retitleLinks(rows).then((changed) => { if (changed) { freshenRefs(editor); freshenRefs(notebook.editor); } }).catch((e) => console.error(e));
 });
 window.__sync = sync;
+window.__notebook = notebook;
 syncEl.addEventListener('click', () => { if (syncEl.dataset.state === 'signed-out') sync.signIn(); else sync.soon(0); });
 
 // An untouched starter book on a new device gives way to the real one from the cloud.
