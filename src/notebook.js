@@ -125,7 +125,8 @@ export class Notebook {
     $('#nb-next').addEventListener('click', () => this.step(1));
     $('#nb-today').addEventListener('click', () => this.openDay());
     $('#nb-date').addEventListener('change', (e) => { if (e.target.value) this.openDay(e.target.value); });
-    $('.past-days').addEventListener('click', (e) => {
+    $('.past-toggle').addEventListener('click', () => this.togglePastDays());
+    $('.past-list').addEventListener('click', (e) => {
       const ref = e.target.closest('a[data-ref]');
       if (ref) { e.preventDefault(); this.onOpen(ref.dataset.ref); return; }
       const line = e.target.closest('[data-line]');
@@ -279,18 +280,43 @@ export class Notebook {
     chip.textContent = `Linked from ${n}`;
   }
 
-  // Earlier days below today's, so you can scroll back through them.
+  // Earlier days below today's, so you can scroll back through them. They sit
+  // behind the line under the day: click it to open or close them. Closed is
+  // the default, and the choice is kept on this device.
+  get pastOpen() {
+    try { return localStorage.getItem('pastDays') === 'open'; } catch { return false; }
+  }
+
+  togglePastDays(open = !this.pastOpen) {
+    try { if (open) localStorage.setItem('pastDays', 'open'); else localStorage.removeItem('pastDays'); } catch {}
+    if (this.isDay) this.renderPastDays();
+  }
+
   async renderPastDays(reset = true) {
     const box = $('.past-days');
-    if (!this.isDay) { box.hidden = true; box.replaceChildren(); return; }
+    const list = $('.past-list');
+    const toggle = $('.past-toggle');
+    if (!this.isDay) { box.hidden = true; list.replaceChildren(); return; }
+    const open = this.pastOpen;
     if (reset) {
       const before = this.page.title;
       this.pastDays = (await byKind('day')).filter((d) => !d.deleted && d.title < before).sort((a, b) => (a.title < b.title ? 1 : -1));
       this.pastShown = 0;
       this.more.disconnect();
-      box.replaceChildren();
+      list.replaceChildren();
+      box.classList.toggle('open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.title = open ? 'Hide earlier days' : 'Show earlier days';
+      if (!open) {
+        // Only the line, and only if there's an earlier day with something on it.
+        let any = false;
+        for (const day of this.pastDays) if ((await descendants(day.id)).some((r) => r.text)) { any = true; break; }
+        if (this.page && this.isDay && !this.pastOpen) box.hidden = !any;
+        return;
+      }
     }
-    box.querySelector('.past-more')?.remove();
+    if (!open) return;
+    list.querySelector('.past-more')?.remove();
     const next = this.pastDays.slice(this.pastShown, this.pastShown + 5);
     this.pastShown += next.length;
     for (const day of next) {
@@ -304,15 +330,15 @@ export class Notebook {
       h.textContent = titleOf(day);
       h.addEventListener('click', () => this.openDay(day.title));
       sec.append(h, lineTree(day.id, rows));
-      box.append(sec);
+      list.append(sec);
     }
     if (this.pastShown < this.pastDays.length) {
       const more = document.createElement('div');
       more.className = 'past-more';
-      box.append(more);
+      list.append(more);
       this.more.observe(more);
     }
-    box.hidden = !box.querySelector('.past-day');
+    box.hidden = !list.querySelector('.past-day');
   }
 
   // Gathering: a line that gathers a #tag gets a linked line under it for
