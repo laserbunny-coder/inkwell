@@ -4,7 +4,7 @@ import StarterKit from '@tiptap/starter-kit';
 import { EntryIds, SceneBreak } from './schema.js';
 import { isMac, keyLabel, showKeysForThisComputer } from './keys.js';
 import { StatsPanel, record as recordProgress } from './stats.js';
-import { AltMark, ParagraphVersions, AltPanel, flip, newParagraphVersion } from './alts.js';
+import { AltMark, ParagraphVersions, AltPanel, flip, newParagraphVersion, altsHere } from './alts.js';
 import { ChapterStore } from './chapter.js';
 import { NotesLayer } from './notes.js';
 import { BlockHandle } from './blocks.js';
@@ -96,11 +96,17 @@ const blocks = new BlockHandle(editor, $('.sheet'), {
 
 // On a phone there's no Tab key, so a row of element buttons rides just above
 // the keyboard while you write a script. Tapping one changes the line you're on.
+// The alternates buttons sit at the far end of the same row (the whole row
+// when it isn't a script), reached by scrolling it sideways.
 const scriptBar = $('.script-bar');
 const touch = matchMedia('(hover: none)');
 function placeScriptBar() {
-  const show = touch.matches && isScript() && writing() && editor.isFocused;
+  const script = isScript();
+  const withAlts = !root.classList.contains('hide-alts') && !root.classList.contains('focus');
+  const show = touch.matches && (script || withAlts) && writing() && editor.isFocused;
   scriptBar.hidden = !show;
+  scriptBar.classList.toggle('scripting', script);
+  scriptBar.classList.toggle('no-alts', !withAlts);
   body.classList.toggle('script-bar-on', show);
   if (!show) return;
   const vv = window.visualViewport;
@@ -108,7 +114,15 @@ function placeScriptBar() {
   scriptBar.style.bottom = `${Math.max(0, bottom)}px`;
   const p = editor.state.selection.$from.parent;
   const el = p.type.name === 'paragraph' ? p.attrs.el || 'action' : null;
-  scriptBar.querySelectorAll('button').forEach((b) => b.classList.toggle('current', b.dataset.el === el));
+  scriptBar.querySelectorAll('button[data-el]').forEach((b) => b.classList.toggle('current', b.dataset.el === el));
+  if (!withAlts) return;
+  const here = altsHere(editor.state);
+  const button = (name) => scriptBar.querySelector(`[data-alt="${name}"]`);
+  button('word').textContent = here.word ? `Alternates · ${here.word.n}` : 'Alternates';
+  button('para').textContent = here.para ? `Paragraph ${here.para.i + 1} of ${here.para.n}` : 'Paragraph';
+  button('word').classList.toggle('current', alts.isOpen && alts.scope === 'word');
+  button('para').classList.toggle('current', alts.isOpen && alts.scope === 'para');
+  for (const name of ['prev', 'next']) button(name).classList.toggle('idle', !here.word && !here.para);
 }
 // The rows above the keyboard: a quick tap runs a button; holding (or sliding)
 // scrolls the row instead, so a thumb resting on a button never sets it off.
@@ -148,8 +162,14 @@ function tapBar(bar, selector, run) {
   });
   bar.addEventListener('pointercancel', () => { end(); start = null; });
 }
-tapBar(scriptBar, 'button[data-el]', (b) => {
-  if (b.dataset.el === 'section') {
+tapBar(scriptBar, 'button[data-el], button[data-alt]', (b) => {
+  const what = b.dataset.alt;
+  if (what === 'word' || what === 'para') alts.toggle({ scope: what });
+  else if (what === 'ask') {
+    if (!alts.isOpen) alts.open({ scope: 'word' });
+    alts.askClaude();
+  } else if (what === 'prev' || what === 'next') flip(editor, what === 'prev' ? -1 : 1);
+  else if (b.dataset.el === 'section') {
     const at = editor.state.selection.$from.before(1);
     editor.chain().insertContentAt(at, { type: 'sceneBreak' }).run();
     requestAnimationFrame(() => editor.view.nodeDOM(at)?.querySelector('input')?.focus());
