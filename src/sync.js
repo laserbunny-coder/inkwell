@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import config from './config.js';
 import { getEntry, putEntries, outboxIds, clearOutbox, addConflict, getMeta, setMeta } from './db.js';
+import { setFileBackend, uploadPending } from './files.js';
 
 // Keeps this device's entries in step with the cloud (the Supabase project
 // shared with Daybook). The device is always the first copy: writing works
@@ -32,7 +33,7 @@ function toLocal(r) {
   return { ...rest, created_at: Date.parse(r.created_at), updated_at: Date.parse(r.updated_at) };
 }
 
-// The real backend: Supabase. Tests swap in a fake with the same five methods.
+// The real backend: Supabase. Tests swap in a fake with the same methods.
 function supabaseBackend() {
   if (!config.supabaseUrl || !config.supabaseAnonKey) return null;
   const sb = createClient(config.supabaseUrl, config.supabaseAnonKey, {
@@ -66,6 +67,16 @@ function supabaseBackend() {
     async pull(since, from) {
       const { data, error } = await sb.from('writing_entries').select('*').gt('updated_at', since)
         .order('updated_at').order('id').range(from, from + PAGE - 1);
+      if (error) throw error;
+      return data;
+    },
+    // Pictures and files, in the private "writing-files" bucket, one folder per person.
+    async upload(path, blob, type) {
+      const { error } = await sb.storage.from('writing-files').upload(path, blob, { contentType: type, upsert: true });
+      if (error) throw error;
+    },
+    async download(path) {
+      const { data, error } = await sb.storage.from('writing-files').download(path);
       if (error) throw error;
       return data;
     },
@@ -117,6 +128,7 @@ export class Sync {
   }
 
   async begin() {
+    setFileBackend(this.backend, this.user.id);
     this.backend.subscribe(this.user.id, () => this.soon(400));
     window.addEventListener('online', () => this.soon(0));
     clearInterval(this.poll);
@@ -127,7 +139,7 @@ export class Sync {
   signIn() { return this.backend?.signIn(); }
   invoke(name, body) { return this.backend.invoke(name, body); }
 
-  async signOut() { await this.backend?.signOut(); this.user = null; this.onStatus('signed-out'); }
+  async signOut() { await this.backend?.signOut(); this.user = null; setFileBackend(null, null); this.onStatus('signed-out'); }
 
   // Called after every local write.
   soon(ms = 1500) {
@@ -146,6 +158,8 @@ export class Sync {
       // other version kept) before ours overwrites it in the cloud.
       await this.pull();
       await this.push();
+      // Pictures and files go up after the words, so a big one never holds up text.
+      uploadPending();
       this.retry = 2000;
       this.onStatus(navigator.onLine === false ? 'offline' : 'synced');
     } catch (e) {

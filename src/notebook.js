@@ -8,6 +8,9 @@ import { bySort } from './order.js';
 import { moveEntry } from './move.js';
 import { newPage } from './library.js';
 import { freshenRefs } from './links.js';
+import { FileEmbed } from './filenode.js';
+import { MAX_BYTES } from './files.js';
+import { toast } from './menu.js';
 
 // The notebook: a page for every day, plus named pages, all written as nested
 // lines. Lines can link to pages, days and chapters with [[, carry #tags, and
@@ -111,7 +114,8 @@ export class Notebook {
       extensions: [
         StarterKit.configure({ document: false, codeBlock: false, code: false, horizontalRule: false, heading: false, blockquote: false, trailingNode: false }),
         OutlineDoc, LineIds, EntryRef.configure({ onPick, onOpen }), TagMarks.configure({ onTag: (t) => this.showTag(t) }), GatherBadge.configure({ onTag: (t) => this.showTag(t), onOpen, origin: (id) => this.origins.get(id) || '' }), AltMark,
-        OutlineFold.configure({ onZoom: (eid) => this.zoomed(eid) })
+        OutlineFold.configure({ onZoom: (eid) => this.zoomed(eid) }),
+        FileEmbed.configure({ onTooBig: (f) => toast(`“${f.name}” is too big to add (the limit is ${Math.round(MAX_BYTES / 1048576)} MB)`) })
       ],
       content: EMPTY,
       onUpdate: ({ editor }) => this.store.change(editor.state.doc)

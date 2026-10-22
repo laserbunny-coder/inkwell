@@ -1,4 +1,5 @@
 import { children } from './db.js';
+import { filePath, isImage } from './files.js';
 
 // Plain Markdown, so the writing stays readable in any app even if this one breaks.
 
@@ -7,6 +8,7 @@ export function inline(content) {
   return content.map((n) => {
     if (n.type === 'hardBreak') return '  \n';
     if (n.type === 'entryRef') return `[[${n.attrs?.title || ''}]]`;
+    if (n.type === 'file') return `${isImage(n.attrs?.type) ? '!' : ''}[${n.attrs?.name || 'File'}](<${filePath(n.attrs?.id, n.attrs?.name)}>)`;
     let t = n.text || '';
     for (const m of n.marks || []) {
       if (m.type === 'bold') t = `**${t}**`;

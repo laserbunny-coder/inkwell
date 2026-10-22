@@ -1,6 +1,7 @@
 import { allEntries } from './db.js';
 import { outline } from './model.js';
 import { bookMarkdown, inline } from './export.js';
+import { fileBlob, filePath } from './files.js';
 import { toFountain } from './script.js';
 import { descendants } from './outline.js';
 import { titleOf } from './notebook.js';
@@ -36,7 +37,9 @@ export async function vaultFiles() {
     let p = path;
     for (let n = 2; used.has(p.toLowerCase()); n++) p = path.replace(/(\.\w+)$/, ` (${n})$1`);
     used.add(p.toLowerCase());
-    files.push({ path: p, text });
+    // Pictures are linked from where each Markdown file sits.
+    const up = '../'.repeat(p.split('/').length - 1);
+    files.push({ path: p, text: up && p.endsWith('.md') ? text.replaceAll('](<Files/', `](<${up}Files/`) : text });
   };
   const areaPath = (id) => {
     const parts = [];
@@ -59,6 +62,11 @@ export async function vaultFiles() {
   for (const d of shown.filter((r) => r.kind === 'day').sort((a, b) => (a.title < b.title ? -1 : 1))) {
     const md = await pageMarkdown(d);
     if (md.includes('\n- ')) add(`Daily pages/${clean(d.title)}.md`, md);
+  }
+  // The pictures and files themselves (fetched from the cloud if this device hasn't got one yet).
+  for (const f of live.filter((r) => r.kind === 'file')) {
+    const blob = await fileBlob(f.id);
+    if (blob) files.push({ path: filePath(f.id, f.title), bytes: new Uint8Array(await blob.arrayBuffer()) });
   }
   add('vault.json', JSON.stringify({ exported_at: new Date().toISOString(), entries: live }, null, 1));
   return files;
@@ -93,7 +101,7 @@ export function zip(files, when = new Date()) {
   let offset = 0;
   for (const f of files) {
     const name = enc.encode(f.path);
-    const data = enc.encode(f.text);
+    const data = f.bytes || enc.encode(f.text);
     const crc = crc32(data);
     const head = new DataView(new ArrayBuffer(30));
     head.setUint32(0, 0x04034b50, true);
