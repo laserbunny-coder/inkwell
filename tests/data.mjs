@@ -115,6 +115,33 @@ try {
     assert.equal((await all('conflicts')).length, 0);
   });
 
+  await check('old leftovers on the two versions screen clear in one go, keeping this device’s writing', async () => {
+    const ps = (await paras()).filter((e) => !e.deleted && e.text).slice(0, 2);
+    assert.equal(ps.length, 2);
+    await put('conflicts', ps.map((e, k) => ({ ...e, text: `Old test ${k}`, content: [{ type: 'text', text: `Old test ${k}` }], saved_at: Date.now() - k })));
+    await p.reload();
+    await p.waitForSelector('#versions', { state: 'visible' });
+    await p.locator('#versions').click();
+    await p.waitForSelector('.versions-pair');
+    // The buttons sit side by side and start inside the panel, not cut off at its left edge.
+    const list = await p.locator('.versions-list').boundingBox();
+    const btns = await p.locator('.versions-list li').first().locator('.versions-actions button').evaluateAll((bs) => bs.map((b) => { const r = b.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width }; }));
+    assert.ok(btns[0].x >= list.x, `first button starts at ${btns[0].x}, list at ${list.x}`);
+    assert.equal(btns[1].y, btns[0].y, 'side by side');
+    assert.ok(btns[0].w < list.width / 2);
+    const before = await p.locator('#editor .ProseMirror').innerText();
+    await p.locator('.versions [data-keep-all]').click();
+    await p.waitForSelector('.ask');
+    assert.match(await p.locator('.ask').innerText(), /for all 2/);
+    await p.locator('.ask .pill').click();
+    await sleep(300);
+    assert.equal((await all('conflicts')).length, 0);
+    assert.match(await p.locator('.versions').innerText(), /Nothing to check/);
+    assert.equal(await p.locator('#versions').isVisible(), false);
+    await p.keyboard.press('Escape');
+    assert.equal(await p.locator('#editor .ProseMirror').innerText(), before);
+  });
+
   await check('everything downloads as one backup of plain files', async () => {
     const [download] = await Promise.all([p.waitForEvent('download'), command('Back up everything')]);
     assert.match(download.suggestedFilename(), /^Inkwell vault \d{4}-\d\d-\d\d\.zip$/);

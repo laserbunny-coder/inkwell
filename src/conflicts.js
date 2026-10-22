@@ -1,5 +1,6 @@
 import { conflicts, dropConflict, getEntry, putEntries } from './db.js';
 import { newId } from './model.js';
+import { ask } from './menu.js';
 import { rootOf, titleOf } from './notebook.js';
 
 // "Two versions": when the same paragraph or line was changed on two devices
@@ -17,6 +18,24 @@ export class Conflicts {
     this.panel = $('.versions');
     this.pill.addEventListener('click', () => this.open());
     this.panel.querySelector('[data-close]').addEventListener('click', () => this.close());
+    this.keepAll = this.panel.querySelector('[data-keep-all]');
+    this.keepAll.addEventListener('click', () => this.keepAllMine());
+  }
+
+  // Settle every one the same way: what's on this device now stays as it is,
+  // and the copies saved aside from the other device are let go. Asks first.
+  async keepAllMine() {
+    const rows = await conflicts();
+    if (!rows.length) return;
+    const ok = await ask({
+      title: `Keep this device’s version for all ${rows.length}?`,
+      body: 'Your writing stays exactly as it is on this device. The copies saved aside from the other device are let go, and can’t be brought back from here.',
+      ok: 'Keep this device’s'
+    });
+    if (!ok) return;
+    for (const other of rows) await dropConflict(other.key);
+    await this.count();
+    await this.render();
   }
 
   async count() {
@@ -54,6 +73,7 @@ export class Conflicts {
     const list = this.panel.querySelector('ul');
     const rows = (await conflicts()).sort((a, b) => b.saved_at - a.saved_at);
     list.replaceChildren();
+    this.keepAll.hidden = rows.length < 2;
     if (!rows.length) {
       const li = document.createElement('li');
       li.className = 'versions-empty';
