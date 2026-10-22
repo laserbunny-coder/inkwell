@@ -153,6 +153,49 @@ try {
     assert.match(book.text, /!\[red\.png\]\(<(\.\.\/)+Files\/fi_[a-z0-9_]+-red\.png>\)/);
   });
 
+  await check('Ctrl + K shows how much of the file space is used', async () => {
+    await laptop.keyboard.press('Control+K');
+    await laptop.keyboard.type('space used');
+    await sleep(200);
+    await laptop.keyboard.press('Enter');
+    await laptop.waitForSelector('.toast', { timeout: 5000 });
+    assert.match(await laptop.locator('.toast').innerText(), /Pictures and files: \d+ MB of 1\.0 GB used · 2 files/);
+  });
+
+  await check('a picture stuck for a day shows on the sync button, and a nearly full space warns once', async () => {
+    const ctx = await browser.newContext();
+    await ctx.exposeFunction('__remote', remote);
+    await ctx.addInitScript(fake);
+    // This device can't reach file storage.
+    await ctx.addInitScript(() => { window.__syncBackend.upload = async () => { throw new Error('offline'); }; });
+    const p = await ctx.newPage();
+    await p.goto(URL);
+    await p.waitForSelector('#editor .ProseMirror');
+    await p.evaluate(() => new Promise((res) => {
+      const r = indexedDB.open('writing-files', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('blobs', { keyPath: 'id' });
+      r.onsuccess = () => {
+        const tx = r.result.transaction('blobs', 'readwrite');
+        tx.objectStore('blobs').put({ id: 'fi_stuck', blob: new Blob(['x']), type: 'text/plain', uploaded: false, added: Date.now() - 3 * 864e5 });
+        tx.oncomplete = () => res();
+      };
+    }));
+    // Someone's filled most of the space from another device.
+    const stamp = new Date(Date.now() + 864e5).toISOString();
+    table.set('fi_big', { id: 'fi_big', user_id: 'u1', kind: 'file', parent_id: null, sort: 0, title: 'film.mov', text: '', content: null, tags: [], type: null, fields: { type: 'video/quicktime', size: 870 * 1024 * 1024 }, area_id: null, links: [], deleted: false, created_at: stamp, updated_at: stamp });
+    await p.reload();
+    await p.waitForSelector('#editor .ProseMirror');
+    await syncNow(p);
+    await p.waitForFunction(() => /1 picture or file not uploaded for 3 days/.test(document.querySelector('#sync').textContent), null, { timeout: 5000 });
+    await p.waitForFunction(() => /space is 8\d% full/.test(document.querySelector('.toast')?.textContent || ''), null, { timeout: 5000 });
+    await p.evaluate(() => document.querySelector('.toast')?.remove());
+    await syncNow(p);
+    await sleep(500);
+    assert.equal(await p.locator('.toast').count(), 0, 'only warns once at 80%');
+    table.delete('fi_big');
+    await ctx.close();
+  });
+
   await check('no page errors', async () => assert.deepEqual(laptop.errors, []));
 } finally {
   await browser.close();

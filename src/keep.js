@@ -37,3 +37,21 @@ export function unsentLabel(since, now = Date.now()) {
   const days = Math.floor((now - since) / (24 * 36e5));
   return days >= 2 ? `Not synced for ${days} days` : 'Not synced since yesterday';
 }
+
+export function unsentFilesLabel(count, since, now = Date.now()) {
+  const days = Math.floor((now - since) / (24 * 36e5));
+  const what = count === 1 ? '1 picture or file' : `${count} pictures or files`;
+  return `${what} not uploaded ${days >= 2 ? `for ${days} days` : 'since yesterday'}`;
+}
+
+// How full the cloud's file space is, as a warning to show once at 80% and
+// again at 95% (null when there's nothing new to say). `warned` is the last
+// level already shown.
+export function spaceWarning(bytes, space, warned = 0) {
+  const pct = Math.floor((bytes / space) * 100);
+  const level = pct >= 95 ? 95 : pct >= 80 ? 80 : 0;
+  if (!level || level <= warned) return null;
+  return { level, text: `Picture and file space is ${pct}% full (${mb(bytes)} of ${mb(space)}). Upgrading the cloud plan adds room; nothing is lost if it fills, but new ones stay on this device.` };
+}
+
+export const mb = (n) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : `${Math.round(n / 1024 ** 2)} MB`);

@@ -1,4 +1,4 @@
-import { putEntries, getEntry } from './db.js';
+import { putEntries, getEntry, byKind } from './db.js';
 import { entry, newId } from './model.js';
 
 // Pictures and files dropped or pasted into the writing. Like everything else,
@@ -77,7 +77,7 @@ export async function addFile(file) {
   if (!name || name === 'image.png') name = `${type.startsWith('image/') ? 'Picture' : 'File'} ${new Date().toLocaleDateString()}.${extOf(type, name)}`;
   else if (blob !== file && type === 'image/jpeg') name = name.replace(/\.\w+$/, '') + '.jpg';
   const id = newId('fi');
-  await keep({ id, blob, type, uploaded: false });
+  await keep({ id, blob, type, uploaded: false, added: Date.now() });
   const row = entry('file', { id, title: name, fields: { type, size: blob.size, ...(w ? { w, h } : {}) } });
   await putEntries([row]);
   uploadPending();
@@ -107,9 +107,19 @@ export function uploadPending() {
   return uploading;
 }
 
+// Files added here that haven't gone up yet: how many, and since when.
 export async function unsentFiles() {
-  const rows = await result((await store()).getAll());
-  return rows.filter((r) => !r.uploaded).length;
+  const rows = (await result((await store()).getAll())).filter((r) => !r.uploaded);
+  const since = rows.reduce((m, r) => Math.min(m, r.added || Date.now()), Infinity);
+  return { count: rows.length, since: rows.length ? since : null };
+}
+
+// The cloud's free plan holds 1 GB of files. Every device knows every file's
+// size (it's on the synced entry), so this counts what's there from all of them.
+export const SPACE = 1024 * 1024 * 1024;
+export async function spaceUsed() {
+  const files = await byKind('file', { withTrash: true });
+  return { bytes: files.reduce((n, f) => n + (f.fields?.size || 0), 0), count: files.length };
 }
 
 // The file itself: from this device, or fetched from the cloud once and kept.
