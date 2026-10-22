@@ -64,7 +64,10 @@ export async function addShare(share, day = today()) {
   if (!link && !name && !words && !files.length) return null;
   const content = files.map(fileNode);
   const label = name || (files.length ? '' : words);
-  if (label) content.push({ type: 'text', text: `${content.length ? ' ' : ''}${label}`, ...(link ? { marks: [{ type: 'link', attrs: { href: link } }] } : {}) });
+  if (label) {
+    if (content.length) content.push({ type: 'text', text: ' ' });
+    content.push({ type: 'text', text: label, ...(link ? { marks: [{ type: 'link', attrs: { href: link } }] } : {}) });
+  }
   if (words && label !== words) content.push({ type: 'text', text: `${content.length ? ' — ' : ''}“${words}”` });
   const dayId = `day-${day}`;
   const rows = [];
@@ -134,11 +137,11 @@ export async function placeSnapshot(it, { title = '', summary = '', site = '', i
   const now = Date.now();
   let content = line.content || [];
   if (line.text === it.wrote) {
-    if (title && !it.named) content = content.map((n) => (n.type === 'text' && n.marks?.some((m) => m.type === 'link') ? { ...n, text: `${n.text.startsWith(' ') ? ' ' : ''}${title}` } : n));
+    if (title && !it.named) content = content.map((n) => (n.type === 'text' && n.marks?.some((m) => m.type === 'link') ? { ...n, text: title } : n));
     if (image?.id && !it.picture) {
       const file = entry('file', { id: image.id, title: image.name || 'Picture', fields: { type: image.type, size: image.size || 0, from: it.url } });
       rows.push(file);
-      content = [fileNode(file), ...content.map((n, i) => (i === 0 && n.type === 'text' && !n.text.startsWith(' ') ? { ...n, text: ` ${n.text}` } : n))];
+      content = [fileNode(file), { type: 'text', text: ' ' }, ...content];
     }
   }
   const text = textOf(content);
