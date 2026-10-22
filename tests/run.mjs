@@ -173,7 +173,30 @@ try {
     assert.equal(await width(), '700px');
   });
 
-  const all = () => p.evaluate(() => new Promise((res) => {
+  await check('the Aa panel picks a font by kind, and it sticks after reload', async () => {
+    const family = () => p.locator('#editor .ProseMirror').evaluate((el) => getComputedStyle(el).fontFamily);
+    assert.match(await family(), /Newsreader/);
+    await p.evaluate(() => document.querySelector('.corner [data-cmd=page]').click());
+    assert.equal(await p.locator('.font-groups button.current').innerText(), 'Serif');
+    await p.locator('.font-groups button', { hasText: 'Mono' }).click();
+    await p.locator('.font-list button', { hasText: 'JetBrains Mono' }).click();
+    assert.match(await family(), /JetBrains Mono/);
+    assert.equal(await p.locator('#font-value').innerText(), 'JetBrains Mono');
+    // Each button is drawn in its own font.
+    assert.match(await p.locator('.font-list button', { hasText: 'Courier Prime' }).evaluate((el) => getComputedStyle(el).fontFamily), /Courier Prime/);
+    await p.reload();
+    await p.waitForSelector('#editor .ProseMirror');
+    assert.match(await family(), /JetBrains Mono/);
+    assert.equal(await p.evaluate(() => !!document.getElementById('font-jetbrains')), true);
+    await p.evaluate(() => document.querySelector('.corner [data-cmd=page]').click());
+    assert.equal(await p.locator('.font-groups button.current').innerText(), 'Mono');
+    await p.locator('.font-groups button', { hasText: 'Serif' }).click();
+    await p.locator('.font-list button', { hasText: 'Newsreader' }).click();
+    assert.match(await family(), /Newsreader/);
+    await p.locator('#page-done').click();
+  });
+
+  const all =() => p.evaluate(() => new Promise((res) => {
     const r = indexedDB.open('writing');
     r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').getAll(); q.onsuccess = () => res(q.result); };
   }));

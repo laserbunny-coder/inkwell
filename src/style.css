@@ -21,8 +21,30 @@
   --bg: #1C1A17; --panel: #252320; --ink: #E8E2D6; --muted: #ADA597; --faint: #7D766B;
   --line: #3A3631; --accent: #C9774F; --tint: rgba(201, 119, 79, 0.12); color-scheme: dark;
 }
-:root[data-font="literata"] { --prose: 'Literata', Georgia, serif; }
-:root[data-font="georgia"] { --prose: Georgia, 'Times New Roman', serif; }
+/* Writing fonts (src/fonts.js lists them for the Aa panel). */
+[data-font="newsreader"] { --prose: 'Newsreader', Georgia, serif; }
+[data-font="literata"] { --prose: 'Literata', Georgia, serif; }
+[data-font="charis"] { --prose: 'Charis SIL', Charter, Georgia, serif; }
+[data-font="garamond"] { --prose: 'EB Garamond', Garamond, Georgia, serif; }
+[data-font="georgia"] { --prose: Georgia, 'Times New Roman', serif; }
+[data-font="inter"] { --prose: 'Inter', system-ui, sans-serif; }
+[data-font="geist"] { --prose: 'Geist', system-ui, sans-serif; }
+[data-font="atkinson"] { --prose: 'Atkinson Hyperlegible Next', system-ui, sans-serif; }
+[data-font="plexsans"] { --prose: 'IBM Plex Sans', system-ui, sans-serif; }
+[data-font="iamono"] { --prose: 'iA Writer Mono', Consolas, monospace; }
+[data-font="iaquattro"] { --prose: 'iA Writer Quattro', Consolas, monospace; }
+[data-font="jetbrains"] { --prose: 'JetBrains Mono', Consolas, monospace; }
+[data-font="geistmono"] { --prose: 'Geist Mono', Consolas, monospace; }
+[data-font="courier"] { --prose: 'Courier Prime', 'Courier New', monospace; }
+@font-face { font-family: 'iA Writer Mono'; src: url('./fonts/iAWriterMonoS-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'iA Writer Mono'; src: url('./fonts/iAWriterMonoS-Italic.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'iA Writer Mono'; src: url('./fonts/iAWriterMonoS-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'iA Writer Mono'; src: url('./fonts/iAWriterMonoS-BoldItalic.woff2') format('woff2'); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'iA Writer Quattro'; src: url('./fonts/iAWriterQuattroS-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'iA Writer Quattro'; src: url('./fonts/iAWriterQuattroS-Italic.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'iA Writer Quattro'; src: url('./fonts/iAWriterQuattroS-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'iA Writer Quattro'; src: url('./fonts/iAWriterQuattroS-BoldItalic.woff2') format('woff2'); font-weight: 700; font-style: italic; font-display: swap; }
+
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -159,6 +181,14 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 .page-settings .row { display: flex; justify-content: space-between; }
 .page-settings input[type=range] { width: 100%; accent-color: var(--accent); min-height: 32px; }
 .page-settings .actions { display: flex; justify-content: space-between; }
+.font-pick { display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--muted); }
+.font-groups { display: flex; gap: 2px; }
+.font-groups button { border: 0; background: transparent; padding: 3px 10px; border-radius: 99px; color: var(--muted); font-size: 12px; }
+.font-groups button.current { background: var(--tint); color: var(--accent); font-weight: 600; }
+.font-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.font-list button { font-family: var(--prose); border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 6px 11px; font-size: 16px; line-height: 1.3; color: var(--ink); }
+.font-list button:hover { border-color: var(--faint); }
+.font-list button.current { border-color: var(--accent); color: var(--accent); }
 
 @media (max-width: 700px) {
   .page { padding: 56px 20px 40vh; }
