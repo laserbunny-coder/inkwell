@@ -511,6 +511,21 @@ export class Notebook {
     this.gather();
   }
 
+  // Shows another version of this page (from its history). Mirrored lines keep
+  // showing their originals as they are now, so going back never rewrites them.
+  replaceDoc(json, save) {
+    const live = (n) => {
+      if (n.type === 'listItem' && n.attrs?.mirror && this.store.sources.get(n.attrs.mirror)) {
+        const src = this.store.sources.get(n.attrs.mirror);
+        return { ...n, content: (n.content || []).map((c) => (c.type === 'paragraph' ? { ...c, content: src.content || undefined } : live(c))) };
+      }
+      return n.content ? { ...n, content: n.content.map(live) } : n;
+    };
+    this.editor.commands.setContent(save ? live(json) : json, { emitUpdate: false });
+    this.store.noteShown(this.editor.state.doc, true);
+    if (save) this.store.change(this.editor.state.doc);
+  }
+
   close() { return this.page ? this.store.close(this.editor.state.doc) : null; }
 }
 

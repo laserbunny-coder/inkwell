@@ -175,18 +175,19 @@
 
   <aside class="history" aria-label="Version history" hidden>
     <div class="history-head">
-      <span class="panel-label">History · this chapter</span>
+      <span class="panel-label" id="history-title">History</span>
       <button type="button" class="ghost-btn" data-cmd="history">Close</button>
     </div>
     <div class="history-body">
       <ol id="history-list"></ol>
       <div class="history-preview">
         <div id="history-meta" class="hint">Pick a version to read it.</div>
-        <div id="history-doc"></div>
+        <div class="history-modes" role="group" aria-label="Show" hidden><button type="button" data-mode="changes">What changed since</button><button type="button" data-mode="read">Read it</button></div>
         <div class="history-actions" hidden>
-          <button type="button" class="pill" id="history-restore">Restore this version</button>
+          <button type="button" class="pill" id="history-restore">Go back to this version…</button>
           <button type="button" class="ghost-btn" id="history-copy">Copy its text</button>
         </div>
+        <div id="history-doc"></div>
       </div>
     </div>
   </aside>

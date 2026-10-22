@@ -18,9 +18,12 @@ const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 const results = () => p.locator('#palette-list li').allInnerTexts();
 const search = async (q) => {
+  await sleep(200);
   await p.keyboard.press('Control+Shift+F');
   await p.waitForSelector('.palette', { state: 'visible' });
+  await p.waitForFunction(() => document.activeElement?.id === 'palette-input');
   await p.keyboard.type(q);
+  await p.waitForFunction((t) => document.querySelector('#palette-input').value === t, q);
   // The index is built when search opens; wait for it rather than a fixed time.
   await p.waitForFunction(() => !document.querySelector('#palette-list')?.textContent.includes('Looking…'));
   await sleep(150);

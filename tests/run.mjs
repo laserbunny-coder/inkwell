@@ -150,8 +150,10 @@ try {
     await sleep(500);
     const n = await p.locator('#history-list button').count();
     assert.ok(n >= 2, `expected 2+ versions, got ${n}`);
-    await p.locator('#history-list button').nth(1).click();
+    await p.locator('#history-list button').filter({ hasText: /first kept/ }).click();
     await p.locator('#history-restore').click();
+    // It asks first, and keeps the text as it is now in the history.
+    await p.locator('.ask .pill').click();
     await sleep(800);
     assert.match(await p.locator('#editor .ProseMirror').innerText(), /First draft line\./);
   });
