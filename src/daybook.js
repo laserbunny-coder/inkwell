@@ -23,12 +23,17 @@ export function taskFor(line, base) {
 
 async function waiting() { return (await getMeta('daybookQueue')) || []; }
 
+// Puts a task in the queue for Daybook (replacing one with the same id).
+export async function queueTask(task) {
+  await setMeta('daybookQueue', [...(await waiting()).filter((t) => t.id !== task.id), task]);
+}
+
 // Marks the line as sent (fields.daybook) and queues the task. Returns the row.
 export async function sendToDaybook(lineId, base) {
   const line = await getEntry(lineId);
   if (!line || line.deleted || !(line.text || '').trim()) return null;
   const task = taskFor(line, base);
-  await setMeta('daybookQueue', [...(await waiting()).filter((t) => t.id !== task.id), task]);
+  await queueTask(task);
   const row = { ...line, fields: { ...line.fields, daybook: { id: task.id, at: Date.now() } }, updated_at: Date.now() };
   await putEntries([row]);
   return row;

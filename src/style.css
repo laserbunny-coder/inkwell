@@ -416,6 +416,41 @@ button.tree-area:hover { color: var(--ink); }
 @media (hover: none) { .past-toggle span { opacity: .55; } }
 .past-day { border-top: 1px solid var(--line); padding: 22px 0 10px; }
 html.focus .past-days:not(.open) { display: none !important; }
+/* The day review: folded under the day's lines, with a card for each thing to sort. */
+.day-review { margin-top: 40px; }
+.dr-start, .dr-toggle { display: block; border: 0; background: transparent; padding: 6px 0; color: var(--faint); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
+.dr-start:hover, .dr-toggle:hover, .dr-toggle:focus-visible { color: var(--muted); }
+.dr-toggle span:first-child::after { content: ''; display: inline-block; width: .45em; height: .45em; margin: 0 .5em .2em .6em; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform .15s; }
+.day-review.open .dr-toggle span:first-child::after { transform: rotate(45deg); }
+.dr-left { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--accent); }
+.day-review.busy .dr-left, .day-review.busy .dr-start { color: var(--muted); }
+.dr-body { padding: 6px 0 4px; }
+.dr-summary { font-family: var(--prose); font-size: calc(var(--text-size, 21px) * .86); line-height: 1.55; color: var(--muted); margin: 6px 0 18px; }
+.dr-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.dr-card { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.dr-card.decided { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 8px 14px; border-style: dashed; }
+.dr-card.decided .dr-title { color: var(--muted); font-weight: 400; }
+.dr-label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); margin-bottom: 2px; }
+.dr-title { font-weight: 600; }
+.dr-gist { color: var(--muted); margin-top: 2px; font-size: 14px; }
+.dr-from { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-top: 8px; }
+.dr-line { border: 0; background: transparent; padding: 0; color: var(--faint); font-size: 13px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.dr-line::before { content: '↳ '; }
+.dr-line:hover { color: var(--ink); }
+.dr-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.dr-actions .pill { font-size: 13px; padding: 5px 11px; color: var(--muted); }
+.dr-actions .dr-suggested { color: var(--ink); border-color: var(--muted); }
+.dr-outcome { margin-left: auto; display: flex; align-items: baseline; gap: 4px; color: var(--faint); font-size: 13px; }
+.dr-outcome .ghost-btn { padding: 2px 6px; font-size: 13px; }
+.dr-task { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.dr-task input { flex: 1 1 220px; min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; background: transparent; color: var(--ink); font: inherit; }
+.dr-task select { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; background: var(--bg); color: var(--ink); font: inherit; }
+.dr-task .dr-send { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.dr-split { min-width: 0; grid-template-columns: minmax(0, 1fr); border-left: 2px solid var(--line); padding-left: 12px; display: grid; gap: 8px; }
+.dr-split-title { color: var(--faint); font-size: 13px; }
+.dr-unsplit { justify-self: start; font-size: 13px; padding: 2px 6px; }
+.dr-again { margin-top: 10px; font-size: 13px; padding: 4px 6px; }
+.hide-review .day-review, html.focus .day-review:not(.open) { display: none !important; }
 .past-list > .past-day:first-child { border-top: 0; padding-top: 8px; }
 .past-title { border: 0; background: transparent; padding: 0; font-family: var(--prose); font-size: calc(var(--text-size, 21px) * 1.1); color: var(--muted); }
 .past-title:hover { color: var(--ink); }

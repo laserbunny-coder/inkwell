@@ -164,6 +164,16 @@
       <button type="button" class="links-chip" id="nb-links" hidden></button>
       <nav id="nb-zoom" class="nb-zoom" aria-label="Zoomed in from" hidden></nav>
       <article id="outline-editor" aria-label="Lines"></article>
+      <section class="day-review" aria-label="Day review" hidden>
+        <button type="button" class="dr-start" hidden>Review the day</button>
+        <button type="button" class="dr-toggle" aria-expanded="false" hidden><span>Day review</span><span class="dr-left"></span></button>
+        <div class="dr-body" hidden>
+          <p class="dr-summary"></p>
+          <div class="dr-cards"></div>
+          <p class="dr-quiet hint" hidden>Nothing to sort today.</p>
+          <button type="button" class="ghost-btn dr-again" title="Ask Claude to look at the day again (what you’ve decided stays)">Review again</button>
+        </div>
+      </section>
       <section class="backlinks" hidden>
         <div class="panel-label">Linked from</div>
         <ul id="backlinks-list" class="ref-list"></ul>
@@ -259,6 +269,7 @@
     </div>
     <div class="panel-label view-label">Show</div>
     <label class="switch"><input type="checkbox" data-show="links"> Linked from</label>
+    <label class="switch"><input type="checkbox" data-show="review"> Day review on day pages</label>
     <label class="switch"><input type="checkbox" data-show="dots"> Note dots in the margin</label>
     <label class="switch"><input type="checkbox" data-show="handle"> Six-dot handle</label>
     <label class="switch"><input type="checkbox" data-show="bullets"> Bullets on notebook lines</label>

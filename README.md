@@ -116,6 +116,7 @@ Every line, paragraph and page records who first wrote it and who last changed i
 - **Share.** Share from Chrome, Instagram, Pinterest or any Android app, then pick Inkwell. The page, link or picture lands on today's page with an empty line under it for what it sparked. Links get a snapshot (title, picture, a one- or two-sentence summary) so they stay useful if the page goes away.
 - **Watch and read lists.** On any page, `Ctrl + K`, "Make this page a watch list" (or read list). Type titles one per line, and once you move on Claude links each to its page, leaving your words and tags as you typed them.
 - **Send to Daybook.** `Ctrl + K`, "Send this line to Daybook" puts the line in Daybook's Inbox as a task (without its #tags), with an "Open in Inkwell" link back to the line. Sending again updates the same task.
+- **Day review.** At 9 pm (Pacific) Daybook gets a note, "Your day review", if today's page has something on it and hasn't been reviewed. Its link (`?review=<date>`) opens the day, and Claude writes three or four sentences on how it went, then a card for each thread: **Add to Daybook** (change the words and area, then send; it links back to the line), **Keep thinking** (goes on the "Still thinking about" page, with a link to the day, and comes back in later reviews as "Still on your mind?"), **Split** (a ramble into its parts) or **Let go**. Nothing goes to Daybook until you tap. Any day page: `Ctrl + K`, "Review the day". The review stays folded at the bottom of the day; hide it under Show, "Day review on day pages".
 
 ## How it's built
 
