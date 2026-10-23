@@ -42,6 +42,9 @@ const fake = () => {
     },
     subscribe() {}, unsubscribe() {}
   };
+  // Keeps hold of the microphone, so a test can take it away like a phone call would.
+  const gum = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
+  if (gum) navigator.mediaDevices.getUserMedia = async (c) => (window.__mic = await gum(c));
   // The server: no speech service until a test says there is one.
   window.__asked = [];
   window.__claude = async (body) => {
@@ -197,6 +200,22 @@ try {
     await page.waitForFunction((n) => document.querySelectorAll('#outline-editor .file-embed.audio').length > n, before, { timeout: 8000 });
     assert.equal((await lines(page)).filter((l) => l.fields?.capture === 'voice').length, before + 1);
     assert.match(await page.locator('.toast').innerText(), /cut short/);
+    assert.equal(await pieceCount(page), 0);
+  });
+
+  await check('if the phone takes the microphone away, what was said is kept and Capture doesn’t hang', async () => {
+    const before = (await lines(page)).filter((l) => l.fields?.capture === 'voice').length;
+    await page.keyboard.press('Control+K');
+    await page.keyboard.type('Capture an idea');
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('.capture:not([hidden])');
+    await page.click('.cap-big');
+    await page.waitForSelector('.capture[data-state="recording"]');
+    await sleep(4600);
+    await page.evaluate(() => window.__mic.getTracks().forEach((t) => t.stop()));
+    await page.waitForSelector('.capture', { state: 'hidden', timeout: 8000 });
+    await page.waitForFunction(() => /stopped the microphone/.test(document.querySelector('.toast')?.textContent || ''), null, { timeout: 5000 }).catch(async (e) => { throw new Error(`toast: ${await page.locator('.toast').innerText()}`); });
+    assert.equal((await lines(page)).filter((l) => l.fields?.capture === 'voice').length, before + 1);
     assert.equal(await pieceCount(page), 0);
   });
 
