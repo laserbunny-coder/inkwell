@@ -45,6 +45,9 @@ const fake = () => {
   // Keeps hold of the microphone, so a test can take it away like a phone call would.
   const gum = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
   if (gum) navigator.mediaDevices.getUserMedia = async (c) => (window.__mic = await gum(c));
+  // Stands in for the phone handing launches to the window (first the one
+  // that opened it, as Chrome does, then any later ones).
+  Object.defineProperty(window, 'launchQueue', { configurable: true, value: { setConsumer(fn) { window.__launch = fn; fn({ targetURL: location.href }); } } });
   // The server: no speech service until a test says there is one.
   window.__asked = [];
   window.__claude = async (body) => {
@@ -255,9 +258,20 @@ try {
     assert.ok(await page.evaluate(() => !document.querySelector('#outline-editor .ProseMirror-selectednode')), 'the editor didn’t grab the click');
   });
 
+  await check('the Capture shortcut works while Inkwell is already open', async () => {
+    await page.evaluate((u) => window.__launch({ targetURL: `${u}?capture=voice` }), URL);
+    await page.waitForSelector('.capture:not([hidden])', { timeout: 5000 });
+    await page.click('.cap-cancel');
+    await page.waitForSelector('.capture', { state: 'hidden' });
+    await page.evaluate((u) => window.__launch({ targetURL: u }), URL);
+    await sleep(400);
+    assert.ok(await page.locator('.capture').isHidden(), 'a plain launch doesn’t open Capture');
+  });
+
   await check('the manifest offers Capture on a long-press of the icon', async () => {
     const m = await (await fetch(`${URL}manifest.webmanifest`)).json();
     assert.equal(m.shortcuts[0].url, './?capture=voice');
+    assert.equal(m.launch_handler?.client_mode, 'navigate-existing', 'the open window is sent to the shortcut');
   });
 
   await check('no page errors', async () => { assert.deepEqual(page.errors, []); });

@@ -2994,6 +2994,17 @@ async function start() {
   if (recovered) { toast('A recording that was cut short is kept on today’s page'); await showCapture(recovered); }
   // The home-screen shortcut (long-press the icon, then Capture) opens straight in.
   const asked = new URLSearchParams(location.search);
+  // The Capture shortcut while Inkwell is already open: the open window is
+  // sent to the shortcut's address (launch_handler in the manifest). Where a
+  // phone only brings the window forward, its launch still comes through here.
+  // The launch that opened this window was handled just above.
+  let first = location.href;
+  window.launchQueue?.setConsumer((params) => {
+    const same = params.targetURL === first;
+    first = null;
+    if (!params.targetURL || same) return;
+    if (new URL(params.targetURL).searchParams.get('capture')) openCapture();
+  });
   if (asked.has('capture') || asked.has('share') || asked.has('open')) history.replaceState(history.state, '', location.pathname);
   if (asked.get('capture')) openCapture();
   if (asked.get('open')) { asking = asked.get('open'); await openAsked(); }
