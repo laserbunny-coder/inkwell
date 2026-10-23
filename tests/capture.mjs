@@ -220,6 +220,22 @@ try {
     await page.waitForSelector('#outline-editor .file-embed.audio.playing', { state: 'detached', timeout: 5000 });
   });
 
+  await check('once played, a bar opens to scrub through the recording', async () => {
+    const chip = page.locator('#outline-editor .file-embed.audio').first();
+    assert.ok(await chip.locator('.scrub').isVisible(), 'the bar is open after playing');
+    assert.match(await chip.locator('small').first().innerText(), /^\d:\d\d \/ 0:0[4-6]$/);
+    const box = await chip.locator('.scrub').boundingBox();
+    await page.mouse.click(box.x + box.width * 0.6, box.y + box.height / 2);
+    await page.waitForFunction(() => /^0:0[2-4] \//.test(document.querySelector('#outline-editor .file-embed.audio small')?.textContent || ''), null, { timeout: 5000 });
+    await chip.locator('.play').click();
+    await page.waitForSelector('#outline-editor .file-embed.audio.playing', { timeout: 5000 });
+    await sleep(400);
+    await chip.locator('.play').click();
+    const at = await page.evaluate(() => Number(document.querySelector('#outline-editor .file-embed.audio .scrub').value));
+    assert.ok(at >= 2, `plays on from where you scrubbed to (at ${at}s)`);
+    assert.ok(await page.evaluate(() => !document.querySelector('#outline-editor .ProseMirror-selectednode')), 'the editor didn’t grab the click');
+  });
+
   await check('the manifest offers Capture on a long-press of the icon', async () => {
     const m = await (await fetch(`${URL}manifest.webmanifest`)).json();
     assert.equal(m.shortcuts[0].url, './?capture=voice');
