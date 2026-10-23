@@ -247,6 +247,10 @@ export class CaptureScreen {
       // Each piece is kept as it arrives, so a crash keeps everything up to here.
       keepPiece({ i: rec.i++, started: started.getTime(), type: rec.type, blob: e.data }).catch(() => {});
     });
+    rec.stopped = new Promise((res) => { mr.addEventListener('stop', res, { once: true }); mr.addEventListener('error', res, { once: true }); });
+    // If the phone takes the microphone away (a call, another app, the
+    // screen going off), what was said up to then is kept, not left hanging.
+    rec.stopped.then(() => { if (this.rec === rec && !rec.finishing && !rec.dropped) this.finish({ cutOff: true }); });
     mr.start(4000);
     this.starting = false;
     this.render('recording');
@@ -288,35 +292,34 @@ export class CaptureScreen {
     this.rec?.stream.getTracks().forEach((t) => t.stop());
   }
 
-  async finish() {
+  async finish({ cutOff = false } = {}) {
     const rec = this.rec;
-    if (!rec) return;
+    if (!rec || rec.finishing) return;
+    rec.finishing = true;
     this.render('saving');
-    const ended = new Promise((res) => rec.mr.addEventListener('stop', res, { once: true }));
-    rec.mr.stop();
-    await ended;
+    await stopRecorder(rec);
     this.stopDevices();
     this.rec = null;
     const duration = performance.now() - rec.at;
     const blob = new Blob(rec.parts, { type: rec.type });
     let saved = null;
     try {
-      saved = blob.size ? await saveRecording(blob, duration, rec.started) : null;
+      saved = blob.size ? await within(20000, saveRecording(blob, duration, rec.started)) : null;
     } catch (e) {
       console.error(e);
     }
     if (!saved) { this.render('error', 'That recording couldn’t be kept. It’s still on this device; reopen Inkwell to bring it back.'); return; }
     await clearPieces();
     this.close();
-    this.onSaved(saved);
+    await this.onSaved(saved);
+    if (cutOff) this.toast('The phone stopped the microphone; what you said up to then is kept');
   }
 
   async cancel() {
     if (this.rec) {
       const rec = this.rec;
       rec.dropped = true;
-      const ended = new Promise((res) => rec.mr.addEventListener('stop', res, { once: true }));
-      try { rec.mr.stop(); await ended; } catch { /* already stopped */ }
+      await stopRecorder(rec);
       this.stopDevices();
       this.rec = null;
       await clearPieces();
@@ -331,6 +334,15 @@ export class CaptureScreen {
     document.documentElement.classList.remove('capturing');
   }
 }
+
+// Stops the recorder and waits for its last piece. A recorder the phone
+// already stopped has nothing more to send, and none waits more than a few
+// seconds, so Done can never hang.
+async function stopRecorder(rec) {
+  try { if (rec.mr.state !== 'inactive') rec.mr.stop(); } catch { /* already stopped */ }
+  await within(4000, rec.stopped).catch(() => {});
+}
+const within = (ms, promise) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Took too long')), ms))]);
 
 // A recording cut off by a crash, a closed app or a dead battery: whatever
 // was kept goes on today's page like any other capture.
