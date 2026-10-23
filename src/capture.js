@@ -251,7 +251,7 @@ export class CaptureScreen {
     // If the phone takes the microphone away (a call, another app, the
     // screen going off), what was said up to then is kept, not left hanging.
     rec.stopped.then(() => { if (this.rec === rec && !rec.finishing && !rec.dropped) this.finish({ cutOff: true }); });
-    mr.start(4000);
+    mr.start(1000);
     this.starting = false;
     this.render('recording');
     this.tick = setInterval(() => { this.time.textContent = lengthLabel(performance.now() - rec.at) || '0:00'; }, 250);
