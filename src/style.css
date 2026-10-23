@@ -755,6 +755,8 @@ body.line-dragging, body.line-dragging * { user-select: none; }
 .file-embed.chip.audio.playing .play::before { left: 7px; top: 7px; width: 3px; height: 8px; border: 0; border-left: 3px solid var(--bg); border-right: 3px solid var(--bg); }
 .file-embed.chip.audio small { font-variant-numeric: tabular-nums; }
 .file-embed.chip.audio .note { margin-left: -6px; }
+.file-embed.chip.audio .scrub { display: none; }
+.file-embed.chip.audio.open .scrub { display: block; width: min(240px, 42vw); height: 22px; margin: 0; accent-color: var(--accent); cursor: pointer; touch-action: none; }
 
 /* Capture: one big button, nothing else to think about. */
 .capture { position: fixed; inset: 0; z-index: 80; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: max(16px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom)); font-family: var(--ui); }

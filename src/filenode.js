@@ -74,21 +74,49 @@ export const FileEmbed = Node.create({
         const note = document.createElement('small');
         note.className = 'note';
         note.textContent = notes.has(a.id) ? ` · ${notes.get(a.id)}` : '';
-        dom.append(play, label, note);
+        // Once played, a bar opens beside the button to scrub through it.
+        const scrub = document.createElement('input');
+        scrub.type = 'range';
+        scrub.className = 'scrub';
+        scrub.min = '0';
+        scrub.step = '0.1';
+        scrub.value = '0';
+        scrub.draggable = false;
+        scrub.setAttribute('aria-label', 'Where in the recording');
+        dom.append(play, scrub, label, note);
+        const total = () => (Number.isFinite(audio?.duration) && audio.duration > 0 ? audio.duration : (a.duration || 0) / 1000);
+        const showTime = () => {
+          const at = audio ? audio.currentTime : 0;
+          scrub.max = String(total() || 1);
+          if (!scrub.matches(':active')) scrub.value = String(at);
+          label.textContent = `${lengthLabel(at * 1000) || '0:00'} / ${lengthLabel(total() * 1000) || '–'}`;
+        };
         let audio = null;
+        const load = async () => {
+          if (audio) return audio;
+          const url = await fileUrl(a.id);
+          if (!url) { dom.title = 'This recording hasn’t reached this device yet'; return null; }
+          audio = new Audio(url);
+          audio.preload = 'auto';
+          audio.addEventListener('play', () => dom.classList.add('playing'));
+          audio.addEventListener('pause', () => dom.classList.remove('playing'));
+          audio.addEventListener('ended', () => dom.classList.remove('playing'));
+          audio.addEventListener('timeupdate', showTime);
+          audio.addEventListener('durationchange', showTime);
+          dom.classList.add('open');
+          showTime();
+          return audio;
+        };
         play.addEventListener('mousedown', (e) => e.preventDefault());
         play.addEventListener('click', async (e) => {
           e.preventDefault();
           if (audio && !audio.paused) { audio.pause(); return; }
-          if (!audio) {
-            const url = await fileUrl(a.id);
-            if (!url) { dom.title = 'This recording hasn’t reached this device yet'; return; }
-            audio = new Audio(url);
-            audio.addEventListener('play', () => dom.classList.add('playing'));
-            audio.addEventListener('pause', () => dom.classList.remove('playing'));
-            audio.addEventListener('ended', () => dom.classList.remove('playing'));
-          }
-          audio.play().catch(() => {});
+          if (await load()) audio.play().catch(() => {});
+        });
+        scrub.addEventListener('input', async () => {
+          if (!(await load())) return;
+          audio.currentTime = Number(scrub.value);
+          showTime();
         });
       } else {
         dom.className = 'file-embed chip';
@@ -111,7 +139,8 @@ export const FileEmbed = Node.create({
           go.click();
         });
       }
-      return { dom, ignoreMutation: () => true };
+      // The scrub bar is the chip's own: the editor leaves its clicks and drags alone.
+      return { dom, ignoreMutation: () => true, stopEvent: (e) => !!e.target?.closest?.('.scrub') };
     };
   },
   addProseMirrorPlugins() {
