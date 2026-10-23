@@ -236,7 +236,7 @@ export class CaptureScreen {
       this.render('error', e?.name === 'NotAllowedError' ? 'Inkwell needs the microphone. Allow it in Chrome’s site settings, then tap again.' : 'The microphone didn’t start. Tap to try again.');
       return;
     }
-    await clearPieces();
+    await within(4000, clearPieces()).catch((e) => console.warn(e));
     const type = recorderType();
     const mr = new MediaRecorder(stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 32000 });
     const started = new Date();
@@ -302,14 +302,19 @@ export class CaptureScreen {
     this.rec = null;
     const duration = performance.now() - rec.at;
     const blob = new Blob(rec.parts, { type: rec.type });
+    if (!blob.size) { this.render('error', 'Nothing was recorded. Tap to try again.'); return; }
+    // Every step has a time limit, so this screen can't get stuck; a save
+    // that finishes late still lands on the page.
+    const saving = saveRecording(blob, duration, rec.started);
     let saved = null;
     try {
-      saved = blob.size ? await within(20000, saveRecording(blob, duration, rec.started)) : null;
+      saved = await within(20000, saving);
     } catch (e) {
       console.error(e);
+      saving.then(async (late) => { if (late) { await within(4000, clearPieces()).catch(() => {}); if (!this.rec) this.close(); this.onSaved(late); } }).catch(() => {});
     }
-    if (!saved) { this.render('error', 'That recording couldn’t be kept. It’s still on this device; reopen Inkwell to bring it back.'); return; }
-    await clearPieces();
+    if (!saved) { this.render('error', 'That recording is taking a while to keep. It’s safe on this device; reopen Inkwell if it doesn’t appear.'); return; }
+    await within(4000, clearPieces()).catch((e) => console.warn(e));
     this.close();
     await this.onSaved(saved);
     if (cutOff) this.toast('The phone stopped the microphone; what you said up to then is kept');
