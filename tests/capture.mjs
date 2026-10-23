@@ -68,7 +68,7 @@ const pieceCount = (p) => p.evaluate(() => new Promise((res) => {
 const outlineText = (p) => p.locator('#outline-editor .ProseMirror').innerText();
 
 const browser = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
-const ctx = await browser.newContext({ permissions: ['microphone'] });
+const ctx = await browser.newContext({ permissions: ['microphone'], colorScheme: 'dark' });
 await ctx.exposeFunction('__remote', remote);
 await ctx.addInitScript(fake);
 const page = await ctx.newPage();
@@ -114,7 +114,8 @@ try {
     const [line] = (await lines(page)).filter((l) => l.fields?.capture === 'voice');
     assert.ok(line, 'a capture line');
     assert.deepEqual(line.tags, ['idea']);
-    assert.equal(line.content[0].type, 'file');
+    assert.match(line.content[0].text, /^\d{1,2}:\d\d [ap]m $/, 'the time it was said comes first');
+    assert.equal(line.content[1].type, 'file');
     assert.equal(await pieceCount(page), 0, 'pieces cleared once kept');
   });
 
@@ -131,7 +132,7 @@ try {
     });
     await page.waitForFunction(() => /terrible at hiding/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''), null, { timeout: 8000 });
     const text = await outlineText(page);
-    assert.match(text, /Ninjas who are terrible at hiding, filmed like a nature documentary\. #idea #ninja-bunch/);
+    assert.match(text, /\d{1,2}:\d\d [ap]m\s+\S*\s*Ninjas who are terrible at hiding, filmed like a nature documentary\. #idea #ninja-bunch/s, 'the time stays in front');
     assert.match(text, /Premise: ninjas who can’t hide/);
     const all = await lines(page);
     const cap = all.find((l) => l.fields?.capture === 'voice');
@@ -143,12 +144,14 @@ try {
     assert.equal(kids[2].text, 'Planet Earth (2006)');
     assert.equal(kids[2].content[0].marks[0].attrs.href, 'https://www.imdb.com/title/tt0795176/');
     assert.ok(Array.isArray((await page.evaluate(() => window.__asked.at(-1))).tags), 'your tags are sent so Claude can reuse one');
-    assert.equal(cap.content[0].type, 'file', 'the recording stays on the line');
+    assert.equal(cap.content.find((n) => n.type !== 'text')?.type, 'file', 'the recording stays on the line');
     assert.equal(await page.locator('#outline-editor .file-embed.audio .note').first().innerText(), '');
     const asked = await page.evaluate(() => window.__asked.at(-1));
     assert.equal(asked.mode, 'capture');
     assert.ok(bucket.has(`u1/${asked.file}`), 'the recording went up before asking');
   });
+
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/desktop-9-capture-time.png` });
 
   await check('if you already wrote on the line, the words go under it and yours stay', async () => {
     await page.evaluate(() => { window.__transcriber = null; });

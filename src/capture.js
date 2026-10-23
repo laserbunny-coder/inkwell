@@ -75,7 +75,8 @@ export async function saveRecording(blob, duration, started = new Date()) {
   const file = new File([blob], `Voice ${clock(started)}.${ext}`, { type });
   const row = await addFile(file, { duration: Math.round(duration) });
   if (!row) return null;
-  const content = [fileNode(row), { type: 'text', text: ' #idea' }];
+  // The time it was said goes first, so the day page reads like a log.
+  const content = [{ type: 'text', text: `${clock(started)} ` }, fileNode(row), { type: 'text', text: ' #idea' }];
   const { line, rows } = await addLine(content, { capture: 'voice' }, dayOf(started));
   await queue({ line: line.id, file: row.id, wrote: line.text, duration: Math.round(duration), at: Date.now() });
   return { line, rows: [row, ...rows] };
@@ -163,7 +164,10 @@ export async function placeWriteOut(it, { transcript = '', outline = [], tag = '
   let top = line;
   if (words) {
     if (line.text === it.wrote) {
-      const content = [...(line.content || []).filter((n) => n.type !== 'text'), { type: 'text', text: ` ${words} #idea` }];
+      // Everything up to the recording stays (its time); the words go after it.
+      const was = line.content || [];
+      const upTo = was.findLastIndex((n) => n.type !== 'text');
+      const content = [...was.slice(0, upTo + 1), { type: 'text', text: ` ${words} #idea` }];
       const text = textOf(content);
       top = { ...line, content, text, tags: tagsIn(text) };
     } else rows.push(child(`${line.id}-t`, words));
