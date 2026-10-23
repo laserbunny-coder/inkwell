@@ -35,6 +35,7 @@ import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
 import { takeShares, snapshotPending } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
 import { sendToDaybook, sendPending } from './daybook.js';
+import { DayReview, getReview } from './review.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf } from './library.js';
 
@@ -244,12 +245,13 @@ window.visualViewport?.addEventListener('scroll', placeScriptBar);
 // ---------- notebook ----------
 
 let railTimer;
+let dayReview = null; // the day review under a day page (set up with capture, below)
 const notebook = new Notebook({
   onPick: openPicker,
   onOpen: openEntry,
   onStatus: (s) => {
     if (inNotebook()) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved';
-    if (s === 'saved') listSoon();
+    if (s === 'saved') { listSoon(); if (notebook?.isDay) dayReview?.soon(); }
   },
   onChange: () => { clearTimeout(railTimer); railTimer = setTimeout(renderRail, 100); },
   // A mirror edited a paragraph of the chapter that's open behind the notebook.
@@ -257,6 +259,7 @@ const notebook = new Notebook({
   onPlace: (page) => {
     if (!inNotebook()) return;
     remember({ view: 'notebook', pageId: page.id, ...(notebook?.zoom ? { zoom: notebook.zoom } : {}) });
+    dayReview?.show(page);
     $('#nb-more').replaceChildren(...(page.kind === 'page' ? [menuButton(() => pageMenu(page), 'More for this page')] : []));
     renderCrumb();
   },
@@ -569,7 +572,7 @@ const sync = new Sync({
     syncEl.dataset.state = s;
     delete syncEl.dataset.stale;
     document.body.dataset.sync = s;
-    if (s === 'synced') { conflicts.count(); checkSpace().catch(() => {}); writeOut(); openAsked(); }
+    if (s === 'synced') { conflicts.count(); checkSpace().catch(() => {}); writeOut(); openAsked(); reviewAsked(); }
     if (s !== 'syncing') checkUnsent().catch(() => {});
   },
   onRemote: applyRemote
@@ -691,6 +694,7 @@ async function applyRemote(rows) {
   if (rows.some((r) => r.parent_id === state.chapterId && ['para', 'scene', 'heading'].includes(r.kind))) await applyRemoteChapter();
   if (rows.some((r) => r.kind === 'note' && r.fields?.chapter_id === state.chapterId)) await notes.load(state.chapterId);
   await notebook.applyRemote(rows);
+  if (inNotebook() && notebook.isDay && rows.some((r) => r.kind === 'review' || r.parent_id === notebook.page.id || r.parent_id === 'pg_mulling')) dayReview?.refresh();
 }
 
 async function applyRemoteChapter(tries = 0) {
@@ -2419,6 +2423,7 @@ const commands = [
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
   ...Object.entries(LISTS).map(([list, name]) => ({ group: 'page', label: `Make this page a ${name.toLowerCase()} (Claude links each title)`, keys: '', run: () => makeList(list), when: () => inNotebook() && notebook.page?.kind === 'page' && listOf(notebook.page) !== list })),
+  { group: 'tidy', label: 'Review the day with Claude (what goes to Daybook, what to keep thinking about)', keys: '', run: () => dayReview.run(), when: () => inNotebook() && notebook.isDay },
   { group: 'tidy', label: 'Send this line to Daybook (a task in its Inbox, linked back here)', keys: '', run: sendLineToDaybook, when: () => inNotebook() && !!notebook.currentLine() },
   { group: 'page', label: 'Stop Claude linking titles on this page', keys: '', run: () => makeList(null), when: () => inNotebook() && !!listOf(notebook.page) },
   { group: 'tidy', label: 'This page: rename, move to a world or trash…', keys: '', run: async () => popMenu(null, await pageMenu(notebook.page), menuSpot()), when: () => inNotebook() && notebook.page?.kind === 'page' },
@@ -2948,6 +2953,32 @@ async function openCapture(opts) {
 }
 window.addEventListener('online', () => writeOut());
 
+// The day review: Claude sums up a day's page and sorts what's on it, and you
+// decide each thing (Daybook, keep thinking, split, let go).
+dayReview = new DayReview($('.day-review'), {
+  ask: askServer,
+  canAsk: canAskServer,
+  areas: () => (window.__areas ? window.__areas() : sync.user && sync.backend?.areas ? sync.backend.areas() : null),
+  sendPending: () => sendPending({ send: sendTask, canSend: canSendTask }),
+  base: () => location.origin + location.pathname,
+  onRows: (rows) => applyRemote(rows),
+  onOpen: (id) => openEntry(id),
+  toast
+});
+// The 9 pm note in Daybook links to ?review=<date>: open that day and its
+// review, or ask Claude for one once this device has caught up.
+let reviewing = null;
+async function reviewAsked() {
+  if (!reviewing) return;
+  const iso = reviewing;
+  if (!inNotebook() || notebook.page?.id !== dayId(iso)) await go({ view: 'notebook', pageId: dayId(iso) });
+  if (await getReview(iso)) { reviewing = null; await dayReview.reveal(); return; }
+  if (!canAskServer()) return;
+  reviewing = null;
+  await dayReview.run(iso);
+  dayReview.box.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
 // Watch and read lists: once typing pauses, Claude links the titles you've
 // moved on from (never the line you're on).
 let listTimer;
@@ -3003,9 +3034,18 @@ async function start() {
     const same = params.targetURL === first;
     first = null;
     if (!params.targetURL || same) return;
-    if (new URL(params.targetURL).searchParams.get('capture')) openCapture();
+    const sp = new URL(params.targetURL).searchParams;
+    if (sp.get('capture')) openCapture();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(sp.get('review') || '')) { reviewing = sp.get('review'); reviewAsked(); }
   });
-  if (asked.has('capture') || asked.has('share') || asked.has('open')) history.replaceState(history.state, '', location.pathname);
+  if (asked.has('capture') || asked.has('share') || asked.has('open') || asked.has('review')) history.replaceState(history.state, '', location.pathname);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(asked.get('review') || '')) {
+    reviewing = asked.get('review');
+    // Signed in, wait for this device to catch up first (the review may
+    // already have been made on another one); otherwise go now.
+    const signedIn = !window.__claude && await sync.backend?.user?.().catch(() => null);
+    if (signedIn) { await go({ view: 'notebook', pageId: dayId(reviewing) }); if (await getReview(reviewing)) await reviewAsked(); } else await reviewAsked();
+  }
   if (asked.get('capture')) openCapture();
   if (asked.get('open')) { asking = asked.get('open'); await openAsked(); }
   // Shared from another app (or shared earlier and not yet placed).
