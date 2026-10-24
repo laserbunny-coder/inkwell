@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Shared from Inkwell</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png">
+  <meta name="theme-color" content="#1C1A17">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header class="rd-top">
+    <span class="rd-from">Shared from Inkwell</span>
+    <button type="button" class="rd-ghost" id="rd-toggle" hidden>Hide comments</button>
+  </header>
+  <main class="rd-sheet">
+    <h1 id="rd-title"></h1>
+    <p class="rd-hint" id="rd-hint" hidden></p>
+    <div id="rd-body"><p class="rd-hint">Opening…</p></div>
+  </main>
+  <div class="rd-bar" id="rd-bar" hidden>
+    <button type="button" class="rd-pill" id="rd-comment">Comment</button>
+  </div>
+  <form class="rd-compose" id="rd-compose" hidden>
+    <div class="rd-quote" id="rd-quote" hidden></div>
+    <textarea id="rd-text" rows="3" placeholder="Your comment…" aria-label="Your comment" maxlength="4000"></textarea>
+    <div class="rd-row">
+      <input id="rd-name" placeholder="Your name" aria-label="Your name" maxlength="60" autocomplete="name">
+      <span class="rd-grow"></span>
+      <button type="button" class="rd-ghost" id="rd-cancel">Cancel</button>
+      <button type="submit" class="rd-pill" id="rd-send">Send</button>
+    </div>
+  </form>
+  <script type="module" src="./src/reader.js"></script>
+</body>
+</html>

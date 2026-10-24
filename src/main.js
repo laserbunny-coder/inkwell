@@ -41,13 +41,20 @@ import { sendToDaybook, sendPending, queueTask } from './daybook.js';
 import { DayReview, getReview } from './review.js';
 import { TagsPage } from './tags.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
+import { pieceDoc, pageDoc, startDraft, draftHolding } from './drafts.js';
+import { printPiece } from './print.js';
+import { CompareView, BesidePane } from './compare.js';
+import { claudeNotes, TalkPanel } from './claudenotes.js';
+import { Sharing, linkFor, commentsOn } from './sharelink.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf } from './library.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
 const root = document.documentElement;
 const extensions = [
-  StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false }), EntryIds, SceneBreak.configure({ names: () => sectionNames() }), AltMark, ParagraphVersions,
+  // No lists or block quotes in a manuscript: they hold paragraphs the chapter
+  // can't save as its own (typing "- " made a list whose words were lost).
+  StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false, bulletList: false, orderedList: false, listItem: false, listKeymap: false, blockquote: false }), EntryIds, SceneBreak.configure({ names: () => sectionNames() }), AltMark, ParagraphVersions,
   EntryRef.configure({ onPick: openPicker, onOpen: openEntry }),
   TagMarks.configure({ onTag: (t) => notebook.showTag(t) }),
   ScriptElements.configure({ isScript: () => isScript() }),
@@ -65,7 +72,7 @@ const gone = (r) => !r || r.deleted || isTrashed(r);
 
 // project: the piece open in the manuscript view. bookId: the piece whose home is
 // shown. worldId: the world whose home is shown.
-const state = { project: null, acts: [], chapterId: null, bookId: null, worldId: null, gridId: null, prodId: null, libArea: null };
+const state = { project: null, acts: [], chapterId: null, bookId: null, worldId: null, gridId: null, prodId: null, compareId: null, libArea: null };
 // The plot grid wrote to the open chapter's entries: read it afresh on the way back.
 let gridTouched = false;
 const view = () => root.dataset.view || 'write';
@@ -478,13 +485,21 @@ async function go(place) {
   if (place.view === 'world' && gone(await getEntry(place.id))) place = { view: 'library' };
   if (place.view === 'grid' && gone(await getEntry(place.id))) place = { view: 'library' };
   if (place.view === 'production' && gone(await getEntry(place.id))) place = { view: 'library' };
+  if (place.view === 'compare' && gone(await getEntry(place.id))) place = { view: 'library' };
+  // A chapter of a kept draft reads beside the draft you're writing, rather than opening to write in.
+  if (place.view === 'write' && place.chapterId) {
+    const ch = await getEntry(place.chapterId);
+    const kept = ch?.kind === 'chapter' && (await draftHolding(ch));
+    if (kept) place = { view: 'compare', id: kept.parent_id, a: { type: 'draft', id: kept.id }, b: { type: 'now' }, focus: ch.id };
+  }
   if (place.view === 'notebook' && place.pageId && !place.pageId.startsWith('day-') && gone(await getEntry(place.pageId))) place = { view: 'notebook', pageId: dayId(isoToday()) };
   if (place.view === 'notebook' && !place.pageId && notebook.page && !notebook.isDay && gone(await getEntry(notebook.page.id))) place = { view: 'notebook', pageId: dayId(isoToday()) };
   const from = view();
   // Switch at once so the next keystroke lands in the right place; saving catches up.
   if (from === 'write' && place.view !== 'write') store.close(editor.state.doc);
   // The grid reads the manuscript as saved, so the last words go first.
-  if (place.view === 'grid' || place.view === 'production') await store.close(editor.state.doc);
+  if (place.view === 'grid' || place.view === 'production' || place.view === 'compare') await store.close(editor.state.doc);
+  if (place.view !== 'write') { if (beside.isOpen) beside.close(); if (talk.isOpen) talk.close(); }
   if (from === 'notebook' && place.view !== 'notebook') notebook.close();
   if (place.view === 'write') delete root.dataset.view;
   else root.dataset.view = place.view;
@@ -541,6 +556,10 @@ async function go(place) {
     state.prodId = place.id;
     remember({ view: 'production', id: place.id });
     await production.show(place.id, place);
+  } else if (place.view === 'compare') {
+    state.compareId = place.id;
+    await comparer.show(place.id, place);
+    remember(comparer.place);
   }
   renderCrumb();
   renderRail();
@@ -731,7 +750,7 @@ async function applyRemote(rows) {
   if (view() === 'tags' && tagsPage && rows.some((r) => r.tags?.length || r.id === 'settings-tag-groups')) tagsPage.refresh();
   if (rows.some((r) => r.kind === 'settings')) await notes.reloadTypes();
   if (state.chapterId && rows.some((r) => r.links?.includes(state.chapterId))) renderChapterLinks();
-  const structural = rows.some((r) => ['project', 'world', 'act', 'chapter', 'area', 'page'].includes(r.kind));
+  const structural = rows.some((r) => ['project', 'world', 'act', 'chapter', 'area', 'page', 'draft'].includes(r.kind));
   if (structural) {
     const remoteProject = rows.find((r) => r.kind === 'project' && !r.deleted);
     if (remoteProject) await dropEmptySeed(remoteProject);
@@ -742,6 +761,14 @@ async function applyRemote(rows) {
     }
     const ch = state.chapterId && (await getEntry(state.chapterId));
     if (state.chapterId && gone(ch)) await leaveChapter();
+    // The other device started a new draft: this chapter is now in the kept one.
+    if (view() === 'write' && ch && !gone(ch) && (await draftHolding(ch))) {
+      await store.close(editor.state.doc);
+      state.chapterId = null;
+      const first = state.project && (await outline(state.project.id)).flatMap((a) => a.chapters)[0];
+      if (first) await openChapter(first.id);
+      toast('A new draft was started on your other device; the earlier one is kept whole');
+    }
     if (view() === 'write' && (!state.project || gone(ch))) {
       state.chapterId = null;
       const id = await lastChapterAnywhere();
@@ -814,6 +841,8 @@ async function openChapter(id) {
   await setMeta('lastChapter', id);
   if (state.project) await setMeta(`lastChapter:${state.project.id}`, id);
   if (view() === 'write') remember({ view: 'write', chapterId: id });
+  if (beside.isOpen) beside.follow(id);
+  if (talk.isOpen) talk.open(id);
   refreshWords();
   renderRail();
   renderCrumb();
@@ -1223,6 +1252,10 @@ async function drawCrumb() {
     const g = await getEntry(state.prodId);
     if (g) { const up = await within(g); parts.push(...(up ? up.out : [lib]), bookPart(g)); }
     parts.push(link('Production', () => {}, 'here'));
+  } else if (view() === 'compare') {
+    const g = await getEntry(state.compareId);
+    if (g) { const up = await within(g); parts.push(...(up ? up.out : [lib]), bookPart(g)); }
+    parts.push(link('Compare', () => {}, 'here'));
   } else if (view() === 'project') {
     const b = await getEntry(state.bookId);
     const up = b && (await within(b));
@@ -1488,6 +1521,12 @@ async function bookMenu(book) {
     { label: 'Stage', sub: STAGES.map((st) => ({ label: st, current: stageOf(b) === st, run: () => setStage(b, st) })) },
     ...(script ? [{ label: b.fields?.numbered ? 'Scene numbers: turn off' : 'Number the scenes (for production)…', run: () => toggleNumbering(b) }] : []),
     ...(hasManuscript(b) ? [{ label: 'Production (shots, kit, shoot days)', run: () => go({ view: 'production', id: b.id }) }] : []),
+    ...(hasManuscript(b) ? [{ label: 'Revise', sub: [
+      { label: 'Compare drafts or dates', run: () => go({ view: 'compare', id: b.id }) },
+      { label: 'Start a new draft from scratch…', run: () => newDraft(b) },
+      { label: 'Print, or save as PDF', run: async () => { await go({ view: 'project', id: b.id }); await printCurrent(); } }
+    ] }] : []),
+    ...(hasManuscript(b) ? [{ label: 'Share a link to read and comment…', run: () => openShare(b) }] : []),
     { label: 'New piece inside (an episode in a season…)', run: () => addPiece(b.id) },
     { label: 'New page in it', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(b.id); } },
     { label: 'Move to', sub: (await homesFor(b)).map((h) => ({ label: h.label, current: b.parent_id === h.id, run: () => movePiece(b, h.id) })) },
@@ -1521,6 +1560,7 @@ async function pageMenu(page) {
     { label: 'Rename…', run: () => rename(p) },
     { label: 'New page inside', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(p.id); } },
     { label: 'History…', run: async () => { await go({ view: 'notebook', pageId: p.id }); await openHistory(); } },
+    { label: 'Share a link to read and comment…', run: () => openShare(p) },
     { label: 'Move to', sub: [{ label: 'Loose pages (no world)', current: !p.parent_id, run: () => movePage(p, null) }, ...(await homesFor(p)).map((h) => ({ label: h.label, current: p.parent_id === h.id, run: () => movePage(p, h.id) }))] },
     'sep',
     { label: 'Move to Trash', danger: true, run: () => toTrash(p) }
@@ -2104,6 +2144,260 @@ const grid = new PlotGrid($('#grid-view'), {
 });
 window.__grid = grid;
 
+// ---------- revising: fresh eyes, print, drafts, compare, Claude's notes ----------
+
+// Fresh eyes: one switch that makes the draft look unfamiliar (another kind
+// of font, a narrower page, a different page colour), so it reads like
+// someone else's. Per device, like the other view settings.
+const freshEyes = () => root.classList.contains('fresh-eyes');
+function setFreshFont() {
+  const g = currentFont().group;
+  root.style.setProperty('--fresh-prose', g === 'serif' ? "'iA Writer Quattro', Consolas, monospace" : "'Literata', Georgia, serif");
+}
+function toggleFreshEyes(on = !freshEyes()) {
+  setFreshFont();
+  root.classList.toggle('fresh-eyes', on);
+  try { localStorage.setItem('freshEyes', on ? '1' : '0'); } catch { /* private window */ }
+  $('#fresh-eyes').checked = on;
+  notes.layout();
+  toast(on ? 'Fresh eyes on: a new font, page and colour, so it reads like someone else’s' : 'Fresh eyes off');
+}
+try { if (localStorage.getItem('freshEyes') === '1') { setFreshFont(); root.classList.add('fresh-eyes'); } } catch { /* private window */ }
+$('#fresh-eyes').checked = freshEyes();
+$('#fresh-eyes').addEventListener('change', () => toggleFreshEyes($('#fresh-eyes').checked));
+
+// The piece the revision tools are about, from where you are.
+async function revisionPiece() {
+  if (view() === 'compare') return getEntry(state.compareId);
+  const id = await productionOwner();
+  const b = id && (await getEntry(id));
+  return b && hasManuscript(b) ? b : null;
+}
+
+// Ctrl + P: the piece as a manuscript or a script, ready to print or save as a PDF.
+async function printCurrent() {
+  if (inNotebook() && notebook.page && !notebook.isDay) {
+    await notebook.close();
+    const doc = await pageDoc(notebook.page);
+    printPiece({ title: titleOf(notebook.page), type: 'page', chapters: doc, author: await accountName() });
+    return;
+  }
+  const b = await revisionPiece();
+  if (!b) { toast('Open a piece to print it'); return; }
+  if (state.project?.id === b.id) await store.close(editor.state.doc);
+  const chapters = await pieceDoc(b.id);
+  const words = chapters.reduce((n, ch) => n + ch.blocks.reduce((m, x) => m + wordCount(x.text), 0), 0);
+  printPiece({ title: b.title, type: bookType(b), chapters, words, author: await accountName() });
+}
+const accountName = async () => (window.__claude ? 'Michael' : (await sync.backend?.name?.().catch(() => '')) || '');
+
+// Start again from scratch: the draft as it is now is kept whole, and the
+// piece opens empty, with the old draft beside it to read from.
+async function newDraft(piece) {
+  const b = await getEntry(piece.id);
+  const n = (b.fields?.draft || 1);
+  const ok = await ask({
+    title: `Start draft ${n + 1} of “${nameOf(b)}” from scratch?`,
+    body: `Draft ${n} is kept whole, exactly as it is, with its notes${bookType(b) === 'screenplay' ? ', shots' : ''} and grid notes. The piece starts empty with the same ${bookType(b) === 'screenplay' ? 'script' : 'acts and chapters'}, and Draft ${n} opens beside it to read from. Compare the two any time.`,
+    ok: `Start draft ${n + 1}`
+  });
+  if (!ok) return;
+  if (state.project?.id === b.id) { await store.close(editor.state.doc); state.chapterId = null; }
+  const { draft, first } = await startDraft(b, { script: bookType(b) === 'screenplay' });
+  state.project = await getEntry(b.id);
+  await go({ view: 'write', chapterId: first.id });
+  await beside.open(b.id, first.id, { type: 'draft', id: draft.id });
+  toast(`Draft ${n + 1}: a clean page. ${draft.title} is beside it (Ctrl + Shift + B hides it).`);
+}
+
+// Ctrl + Shift + B: an earlier draft (or the text as it was) beside the one you're writing.
+const beside = new BesidePane($('.beside'), {
+  pickDate: () => pickDate(),
+  focus: () => editor.commands.focus()
+});
+window.__beside = beside;
+// Caught before the editor sees it, which would otherwise make a block quote.
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') { e.preventDefault(); e.stopPropagation(); toggleBeside(); }
+}, true);
+async function toggleBeside() {
+  if (beside.isOpen) { beside.close(); editor.commands.focus(); return; }
+  if (!writing() || !state.project || !state.chapterId) { toast('Open a chapter to read another draft beside it'); return; }
+  await store.close(editor.state.doc);
+  await beside.open(state.project.id, state.chapterId);
+}
+
+async function pickDate() {
+  const got = await askText({ title: 'The text as it was on…', type: 'date', ok: 'Show it', value: '' });
+  if (!got) return null;
+  const [y, m, d] = got.split('-').map(Number);
+  return y ? new Date(y, m - 1, d, 23, 59, 59, 999).getTime() : null;
+}
+
+// Ctrl + Shift + X: compare two drafts, or the text then and now.
+const comparer = new CompareView($('#compare-view'), {
+  back: (piece) => openBook(piece.id),
+  pickDate: () => pickDate(),
+  remember: (place) => remember(place),
+  ask: (b) => askServer(b),
+  canAsk: () => canAskServer(),
+  toast
+});
+window.__compare = comparer;
+async function toggleCompare() {
+  if (view() === 'compare') { const p = await getEntry(state.compareId); return p ? openBook(p.id) : go({ view: 'library' }); }
+  const b = await revisionPiece();
+  if (!b) { toast('Open a piece to compare its drafts'); return; }
+  return go({ view: 'compare', id: b.id, focus: writing() ? state.chapterId : null });
+}
+
+// Claude's notes on the chapter you're in: margin notes and a fix list.
+async function askClaudeNotes() {
+  if (!writing() || !state.chapterId) { toast('Open a chapter for Claude to read'); return; }
+  if (!canAskServer()) { toast('Sign in and go online to ask Claude'); return; }
+  await store.close(editor.state.doc);
+  const chapter = await getEntry(state.chapterId);
+  statusEl.textContent = 'Claude is reading…';
+  try {
+    const ctx = await alts.context();
+    const got = await claudeNotes(chapter, state.project, { ask: askServer, idea: ctx.idea });
+    if (state.chapterId === chapter.id) { await notes.reloadTypes(); await notes.load(chapter.id); if (hidden().has('claude')) setShown('claude', true); notes.setVisible(true); }
+    statusEl.textContent = 'Saved';
+    const fixes = got.page ? (await children(got.page.id)).length : 0;
+    toast(`Claude left ${plural(got.notes.length, 'note')} in the margin${fixes ? ' and a fix list' : ''}`, got.page ? { label: 'Open the fix list', run: () => go({ view: 'notebook', pageId: got.page.id }) } : null);
+  } catch (e) {
+    statusEl.textContent = 'Saved';
+    toast(e.message || 'Couldn’t ask Claude. Try again.');
+  }
+}
+
+const talk = new TalkPanel($('.talk'), {
+  ask: (b) => askServer(b),
+  canAsk: () => canAskServer(),
+  toast,
+  save: () => store.close(editor.state.doc),
+  context: () => alts.context(),
+  focus: () => editor.commands.focus()
+});
+window.__talk = talk;
+async function toggleTalk() {
+  if (talk.isOpen) { talk.close(); editor.commands.focus(); return; }
+  if (!writing() || !state.chapterId) { toast('Open a chapter to talk it over'); return; }
+  await talk.open(state.chapterId);
+}
+
+// ---------- share links: read and comment ----------
+
+const sharing = new Sharing({
+  backend: () => sync.backend,
+  user: () => sync.user,
+  onComments: async (fresh) => {
+    if (state.chapterId && fresh.some((n) => n.fields?.chapter_id === state.chapterId)) await notes.load(state.chapterId);
+    const where = [...new Set(fresh.map((n) => n.fields?.comment?.share))].length === 1 ? (await getEntry(fresh[0].fields.comment.share))?.title : null;
+    toast(`${plural(fresh.length, 'new comment')}${where ? ` on “${where}”` : ''}`, fresh[0].fields?.chapter_id ? { label: 'Show', run: () => openEntry(fresh[0].parent_id).then(() => { if (hidden().has('comments')) setShown('comments', true); notes.setVisible(true); }) } : null);
+  }
+});
+window.__sharing = sharing;
+notes.comments = { reply: (n, t) => sharing.reply(n, t), resolve: (n) => sharing.resolve(n), toast };
+notes.skip = (n) => (n.type === 'claude' && hidden().has('claude')) || (n.type === 'comment' && hidden().has('comments'));
+setInterval(() => sharing.refresh().catch((e) => console.warn(e)), 120000);
+document.addEventListener('visibilitychange', () => { if (document.hidden) sharing.refresh().catch(() => {}); });
+setTimeout(() => sharing.refresh().catch(() => {}), 8000);
+
+// What's shared from where you are: the piece, or the bible page.
+async function shareTarget() {
+  if (inNotebook() && notebook.page?.kind === 'page') return notebook.page;
+  const id = await productionOwner();
+  return id ? getEntry(id) : null;
+}
+
+async function openShare(target) {
+  target = target || (await shareTarget());
+  if (!target) { toast('Open a piece or a page to share it'); return; }
+  if (state.project?.id === target.id) await store.close(editor.state.doc);
+  if (inNotebook()) await notebook.close();
+  document.querySelector('.share-panel')?.remove();
+  const back = make('div', 'ask-backdrop');
+  const box = make('div', 'ask share-panel');
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-label', 'Share a link');
+  back.append(box);
+  document.body.append(back);
+  const close = () => { back.remove(); currentEditor().commands.focus(); };
+  back.addEventListener('pointerdown', (e) => { if (e.target === back) close(); });
+  box.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } });
+  const draw = async () => {
+    const share = await sharing.current(target);
+    box.replaceChildren(make('h2', '', `Share “${titleOf(target)}”`));
+    const btn = (label, cls, run) => { const b = make('button', cls, label); b.type = 'button'; b.addEventListener('click', run); return b; };
+    if (!share) {
+      box.append(make('p', '', `Anyone with the link can read ${target.kind === 'page' ? 'this page' : 'this piece'} and leave comments, without an account. Nothing else of yours is shared: not your notes, other pieces or day pages. It stays up to date as you write, and you can turn it off any time.`));
+      const l = make('label', 'switch');
+      const c = make('input');
+      c.type = 'checkbox';
+      c.checked = true;
+      l.append(c, document.createTextNode(' Readers can comment'));
+      box.append(l);
+      const row = make('div', 'ask-actions');
+      row.append(btn('Cancel', 'ghost-btn', close));
+      if (!sharing.ready) {
+        box.append(make('p', 'hint', sync.user ? 'You’re offline. Links are made online.' : 'Sign in to sync first: links are made through your account.'));
+        if (!sync.user && sync.available) row.append(btn('Sign in', 'pill primary', () => sync.signIn()));
+      } else {
+        row.append(btn('Make a link', 'pill primary', async (e) => {
+          e.target.disabled = true;
+          e.target.textContent = 'Making it…';
+          try { await sharing.start(target, { comments: c.checked }); await draw(); } catch (err) { e.target.disabled = false; e.target.textContent = 'Make a link'; toast(err.message || 'Couldn’t make the link. Try again.'); }
+        }));
+      }
+      box.append(row);
+      row.querySelector('.primary')?.focus();
+      return;
+    }
+    const url = linkFor(share.fields.token);
+    const field = make('input', 'ask-input share-url');
+    field.readOnly = true;
+    field.value = url;
+    field.setAttribute('aria-label', 'The link');
+    field.addEventListener('focus', () => field.select());
+    const copy = btn('Copy the link', 'pill primary', async () => { try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { field.select(); } });
+    const urlRow = make('div', 'share-row');
+    urlRow.append(field, copy);
+    box.append(urlRow);
+    const l = make('label', 'switch');
+    const c = make('input');
+    c.type = 'checkbox';
+    c.checked = !!share.fields.comments;
+    c.addEventListener('change', async () => { try { await sharing.setComments(share, c.checked); } catch (err) { c.checked = !c.checked; toast(err.message || 'Couldn’t change that. Try again.'); } });
+    l.append(c, document.createTextNode(' Readers can comment'));
+    box.append(l, make('p', 'hint', share.fields.sent ? `Readers see it as of ${ago(share.fields.sent)}; new words go up every couple of minutes.` : 'Sending…'));
+    const list = await commentsOn(share);
+    if (list.length) {
+      box.append(make('div', 'panel-label', `Comments (${list.length})`));
+      const ul = make('ul', 'share-comments');
+      for (const n of list.slice(0, 30)) {
+        const li = make('li', n.fields.resolved ? 'resolved' : '');
+        const b = make('button', '');
+        b.type = 'button';
+        b.append(make('b', '', n.fields.comment.name || 'A reader'), document.createTextNode(` ${n.text}`));
+        b.addEventListener('click', async () => { close(); await openEntry(n.parent_id); if (n.fields.chapter_id) { if (hidden().has('comments')) setShown('comments', true); notes.setVisible(true); } });
+        li.append(b);
+        ul.append(li);
+      }
+      box.append(ul);
+    }
+    const row = make('div', 'ask-actions');
+    row.append(btn('Stop sharing…', 'ghost-btn danger-text', async () => {
+      const ok = await ask({ title: 'Turn this link off?', body: 'Anyone who opens it sees that it’s been turned off. Comments already in stay in your margin. A new link later is a new address.', ok: 'Turn it off', danger: true });
+      if (!ok) return;
+      try { await sharing.stop(share); await draw(); toast('Link turned off'); } catch (err) { toast(err.message || 'Couldn’t turn it off. Try again.'); }
+    }), btn('Done', 'pill', close));
+    box.append(row);
+    copy.focus();
+  };
+  await draw();
+}
+
 // ---------- production: shots, the kit, shoot days, posting ----------
 
 const production = new ProductionView($('#prod-view'), {
@@ -2472,6 +2766,7 @@ function setShown(name, on) {
   if (on) h.delete(name); else h.add(name);
   localStorage.setItem('hide', JSON.stringify([...h]));
   root.classList.toggle(`hide-${name}`, !on);
+  if (name === 'claude' || name === 'comments') notes.render();
   if (name === 'linkpics') resetLinkPics();
   syncSwitches();
 }
@@ -2729,6 +3024,17 @@ const commands = [
   { group: 'view', label: 'Production (shots, kit, shoot days, posting)', keys: `${mod}⇧S`, run: toggleProduction, when: () => view() !== 'production' && view() !== 'library' },
   { group: 'view', label: 'Back to the text from production', keys: `${mod}⇧S`, run: toggleProduction, when: () => view() === 'production' },
   { group: 'view', label: 'Show or hide section summaries', keys: '', run: () => setShown('synopsis', hidden().has('synopsis')), when: () => writing() && isScript() },
+  { group: 'view', label: 'Fresh eyes: a new font, page and colour, to reread it cold', keys: `${mod}⇧Y`, words: ['reread', 'revise', 'unfamiliar'], run: () => toggleFreshEyes() },
+  { group: 'view', label: 'Show or hide Claude’s notes in the margin', keys: '', run: () => setShown('claude', hidden().has('claude')) },
+  { group: 'view', label: 'Show or hide readers’ comments in the margin', keys: '', run: () => setShown('comments', hidden().has('comments')) },
+  { group: 'revise', label: 'Compare drafts, or the text then and now', keys: `${mod}⇧X`, words: ['diff', 'versions', 'changes'], run: toggleCompare, when: () => view() !== 'compare' },
+  { group: 'revise', label: 'Back to the text from comparing', keys: `${mod}⇧X`, run: toggleCompare, when: () => view() === 'compare' },
+  { group: 'revise', label: 'Read an earlier draft beside this one', keys: `${mod}⇧B`, words: ['side by side', 'old draft'], run: toggleBeside, when: writing },
+  { group: 'revise', label: 'Start a new draft from scratch (the old one is kept whole)…', keys: '', words: ['rewrite', 'draft 2'], run: async () => { const b = await revisionPiece(); if (b) newDraft(b); }, when: () => !!currentBookId() },
+  { group: 'revise', label: 'Claude’s notes on this chapter (margin notes and a fix list)', keys: '', words: ['feedback', 'editor', 'critique'], run: askClaudeNotes, when: writing },
+  { group: 'revise', label: 'Talk this chapter over with Claude', keys: '', words: ['chat', 'conversation', 'feedback'], run: toggleTalk, when: writing },
+  { group: 'revise', label: 'Print, or save as PDF (manuscript or screenplay format)', keys: `${mod}P`, words: ['pdf', 'export'], run: printCurrent, when: () => writing() || view() === 'project' || view() === 'compare' || (inNotebook() && notebook.page?.kind === 'page') },
+  { group: 'revise', label: 'Share a link to read and comment…', keys: '', words: ['share', 'feedback', 'reader', 'link'], run: () => openShare(), when: () => !!currentBookId() || (inNotebook() && notebook.page?.kind === 'page') },
   { group: 'page', label: 'Name the section levels (Act, Sequence, Scene…)', keys: '', run: nameSectionLevels, when: () => writing() && isScript() },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
   { group: 'sync', label: 'Connect Scribe, the dictation keyboard…', keys: '', run: () => connectScribe() },
@@ -2821,6 +3127,7 @@ const GROUPS = [
   { id: 'write', label: 'Write', hint: 'Links, notes, scene breaks, history' },
   { id: 'view', label: 'View', hint: 'Focus, sidebar, notes, what shows' },
   { id: 'page', label: 'Page and text', hint: 'Width, text size, font, light or dark' },
+  { id: 'revise', label: 'Revise and share', hint: 'Compare drafts, new draft, Claude’s notes, print, share a link' },
   { id: 'tidy', label: 'Organize', hint: 'Rename, move, change kind, Trash' },
   { id: 'sync', label: 'Sync and backup', hint: 'Sync, export, back up' }
 ];
@@ -2828,6 +3135,7 @@ const GROUPS = [
 // The piece you're in, wherever you are in it.
 function currentBookId() {
   if (view() === 'project') return state.bookId;
+  if (view() === 'compare') return state.compareId;
   if (writing()) return state.project?.id || null;
   if (inNotebook() && notebook.page?.kind === 'project') return notebook.page.id;
   return null;
@@ -3182,6 +3490,9 @@ document.addEventListener('keydown', (e) => {
   else if (m && e.shiftKey && k === 'l') { e.preventDefault(); toggleTheme(); }
   else if (m && e.shiftKey && k === 'g') { e.preventDefault(); toggleGrid(); }
   else if (m && e.shiftKey && !e.altKey && k === 's') { e.preventDefault(); toggleProduction(); }
+  else if (m && e.shiftKey && !e.altKey && k === 'y') { e.preventDefault(); toggleFreshEyes(); }
+  else if (m && e.shiftKey && !e.altKey && k === 'x') { e.preventDefault(); toggleCompare(); }
+  else if (m && !e.shiftKey && !e.altKey && k === 'p' && (writing() || view() === 'project' || view() === 'compare' || (inNotebook() && notebook.page?.kind === 'page'))) { e.preventDefault(); printCurrent(); }
   // Alt+C: Capture, recording at once; Alt+C again keeps it.
   else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyV' && (writing() || capture.isOpen)) { e.preventDefault(); if (!capture.isOpen) talkIntoDraft(); else if (capture.rec) capture.finish(); }
   else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyC') { e.preventDefault(); if (!capture.isOpen) openCapture({ start: true }); else if (capture.rec) capture.finish(); }

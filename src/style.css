@@ -224,10 +224,10 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 }
 
 /* Views: the manuscript (default), the notebook, the library and a book's home */
-.notebook, .library, .project-home, .world-home, .tags-home, .grid-view, .prod-view { display: none; }
+.notebook, .library, .project-home, .world-home, .tags-home, .grid-view, .prod-view, .compare-view { display: none; }
 :root[data-view] .page { display: none; }
 :root[data-view] #notes-toggle, :root[data-view] .when-write { display: none; }
-:root[data-view="notebook"] .notebook, :root[data-view="library"] .library, :root[data-view="project"] .project-home, :root[data-view="world"] .world-home, :root[data-view="tags"] .tags-home, :root[data-view="grid"] .grid-view, :root[data-view="production"] .prod-view { display: flex; }
+:root[data-view="notebook"] .notebook, :root[data-view="library"] .library, :root[data-view="project"] .project-home, :root[data-view="world"] .world-home, :root[data-view="tags"] .tags-home, :root[data-view="grid"] .grid-view, :root[data-view="production"] .prod-view, :root[data-view="compare"] .compare-view { display: flex; }
 :root[data-view="library"] #view-toggle, :root[data-view="project"] #view-toggle, :root[data-view="world"] #view-toggle, :root[data-view="tags"] #view-toggle { display: inline; }
 :root[data-view="library"] #library-toggle { display: none; }
 
@@ -1150,6 +1150,149 @@ div.pd-scene-title { cursor: default; }
   .printing-sheet .pd-sheet { box-shadow: none; padding: 0; }
 }
 
+/* ---------- revising (src/compare.js, src/claudenotes.js, src/print.js, src/sharelink.js) ---------- */
+
+/* Fresh eyes: the same words in a different font, page and colour. */
+:root.fresh-eyes { --bg: #E9EDF0; --panel: #F2F5F7; --ink: #1E2429; --muted: #56606A; --line: #D3DAE0; }
+@media (prefers-color-scheme: dark) { :root.fresh-eyes:not([data-theme="light"]) { --bg: #141A21; --panel: #1B232C; --ink: #D9E0E7; --muted: #95A1AD; --line: #2A343F; } }
+:root.fresh-eyes[data-theme="dark"] { --bg: #141A21; --panel: #1B232C; --ink: #D9E0E7; --muted: #95A1AD; --line: #2A343F; }
+:root.fresh-eyes .sheet { max-width: calc(var(--page-width, 660px) * .8); }
+:root.fresh-eyes body.notes-on .sheet { max-width: calc(var(--page-width, 660px) * .8 + 300px); }
+:root.fresh-eyes #editor .ProseMirror { font-family: var(--fresh-prose, 'Literata', Georgia, serif); font-size: calc(var(--text-size, 21px) * 1.05); line-height: 1.62; }
+:root.fresh-eyes.script #editor .ProseMirror { font-family: 'Courier Prime', 'Courier New', monospace; font-size: calc(var(--text-size, 21px) * .9); }
+
+/* Compare: two versions side by side, the scenes lined up. */
+.compare-view { padding: 64px 24px 16vh; justify-content: center; }
+.cmp-sheet { max-width: 1400px; }
+.cmp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 18px; }
+.cmp-title { font-family: var(--prose); font-weight: 500; font-size: 26px; margin: 0 8px 0 0; }
+.cmp-sides { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cmp-vs { color: var(--faint); font-size: 13px; }
+.cmp-pick { font: 14px var(--ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; max-width: 100%; }
+.cmp-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.cmp-tools .switch { display: flex; font-size: 13px; }
+.cmp-body { font-family: var(--prose); font-size: calc(var(--text-size, 21px) * .8); line-height: 1.6; }
+.cmp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; }
+.cmp-row > div { min-width: 0; }
+.cmp-i { display: none; }
+.cmp-labels { position: sticky; top: 44px; z-index: 2; background: var(--bg); font: 600 11px var(--ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 8px 0; border-bottom: 1px solid var(--line); }
+.cmp-chapter { margin-top: 28px; }
+.cmp-ch-head { font: 600 15px var(--ui); color: var(--ink); }
+.cmp-count { font: 12px var(--ui); color: var(--faint); margin: 2px 0 12px; }
+.cmp-b { margin: 0 0 .7em; padding: 2px 8px; border-radius: 4px; white-space: pre-wrap; }
+.cmp-scene, .cmp-b.el-scene { font-family: var(--ui); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-top: 1.2em; }
+.cmp-heading { font-weight: 600; }
+.cmp-b.el-character { padding-left: 34%; text-transform: uppercase; margin-bottom: 0; }
+.cmp-b.el-dialogue { padding-left: 16%; padding-right: 12%; }
+.cmp-b.el-paren { padding-left: 26%; }
+.cmp-b.el-transition { text-align: right; text-transform: uppercase; }
+.op-del .cmp-a .cmp-b { background: rgba(190, 70, 50, .10); }
+.op-ins .cmp-b-col .cmp-b { background: rgba(70, 140, 80, .12); }
+.op-chg .cmp-b { background: rgba(200, 160, 60, .07); }
+.cmp-body ins { background: rgba(70, 140, 80, .22); text-decoration: none; border-radius: 2px; }
+.cmp-body del { background: rgba(190, 70, 50, .18); text-decoration: line-through; text-decoration-color: rgba(190, 70, 50, .55); border-radius: 2px; }
+.cmp-b.by-claude { box-shadow: inset 2px 0 0 #9C7A45; }
+.cmp-fold { display: block; width: 100%; margin: 4px 0 12px; border: 0; border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); background: transparent; color: var(--faint); font: 12px var(--ui); padding: 6px; cursor: pointer; }
+.cmp-fold:hover { color: var(--ink); }
+.cmp-same { margin-top: 24px; }
+.cmp-claude { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; font-size: 14px; line-height: 1.55; }
+.cmp-claude-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.cmp-point { margin: 0 0 12px; }
+.cmp-where { font-weight: 600; font-size: 13px; color: var(--muted); }
+.cmp-overall { margin: 8px 0 0; font-style: italic; }
+@media (max-width: 700px) {
+  .compare-view { padding: 56px 16px 12vh; }
+  .cmp-row { grid-template-columns: 1fr; }
+  .cmp-row > .cmp-a, .cmp-row > .cmp-b-col { display: none; }
+  .cmp-row > .cmp-i { display: block; }
+  .cmp-labels, .cmp-ch-head { display: none; }
+  .cmp-head { gap: 8px; }
+}
+
+/* An earlier draft beside the one you're writing; talking it over with Claude. */
+.beside, .talk { position: fixed; top: 0; right: 0; bottom: 0; width: min(44vw, 620px); z-index: 30; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; padding: 52px 22px 16px; }
+.beside[hidden], .talk[hidden] { display: none; }
+/* Room for the panel; a page too wide for what's left keeps its start (scene numbers) on screen. */
+body.beside-on .page, body.talk-on .page { padding-right: calc(min(44vw, 620px) + 16px); padding-left: 56px; justify-content: safe center; }
+.bs-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.bs-head .panel-label { flex: 1; }
+.bs-head select { flex: 1; min-width: 0; }
+.bs-chapter { margin-bottom: 12px; }
+.bs-text { flex: 1; overflow-y: auto; font-family: var(--prose); font-size: calc(var(--text-size, 21px) * .82); line-height: 1.65; color: var(--muted); padding-right: 6px; }
+.tk-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 2px 12px; }
+.tk-msg { white-space: pre-wrap; font-size: 14px; line-height: 1.55; padding: 8px 12px; border-radius: 10px; max-width: 92%; }
+.tk-me { align-self: flex-end; background: var(--tint); }
+.tk-claude { align-self: flex-start; border: 1px solid var(--line); }
+.tk-wait { color: var(--faint); font-style: italic; }
+.tk-form { display: flex; gap: 8px; align-items: flex-end; }
+.tk-form textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); padding: 8px 10px; font: 14px/1.45 var(--ui); }
+@media (max-width: 900px) {
+  .beside, .talk { width: auto; left: 0; padding: 16px 16px calc(12px + env(safe-area-inset-bottom)); }
+  body.beside-on .page, body.talk-on .page { padding-right: 0; }
+}
+
+/* Readers' comments in the margin. */
+.note-comment .note-head { font: 600 10px var(--ui); letter-spacing: .08em; text-transform: uppercase; color: var(--hat); }
+.nc-when { color: var(--faint); font-weight: 400; margin-right: auto; }
+.nc-quote { font-size: 12px; font-style: italic; color: var(--faint); margin: 2px 0; }
+.nc-text { font-size: 13px; line-height: 1.5; color: var(--ink); white-space: pre-wrap; }
+.nc-reply { font-size: 12px; line-height: 1.45; color: var(--muted); margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--line); }
+.nc-actions { display: flex; gap: 4px; margin-top: 2px; }
+.nc-actions .ghost-btn { font-size: 12px; padding: 2px 6px; }
+.note-comment textarea { border: 1px solid var(--line) !important; border-radius: 6px; padding: 4px 6px !important; margin: 4px 0; overflow: auto !important; }
+.note-comment .pill { font-size: 12px; padding: 3px 10px; }
+
+/* The share dialog. */
+.share-panel { max-width: 520px; }
+.share-row { display: flex; gap: 8px; align-items: center; }
+.share-row .ask-input { flex: 1; min-width: 0; font-size: 13px; }
+.share-comments { list-style: none; padding: 0; margin: 4px 0 8px; max-height: 32vh; overflow-y: auto; }
+.share-comments button { text-align: left; width: 100%; border: 0; background: transparent; color: var(--ink); padding: 6px 4px; font-size: 13px; line-height: 1.45; border-radius: 6px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-comments button:hover { background: var(--tint); }
+.share-comments .resolved { opacity: .5; }
+.danger-text { color: #B4452F !important; }
+
+/* Print, or save as PDF: only the piece, in manuscript or screenplay format. */
+.print-doc { display: none; }
+@media print {
+  .printing-doc body > *:not(.print-doc) { display: none !important; }
+  .printing-doc body { background: #fff !important; padding: 0 !important; }
+  .printing-doc .print-doc { display: block !important; color: #000; }
+  .pr-novel { page: manuscript; font: 12pt/2 'Times New Roman', Times, serif; }
+  .pr-script { page: screenplay; font: 12pt/1 'Courier Prime', 'Courier New', Courier, monospace; }
+  .pr-title-page { break-after: page; position: relative; }
+  /* A script's title page isn't counted: the script starts on page 1. */
+  .pr-script .pr-title-page { page: screenplay-title; }
+  .pr-novel .pr-corner { font-size: 12pt; line-height: 1.2; }
+  .pr-novel .pr-count { position: absolute; top: 0; right: 0; }
+  .pr-novel .pr-big { text-align: center; margin-top: 3in; font-size: 14pt; font-weight: bold; text-transform: uppercase; }
+  .pr-novel .pr-by { text-align: center; }
+  .pr-script .pr-big { text-align: center; margin-top: 3.2in; text-decoration: underline; }
+  .pr-script .pr-by { text-align: center; margin-top: 2em; }
+  .pr-script .pr-author { text-align: center; margin-top: 1em; }
+  .pr-chapter { break-before: page; }
+  .pr-chapter:first-of-type { break-before: auto; }
+  .pr-ch-title { font: bold 12pt/2 'Times New Roman', Times, serif; text-align: center; margin: 2.2in 0 1em; }
+  .pr-p { margin: 0; text-indent: .5in; orphans: 2; widows: 2; }
+  .pr-h { font-size: 12pt; margin: 1em 0 0; }
+  .pr-break { text-align: center; margin: 0; }
+  .pr-script p { margin: 0; }
+  .pr-scene { margin-top: 2em !important; font-weight: bold; break-after: avoid; position: relative; }
+  .pr-action { margin-top: 1em !important; }
+  .pr-character { margin-top: 1em !important; padding-left: 2.2in; break-after: avoid; }
+  .pr-paren { padding-left: 1.6in; width: 3.6in; break-after: avoid; }
+  .pr-dialogue { padding-left: 1in; width: 4.5in; }
+  .pr-transition { margin-top: 1em !important; text-align: right; }
+  .pr-code { position: absolute; font-weight: normal; }
+  /* Scene codes sit in the page's padding, not its margin: a PDF cuts off anything in the margin. */
+  .pr-script .pr-chapter { padding: 0 .5in 0 .75in; }
+  .pr-code-l { left: -.7in; }
+  .pr-code-r { right: -.45in; }
+  @page manuscript { size: letter; margin: 1in; @top-right { content: counter(page); font: 12pt 'Times New Roman', serif; } }
+  @page manuscript:first { @top-right { content: none; } }
+  @page screenplay { size: letter; margin: 1in .5in 1in .75in; @top-right { content: counter(page) "."; font: 12pt 'Courier Prime', 'Courier New', monospace; } }
+  @page screenplay-title { size: letter; margin: 1in; counter-increment: page 0; }
+}
 /* A shared link's picture, folded: just a small arrow before the title. */
 .file-embed.picture.from-link { position: relative; }
 .pic-fold { position: absolute; top: 6px; left: 6px; z-index: 1; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: rgba(0, 0, 0, .45); color: #fff; font: 13px/26px var(--ui); opacity: 0; cursor: pointer; }

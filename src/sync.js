@@ -109,6 +109,36 @@ function supabaseBackend() {
       if (error) throw error;
       return data;
     },
+    // Share links (a piece or page someone can read and comment on). The
+    // reader's copy lives in writing_shares; comments come back from
+    // writing_comments. Both are this account's alone under row-level security.
+    async saveShare(row) {
+      const { error } = await sb.from('writing_shares').upsert(row);
+      if (error) throw error;
+    },
+    async comments(tokens, since) {
+      if (!tokens.length) return [];
+      const { data, error } = await sb.from('writing_comments').select('id,share_id,parent_id,block,quote,name,text,owner,resolved,created_at')
+        .in('share_id', tokens).gt('created_at', since).order('created_at').limit(500);
+      if (error) throw error;
+      return data;
+    },
+    async reply(row) {
+      const { data: auth } = await sb.auth.getSession();
+      const { data, error } = await sb.from('writing_comments').insert({ ...row, owner: true, user_id: auth.session?.user?.id }).select('id,created_at').single();
+      if (error) throw error;
+      return data;
+    },
+    async resolveComment(id, resolved) {
+      const { error } = await sb.from('writing_comments').update({ resolved }).eq('id', id);
+      if (error) throw error;
+    },
+    // The name on the account, for replies and the title page of a print.
+    async name() {
+      const { data } = await sb.auth.getSession();
+      const m = data.session?.user?.user_metadata || {};
+      return m.full_name || m.name || '';
+    },
     subscribe(userId, fn) {
       if (channel) sb.removeChannel(channel);
       channel = sb.channel(`writing-${userId}`)
