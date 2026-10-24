@@ -125,29 +125,38 @@ try {
     assert.equal(q.length, 1);
   });
 
-  await check('once it’s set up, the words go into the line, with Claude’s outline, tag and links', async () => {
+  await check('once it’s set up, it’s written up in the mode Claude picked, with a chip, Claude’s tag and links', async () => {
     await page.evaluate(() => {
-      window.__transcriber = async () => ({ transcript: 'Ninjas who are terrible at hiding, filmed like a nature documentary.', outline: ['Premise: ninjas who can’t hide', 'Images: nature-documentary framing'], tag: 'Ninja Bunch', refs: [{ label: 'Planet Earth (2006)', url: 'https://www.imdb.com/title/tt0795176/' }, { label: 'no link', url: 'javascript:alert(1)' }] });
+      window.__transcriber = async () => ({
+        raw: 'Um so ninjas who are terrible at hiding, filmed like a nature documentary. Note to self, look up Attenborough.',
+        mode: 'idea',
+        blocks: [{ text: 'Ninjas who are terrible at hiding, filmed like a nature documentary.', el: 'paragraph', new_scene: false }, { text: 'Premise: ninjas who can’t hide', el: 'paragraph', new_scene: false }, { text: 'Images: nature-documentary framing', el: 'paragraph', new_scene: false }],
+        notes: [{ text: 'Look up Attenborough.', after: 0 }],
+        tag: 'Ninja Bunch',
+        refs: [{ label: 'Planet Earth (2006)', url: 'https://www.imdb.com/title/tt0795176/' }, { label: 'no link', url: 'javascript:alert(1)' }]
+      });
       window.dispatchEvent(new Event('online'));
     });
     await page.waitForFunction(() => /terrible at hiding/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''), null, { timeout: 8000 });
     const text = await outlineText(page);
-    assert.match(text, /\d{1,2}:\d\d [ap]m Ninjas who are terrible at hiding, filmed like a nature documentary\. #idea #ninja-bunch/, 'the time stays after the recording, before the words');
+    assert.match(text, /\d{1,2}:\d\d [ap]m\s*Idea\s*Ninjas who are terrible at hiding, filmed like a nature documentary\. #idea #ninja-bunch/, 'the time stays after the recording, then the mode chip, then the words');
+    assert.equal(await page.locator('#outline-editor .voice-chip').first().innerText(), 'Idea');
     assert.match(text, /Premise: ninjas who can’t hide/);
     const all = await lines(page);
     const cap = all.find((l) => l.fields?.capture === 'voice');
     assert.deepEqual(cap.tags, ['idea', 'ninja-bunch']);
     assert.equal(cap.fields.claude_tag, 'ninja-bunch', 'the line knows the tag was Claude’s');
+    assert.match(cap.fields.voice.raw, /^Um so ninjas/, 'the word-for-word text is kept');
     const kids = all.filter((l) => l.parent_id === cap.id).sort((a, b) => a.sort - b.sort);
-    assert.equal(kids.length, 3, 'two outline lines and one safe link');
-    assert.ok(kids.every((k) => k.fields.by === 'claude'), 'outline and link lines are Claude’s');
-    assert.equal(kids[2].text, 'Planet Earth (2006)');
-    assert.equal(kids[2].content[0].marks[0].attrs.href, 'https://www.imdb.com/title/tt0795176/');
-    assert.ok(Array.isArray((await page.evaluate(() => window.__asked.at(-1))).tags), 'your tags are sent so Claude can reuse one');
+    assert.deepEqual(kids.map((k) => k.text), ['Note to self: Look up Attenborough.', 'Premise: ninjas who can’t hide', 'Images: nature-documentary framing', 'Planet Earth (2006)'], 'the note to self is set apart, the link is last and only the safe one');
+    assert.ok(kids.every((k) => k.fields.by === 'claude'), 'Claude’s lines say so');
+    assert.equal(kids[3].content[0].marks[0].attrs.href, 'https://www.imdb.com/title/tt0795176/');
+    const asked = await page.evaluate(() => window.__asked.at(-1));
+    assert.ok(Array.isArray(asked.tags), 'your tags are sent so Claude can reuse one');
     assert.equal(cap.content[0].type, 'file', 'the recording stays on the line');
     assert.equal(await page.locator('#outline-editor .file-embed.audio .note').first().innerText(), '');
-    const asked = await page.evaluate(() => window.__asked.at(-1));
-    assert.equal(asked.mode, 'capture');
+    assert.equal(asked.mode, 'voice');
+    assert.equal(asked.place, 'day');
     assert.ok(bucket.has(`u1/${asked.file}`), 'the recording went up before asking');
   });
 
@@ -165,15 +174,17 @@ try {
     await page.keyboard.type(' bunny version');
     await sleep(900);
     await page.evaluate(() => {
-      window.__transcriber = async () => ({ transcript: 'What if the ninjas were rabbits.', outline: [] });
+      window.__transcriber = async () => ({ raw: 'What if the ninjas were rabbits.', mode: 'idea', blocks: [{ text: 'What if the ninjas were rabbits.', el: 'paragraph', new_scene: false }], notes: [] });
       window.dispatchEvent(new Event('online'));
     });
     await page.waitForFunction(() => /ninjas were rabbits/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''), null, { timeout: 8000 });
     const all = await lines(page);
     const mine = all.find((l) => /bunny version/.test(l.text));
     assert.ok(mine, 'your words kept');
+    assert.match(mine.text, /bunny version$/, 'your line isn’t touched');
     const under = all.find((l) => l.parent_id === mine.id);
-    assert.equal(under?.text, 'What if the ninjas were rabbits.');
+    assert.equal(under?.text.trim(), 'What if the ninjas were rabbits.');
+    assert.equal(under.content[0].type, 'voice', 'the chip goes on the line under it');
   });
 
   await check('Cancel throws a recording away and leaves the page as it was', async () => {

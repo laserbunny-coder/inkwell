@@ -31,6 +31,7 @@
       if (!localStorage.getItem('bulletsOff')) { hide.push('bullets'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('bulletsOff', '1'); }
       for (const h of hide) d.classList.add('hide-' + h);
       if (localStorage.getItem('focus') === '1') d.classList.add('focus');
+      if (localStorage.getItem('typewriter') === '1') d.classList.add('typewriter');
       if (w) d.style.setProperty('--page-width', w + 'px');
       if (z) d.style.setProperty('--text-size', z + 'px');
       else if (matchMedia('(max-width: 700px)').matches) d.style.setProperty('--text-size', '18px');
@@ -242,13 +243,17 @@
 
   <div class="capture" role="dialog" aria-label="Capture an idea" hidden>
     <button type="button" class="cap-cancel" aria-label="Close without keeping">Cancel</button>
+    <p class="cap-into" hidden></p>
     <div class="cap-middle">
       <span class="cap-level" aria-hidden="true"></span>
       <button type="button" class="cap-big" aria-label="Start talking"><svg class="cap-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><svg class="cap-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg></button>
       <p class="cap-time" aria-live="off"></p>
       <p class="cap-hint" aria-live="polite">Tap to talk</p>
     </div>
-    <label class="cap-auto"><input type="checkbox"> Start recording as soon as Capture opens</label>
+    <div class="cap-foot">
+      <label class="cap-file"><input type="file" accept="audio/*,.m4a,.mp3,.wav,.ogg,.opus,.webm,.aac,.amr,.3gp" hidden> Use a recording file instead</label>
+      <label class="cap-auto"><input type="checkbox"> Start recording as soon as Capture opens</label>
+    </div>
   </div>
 
   <div class="palette-backdrop" hidden></div>
@@ -274,6 +279,8 @@
     <label class="switch"><input type="checkbox" data-show="handle"> Six-dot handle</label>
     <label class="switch"><input type="checkbox" data-show="bullets"> Bullets on notebook lines</label>
     <label class="switch"><input type="checkbox" data-show="alts"> Marks on words and paragraphs with alternates</label>
+    <label class="switch"><input type="checkbox" data-show="voice"> Mode chips on voice captures</label>
+    <label class="switch"><input type="checkbox" id="typewriter-mode"> Typewriter: the line you’re on stays put</label>
     <label class="switch"><input type="checkbox" id="focus-mode"> Focus: just the text <span class="keys">⌘.</span></label>
     <div class="actions">
       <button type="button" class="ghost-btn" id="page-reset">Reset</button>
@@ -293,6 +300,7 @@
 
   <div class="script-bar" role="toolbar" aria-label="Script elements and alternates" hidden>
     <button type="button" data-ins="1" aria-label="Insert (time, date, link…)">+</button>
+    <button type="button" data-talk="1" aria-label="Talk into the draft">Talk</button>
     <button type="button" data-el="scene">Scene</button>
     <button type="button" data-el="action">Action</button>
     <button type="button" data-el="character">Character</button>
@@ -343,6 +351,7 @@
       <dt>⌘⇧F</dt><dd>Search inside all your writing</dd>
       <dt>⌘J</dt><dd>Today’s page, and back to writing</dd>
       <dt>⌥C</dt><dd>Capture by voice (again to keep it, Esc to throw it away)</dd>
+      <dt>⌥V</dt><dd>Talk into the draft where you are (again to keep it)</dd>
       <dt>⌘⇧O</dt><dd>Library</dd>
       <dt>⌘⌥↓ ⌘⌥↑</dt><dd>Next or previous chapter (or day)</dd>
       <dt>⌘[ ⌘]</dt><dd>Back and forward</dd>

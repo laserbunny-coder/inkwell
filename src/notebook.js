@@ -9,6 +9,7 @@ import { moveEntry } from './move.js';
 import { newPage } from './library.js';
 import { freshenRefs } from './links.js';
 import { FileEmbed } from './filenode.js';
+import { VoiceChip } from './voice.js';
 import { MAX_BYTES } from './files.js';
 import { toast } from './menu.js';
 import { SlashMenu } from './slash.js';
@@ -117,7 +118,7 @@ export class Notebook {
         OutlineDoc, LineIds, EntryRef.configure({ onPick, onOpen }), TagMarks.configure({ onTag: (t) => this.showTag(t) }), GatherBadge.configure({ onTag: (t) => this.showTag(t), onOpen, origin: (id) => this.origins.get(id) || '' }), AltMark,
         OutlineFold.configure({ onZoom: (eid) => this.zoomed(eid) }),
         FileEmbed.configure({ onTooBig: (f) => toast(`“${f.name}” is too big to add (the limit is ${Math.round(MAX_BYTES / 1048576)} MB)`) }),
-        SlashMenu
+        VoiceChip, SlashMenu
       ],
       content: EMPTY,
       onUpdate: ({ editor }) => this.store.change(editor.state.doc)

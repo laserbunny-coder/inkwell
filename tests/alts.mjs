@@ -197,8 +197,8 @@ try {
     await ph.keyboard.type('She walked home.');
     await ph.waitForSelector('.script-bar', { state: 'visible' });
     // A prose chapter: + (the insert menu) and the alternates buttons, no script ones.
-    const shown = () => ph.locator('.script-bar button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => (b.dataset.ins ? 'insert' : b.dataset.alt || b.dataset.el)));
-    assert.deepEqual(await shown(), ['insert', 'word', 'ask', 'para', 'prev', 'next']);
+    const shown = () => ph.locator('.script-bar button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => (b.dataset.ins ? 'insert' : b.dataset.talk ? 'talk' : b.dataset.alt || b.dataset.el)));
+    assert.deepEqual(await shown(), ['insert', 'talk', 'word', 'ask', 'para', 'prev', 'next']);
     assert.equal(await ph.locator('.script-bar [data-alt="prev"]').evaluate((b) => b.classList.contains('idle')), true);
     // Alternates: the sheet opens for the word at the caret, and the keyboard stays up.
     await ph.evaluate(() => window.__editor.chain().focus().setTextSelection(7).run());
