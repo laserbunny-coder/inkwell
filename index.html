@@ -45,6 +45,7 @@
 
   <header class="topbar">
     <nav class="crumb" id="crumb" aria-label="Where you are"></nav>
+    <nav class="page-tabs" id="page-tabs" aria-label="Pages" hidden></nav>
     <span class="spacer"></span>
     <button type="button" class="pill links-pill" id="chapter-links-chip" hidden></button>
     <button type="button" id="words" data-cmd="stats" title="Progress: words and pages over time"></button>
@@ -82,7 +83,7 @@
       <div id="lib-books" class="cards"></div>
       <form id="lib-new" class="lib-new" hidden>
         <input id="lib-new-title" placeholder="Title" aria-label="Title" autocomplete="off" required>
-        <select id="lib-new-type" aria-label="Starts with"><option value="novel">Novel</option><option value="screenplay">Screenplay</option><option value="lines">Outline (a gag, a short…)</option><option value="world">Pages only (notes, a bible)</option></select>
+        <select id="lib-new-type" aria-label="Starts with"><option value="novel">Novel</option><option value="screenplay">Screenplay</option><option value="lines">Outline (a gag, a short…)</option><option value="world">Pages only (notes, a bible)</option><option value="life">Life project (a remodel, research, the business)</option></select>
         <select id="lib-new-area" aria-label="Area"></select>
         <button type="submit" class="pill">Create</button>
         <button type="button" class="ghost-btn" id="lib-new-cancel">Cancel</button>
@@ -108,8 +109,6 @@
       <div class="ph-head">
         <h1 id="ph-title" spellcheck="false"></h1>
         <button type="button" class="pill" id="ph-continue">Continue writing</button>
-        <button type="button" class="ghost-btn ph-grid-btn" data-cmd="grid" title="The story as a table (Ctrl + Shift + G)">Plot grid</button>
-        <button type="button" class="ghost-btn ph-grid-btn ph-prod-btn" data-cmd="production" title="Shots, kit, shoot days and posting (Ctrl + Shift + S)">Production</button>
         <span id="ph-more"></span>
       </div>
       <div class="ph-meta"><input id="ph-label" class="ph-label" list="piece-labels" aria-label="What this is (Novel, Gag, Episode…)" autocomplete="off" spellcheck="false"> · <label>Written as <select id="ph-kind" aria-label="How it's written"></select></label> · <label>Stage <select id="ph-stage" aria-label="Stage"></select></label> · <span id="ph-stats"></span> · <span id="ph-world"></span></div>
@@ -137,30 +136,32 @@
       <div class="ph-head">
         <h1 id="wh-title" spellcheck="false"></h1>
         <button type="button" class="pill" id="wh-continue" hidden>Continue writing</button>
-        <button type="button" class="ghost-btn ph-grid-btn" data-cmd="grid" title="The world's pieces as a table (Ctrl + Shift + G)">Plot grid</button>
         <span id="wh-more"></span>
       </div>
-      <div class="ph-meta"><span id="wh-stats"></span> · <label>Area <select id="wh-area"></select></label></div>
-      <div id="wh-board" class="stage-board" hidden></div>
+      <div class="ph-meta"><span id="wh-kind"></span><span id="wh-stats"></span> · <label>Area <select id="wh-area"></select></label></div>
+      <p id="wh-logline" class="wh-logline" spellcheck="true"></p>
+      <div id="wh-stagebar" class="wh-stagebar" hidden></div>
       <div class="ph-grid">
         <section>
-          <div class="ph-row"><span class="panel-label">Pieces</span><span><button type="button" class="ghost-btn wh-board-btn" id="wh-board-toggle" title="Every piece by stage, from idea to posted">Board</button><button type="button" class="ghost-btn" id="wh-new-piece">+ Piece</button></span></div>
-          <ul id="wh-pieces" class="loose-list tree-list"></ul>
-          <div class="hint" id="wh-pieces-empty">Anything you make in this world, at any size: a gag, a short, an episode, a novel, a film.</div>
-          <div id="wh-promises-box" hidden>
-            <div class="panel-label ph-gap">Promises</div>
-            <ul id="wh-promises" class="ref-list promise-list"></ul>
+          <div id="wh-pieces-box">
+            <div class="ph-row"><span class="panel-label">Pieces</span><button type="button" class="ghost-btn" id="wh-new-piece">+ Piece</button></div>
+            <ul id="wh-pieces" class="loose-list tree-list"></ul>
+            <div class="hint" id="wh-pieces-empty">Anything you make in this world, at any size: a gag, a short, an episode, a novel, a film.</div>
           </div>
-          <div class="panel-label ph-gap">From your daily pages</div>
-          <ul id="wh-daily" class="ref-list"></ul>
-          <div class="hint" id="wh-daily-empty">Link a line on a daily page to this world, its pieces or its pages with [[ and it shows here.</div>
+          <div id="wh-task-box" hidden>
+            <div class="panel-label">A task for Daybook</div>
+            <input type="text" id="wh-task" class="st-input wh-task" placeholder="Call the contractor about the cabinets" aria-label="A task for Daybook">
+            <div class="hint">Goes to your Daybook inbox, with a link back here.</div>
+          </div>
         </section>
         <section>
-          <div class="ph-row"><span class="panel-label">Bible</span><button type="button" class="ghost-btn" data-cmd="new-page">+ Page</button></div>
-          <ul id="wh-pages" class="loose-list tree-list"></ul>
-          <div class="hint" id="wh-pages-empty">Characters, places, rules, running gags: a page for each, and pages inside pages.</div>
+          <div class="panel-label">Next</div>
+          <ul id="wh-next" class="ref-list wh-next"></ul>
+          <div class="panel-label ph-gap">Recently</div>
+          <ul id="wh-recent" class="loose-list wh-recent"></ul>
         </section>
       </div>
+      <div id="wh-board" class="stage-board" hidden></div>
     </div>
   </main>
 
@@ -174,6 +175,10 @@
 
   <main class="compare-view" aria-label="Compare versions">
     <div class="gv-sheet cmp-sheet" id="compare-view"></div>
+  </main>
+
+  <main class="stage-view" aria-label="Page">
+    <div class="st-sheet" id="stage-view"></div>
   </main>
 
   <main class="notebook" aria-label="Notebook">
@@ -250,6 +255,7 @@
 
   <aside class="beside" aria-label="An earlier draft, to read" hidden></aside>
   <aside class="talk" aria-label="Talk it over with Claude" hidden></aside>
+  <aside class="today-panel" aria-label="Today" hidden></aside>
 
   <aside class="history" aria-label="Version history" hidden>
     <div class="history-head">
@@ -315,6 +321,7 @@
     <label class="switch"><input type="checkbox" data-show="comments"> Readers’ comments in the margin</label>
     <label class="switch"><input type="checkbox" id="fresh-eyes"> Fresh eyes: reread it in a new font, page and colour <span class="keys">⌘⇧Y</span></label>
     <label class="switch"><input type="checkbox" id="typewriter-mode"> Typewriter: the line you’re on stays put</label>
+    <label class="switch"><input type="checkbox" data-show="pagetabs"> Page tabs at the top <span class="keys">⌥1</span></label>
     <label class="switch"><input type="checkbox" id="focus-mode"> Focus: just the text <span class="keys">⌘.</span></label>
     <div class="actions">
       <button type="button" class="ghost-btn" id="page-reset">Reset</button>
@@ -384,6 +391,9 @@
       <dt>⌘O</dt><dd>Go to a book, chapter or page</dd>
       <dt>⌘⇧F</dt><dd>Search inside all your writing</dd>
       <dt>⌘J</dt><dd>Today’s page, and back to writing</dd>
+      <dt>⌘⇧J</dt><dd>Today panel: today’s lines beside whatever you’re doing</dd>
+      <dt>⌥1 – ⌥6</dt><dd>Pages: Gather, Shape, Write, Revise, Make, Deliver (hold ⌥ to see the numbers)</dd>
+      <dt>⌥0</dt><dd>Overview of the world or piece you’re in</dd>
       <dt>⌥C</dt><dd>Capture by voice (again to keep it, Esc to throw it away)</dd>
       <dt>⌥V</dt><dd>Talk into the draft where you are (again to keep it)</dd>
       <dt>⌘⇧O</dt><dd>Library</dd>
@@ -391,8 +401,8 @@
       <dt>⌘[ ⌘]</dt><dd>Back and forward</dd>
       <dt>⌘/</dt><dd>This list</dd>
       <dt>⌘⇧P</dt><dd>Progress: words and pages over time</dd>
-      <dt>⌘⇧G</dt><dd>Plot grid: the story as a table, and back</dd>
-      <dt>⌘⇧S</dt><dd>Production: shots, kit, shoot days, posting, and back</dd>
+      <dt>⌘⇧G</dt><dd>Plot grid (in Shape): the story as a table, and back</dd>
+      <dt>⌘⇧S</dt><dd>Make: shots, storyboard, kit, shoot days, and back</dd>
       <dt>Esc</dt><dd>Close whatever is open</dd>
     </dl>
     <h3>What shows</h3>

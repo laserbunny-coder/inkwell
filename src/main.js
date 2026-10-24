@@ -15,7 +15,7 @@ import { searchIndex, searchChanged } from './search.js';
 import { keep, versionsOf, tidyHistory, blocks as docBlocks, compare, deletedFrom, bringBack } from './history.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, askPiece, askScript, showCopy, toast, closeMenu } from './menu.js';
 import { Sync } from './sync.js';
-import { ensureSeed, outline, entry, wordCount, noteTypes } from './model.js';
+import { ensureSeed, outline, entry, wordCount, noteTypes, newId as newIdLocal } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
 import { EntryRef, TagMarks } from './outline.js';
 import { retitleLinks, freshenRefs } from './links.js';
@@ -33,6 +33,8 @@ import { openHandleMenu } from './handlemenu.js';
 import { openPicker } from './picker.js';
 import { PlotGrid, threadsOf, worldPromises } from './grid.js';
 import { ProductionView } from './prodview.js';
+import { PageStrip, TodayPanel, isLife } from './pages.js';
+import { StagePage, intoDrawer, gatherItems } from './stages.js';
 import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, RAW } from './voice.js';
 import { takeShares, snapshotPending } from './share.js';
@@ -45,7 +47,7 @@ import { pieceDoc, pageDoc, startDraft, draftHolding } from './drafts.js';
 import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
-import { Sharing, linkFor, commentsOn } from './sharelink.js';
+import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf } from './library.js';
 
 const $ = (s) => document.querySelector(s);
@@ -72,7 +74,7 @@ const gone = (r) => !r || r.deleted || isTrashed(r);
 
 // project: the piece open in the manuscript view. bookId: the piece whose home is
 // shown. worldId: the world whose home is shown.
-const state = { project: null, acts: [], chapterId: null, bookId: null, worldId: null, gridId: null, prodId: null, compareId: null, libArea: null };
+const state = { project: null, acts: [], chapterId: null, bookId: null, worldId: null, gridId: null, prodId: null, compareId: null, libArea: null, stage: null };
 // The plot grid wrote to the open chapter's entries: read it afresh on the way back.
 let gridTouched = false;
 const view = () => root.dataset.view || 'write';
@@ -479,6 +481,8 @@ window.addEventListener('popstate', async (e) => {
 async function go(place) {
   // Somewhere that has since gone to the Trash (Back can lead there): go nearby instead.
   if (place.view === 'write' && place.chapterId && gone(await getEntry(place.chapterId))) place = { view: 'library' };
+  // Posting moved from Make to Deliver: an old place with its tab goes there.
+  if (place.view === 'production' && ['files', 'share', 'post'].includes(place.tab)) place = { ...place, view: 'deliver' };
   if (place.view === 'project' && gone(await getEntry(place.id))) place = { view: 'library' };
   // A book saved as a place before worlds: if it became a world, show that.
   if (place.view === 'project' && (await getEntry(place.id))?.kind === 'world') place = { view: 'world', id: place.id };
@@ -486,6 +490,7 @@ async function go(place) {
   if (place.view === 'grid' && gone(await getEntry(place.id))) place = { view: 'library' };
   if (place.view === 'production' && gone(await getEntry(place.id))) place = { view: 'library' };
   if (place.view === 'compare' && gone(await getEntry(place.id))) place = { view: 'library' };
+  if ((place.view === 'stage' || place.view === 'deliver') && gone(await getEntry(place.id))) place = { view: 'library' };
   // A chapter of a kept draft reads beside the draft you're writing, rather than opening to write in.
   if (place.view === 'write' && place.chapterId) {
     const ch = await getEntry(place.chapterId);
@@ -498,7 +503,7 @@ async function go(place) {
   // Switch at once so the next keystroke lands in the right place; saving catches up.
   if (from === 'write' && place.view !== 'write') store.close(editor.state.doc);
   // The grid reads the manuscript as saved, so the last words go first.
-  if (place.view === 'grid' || place.view === 'production' || place.view === 'compare') await store.close(editor.state.doc);
+  if (['grid', 'production', 'deliver', 'compare', 'stage'].includes(place.view)) await store.close(editor.state.doc);
   if (place.view !== 'write') { if (beside.isOpen) beside.close(); if (talk.isOpen) talk.close(); }
   if (from === 'notebook' && place.view !== 'notebook') notebook.close();
   if (place.view === 'write') delete root.dataset.view;
@@ -552,10 +557,14 @@ async function go(place) {
     state.gridId = place.id;
     remember(place);
     await grid.show(place.id);
-  } else if (place.view === 'production') {
+  } else if (place.view === 'production' || place.view === 'deliver') {
     state.prodId = place.id;
-    remember({ view: 'production', id: place.id });
-    await production.show(place.id, place);
+    remember({ view: place.view, id: place.id });
+    await production.show(place.id, { ...place, mode: place.view === 'deliver' ? 'deliver' : 'make' });
+  } else if (place.view === 'stage' || place.view === 'drawer') {
+    state.stage = place;
+    remember(place);
+    await stagePage.show(place);
   } else if (place.view === 'compare') {
     state.compareId = place.id;
     await comparer.show(place.id, place);
@@ -785,7 +794,9 @@ async function applyRemote(rows) {
   if (rows.some((r) => r.parent_id === state.chapterId && ['para', 'scene', 'heading'].includes(r.kind))) await applyRemoteChapter();
   if (rows.some((r) => r.kind === 'note' && r.fields?.chapter_id === state.chapterId)) await notes.load(state.chapterId);
   if (view() === 'grid' && rows.some((r) => ['note', 'thread', 'para', 'scene', 'chapter', 'act', 'project', 'world'].includes(r.kind))) grid.refresh();
-  if (view() === 'production' && rows.some((r) => ['shot', 'breakdown', 'shootday', 'file', 'page', 'note', 'para', 'scene', 'chapter', 'act', 'project', 'world'].includes(r.kind))) production.refresh();
+  if ((view() === 'production' || view() === 'deliver') && rows.some((r) => ['shot', 'breakdown', 'shootday', 'file', 'page', 'note', 'para', 'scene', 'chapter', 'act', 'project', 'world', 'share'].includes(r.kind))) production.refresh();
+  if (stagePage.isOpen && rows.some((r) => ['line', 'page', 'project', 'world', 'event', 'tie', 'shootday', 'note', 'share'].includes(r.kind))) stagePage.refresh();
+  if (todayPanel.isOpen && rows.some((r) => r.kind === 'line' || r.kind === 'day')) todayPanel.refresh();
   await notebook.applyRemote(rows);
   if (inNotebook() && notebook.isDay && rows.some((r) => r.kind === 'review' || r.parent_id === notebook.page.id || r.parent_id === 'pg_mulling')) dayReview?.refresh();
 }
@@ -1248,10 +1259,17 @@ async function drawCrumb() {
     if (g?.kind === 'world') parts.push(lib, ...(await areaParts(g.area_id)), bookPart(g));
     else if (g) { const up = await within(g); parts.push(...(up ? up.out : [lib]), bookPart(g)); }
     parts.push(link('Plot grid', () => {}, 'here'));
-  } else if (view() === 'production') {
+  } else if (view() === 'production' || view() === 'deliver') {
     const g = await getEntry(state.prodId);
     if (g) { const up = await within(g); parts.push(...(up ? up.out : [lib]), bookPart(g)); }
-    parts.push(link('Production', () => {}, 'here'));
+    parts.push(link(view() === 'deliver' ? 'Deliver' : 'Make', () => {}, 'here'));
+  } else if (view() === 'stage' && state.stage) {
+    const g = await getEntry(state.stage.id);
+    if (g?.kind === 'world') parts.push(lib, ...(await areaParts(g.area_id)), bookPart(g));
+    else if (g) { const up = await within(g); parts.push(...(up ? up.out : [lib]), bookPart(g)); }
+    parts.push(link(PAGE_NAMES[state.stage.page] || '', () => {}, 'here'));
+  } else if (view() === 'drawer') {
+    parts.push(lib, link('Drawer', () => {}, 'here'));
   } else if (view() === 'compare') {
     const g = await getEntry(state.compareId);
     if (g) { const up = await within(g); parts.push(...(up ? up.out : [lib]), bookPart(g)); }
@@ -1288,6 +1306,7 @@ async function drawCrumb() {
   crumb.replaceChildren();
   parts.forEach((p, i) => { if (i) crumb.append(make('span', 'sep', '›')); crumb.append(p); });
   refreshWords();
+  await renderStrip();
 }
 
 // ---------- tidying up: rename, move, change kind, the Trash ----------
@@ -1305,6 +1324,8 @@ async function refreshViews() {
   if (view() === 'library') await renderLibrary();
   if (view() === 'project') await renderProject();
   if (view() === 'world') await renderWorld();
+  if (stagePage.isOpen) await stagePage.refresh();
+  if (view() === 'production' || view() === 'deliver') await production.refresh();
   if (inNotebook() && notebook.page && !notebook.isDay) {
     const p = await getEntry(notebook.page.id);
     if (p && !gone(p)) { notebook.page = notebook.store.page = p; notebook.renderHead(); }
@@ -1523,6 +1544,7 @@ async function bookMenu(book) {
     ...(hasManuscript(b) ? [{ label: 'Production (shots, kit, shoot days)', run: () => go({ view: 'production', id: b.id }) }] : []),
     ...(hasManuscript(b) ? [{ label: 'Revise', sub: [
       { label: 'Compare drafts or dates', run: () => go({ view: 'compare', id: b.id }) },
+      { label: 'New draft from this one (keep a copy of this draft)…', run: () => newDraftFrom(b) },
       { label: 'Start a new draft from scratch…', run: () => newDraft(b) },
       { label: 'Print, or save as PDF', run: async () => { await go({ view: 'project', id: b.id }); await printCurrent(); } }
     ] }] : []),
@@ -1544,6 +1566,11 @@ async function worldMenu(world) {
     { label: 'New piece…', run: () => addPiece(w.id) },
     { label: 'New page in its bible', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(w.id); } },
     { label: 'Move to area', sub: (await areaOptions(all)).map(([id, label]) => ({ label: label.trim(), current: w.area_id === id, run: () => moveBookToArea(w, id) })) },
+    { label: 'Kind', sub: [
+      { label: 'Creative world (pieces, the six pages)', current: !isLife(w), run: () => setLife(w, false) },
+      { label: 'Life project (Overview, Gather, Notes; never shared)', current: isLife(w), run: () => setLife(w, true) }
+    ] },
+    ...(isLife(w) ? [{ label: 'Meeting notes go here', sub: [['business', 'Business meetings'], ['filmmaking', 'Filmmaking meetings'], ['other', 'Other meetings']].map(([k, label]) => ({ label, current: (w.fields?.meetings || []).includes(k), run: () => setMeetings(w, k) })) }] : []),
     ...(view() === 'library' ? [
       { label: 'Move earlier in my order', run: () => nudgeBook(w, -1) },
       { label: 'Move later in my order', run: () => nudgeBook(w, 1) }
@@ -1551,6 +1578,38 @@ async function worldMenu(world) {
     'sep',
     { label: 'Move to Trash…', danger: true, run: () => toTrash(w) }
   ];
+}
+
+// A life project: Overview, Gather and Notes only, and never shared. Nothing
+// in it changes; switching back brings the six pages back.
+async function setLife(world, on) {
+  const w = await getEntry(world.id);
+  if (isLife(w) === on) return;
+  if (on) {
+    const live = (await sharesOf()).filter((sh) => sh.fields?.world === w.id);
+    if (live.length) {
+      const ok = await ask({ title: 'Turn its share links off?', body: `Life projects are never shared. ${plural(live.length, 'link')} from it ${live.length === 1 ? 'is' : 'are'} still on; ${live.length === 1 ? 'it' : 'they'} will be turned off. Comments already in stay.`, ok: 'Turn them off' });
+      if (!ok) return;
+      for (const sh of live) await sharing.stop(sh).catch(() => {});
+    }
+  }
+  const fields = { ...w.fields, life: on };
+  if (!on) delete fields.life;
+  await putEntries([{ ...w, fields, updated_at: Date.now() }]);
+  await refreshViews();
+  toast(on ? `${w.title || 'It'} is a life project now: Overview, Gather and Notes` : `${w.title || 'It'} is a creative world again`);
+}
+
+// Which meetings land in this life project (the meeting notes put them under it).
+async function setMeetings(world, kind) {
+  const w = await getEntry(world.id);
+  const now = new Set(w.fields?.meetings || []);
+  if (now.has(kind)) now.delete(kind); else now.add(kind);
+  const rows = [{ ...w, fields: { ...w.fields, meetings: [...now] }, updated_at: Date.now() }];
+  // One home for each kind of meeting.
+  if (now.has(kind)) for (const o of await worlds()) if (o.id !== w.id && (o.fields?.meetings || []).includes(kind)) rows.push({ ...o, fields: { ...o.fields, meetings: o.fields.meetings.filter((k) => k !== kind) }, updated_at: Date.now() });
+  await putEntries(rows);
+  await refreshViews();
 }
 
 async function pageMenu(page) {
@@ -1763,7 +1822,7 @@ async function renderLibrary() {
     const kind = make('span', 'card-kind');
     // A world says what's in it: its one piece, how many pieces, or just pages.
     const top = s.pieces.filter((p) => p.depth === 0).map((p) => p.row);
-    const what = top.length === 1 && !s.pieces.slice(1).length ? kindName(top[0]).toLowerCase() : s.pieces.length ? 'world' : 'pages';
+    const what = isLife(b) ? 'life project' : top.length === 1 && !s.pieces.slice(1).length ? kindName(top[0]).toLowerCase() : s.pieces.length ? 'world' : 'pages';
     kind.append(dot(areaColor(area)), document.createTextNode(`${area?.title || 'No area'} · ${what}`));
     const n = (x, word) => `${x} ${word}${x === 1 ? '' : 's'}`;
     const detail = [
@@ -1887,8 +1946,14 @@ $('#lib-new').addEventListener('submit', async (e) => {
   if (!title) return;
   const type = $('#lib-new-type').value;
   const area = $('#lib-new-area').value || null;
-  const world = type === 'world' ? await newWorld(title, area) : await worldOf(await newBook(type, title, area));
+  let world = type === 'world' || type === 'life' ? await newWorld(title, area) : await worldOf(await newBook(type, title, area));
   $('#lib-new').hidden = true;
+  // A life project (a remodel, research for someone ill) opens on its overview.
+  if (type === 'life') {
+    world = await getEntry(world.id);
+    await putEntries([{ ...world, fields: { ...world.fields, life: true }, updated_at: Date.now() }]);
+    return go({ view: 'world', id: world.id });
+  }
   // A new world opens on its Idea page, the place to think it through.
   const idea = (await pagesIn(world.id))[0];
   if (idea) await go({ view: 'notebook', pageId: idea.id });
@@ -2049,7 +2114,7 @@ async function renderWorld() {
   title.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); title.blur(); } if (e.key === 'Escape') { e.preventDefault(); title.textContent = w.title; title.blur(); } };
   $('#wh-more').replaceChildren(menuButton(() => worldMenu(w), 'More for this world'));
   const n = (x, word) => `${x.toLocaleString()} ${word}${x === 1 ? '' : 's'}`;
-  $('#wh-stats').textContent = [n(s.pieces.length, 'piece'), s.words && n(s.words, 'word'), n(s.pages.length, 'page')].filter(Boolean).join(' · ');
+  $('#wh-stats').textContent = (isLife(w) ? [n(s.pages.length, 'page')] : [n(s.pieces.length, 'piece'), s.words && n(s.words, 'word'), n(s.pages.length, 'page')]).filter(Boolean).join(' · ');
   const areaSel = $('#wh-area');
   areaSel.replaceChildren(...(await areaOptions(allAreas)).map(([id, label]) => Object.assign(make('option', '', label), { value: id })));
   areaSel.value = w.area_id || '';
@@ -2067,54 +2132,94 @@ async function renderWorld() {
     cont.onclick = () => openBook(here.id);
   }
 
+  const life = isLife(w);
+  $('#wh-kind').textContent = life ? 'Life project · ' : '';
+  // What it is, in a sentence: type over it.
+  const log = $('#wh-logline');
+  log.textContent = w.fields?.logline || '';
+  log.contentEditable = 'true';
+  log.dataset.placeholder = life ? 'What this is about, in a sentence' : 'The world in a sentence';
+  log.onblur = async () => {
+    const t = log.textContent.trim();
+    const fresh = await getEntry(w.id);
+    if (t === (fresh.fields?.logline || '')) return;
+    await putEntries([{ ...fresh, fields: { ...fresh.fields, logline: t }, updated_at: Date.now() }]);
+  };
+  log.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); log.blur(); } if (e.key === 'Escape') { e.preventDefault(); log.textContent = w.fields?.logline || ''; log.blur(); } };
+
+  // Where every piece is, idea to posted: click to see the board in Make.
+  const bar = $('#wh-stagebar');
+  bar.hidden = life || !s.pieces.length;
+  bar.replaceChildren(...STAGES.map((st, i) => {
+    const n = s.pieces.filter(({ row }) => stageOf(row) === st).length;
+    const b = make('button', 'wh-stage', n ? `${st} ${n}` : '');
+    b.style.flexGrow = String(n);
+    b.dataset.stage = st;
+    b.style.setProperty('--i', i);
+    b.hidden = !n;
+    b.title = `${plural(n, 'piece')} at ${st}: see the stage board`;
+    b.addEventListener('click', () => go({ view: 'stage', id: w.id, page: 'make', sub: 'board' }));
+    return b;
+  }));
+
+  $('#wh-pieces-box').hidden = life && !s.pieces.length;
   $('#wh-pieces').replaceChildren(...s.pieces.map(({ row, depth }) => pieceRow(row, depth)));
   $('#wh-pieces-empty').hidden = s.pieces.length > 0;
-  // The stage board: every piece by stage, one column each, instead of the list.
-  const board = boardOn() && s.pieces.length > 0;
-  const toggle = $('#wh-board-toggle');
-  toggle.hidden = !s.pieces.length;
-  toggle.textContent = board ? 'List' : 'Board';
-  toggle.onclick = () => { try { localStorage.setItem('stageBoard', board ? 'list' : 'board'); } catch { /* full */ } renderWorld(); };
-  $('#wh-pieces').hidden = board;
-  $('#wh-board').hidden = !board;
-  if (board) renderBoard(w, s.pieces);
-  else $('#wh-board').replaceChildren();
-  // Promises made in this world, and whether they've been paid off yet.
-  const promises = await worldPromises(w);
-  $('#wh-promises-box').hidden = !promises.length;
-  $('#wh-promises').replaceChildren(...promises.map((p) => {
-    const li = make('li', p.paid ? 'paid' : 'unpaid');
-    const btn = make('button');
-    const where = [p.thread?.title, p.piece?.title].filter(Boolean).join(' · ');
-    btn.append(make('span', 'from', where), make('span', 'line', p.note.text || ''), make('span', 'state', p.paid ? `Paid off${p.payoffPiece && p.payoffPiece.id !== p.piece?.id ? ` in ${p.payoffPiece.title}` : ''}: ${p.payoff.text || ''}` : 'Not paid off yet'));
-    btn.addEventListener('click', () => go({ view: 'grid', id: p.piece?.id || w.id }));
-    li.append(btn);
-    return li;
-  }));
   $('#wh-new-piece').onclick = () => addPiece(w.id);
+  $('#wh-board').hidden = true;
 
+  // A life project's tasks go to Daybook, linked back here.
+  $('#wh-task-box').hidden = !life;
+  const task = $('#wh-task');
+  task.onkeydown = async (e) => {
+    if (e.key !== 'Enter' || !task.value.trim()) return;
+    e.preventDefault();
+    const title = task.value.trim();
+    task.value = '';
+    await queueTask({ id: `inkwell-${newIdLocal()}`, title, notes: `From ${w.title || 'Inkwell'}`, link: `${location.origin + location.pathname}?open=${encodeURIComponent(w.id)}`, deleted: false });
+    await sendPending({ send: sendTask, canSend: canSendTask });
+    toast(`“${title}” is in your Daybook inbox`);
+  };
+
+  // Next: what's waiting, from each page.
+  const next = [];
+  const items = await gatherItems(w);
+  const open = items.filter(({ row }) => !(row.fields?.filed || []).length && !row.fields?.letgo).length;
+  if (open) next.push({ from: 'Gather', text: `${plural(open, 'thing')} in to file`, run: () => go({ view: 'stage', id: w.id, page: 'gather' }) });
+  if (!life) {
+    const promises = await worldPromises(w);
+    const unpaid = promises.filter((p) => !p.paid).length;
+    if (unpaid) next.push({ from: 'Shape', text: `${plural(unpaid, 'promise')} not paid off yet`, run: () => go({ view: 'stage', id: w.id, page: 'shape', sub: 'promises' }) });
+    const days = [];
+    for (const { row } of s.pieces) for (const d of (await children(row.id)).filter((r) => r.kind === 'shootday' && (r.fields?.date || '') >= isoToday())) days.push({ d, p: row });
+    days.sort((a, b) => a.d.fields.date.localeCompare(b.d.fields.date));
+    if (days[0]) { const { d, p } = days[0]; next.push({ from: 'Make', text: `Shoot day ${new Date(`${d.fields.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${p.title || 'Untitled'}`, run: () => go({ view: 'production', id: p.id, day: d.id }) }); }
+    const written = s.pieces.filter(({ row }) => stageOf(row) === 'Written' && bookType(row) === 'screenplay').map(({ row }) => row);
+    if (written[0]) next.push({ from: 'Make', text: `Board ${written[0].title || 'Untitled'}${written.length > 1 ? ` and ${plural(written.length - 1, 'other')}` : ''}`, run: () => go({ view: 'production', id: written[0].id }) });
+    const edited = s.pieces.filter(({ row }) => stageOf(row) === 'Edited').map(({ row }) => row);
+    if (edited[0]) next.push({ from: 'Deliver', text: `Post ${edited[0].title || 'Untitled'}`, run: () => go({ view: 'deliver', id: edited[0].id, tab: 'post' }) });
+  }
+  $('#wh-next').replaceChildren(...next.map((n) => {
+    const li = make('li');
+    const b = make('button');
+    b.append(make('span', 'from', n.from), make('span', 'line', n.text));
+    b.addEventListener('click', n.run);
+    li.append(b);
+    return li;
+  }));
+  if (!next.length) $('#wh-next').append(make('li', 'hint', life ? 'Nothing waiting. Link a line on any day to this with [[ and it shows up in Gather.' : 'Nothing waiting. Start a piece, or link a line on any day to this world with [[.'));
+
+  // Recently: the pieces and pages last written in.
   const { pages } = await worldTree(w.id);
-  $('#wh-pages').replaceChildren(...pages.map(({ row: p, depth }) => {
+  const recent = [...s.pieces.map(({ row }) => row), ...pages.map(({ row }) => row)].sort((a, b) => editedAt(b) - editedAt(a)).slice(0, 6);
+  $('#wh-recent').replaceChildren(...recent.map((r) => {
     const li = make('li');
-    li.style.setProperty('--depth', depth);
-    const open = make('button', 'loose-title', p.title || 'Untitled page');
-    open.addEventListener('click', () => go({ view: 'notebook', pageId: p.id }));
-    onContextMenu(open, () => pageMenu(p));
-    li.append(open, make('span', 'when', ago(p.updated_at)), menuButton(() => pageMenu(p), `More for ${p.title || 'this page'}`));
+    const open = make('button', 'loose-title', r.title || (r.kind === 'page' ? 'Untitled page' : 'Untitled'));
+    open.addEventListener('click', () => (r.kind === 'page' ? go({ view: 'notebook', pageId: r.id }) : go({ view: 'project', id: r.id })));
+    onContextMenu(open, () => (r.kind === 'page' ? pageMenu(r) : bookMenu(r)));
+    li.append(open, make('span', 'when', ago(editedAt(r))));
     return li;
   }));
-  $('#wh-pages-empty').hidden = pages.length > 0;
-
-  const mentions = await dailyMentions(w);
-  $('#wh-daily').replaceChildren(...mentions.map(({ row, day }) => {
-    const li = make('li');
-    const btn = make('button');
-    btn.append(make('span', 'from', titleOf(day)), make('span', 'line', row.text));
-    btn.addEventListener('click', () => go({ view: 'notebook', pageId: day.id, line: row.id }));
-    li.append(btn);
-    return li;
-  }));
-  $('#wh-daily-empty').hidden = mentions.length > 0;
 }
 
 // ---------- the plot grid: the manuscript as a table ----------
@@ -2208,6 +2313,26 @@ async function newDraft(piece) {
   await go({ view: 'write', chapterId: first.id });
   await beside.open(b.id, first.id, { type: 'draft', id: draft.id });
   toast(`Draft ${n + 1}: a clean page. ${draft.title} is beside it (Ctrl + Shift + B hides it).`);
+}
+
+// Keep this draft as it is and carry on from a copy: for a big new pass
+// that isn't starting over. The words you go on with keep their notes, shots
+// and comments; the kept draft is a copy to read, compare or take back from.
+async function newDraftFrom(piece) {
+  const b = await getEntry(piece.id);
+  const n = (b.fields?.draft || 1);
+  const ok = await ask({
+    title: `Keep this as draft ${n} and carry on?`,
+    body: `A copy of “${nameOf(b)}” as it is now is kept as Draft ${n}. You go on writing in the same text (with its notes${bookType(b) === 'screenplay' ? ', shots' : ''} and comments), so change as much as you like: compare the two any time (Ctrl + Shift + X), or read Draft ${n} beside it (Ctrl + Shift + B).`,
+    ok: `Keep draft ${n}`
+  });
+  if (!ok) return;
+  if (state.project?.id === b.id) await store.close(editor.state.doc);
+  const { draft, first } = await startDraft(b, { copy: true });
+  state.project = await getEntry(b.id);
+  const ch = writing() && state.chapterId ? state.chapterId : first?.id;
+  if (ch) await go({ view: 'write', chapterId: ch });
+  toast(`${draft.title} is kept. Carry on: this is draft ${n + 1}.`, { label: 'Compare', run: () => go({ view: 'compare', id: b.id }) });
 }
 
 // Ctrl + Shift + B: an earlier draft (or the text as it was) beside the one you're writing.
@@ -2314,6 +2439,7 @@ async function shareTarget() {
 async function openShare(target) {
   target = target || (await shareTarget());
   if (!target) { toast('Open a piece or a page to share it'); return; }
+  if (isLife(await worldOf(target))) { toast('Life projects are never shared'); return; }
   if (state.project?.id === target.id) await store.close(editor.state.doc);
   if (inNotebook()) await notebook.close();
   document.querySelector('.share-panel')?.remove();
@@ -2412,13 +2538,18 @@ const production = new ProductionView($('#prod-view'), {
   canAsk: () => canAskServer(),
   numberScenes: async (piece) => { await toggleNumbering(piece); await production.refresh(); },
   sendTask: async (task) => { await queueTask(task); await sendPending({ send: sendTask, canSend: canSendTask }); },
-  base: () => location.origin + location.pathname
+  base: () => location.origin + location.pathname,
+  files: (kind, piece) => filesOut(kind, piece),
+  share: (piece) => openShare(piece),
+  shareOf: async (piece) => { const sh = await sharing.current(piece); return sh ? { url: linkFor(sh.fields.token), comments: !!sh.fields.comments } : null; },
+  moved: (place) => remember(place)
 });
 window.__production = production;
 
 // The piece production is for, from where you are.
 async function productionOwner() {
-  if (view() === 'production') return state.prodId;
+  if (view() === 'production' || view() === 'deliver') return state.prodId;
+  if (view() === 'stage' && state.stage) { const g = await getEntry(state.stage.id); if (g?.kind === 'project') return g.id; if (g?.kind === 'world') return (await worldStats(g)).pieces.find((p) => hasManuscript(p.row))?.row.id || null; }
   if (view() === 'grid') { const g = await getEntry(state.gridId); return g?.kind === 'project' ? g.id : null; }
   if (view() === 'write') return state.project?.id || null;
   if (view() === 'project') return state.bookId;
@@ -2441,6 +2572,8 @@ async function gridOwner() {
   if (view() === 'project') return state.bookId;
   if (view() === 'world') return state.worldId;
   if (view() === 'grid') return state.gridId;
+  if (view() === 'stage' && state.stage) return state.stage.id;
+  if (view() === 'production' || view() === 'deliver') return state.prodId;
   if (inNotebook() && notebook.page && !notebook.isDay) return (await bookOf(notebook.page))?.id || (await worldOf(notebook.page))?.id || null;
   return null;
 }
@@ -2453,11 +2586,158 @@ async function toggleGrid() {
   return go({ view: 'grid', id });
 }
 
+// ---------- the pages: Gather, Shape, Write, Revise, Make, Deliver ----------
+
+const PAGE_NAMES = { gather: 'Gather', shape: 'Shape', write: 'Write', revise: 'Revise', make: 'Make', deliver: 'Deliver', notes: 'Notes' };
+// Views you look at rather than type in: the tabs sit faintly at the top there.
+const LOOKING = ['library', 'tags', 'world', 'project', 'grid', 'production', 'deliver', 'compare', 'stage', 'drawer'];
+const strip = new PageStrip($('#page-tabs'), { pick: (id) => goPage(id) });
+
+// Where you are, as a page: on the desk, or in a world or piece, and which of its pages.
+async function pageContext() {
+  const v = view();
+  const at = async (row, active) => {
+    if (gone(row)) return { scope: 'desk', active: null };
+    if (row.kind === 'world') return { scope: 'world', id: row.id, life: isLife(row), active };
+    return { scope: 'piece', id: row.id, life: false, active };
+  };
+  if (v === 'library' || v === 'tags') return { scope: 'desk', active: 'library' };
+  if (v === 'drawer') return { scope: 'desk', active: 'drawer' };
+  if (v === 'notebook') {
+    const p = notebook.page;
+    if (!p || p.kind === 'day') return { scope: 'desk', active: 'today' };
+    if (p.kind === 'project') return at(p, 'write');
+    const piece = await bookOf(p);
+    if (piece) return at(piece, p.fields?.fixesFor ? 'revise' : 'gather');
+    const w = await worldOf(p);
+    if (w) return at(w, isLife(w) ? 'notes' : 'shape');
+    return { scope: 'desk', active: null };
+  }
+  if (v === 'world') return at(await getEntry(state.worldId), 'overview');
+  if (v === 'project') return at(await getEntry(state.bookId), 'overview');
+  if (v === 'write') return state.project ? at(state.project, 'write') : null;
+  if (v === 'grid') return at(await getEntry(state.gridId), 'shape');
+  if (v === 'production') return at(await getEntry(state.prodId), 'make');
+  if (v === 'deliver') return at(await getEntry(state.prodId), 'deliver');
+  if (v === 'compare') return at(await getEntry(state.compareId), 'revise');
+  if (v === 'stage' && state.stage) return at(await getEntry(state.stage.id), state.stage.page);
+  return null;
+}
+
+async function renderStrip() {
+  strip.set(await pageContext());
+  body.classList.toggle('looking', LOOKING.includes(view()));
+  $('.topbar').classList.toggle('has-tabs', !$('#page-tabs').hidden);
+}
+
+// A tab: the same page at the size you're at.
+async function goPage(id) {
+  if (id === 'today') return go({ view: 'notebook', pageId: dayId(isoToday()) });
+  if (id === 'drawer') return go({ view: 'drawer' });
+  if (id === 'library') return go({ view: 'library', area: null });
+  const ctx = await pageContext();
+  if (!ctx?.id) return;
+  return openPage(await getEntry(ctx.id), id);
+}
+
+async function openPage(row, id) {
+  if (gone(row)) return;
+  if (id === 'overview') return go(row.kind === 'world' ? { view: 'world', id: row.id } : { view: 'project', id: row.id });
+  if (row.kind === 'world') return go({ view: 'stage', id: row.id, page: id });
+  if (id === 'write') return openBook(row.id);
+  if (id === 'make') return go({ view: 'production', id: row.id });
+  if (id === 'deliver') return go({ view: 'deliver', id: row.id });
+  return go({ view: 'stage', id: row.id, page: id });
+}
+
+// Typing on a page you look at tucks the tabs away until the mouse moves.
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Alt') { body.classList.add('alt-held'); return; }
+  const t = e.target;
+  if (!e.altKey && !e.ctrlKey && !e.metaKey && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName)) && !t.closest('.palette, .topbar')) body.classList.add('typing');
+}, true);
+document.addEventListener('keyup', (e) => { if (e.key === 'Alt') body.classList.remove('alt-held'); });
+window.addEventListener('blur', () => body.classList.remove('alt-held'));
+let lastMove = null;
+document.addEventListener('mousemove', (e) => {
+  if (!body.classList.contains('typing')) return;
+  if (lastMove && Math.abs(e.clientX - lastMove[0]) + Math.abs(e.clientY - lastMove[1]) > 12) { body.classList.remove('typing'); lastMove = null; }
+  else if (!lastMove) lastMove = [e.clientX, e.clientY];
+});
+
+// What the pages need from the rest of the app.
+async function changedHere(rows) {
+  rows = rows.filter(Boolean);
+  if (!rows.length) return;
+  searchChanged(rows);
+  if (rows.some((r) => ['project', 'world', 'page'].includes(r.kind))) renderRail();
+  await notebook.applyRemote(rows);
+  await todayPanel.refresh();
+}
+
+async function revisePiece(action, piece, note) {
+  if (action === 'compare') return go({ view: 'compare', id: piece.id });
+  if (action === 'draft') return newDraft(piece);
+  if (action === 'draft-from') return newDraftFrom(piece);
+  if (action === 'print') return printRow(piece);
+  if (action === 'comment') { await openEntry(note.parent_id); if (note.fields?.chapter_id) { if (hidden().has('comments')) setShown('comments', true); notes.setVisible(true); } return; }
+  await openBook(piece.id);
+  if (!writing()) return;
+  if (action === 'fresh') toggleFreshEyes(true);
+  if (action === 'notes') await askClaudeNotes();
+  if (action === 'talk') await toggleTalk();
+}
+
+async function printRow(b) {
+  if (state.project?.id === b.id) await store.close(editor.state.doc);
+  const chapters = await pieceDoc(b.id);
+  const words = chapters.reduce((n, ch) => n + ch.blocks.reduce((m, x) => m + wordCount(x.text), 0), 0);
+  printPiece({ title: b.title, type: bookType(b), chapters, words, author: await accountName() });
+}
+
+async function filesOut(kind, b) {
+  if (state.project?.id === b.id) await store.close(editor.state.doc);
+  if (kind === 'print') return printRow(b);
+  const acts = await outline(b.id);
+  if (kind === 'fountain') {
+    const rows = [];
+    for (const act of acts) for (const ch of act.chapters) rows.push(...(await children(ch.id)));
+    return download(`${b.title || 'Untitled'}.fountain`, toFountain(b.title, rows));
+  }
+  if (kind === 'markdown') return download(`${b.title || 'Untitled'}.md`, await bookMarkdown(b, acts));
+}
+
+const stagePage = new StagePage($('#stage-view'), {
+  go: (place) => go(place),
+  openEntry: (id) => openEntry(id),
+  openBook: (id) => openBook(id),
+  menu: (anchor, items) => popMenu(anchor, items),
+  menuButton: (items, label) => menuButton(items, label),
+  ask, askText, toast,
+  askServer: (b) => askServer(b),
+  canAsk: () => canAskServer(),
+  changed: (rows) => changedHere(rows),
+  remember: (place) => remember(place),
+  board: (el, w, pieces) => renderBoard(w, pieces, el),
+  revise: (action, piece, note) => revisePiece(action, piece, note),
+  newPage: async (parentId) => { await go({ view: 'notebook' }); await notebook.newPage(parentId); },
+  newPiece: (parentId) => addPiece(parentId)
+});
+window.__stages = stagePage;
+
+// Ctrl + Shift + J: today's lines beside whatever you're doing.
+const todayPanel = new TodayPanel($('.today-panel'), {
+  open: (lineId) => go({ view: 'notebook', pageId: dayId(isoToday()), line: lineId }),
+  openDay: () => go({ view: 'notebook', pageId: dayId(isoToday()) }),
+  added: (rows) => applyRemote(rows),
+  focusBack: () => { if (writing() || inNotebook()) currentEditor().commands.focus(); }
+});
+window.__today = todayPanel;
+
 // ---------- the stage board: a world's pieces by stage ----------
 
-const boardOn = () => { try { return localStorage.getItem('stageBoard') === 'board'; } catch { return false; } };
 
-function renderBoard(w, pieces) {
+function renderBoard(w, pieces, el = $('#wh-board')) {
   const touch = matchMedia('(hover: none)').matches;
   const cols = STAGES.map((stage) => {
     const col = make('section', 'sb-col');
@@ -2496,7 +2776,7 @@ function renderBoard(w, pieces) {
     }
     return col;
   });
-  $('#wh-board').replaceChildren(...cols);
+  el.replaceChildren(...cols);
 }
 
 // ---------- panels revealed by edges ----------
@@ -2941,6 +3221,9 @@ const commands = [
   { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
   { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
   { group: 'go', label: 'Today’s page', keys: `${mod}J`, run: () => go({ view: 'notebook', pageId: dayId(isoToday()) }) },
+  { group: 'go', label: 'Side panel with today’s lines, beside what you’re doing', keys: `${mod}⇧J`, words: ['panel', 'side'], run: () => todayPanel.toggle() },
+  { group: 'go', label: 'The Drawer: ideas with no home yet', keys: '', words: ['ideas', 'jackie chan'], run: () => go({ view: 'drawer' }) },
+  ...['overview', 'gather', 'shape', 'write', 'revise', 'make', 'deliver', 'notes'].map((id, i) => ({ group: 'go', label: `Page: ${id === 'overview' ? 'Overview' : PAGE_NAMES[id]}`, keys: id === 'notes' ? '' : `⌥${i}`, words: ['tab', 'page'], run: () => goPage(id), when: () => strip.tabs.some((t) => t.id === id) })),
   { group: 'go', label: 'Back to writing', keys: `${mod}J`, run: () => go({ view: 'write' }), when: () => !writing() },
   { group: 'go', label: 'Next chapter (or day)', keys: `${mod}⌥↓`, run: () => step(1), when: () => writing() || inNotebook() },
   { group: 'go', label: 'Previous chapter (or day)', keys: `${mod}⌥↑`, run: () => step(-1), when: () => writing() || inNotebook() },
@@ -3030,6 +3313,7 @@ const commands = [
   { group: 'revise', label: 'Compare drafts, or the text then and now', keys: `${mod}⇧X`, words: ['diff', 'versions', 'changes'], run: toggleCompare, when: () => view() !== 'compare' },
   { group: 'revise', label: 'Back to the text from comparing', keys: `${mod}⇧X`, run: toggleCompare, when: () => view() === 'compare' },
   { group: 'revise', label: 'Read an earlier draft beside this one', keys: `${mod}⇧B`, words: ['side by side', 'old draft'], run: toggleBeside, when: writing },
+  { group: 'revise', label: 'New draft from this one: keep a copy of this draft and carry on…', keys: '', words: ['save draft', 'version', 'draft 2', 'snapshot'], run: async () => { const b = await revisionPiece(); if (b) newDraftFrom(b); }, when: () => !!currentBookId() },
   { group: 'revise', label: 'Start a new draft from scratch (the old one is kept whole)…', keys: '', words: ['rewrite', 'draft 2'], run: async () => { const b = await revisionPiece(); if (b) newDraft(b); }, when: () => !!currentBookId() },
   { group: 'revise', label: 'Claude’s notes on this chapter (margin notes and a fix list)', keys: '', words: ['feedback', 'editor', 'critique'], run: askClaudeNotes, when: writing },
   { group: 'revise', label: 'Talk this chapter over with Claude', keys: '', words: ['chat', 'conversation', 'feedback'], run: toggleTalk, when: writing },
@@ -3478,6 +3762,7 @@ document.addEventListener('keydown', (e) => {
   else if (m && !e.altKey && e.code === 'Semicolon' && (writing() || inNotebook()) && currentEditor().isFocused) { e.preventDefault(); if (e.shiftKey) insertTime(currentEditor()); else insertDay(currentEditor(), 0); }
   else if (m && (e.key === '/' || e.code === 'Slash')) { e.preventDefault(); toggleShortcuts(); }
   else if (m && e.shiftKey && k === 'p') { e.preventDefault(); progressPanel.toggle(); }
+  else if (m && e.shiftKey && k === 'j') { e.preventDefault(); todayPanel.toggle(); }
   else if (m && k === 'j') { e.preventDefault(); toggleWriteToday(); }
   else if (m && k === '1') { e.preventDefault(); body.classList.toggle('pin-outline'); }
   else if (m && k === '2' && writing()) { e.preventDefault(); toggleNotes(); }
@@ -3493,6 +3778,8 @@ document.addEventListener('keydown', (e) => {
   else if (m && e.shiftKey && !e.altKey && k === 'y') { e.preventDefault(); toggleFreshEyes(); }
   else if (m && e.shiftKey && !e.altKey && k === 'x') { e.preventDefault(); toggleCompare(); }
   else if (m && !e.shiftKey && !e.altKey && k === 'p' && (writing() || view() === 'project' || view() === 'compare' || (inNotebook() && notebook.page?.kind === 'page'))) { e.preventDefault(); printCurrent(); }
+  // Alt + 0 to 6: the pages (Overview, then Gather to Deliver).
+  else if (e.altKey && !m && !e.shiftKey && /^Digit[0-6]$/.test(e.code) && strip.byNumber(Number(e.code.slice(5)))) { e.preventDefault(); goPage(strip.byNumber(Number(e.code.slice(5)))); }
   // Alt+C: Capture, recording at once; Alt+C again keeps it.
   else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyV' && (writing() || capture.isOpen)) { e.preventDefault(); if (!capture.isOpen) talkIntoDraft(); else if (capture.rec) capture.finish(); }
   else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyC') { e.preventDefault(); if (!capture.isOpen) openCapture({ start: true }); else if (capture.rec) capture.finish(); }

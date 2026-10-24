@@ -158,7 +158,7 @@ try {
     await sleep(500);
     assert.equal(await laptop.evaluate(() => document.documentElement.dataset.view), 'world');
     assert.match(await laptop.locator('#wh-pieces').innerText(), /The Harbour/);
-    const bible = await laptop.locator('#wh-pages').innerText();
+    const bible = await laptop.locator('#wh-recent').innerText();
     assert.match(bible, /Research/);
     assert.match(bible, /Idea/);
   });

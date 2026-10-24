@@ -109,17 +109,18 @@ export function ask({ title, body, ok = 'OK', danger = false, cancel = 'Cancel' 
   });
 }
 
-// A short note at the bottom, with one action (like Undo), gone after a while.
+// A short note at the bottom, with an action or two (like Undo), gone after a while.
 let toastTimer;
-export function toast(text, action) {
+export function toast(text, action, extra) {
   document.querySelector('.toast')?.remove();
   clearTimeout(toastTimer);
   const t = make('div', 'toast');
   t.setAttribute('role', 'status');
   t.append(make('span', '', text));
-  if (action) {
-    const b = make('button', 'toast-action', action.label);
-    b.addEventListener('click', () => { t.remove(); action.run(); });
+  for (const a of [action, extra]) {
+    if (!a) continue;
+    const b = make('button', 'toast-action', a.label);
+    b.addEventListener('click', () => { t.remove(); a.run(); });
     t.append(b);
   }
   document.body.append(t);

@@ -90,7 +90,12 @@ export async function draftHolding(chapter) {
 // draft (its acts move under it, so every paragraph, note, shot and link stays
 // with the words it was about), and the piece gets the same acts and chapters
 // back, empty. Returns the kept draft and the new first chapter.
-export async function startDraft(piece, { script = false } = {}) {
+//
+// With copy, you carry on from the words as they are: a copy of them is kept
+// as the draft, and the text you go on writing keeps its notes, shots and
+// comments (nothing moves).
+export async function startDraft(piece, { script = false, copy = false } = {}) {
+  if (copy) return keepCopy(piece);
   const now = Date.now();
   const kept = await draftsOf(piece.id);
   const n = Math.max(piece.fields?.draft ? piece.fields.draft : 1, ...kept.map((d) => (d.fields?.n || 0) + 1));
@@ -280,3 +285,33 @@ export function changeCount(rows) {
 // The plain text of a side, chapter by chapter, for Claude.
 export const sideText = (chapters) => chapters.map((ch) => ({ title: ch.title, text: ch.blocks.map((b) => (b.kind === 'scene' ? `[${b.text || 'Scene break'}]` : b.el && b.el !== 'action' ? `${b.el.toUpperCase()}: ${b.text}` : b.text)).join('\n') }));
 
+
+async function keepCopy(piece) {
+  const now = Date.now();
+  const kept = await draftsOf(piece.id);
+  const n = Math.max(piece.fields?.draft ? piece.fields.draft : 1, ...kept.map((d) => (d.fields?.n || 0) + 1));
+  const draft = entry('draft', { id: newId('dr'), parent_id: piece.id, title: `Draft ${n}`, sort: n, fields: { n, at: now } });
+  const rows = [draft];
+  let words = 0;
+  let first = null;
+  const TEXT = ['para', 'scene', 'heading'];
+  for (const act of (await children(piece.id)).filter((r) => r.kind === 'act')) {
+    const a = entry('act', { parent_id: draft.id, title: act.title, sort: act.sort, fields: { ...(act.fields || {}) } });
+    rows.push(a);
+    for (const ch of await children(act.id)) {
+      if (ch.kind !== 'chapter') continue;
+      if (!first) first = ch;
+      words += ch.fields?.words || 0;
+      const c = entry('chapter', { parent_id: a.id, title: ch.title, sort: ch.sort, fields: { ...(ch.fields || {}) } });
+      rows.push(c);
+      for (const r of await children(ch.id)) {
+        if (!TEXT.includes(r.kind)) continue;
+        rows.push(entry(r.kind, { id: newId(r.kind.slice(0, 2)), parent_id: c.id, sort: r.sort, title: r.title || '', text: r.text || '', content: r.content ?? null, tags: [], links: [], fields: { ...(r.fields || {}) } }));
+      }
+    }
+  }
+  draft.fields.words = words;
+  rows.push({ ...piece, fields: { ...piece.fields, draft: n + 1 }, updated_at: now });
+  await putEntries(rows);
+  return { draft, first };
+}
