@@ -228,7 +228,7 @@ try {
     await menuPick(a, 'Move to Trash');
     await sleep(600);
     assert.equal(await a.evaluate(() => document.documentElement.dataset.view), 'world');
-    assert.ok(!(await a.locator('#wh-pages').innerText()).includes('Idea'));
+    assert.ok(!(await a.locator('#wh-recent').innerText()).includes('Idea'));
     const row = (await all(a)).find((e) => e.id === idea.id);
     assert.equal(row.fields.trashedWith, idea.id);
     const line = (await all(a)).find((e) => e.kind === 'line' && e.text === 'A thought worth keeping');

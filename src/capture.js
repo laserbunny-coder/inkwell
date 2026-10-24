@@ -50,7 +50,7 @@ export const canRecord = () => !!navigator.mediaDevices?.getUserMedia && recorde
 
 // Adds a line at the end of today's page (making the day if it's new) and
 // returns the rows written.
-async function addLine(content, fields, day = today()) {
+export async function addLine(content, fields, day = today()) {
   const dayId = `day-${day}`;
   const rows = [];
   const dayRow = await getEntry(dayId);

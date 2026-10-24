@@ -3,6 +3,7 @@ import { entry } from './model.js';
 import { GAP, bySort } from './order.js';
 import { descendants } from './outline.js';
 import { queueTask } from './daybook.js';
+import { intoDrawer, outOfDrawer } from './stages.js';
 
 // The day review. Claude reads a day's page and writes a few sentences on what
 // the day was like, then sorts what's on it into threads, each with a
@@ -148,6 +149,10 @@ export async function decide(iso, path, choice, { base, title, area_id, text } =
   } else if (choice === 'let_go' && still) {
     if (mulled) { const r = { ...mulled, fields: { ...mulled.fields, done: true }, updated_at: Date.now() }; await putEntries([r]); rows.push(r); }
     rows.push(await saveChoice(iso, path, { choice }));
+  } else if (choice === 'drawer' && !still) {
+    // No home yet: the lines get #drawer, and wait in the Drawer.
+    for (const id of it.lines || []) rows.push(...await intoDrawer(id));
+    rows.push(await saveChoice(iso, path, { choice }));
   } else if (choice === 'let_go' || choice === 'split') {
     rows.push(await saveChoice(iso, path, { choice }));
   }
@@ -164,6 +169,8 @@ export async function undo(iso, path) {
   if (path[0] === 'still') {
     const m = await getEntry(it.id);
     if (m) { const r = { ...m, fields: { ...m.fields, done: false }, updated_at: Date.now() }; await putEntries([r]); rows.push(r); }
+  } else if (it.choice === 'drawer') {
+    for (const id of it.lines || []) rows.push(...await outOfDrawer(id));
   } else if (it.choice === 'mull' && it.mulling) {
     const m = await getEntry(it.mulling);
     if (m && !m.deleted) { const r = { ...m, deleted: true, updated_at: Date.now() }; await putEntries([r]); rows.push(r); }
@@ -213,7 +220,7 @@ export async function loadAreas(read) {
 // ---------- on the day page ----------
 
 const make = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; };
-const LABEL = { daybook: 'Add to Daybook', mull: 'Keep thinking', split: 'Split', let_go: 'Let go' };
+const LABEL = { daybook: 'Add to Daybook', mull: 'Keep thinking', drawer: 'Into the drawer', split: 'Split', let_go: 'Let go' };
 
 export class DayReview {
   // ask/canAsk reach Claude; send/canSend reach Daybook; areas() lists
@@ -314,7 +321,7 @@ export class DayReview {
     if (it.choice) {
       const done = make('div', 'dr-outcome');
       const area = it.sent?.area_id ? (this.areas || []).find((a) => a.id === it.sent.area_id)?.title : null;
-      done.append(make('span', '', it.choice === 'daybook' ? `In Daybook${area ? ` · ${area}` : '’s Inbox'}` : it.choice === 'mull' ? (still ? 'Still thinking about it' : 'On “Still thinking about”') : 'Let go'));
+      done.append(make('span', '', it.choice === 'daybook' ? `In Daybook${area ? ` · ${area}` : '’s Inbox'}` : it.choice === 'mull' ? (still ? 'Still thinking about it' : 'On “Still thinking about”') : it.choice === 'drawer' ? 'In the drawer' : 'Let go'));
       if (it.choice !== 'daybook') {
         const u = make('button', 'ghost-btn', 'Undo');
         u.type = 'button';
@@ -337,7 +344,7 @@ export class DayReview {
       c.append(from);
     }
     const acts = make('div', 'dr-actions');
-    const choices = still ? ['daybook', 'mull', 'let_go'] : ['daybook', 'mull', ...(it.parts?.length > 1 ? ['split'] : []), 'let_go'];
+    const choices = still ? ['daybook', 'mull', 'let_go'] : ['daybook', 'mull', 'drawer', ...(it.parts?.length > 1 ? ['split'] : []), 'let_go'];
     for (const ch of choices) {
       const b = make('button', ch === (it.suggest || (still ? 'mull' : '')) ? 'pill dr-suggested' : 'pill', LABEL[ch]);
       b.type = 'button';
