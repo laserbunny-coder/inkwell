@@ -2377,7 +2377,7 @@ const commands = [
   { group: 'go', label: 'Back to writing', keys: `${mod}J`, run: () => go({ view: 'write' }), when: () => !writing() },
   { group: 'go', label: 'Next chapter (or day)', keys: `${mod}⌥↓`, run: () => step(1), when: () => writing() || inNotebook() },
   { group: 'go', label: 'Previous chapter (or day)', keys: `${mod}⌥↑`, run: () => step(-1), when: () => writing() || inNotebook() },
-  { group: 'new', label: 'Capture an idea by voice', keys: '', run: () => openCapture() },
+  { group: 'new', label: 'Capture an idea by voice', keys: '⌥C', run: () => openCapture() },
   { group: 'new', label: 'New novel', keys: '', run: () => showNewBook('novel') },
   { group: 'new', label: 'New screenplay', keys: '', run: () => showNewBook('screenplay') },
   { group: 'new', label: 'New notes collection', keys: '', run: () => showNewBook('notes') },
@@ -2890,6 +2890,8 @@ document.addEventListener('keydown', (e) => {
   else if (e.altKey && !e.shiftKey && !m && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && writing() && editor.isFocused) { if (flip(editor, e.key === 'ArrowDown' ? 1 : -1)) e.preventDefault(); }
   else if (m && e.shiftKey && k === 'h' && (writing() || inNotebook())) { e.preventDefault(); openHistory(); }
   else if (m && e.shiftKey && k === 'l') { e.preventDefault(); toggleTheme(); }
+  // Alt+C: Capture, recording at once; Alt+C again keeps it.
+  else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyC') { e.preventDefault(); if (!capture.isOpen) openCapture({ start: true }); else if (capture.rec) capture.finish(); }
   else if (e.altKey && !m && e.code === 'BracketRight') { e.preventDefault(); setPage(currentWidth() + 40, currentSize()); }
   else if (e.altKey && !m && e.code === 'BracketLeft') { e.preventDefault(); setPage(currentWidth() - 40, currentSize()); }
   else if (e.altKey && !m && e.code === 'Equal') { e.preventDefault(); setPage(currentWidth(), currentSize() + 1); }
