@@ -225,7 +225,7 @@ try {
     assert.equal(await scene(laptop, 'pp_1').locator('.pd-notes li').textContent(), 'The apron must be the red one');
     await settle(laptop);
     assert.equal(row('wd_nb').fields.production.code, 'NB', 'the show got a code from its name');
-    assert.equal(await laptop.locator('.crumb').textContent().then((t) => /Production/.test(t)).catch(() => true), true);
+    assert.equal(await laptop.locator('.crumb').textContent().then((t) => /Make/.test(t)).catch(() => true), true);
   });
 
   await check('a piece code, then shots: codes that never change, 1A for one added between', async () => {
@@ -454,8 +454,10 @@ try {
     assert.match(t.link, /\?open=sd_/);
   });
 
-  await check('posting: Claude drafts a caption per platform, links are kept for later', async () => {
-    await laptop.locator('.gv-levels .chip[data-tab="post"]').click();
+  await check('posting (in Deliver now): Claude drafts a caption per platform, links are kept for later', async () => {
+    await laptop.keyboard.press('Alt+Digit6');
+    await laptop.waitForFunction(() => document.documentElement.dataset.view === 'deliver');
+    await laptop.locator('.prod-view .gv-levels .chip[data-tab="post"]').click();
     await laptop.locator('.pd-add .pill', { hasText: 'Draft captions' }).click();
     await laptop.waitForFunction(() => document.querySelector('.pd-post-card[data-platform="tiktok"] textarea')?.value === 'Caption for TikTok');
     await laptop.locator('.pd-post-card[data-platform="youtube"] input').fill('https://youtu.be/abc');
@@ -469,7 +471,10 @@ try {
 
   await check('out to Resolve: the shot list as CSV, the dialogue as subtitles, a shot’s kit as a zip', async () => {
     assert.deepEqual(laptop.errors, []);
-    await laptop.locator('.gv-tools .more-btn').click();
+    await laptop.keyboard.press('Alt+Digit5');
+    await laptop.waitForFunction(() => document.documentElement.dataset.view === 'production');
+    await sleep(500);
+    await laptop.locator('.prod-view .gv-tools .more-btn').click();
     const [csv] = await Promise.all([laptop.waitForEvent('download'), pick(laptop, 'Shot list for Resolve')]);
     const text = await readFile(await csv.path(), 'utf8');
     assert.match(text, /^﻿Shot,Scene,Scene heading/);

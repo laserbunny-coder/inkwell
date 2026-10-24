@@ -37,6 +37,8 @@ function tally(items) {
     for (let i = 0; p && i < 60; i++) {
       if (bookCache.has(p.id)) { p = bookCache.get(p.id); break; }
       seen.push(p.id);
+      // A kept copy of a draft (New draft from this one) was never written: don't count it.
+      if (p.kind === 'draft' && p.fields?.copy) { p = null; break; }
       if (p.kind === 'project' || p.kind === 'day') break;
       p = live.get(p.parent_id);
     }

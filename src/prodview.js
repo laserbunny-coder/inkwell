@@ -27,11 +27,17 @@ const make = (tag, cls, text) => {
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch { /* full */ } };
 const hidden = () => new Set(JSON.parse(pref('prodHide', '[]')));
+// Make: the shots and what they need. Deliver: what goes out (files, a share
+// link, posting). Both are this view, with different tabs.
 export const TABS = [
   { id: 'shots', label: 'Shots' },
   { id: 'board', label: 'Storyboard' },
   { id: 'kit', label: 'Kit' },
-  { id: 'days', label: 'Shoot days' },
+  { id: 'days', label: 'Shoot days' }
+];
+export const DELIVER_TABS = [
+  { id: 'files', label: 'Files' },
+  { id: 'share', label: 'Share' },
   { id: 'post', label: 'Posting' }
 ];
 const PROD_NOTES = ['production', 'ai'];
@@ -58,12 +64,15 @@ export class ProductionView {
     el.addEventListener('drop', (e) => this.dropAnywhere(e));
   }
 
-  get isOpen() { return !!this.piece && document.documentElement.dataset.view === 'production'; }
-  get tab() { const t = pref('prodTab', 'shots'); return TABS.some((x) => x.id === t) ? t : 'shots'; }
+  get isOpen() { return !!this.piece && ['production', 'deliver'].includes(document.documentElement.dataset.view); }
+  get tabs() { return this.mode === 'deliver' ? DELIVER_TABS : TABS; }
+  get tabKey() { return this.mode === 'deliver' ? 'deliverTab' : 'prodTab'; }
+  get tab() { const t = pref(this.tabKey, this.tabs[0].id); return this.tabs.some((x) => x.id === t) ? t : this.tabs[0].id; }
 
   async show(pieceId, opts = {}) {
     this.piece = await getEntry(pieceId);
-    if (opts.tab) setPref('prodTab', opts.tab);
+    this.mode = opts.mode === 'deliver' || DELIVER_TABS.some((t) => t.id === opts.tab) ? 'deliver' : 'make';
+    if (opts.tab) setPref(this.tabKey, opts.tab);
     if (opts.shot) this.open.add(opts.shot);
     if (opts.day) { this.dayId = opts.day; setPref('prodTab', 'days'); }
     await this.render();
@@ -161,20 +170,21 @@ export class ProductionView {
     head.append(make('h1', 'gv-title', piece.title || 'Untitled'));
     const tools = make('div', 'gv-tools');
     const back = make('button', 'ghost-btn gv-write', 'Write');
-    back.title = 'Back to the text (Ctrl + Shift + S)';
+    back.title = this.mode === 'deliver' ? 'Back to the text' : 'Back to the text (Ctrl + Shift + S)';
     back.addEventListener('click', () => this.hooks.leave(piece));
-    tools.append(back, this.hooks.menuButton(() => this.moreMenu(), 'More for production'));
+    tools.append(back);
+    if (this.mode !== 'deliver') tools.append(this.hooks.menuButton(() => this.moreMenu(), 'More for production'));
     head.append(tools);
     const sub = make('div', 'gv-sub');
     const tabs = make('div', 'gv-levels');
     tabs.setAttribute('role', 'tablist');
-    tabs.setAttribute('aria-label', 'Production');
-    for (const t of TABS) {
+    tabs.setAttribute('aria-label', this.mode === 'deliver' ? 'Deliver' : 'Make');
+    for (const t of this.tabs) {
       const b = make('button', 'chip' + (t.id === this.tab ? ' on' : ''), t.label);
       b.setAttribute('role', 'tab');
       b.dataset.tab = t.id;
       b.setAttribute('aria-selected', String(t.id === this.tab));
-      b.addEventListener('click', () => { setPref('prodTab', t.id); this.render(); });
+      b.addEventListener('click', () => { setPref(this.tabKey, t.id); this.hooks.moved?.(this.place()); this.render(); });
       tabs.append(b);
     }
     sub.append(tabs);
@@ -187,7 +197,9 @@ export class ProductionView {
     if (this.tab === 'kit') await this.drawKit(body);
     if (this.tab === 'days') await this.drawDays(body);
     if (this.tab === 'post') await this.drawPost(body);
-    const panel = this.claudePanel();
+    if (this.tab === 'files') await this.drawFiles(body);
+    if (this.tab === 'share') await this.drawShare(body);
+    const panel = this.mode === 'deliver' && this.tab !== 'post' ? null : this.claudePanel();
     this.el.replaceChildren(...[head, sub, panel, body].filter(Boolean));
   }
 
@@ -1171,6 +1183,51 @@ export class ProductionView {
       acts.append(srt);
     }
     body.append(acts, list);
+  }
+
+  // Where this is, for remembering.
+  place() { return { view: this.mode === 'deliver' ? 'deliver' : 'production', id: this.piece?.id, tab: this.tab }; }
+
+  // ---------- Deliver: files out ----------
+
+  async drawFiles(body) {
+    const piece = this.piece;
+    const list = make('div', 'pd-files');
+    const file = (label, about, run, ok = true) => {
+      if (!ok) return;
+      const b = make('button', 'st-tool pd-file');
+      b.append(make('span', 'st-tool-name', label), make('span', 'st-tool-about', about));
+      b.addEventListener('click', run);
+      list.append(b);
+    };
+    const ms = hasManuscript(piece);
+    file('Print or PDF', this.script ? 'The script in standard format, ready to print or save as a PDF' : 'As a manuscript, ready to print or save as a PDF', () => this.hooks.files('print', piece), ms);
+    file('Fountain (.fountain)', 'The script as plain text, for WriterDuet, Highland, Final Draft', () => this.hooks.files('fountain', piece), this.script);
+    file('Markdown (.md)', 'The words as plain text with headings', () => this.hooks.files('markdown', piece), ms);
+    file('Shot list for Resolve (.csv)', 'Every shot with its code, scene, framing, prompts and the take you starred', async () => { await this.loadNames(); this.exportCsv(); }, this.scenes.length > 0);
+    file('Dialogue for subtitles (.srt)', 'Every line of dialogue in order, two seconds each: fix the timing in Resolve', () => this.exportSrt(), this.script);
+    body.append(list);
+    if (!list.children.length) body.append(make('p', 'hint gv-empty', 'This piece is an outline: open it and use Export from Ctrl + K.'));
+    else body.append(make('p', 'hint', 'A shot’s kit (its prompts and reference pictures, as a .zip) is on each shot in Make.'));
+  }
+
+  async drawShare(body) {
+    const piece = this.piece;
+    const box = make('div', 'pd-share');
+    const share = await this.hooks.shareOf(piece);
+    if (share) {
+      box.append(make('p', '', share.comments ? 'Shared: anyone with the link can read it and comment.' : 'Shared: anyone with the link can read it.'));
+      const url = make('input', 'pd-input share-url');
+      url.readOnly = true;
+      url.value = share.url;
+      url.setAttribute('aria-label', 'The link');
+      url.addEventListener('focus', () => url.select());
+      box.append(url);
+    } else box.append(make('p', 'hint', 'A link anyone can read (and comment on, if you like) without an account. Nothing else of yours is shared.'));
+    const b = make('button', 'pill', share ? 'Link and comments…' : 'Share a link to read and comment…');
+    b.addEventListener('click', () => this.hooks.share(piece));
+    box.append(b);
+    body.append(box);
   }
 
   async savePost(platform, patch) {

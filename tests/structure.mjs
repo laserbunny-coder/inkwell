@@ -450,20 +450,19 @@ try {
 
   // ---------- the world: its board and its promises ----------
 
-  await check('a world’s promises are listed with where they’re paid off', async () => {
-    await go(laptop, { view: 'world', id: 'wd_monks' });
-    await laptop.waitForSelector('#wh-promises li');
-    const items = await laptop.locator('#wh-promises li').allInnerTexts();
+  await check('a world’s promises are listed (in Shape) with where they’re paid off', async () => {
+    await go(laptop, { view: 'stage', id: 'wd_monks', page: 'shape', sub: 'promises' });
+    await laptop.waitForSelector('.st-promises li');
+    const items = await laptop.locator('.st-promises li').allInnerTexts();
     assert.equal(items.length, 1);
     assert.match(items[0], /Ex-Yakuza monk · Monks vs\. Zombies/);
     assert.match(items[0], /Refuses the call/);
     assert.match(items[0], /Paid off in Siege: Takes up the sword again/);
   });
 
-  await check('the stage board shows every piece by stage, and dragging a card moves it on', async () => {
-    await laptop.locator('#wh-board-toggle').click();
-    await laptop.waitForSelector('#wh-board .sb-card');
-    assert.ok(await laptop.locator('#wh-pieces').isHidden());
+  await check('the stage board (in Make) shows every piece by stage, and dragging a card moves it on', async () => {
+    await go(laptop, { view: 'stage', id: 'wd_monks', page: 'make', sub: 'board' });
+    await laptop.waitForSelector('#st-board .sb-card');
     const idea = await laptop.locator('.sb-col[data-stage="Idea"] .sb-title').allInnerTexts();
     assert.ok(['Monks vs. Zombies', 'Pilot', 'Season One', 'Pilot', 'The Hive', 'Siege'].every((t) => idea.includes(t)), idea.join(', '));
     await shot(laptop, 'stage-board');
@@ -472,9 +471,7 @@ try {
     await settle(laptop);
     assert.equal(row('pr_e1').fields.stage, 'Written');
     await laptop.waitForSelector('.sb-col[data-stage="Written"] .sb-card[data-id="pr_e1"]');
-    await laptop.locator('#wh-board-toggle').click();
-    await laptop.waitForSelector('#wh-pieces li');
-    assert.ok(await laptop.locator('#wh-board').isHidden());
+
   });
 
   // ---------- bringing a script in ----------

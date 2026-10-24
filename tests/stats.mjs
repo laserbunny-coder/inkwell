@@ -27,6 +27,14 @@ assert.equal(m.books.s1.w, 4);
 assert.ok(m.books.s1.l > 0);
 assert.equal(m.notes, 3);
 
+// A kept copy of a draft (New draft from this one) isn't new writing; a draft set aside to start from scratch still counts.
+const copied = [...base,
+  row('dc', 'draft', 'p1', '', now, { fields: { n: 1, copy: true } }), row('dca', 'act', 'dc', '', now), row('dcc', 'chapter', 'dca', '', now),
+  row('cx', 'para', 'dcc', 'one two three four five', now),
+  row('dk', 'draft', 'p1', '', now, { fields: { n: 1 } }), row('dka', 'act', 'dk', '', now), row('dkc', 'chapter', 'dka', '', now),
+  row('kx', 'para', 'dkc', 'old words', now - 3 * DAY)];
+assert.equal(measure(copied).books.p1.w, 7);
+
 // No tallies yet: every day is an estimate from when things were started.
 let p = progress(base, { unit: 'day', count: 3, now });
 assert.deepEqual(p.series.p1.map((x) => x.w), [3, 2, 0]);
