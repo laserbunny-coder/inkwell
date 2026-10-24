@@ -1,15 +1,18 @@
-import { putEntries, getEntry, children, getMeta, setMeta, topTags, CLAUDE } from './db.js';
+import { putEntries, getEntry, children, getMeta, setMeta, topTags } from './db.js';
+import { refsIn } from './outline.js';
 import { entry, tagsIn } from './model.js';
 import { GAP } from './order.js';
 import { addFile, localFile, uploadPending, lengthLabel } from './files.js';
 import { setFileNote } from './filenode.js';
+import { placeVoice } from './voice.js';
 
 // Capture: an idea in seconds, asking nothing. Tap, talk, tap Done. The
 // recording is kept on this device first (piece by piece while you talk, so
 // even a crash or a dead battery keeps what was said), then lands on today's
 // page as a #idea line with the recording on it. When there's a connection
-// it's written out, and Claude adds a short tidy outline under it. Your words
-// are never changed.
+// it's written out and Claude writes it up in the mode that fits (voice.js),
+// with the word-for-word text always kept. Aimed at a chapter, the write-up
+// goes into the draft instead, and the day page keeps the recording.
 
 const pad = (n) => String(n).padStart(2, '0');
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
@@ -55,7 +58,7 @@ async function addLine(content, fields, day = today()) {
   const kids = await children(dayId);
   const sort = kids.length ? Math.max(...kids.map((k) => k.sort || 0)) + GAP : GAP;
   const text = textOf(content);
-  const line = entry('line', { parent_id: dayId, sort, text, content, tags: tagsIn(text), fields: { done: false, gather: null, gathered: null, mirror: null, ...fields } });
+  const line = entry('line', { parent_id: dayId, sort, text, content, tags: tagsIn(text), links: refsIn(content), fields: { done: false, gather: null, gathered: null, mirror: null, ...fields } });
   rows.push(line);
   await putEntries(rows);
   return { line, rows };
@@ -68,18 +71,22 @@ function textOf(content) {
 
 const fileNode = (row) => ({ type: 'file', attrs: { id: row.id, name: row.title, type: row.fields.type, size: row.fields.size, duration: row.fields.duration || 0 } });
 
-// Keeps a finished recording and puts it on today's page. Returns the rows written.
-export async function saveRecording(blob, duration, started = new Date()) {
+// Keeps a finished recording and puts it on today's page. `into` aims it at a
+// chapter ({ chapter, title, after }): the words go there, and the day page
+// keeps the recording with a link to where they went. Returns the rows written.
+export async function saveRecording(blob, duration, started = new Date(), { into = null, name = '' } = {}) {
   const type = (blob.type || 'audio/webm').split(';')[0];
-  const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
-  const file = new File([blob], `Voice ${clock(started)}.${ext}`, { type });
+  const ext = /mp4|m4a|aac/.test(type) ? 'm4a' : type.includes('ogg') ? 'ogg' : type.includes('mpeg') ? 'mp3' : type.includes('wav') ? 'wav' : 'webm';
+  const file = new File([blob], name || `Voice ${clock(started)}.${ext}`, { type });
   const row = await addFile(file, { duration: Math.round(duration) });
   if (!row) return null;
   // The time it was said goes just after the recording, so the day page reads like a log.
   const said = clock(started);
-  const content = [fileNode(row), { type: 'text', text: ` ${said} #idea` }];
-  const { line, rows } = await addLine(content, { capture: 'voice', said }, dayOf(started));
-  await queue({ line: line.id, file: row.id, wrote: line.text, duration: Math.round(duration), at: Date.now() });
+  const content = into
+    ? [fileNode(row), { type: 'text', text: ` ${said} into ` }, { type: 'entryRef', attrs: { id: into.chapter, title: into.title || 'the draft' } }, { type: 'text', text: ' #draft' }]
+    : [fileNode(row), { type: 'text', text: ` ${said} #idea` }];
+  const { line, rows } = await addLine(content, { capture: 'voice', said, ...(into ? { into } : {}) }, dayOf(started));
+  await queue({ line: line.id, file: row.id, wrote: line.text, duration: Math.round(duration), at: Date.now(), ...(into ? { into } : {}) });
   return { line, rows: [row, ...rows] };
 }
 
@@ -98,9 +105,11 @@ let busy = null;
 let retry = null;
 
 // Works through what's waiting: the recording goes up, comes back written
-// out, and Claude's outline goes under it. `ask` sends a request to the
-// server; `onRows` is told what changed so an open page can show it.
-export function writeOutPending({ ask, canAsk, onRows }) {
+// out and written up, and lands on the page (or in the chapter it was aimed
+// at). `ask` sends a request to the server; `onRows` is told what changed so
+// an open page can show it. `draft` knows about chapters: `context(into)`
+// gives the text before the spot, and `deliver(it, answer)` puts the words in.
+export function writeOutPending({ ask, canAsk, onRows, draft = null }) {
   busy ||= (async () => {
     clearTimeout(retry);
     const items = await waiting();
@@ -110,17 +119,18 @@ export function writeOutPending({ ask, canAsk, onRows }) {
     for (const it of items) {
       const kept = await localFile(it.file);
       if (kept && !kept.uploaded) continue; // still going up; next time
-      setFileNote(it.file, 'writing out…');
+      setFileNote(it.file, it.into ? 'writing it into the draft…' : 'writing out…');
       let answer;
       try {
-        answer = await ask({ mode: 'capture', file: it.file, duration: it.duration || 0, tags: await topTags(40) });
+        const where = it.into && draft ? { place: 'draft', ...(await draft.context(it.into)) } : { place: 'day', tags: await topTags(40) };
+        answer = await ask({ mode: 'voice', file: it.file, duration: it.duration || 0, ...where });
       } catch (e) {
         setFileNote(it.file, e.code === 'no-transcriber' ? 'waiting for writing-out to be set up' : 'waiting to be written out');
         if (e.code === 'no-transcriber') break;
         console.warn('capture write-out failed, will retry', e);
         continue;
       }
-      const rows = await placeWriteOut(it, answer || {});
+      const rows = it.into && draft ? await draft.deliver(it, answer || {}) : await placeVoice(it, answer || {}, { withTag });
       await unqueue(it.line);
       setFileNote(it.file, '');
       if (rows.length) onRows(rows);
@@ -128,7 +138,7 @@ export function writeOutPending({ ask, canAsk, onRows }) {
   })().catch((e) => console.error(e)).finally(() => {
     busy = null;
     // Anything still waiting gets another go in a few minutes.
-    waiting().then((left) => { if (left.length) retry = setTimeout(() => writeOutPending({ ask, canAsk, onRows }), 3 * 60 * 1000); });
+    waiting().then((left) => { if (left.length) retry = setTimeout(() => writeOutPending({ ask, canAsk, onRows, draft }), 3 * 60 * 1000); });
   });
   return busy;
 }
@@ -145,42 +155,6 @@ export function withTag(row, tag) {
 
 // A link to something the capture named (a film, a book), as Claude's line.
 export const linkContent = (label, url) => [{ type: 'text', text: label, marks: [{ type: 'link', attrs: { href: url } }] }];
-
-// The words go into the capture's line (after the recording, before #idea).
-// If you've already written on that line, they go just under it instead, so
-// nothing you typed is touched. Claude's outline lines go under that, then
-// links to anything it named; Claude's #tag goes on the line.
-export async function placeWriteOut(it, { transcript = '', outline = [], tag = '', refs = [] }) {
-  const line = await getEntry(it.line);
-  if (!line || line.deleted) return [];
-  const words = transcript.trim();
-  const rows = [];
-  const kids = await children(line.id);
-  let sort = kids.length ? Math.max(...kids.map((k) => k.sort || 0)) : 0;
-  const child = (id, text, by, content = text ? [{ type: 'text', text }] : null) => {
-    sort += GAP;
-    const prev = kids.find((k) => k.id === id);
-    return { ...(prev || entry('line', { id })), kind: 'line', parent_id: line.id, sort: prev?.sort ?? sort, text, content, tags: tagsIn(text), links: [], deleted: false, updated_at: Date.now(), fields: { ...(prev?.fields || {}), done: false, gather: null, gathered: null, mirror: null }, ...(by ? { _by: by } : {}) };
-  };
-  let top = line;
-  if (words) {
-    if (line.text === it.wrote) {
-      // Everything up to the recording stays; its time, then the words, go after it.
-      const was = line.content || [];
-      const upTo = was.findLastIndex((n) => n.type !== 'text');
-      const said = line.fields?.said ? ` ${line.fields.said}` : '';
-      const content = [...was.slice(0, upTo + 1), { type: 'text', text: `${said} ${words} #idea` }];
-      const text = textOf(content);
-      top = { ...line, content, text, tags: tagsIn(text) };
-    } else rows.push(child(`${line.id}-t`, words));
-  }
-  const tagged = withTag(top, tag);
-  if (tagged !== line) rows.unshift({ ...tagged, updated_at: Date.now() });
-  outline.filter((s) => typeof s === 'string' && s.trim()).slice(0, 12).forEach((s, i) => rows.push(child(`${line.id}-o${i + 1}`, s.trim(), CLAUDE)));
-  refs.filter((r) => r?.label && /^https?:\/\//.test(r.url || '')).slice(0, 6).forEach((r, i) => rows.push(child(`${line.id}-r${i + 1}`, r.label, CLAUDE, linkContent(r.label, r.url))));
-  if (rows.length) await putEntries(rows);
-  return rows;
-}
 
 // ---------- the Capture screen ----------
 
@@ -200,6 +174,9 @@ export class CaptureScreen {
     this.time = el.querySelector('.cap-time');
     this.hint = el.querySelector('.cap-hint');
     this.level = el.querySelector('.cap-level');
+    this.where = el.querySelector('.cap-into');
+    this.pick = el.querySelector('.cap-file input');
+    this.pick.addEventListener('change', () => { const f = this.pick.files?.[0]; this.pick.value = ''; if (f) this.fromFile(f); });
     this.auto = el.querySelector('.cap-auto input');
     this.auto.checked = autostart();
     this.auto.addEventListener('change', () => { try { localStorage.setItem(AUTOSTART, this.auto.checked ? 'on' : 'off'); } catch { /* ignore */ } });
@@ -213,7 +190,12 @@ export class CaptureScreen {
 
   get isOpen() { return !this.el.hidden; }
 
-  async show({ start = autostart() } = {}) {
+  // `into` aims what's said at a chapter ({ chapter, title, after }).
+  async show({ start = autostart(), into = null } = {}) {
+    this.into = into;
+    this.where.hidden = !into;
+    this.where.textContent = into ? `Talking into ${into.title || 'the draft'}` : '';
+    this.el.setAttribute('aria-label', into ? 'Talk into the draft' : 'Capture an idea');
     this.el.hidden = false;
     document.documentElement.classList.add('capturing');
     this.render('ready');
@@ -246,12 +228,12 @@ export class CaptureScreen {
     const type = recorderType();
     const mr = new MediaRecorder(stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 32000 });
     const started = new Date();
-    const rec = this.rec = { mr, stream, started, at: performance.now(), type: mr.mimeType || type || 'audio/webm', parts: [], i: 0 };
+    const rec = this.rec = { mr, stream, started, at: performance.now(), type: mr.mimeType || type || 'audio/webm', parts: [], i: 0, into: this.into };
     mr.addEventListener('dataavailable', (e) => {
       if (!e.data?.size || rec.dropped) return;
       rec.parts.push(e.data);
       // Each piece is kept as it arrives, so a crash keeps everything up to here.
-      keepPiece({ i: rec.i++, started: started.getTime(), type: rec.type, blob: e.data }).catch(() => {});
+      keepPiece({ i: rec.i++, started: started.getTime(), type: rec.type, blob: e.data, into: rec.into }).catch(() => {});
     });
     rec.stopped = new Promise((res) => { mr.addEventListener('stop', res, { once: true }); mr.addEventListener('error', res, { once: true }); });
     // If the phone takes the microphone away (a call, another app, the
@@ -311,7 +293,7 @@ export class CaptureScreen {
     if (!blob.size) { this.render('error', 'Nothing was recorded. Tap to try again.'); return; }
     // Every step has a time limit, so this screen can't get stuck; a save
     // that finishes late still lands on the page.
-    const saving = saveRecording(blob, duration, rec.started);
+    const saving = saveRecording(blob, duration, rec.started, { into: rec.into });
     let saved = null;
     try {
       saved = await within(20000, saving);
@@ -324,6 +306,22 @@ export class CaptureScreen {
     this.close();
     await this.onSaved(saved);
     if (cutOff) this.toast('The phone stopped the microphone; what you said up to then is kept');
+  }
+
+  // A recording made somewhere else (the phone's recorder app, a file on the
+  // computer) goes in just like one made here.
+  async fromFile(file) {
+    if (this.rec || !/^audio\/|^video\/(mp4|webm)/.test(file.type || '') && !/\.(m4a|mp3|wav|ogg|opus|webm|aac|amr|3gp)$/i.test(file.name)) {
+      if (!this.rec) this.render('error', 'That isn’t a recording Inkwell can use. Try an audio file.');
+      return;
+    }
+    this.render('saving');
+    const duration = await lengthOf(file);
+    const type = file.type && file.type.startsWith('audio/') ? file.type : 'audio/mp4';
+    const saved = await saveRecording(new Blob([file], { type }), duration, new Date(file.lastModified || Date.now()), { into: this.into, name: file.name }).catch((e) => { console.error(e); return null; });
+    if (!saved) { this.render('error', 'That file couldn’t be kept. Is it too big (over 50 MB)?'); return; }
+    this.close();
+    await this.onSaved(saved);
   }
 
   async cancel() {
@@ -353,6 +351,19 @@ async function stopRecorder(rec) {
   try { if (rec.mr.state !== 'inactive') rec.mr.stop(); } catch { /* already stopped */ }
   await within(4000, rec.stopped).catch(() => {});
 }
+// How long a recording file runs, from the browser's own reading of it (0 if it can't tell).
+function lengthOf(file) {
+  return new Promise((resolve) => {
+    const a = new Audio();
+    const url = URL.createObjectURL(file);
+    const done = (ms) => { URL.revokeObjectURL(url); resolve(ms); };
+    a.preload = 'metadata';
+    a.onloadedmetadata = () => done(Number.isFinite(a.duration) ? Math.round(a.duration * 1000) : 0);
+    a.onerror = () => done(0);
+    setTimeout(() => done(0), 5000);
+    a.src = url;
+  });
+}
 const within = (ms, promise) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Took too long')), ms))]);
 
 // A recording cut off by a crash, a closed app or a dead battery: whatever
@@ -363,10 +374,10 @@ export async function recoverRecording() {
   if (!parts.length) return null;
   parts.sort((a, b) => a.i - b.i);
   // Only one recording's pieces are ever kept, and only while it's going.
-  const { started, type } = parts[0];
+  const { started, type, into } = parts[0];
   const blob = new Blob(parts.map((p) => p.blob), { type });
-  const duration = Math.max(1000, parts.length * 4000);
-  const saved = await saveRecording(blob, duration, new Date(started));
+  const duration = Math.max(1000, parts.length * 1000);
+  const saved = await saveRecording(blob, duration, new Date(started), { into: into || null });
   await clearPieces();
   return saved;
 }

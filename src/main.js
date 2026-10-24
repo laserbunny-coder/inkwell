@@ -15,7 +15,7 @@ import { searchIndex, searchChanged } from './search.js';
 import { keep, versionsOf, tidyHistory, blocks as docBlocks, compare, deletedFrom, bringBack } from './history.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, askPiece, showCopy, toast, closeMenu } from './menu.js';
 import { Sync } from './sync.js';
-import { ensureSeed, outline, entry, wordCount } from './model.js';
+import { ensureSeed, outline, entry, wordCount, noteTypes } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
 import { EntryRef, TagMarks } from './outline.js';
 import { retitleLinks, freshenRefs } from './links.js';
@@ -32,6 +32,7 @@ import { SlashMenu, setSlashItems } from './slash.js';
 import { openHandleMenu } from './handlemenu.js';
 import { openPicker } from './picker.js';
 import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
+import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, RAW } from './voice.js';
 import { takeShares, snapshotPending } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
 import { sendToDaybook, sendPending } from './daybook.js';
@@ -221,9 +222,10 @@ function tapBar(bar, selector, run) {
   });
   bar.addEventListener('pointercancel', () => { end(); start = null; });
 }
-tapBar(scriptBar, 'button[data-el], button[data-alt], button[data-ins]', (b) => {
+tapBar(scriptBar, 'button[data-el], button[data-alt], button[data-ins], button[data-talk]', (b) => {
   const what = b.dataset.alt;
-  if (b.dataset.ins) typeHere(editor, '/');
+  if (b.dataset.talk) talkIntoDraft();
+  else if (b.dataset.ins) typeHere(editor, '/');
   else if (what === 'word' || what === 'para') alts.toggle({ scope: what });
   else if (what === 'ask') {
     if (!alts.isOpen) alts.open({ scope: 'word' });
@@ -380,9 +382,10 @@ notebook.editor.view.dom.addEventListener('line-menu', (e) => {
 // the caret would be hidden, and only as far as it must, so typing never
 // makes it jump. ProseMirror's own scrolling defers to this on a phone.
 for (const ed of [editor, notebook.editor]) {
-  ed.view.setProps({ scrollMargin: caretRoom, scrollThreshold: caretRoom, handleScrollToSelection: () => touch.matches && keepCaretInView(ed) });
+  ed.view.setProps({ scrollMargin: caretRoom, scrollThreshold: caretRoom, handleScrollToSelection: () => (typewriter() ? holdLine(ed) : touch.matches && keepCaretInView(ed)) });
 }
 function keepCaretInView(ed = currentEditor()) {
+  if (typewriter()) return holdLine(ed);
   if (!touch.matches || !ed?.isFocused) return false;
   let r;
   try { r = ed.view.coordsAtPos(ed.state.selection.head); } catch { return false; }
@@ -394,9 +397,32 @@ function keepCaretInView(ed = currentEditor()) {
   else if (r.top < ceiling) window.scrollBy(0, r.top - ceiling);
   return true;
 }
+// Typewriter mode: the line you're on stays just above the middle of what
+// you can see (above the phone's keyboard), and the page glides under it.
+const typewriter = () => root.classList.contains('typewriter');
+function holdLine(ed = currentEditor()) {
+  if (!ed?.isFocused) return false;
+  let r;
+  try { r = ed.view.coordsAtPos(ed.state.selection.head); } catch { return false; }
+  const vv = window.visualViewport;
+  const bar = [scriptBar, outlineBar].find((b) => !b.hidden);
+  const top = vv ? vv.offsetTop : 0;
+  const bottom = bar ? bar.getBoundingClientRect().top : vv ? vv.offsetTop + vv.height : window.innerHeight;
+  const delta = r.top - (top + (bottom - top) * 0.45);
+  if (Math.abs(delta) > 3) window.scrollBy({ top: delta, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  return true;
+}
+function toggleTypewriter() {
+  const on = !typewriter();
+  root.classList.toggle('typewriter', on);
+  try { localStorage.setItem('typewriter', on ? '1' : '0'); } catch { /* private window */ }
+  $('#typewriter-mode').checked = on;
+  if (on) requestAnimationFrame(() => holdLine());
+  toast(on ? 'Typewriter on: the line you’re on stays put' : 'Typewriter off');
+}
 let caretTimer;
 const caretSoon = (ms = 60) => { clearTimeout(caretTimer); caretTimer = setTimeout(() => requestAnimationFrame(() => keepCaretInView()), ms); };
-for (const ed of [editor, notebook.editor]) { ed.on('selectionUpdate', () => caretSoon()); ed.on('focus', () => caretSoon(250)); }
+for (const ed of [editor, notebook.editor]) { ed.on('selectionUpdate', () => caretSoon(typewriter() ? 0 : 60)); ed.on('focus', () => caretSoon(250)); }
 window.visualViewport?.addEventListener('resize', () => caretSoon(120));
 window.visualViewport?.addEventListener('scroll', () => caretSoon(200));
 notebook.editor.on('transaction', placeOutlineBar);
@@ -697,6 +723,7 @@ async function applyRemote(rows) {
   if (inNotebook() && notebook.isDay && rows.some((r) => r.kind === 'review' || r.parent_id === notebook.page.id || r.parent_id === 'pg_mulling')) dayReview?.refresh();
 }
 
+let caretAfter = null;
 async function applyRemoteChapter(tries = 0) {
   // Never replace text that's still being saved; wait for this device to settle.
   if (!store.idle) { if (tries < 20) setTimeout(() => applyRemoteChapter(tries + 1), 800); return; }
@@ -704,7 +731,9 @@ async function applyRemoteChapter(tries = 0) {
   if (JSON.stringify(doc) === JSON.stringify(editor.state.doc.toJSON())) return;
   const { $from } = editor.state.selection;
   const block = $from.node(1);
-  const anchor = block ? { eid: block.attrs.eid, offset: $from.parentOffset } : null;
+  // Words you talked in land where the caret was: it moves to the end of them.
+  const anchor = caretAfter ? { eid: caretAfter, offset: Infinity } : block ? { eid: block.attrs.eid, offset: $from.parentOffset } : null;
+  caretAfter = null;
   const focused = editor.isFocused;
   editor.commands.setContent(doc, { emitUpdate: false });
   if (anchor?.eid) {
@@ -2268,6 +2297,8 @@ setTimeout(() => recordProgress().catch((e) => console.error(e)), 20000);
 const toggleShortcuts = () => { const s = $('.shortcuts'); s.hidden = !s.hidden; if (s.hidden) currentEditor().commands.focus(); };
 document.querySelectorAll('[data-show]').forEach((c) => c.addEventListener('change', () => setShown(c.dataset.show, c.checked)));
 $('#focus-mode').addEventListener('change', toggleFocus);
+$('#typewriter-mode').checked = root.classList.contains('typewriter');
+$('#typewriter-mode').addEventListener('change', toggleTypewriter);
 syncSwitches();
 
 $('#page-width').addEventListener('input', (e) => setPage(Number(e.target.value), currentSize()));
@@ -2378,6 +2409,10 @@ const commands = [
   { group: 'go', label: 'Next chapter (or day)', keys: `${mod}⌥↓`, run: () => step(1), when: () => writing() || inNotebook() },
   { group: 'go', label: 'Previous chapter (or day)', keys: `${mod}⌥↑`, run: () => step(-1), when: () => writing() || inNotebook() },
   { group: 'new', label: 'Capture an idea by voice', keys: '⌥C', run: () => openCapture() },
+  { group: 'new', label: 'Talk into the draft here (Claude writes it up)', keys: '⌥V', words: ['dictate', 'voice', 'walk', 'speak'], run: () => talkIntoDraft(), when: () => writing() },
+  { group: 'new', label: 'Capture from a recording file…', words: ['audio', 'voice memo', 'upload'], run: () => fromRecordingFile(false) },
+  { group: 'new', label: 'Draft from a recording file…', words: ['audio', 'voice memo', 'upload'], run: () => fromRecordingFile(true), when: () => writing() },
+  { group: 'write', label: 'Your voice modes (shared with Scribe)…', words: ['journal', 'scene', 'idea', 'email', 'mode'], run: () => openModes() },
   { group: 'new', label: 'New novel', keys: '', run: () => showNewBook('novel') },
   { group: 'new', label: 'New screenplay', keys: '', run: () => showNewBook('screenplay') },
   { group: 'new', label: 'New notes collection', keys: '', run: () => showNewBook('notes') },
@@ -2408,12 +2443,14 @@ const commands = [
   { group: 'view', label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: writing },
   { group: 'view', label: 'Read it through: just the script pages', keys: 'Esc to stop', run: toggleReading, when: () => writing() && isScript() },
   { group: 'view', label: 'Focus: just the text (on / off)', keys: `${mod}.`, run: toggleFocus },
+  { group: 'view', label: 'Typewriter mode: the line you’re on stays put', words: ['scroll', 'center', 'middle'], run: () => toggleTypewriter() },
   { group: 'view', label: 'Show or hide earlier days (under the day page)', keys: '', run: () => notebook.togglePastDays(), when: () => inNotebook() && notebook.isDay },
   { group: 'view', label: 'Show or hide "Linked from"', keys: '', run: () => setShown('links', hidden().has('links')) },
   { group: 'view', label: 'Show or hide note dots', keys: '', run: () => setShown('dots', hidden().has('dots')) },
   { group: 'view', label: 'Show or hide alternate marks', keys: '', run: () => setShown('alts', hidden().has('alts')) },
   { group: 'view', label: 'Show or hide the six-dot handle', keys: '', run: () => setShown('handle', hidden().has('handle')) },
   { group: 'view', label: 'Show or hide bullets on notebook lines', keys: '', run: () => setShown('bullets', hidden().has('bullets')) },
+  { group: 'view', label: 'Show or hide mode chips on voice captures', keys: '', run: () => setShown('voice', hidden().has('voice')) },
   { group: 'view', label: 'Progress: words and pages over time (stats)', keys: `${mod}⇧P`, run: () => progressPanel.open() },
   { group: 'write', label: 'Move this line to another page or day…', keys: '', run: moveLinePicker, when: inNotebook },
   { group: 'write', label: 'Gather a #tag onto this page…', keys: '', run: gatherTagHere, when: inNotebook },
@@ -2508,6 +2545,8 @@ setSlashItems((ed) => {
     { id: 'link', label: 'Link to a page', keys: '[[', words: ['page'], run: (e) => openPicker(e) },
     { id: 'tag', label: 'Tag', keys: '#', run: (e) => e.chain().focus().insertContent('#').run() },
     !outline && { id: 'note', label: 'Note on this paragraph', keys: '⌘⇧N', words: ['comment'], run: () => notes.add() },
+    !outline && { id: 'talk', label: 'Talk into the draft', hint: 'say it; Claude writes it up', keys: '⌥V', words: ['voice', 'dictate', 'speak', 'record'], run: () => setTimeout(talkIntoDraft, 60) },
+    outline && { id: 'talk', label: 'Capture by voice', hint: 'say it; Claude writes it up', keys: '⌥C', words: ['voice', 'dictate', 'speak', 'record'], run: () => setTimeout(() => openCapture(), 60) },
     { id: 'picture', label: 'Picture or file', words: ['image', 'photo', 'file', 'attach'], run: () => setTimeout(pickFiles, 120) },
     outline && { id: 'done', label: 'Done', hint: 'strike the line through', keys: '⌘↵', words: ['todo', 'check'], run: (e) => toggleDone(e) },
     !outline && !inScript && { id: 'scene', label: 'Scene break', keys: '⌘⇧↵', words: ['break', 'divider'], run: (e) => e.chain().focus().insertSceneBreak().run() },
@@ -2891,6 +2930,7 @@ document.addEventListener('keydown', (e) => {
   else if (m && e.shiftKey && k === 'h' && (writing() || inNotebook())) { e.preventDefault(); openHistory(); }
   else if (m && e.shiftKey && k === 'l') { e.preventDefault(); toggleTheme(); }
   // Alt+C: Capture, recording at once; Alt+C again keeps it.
+  else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyV' && (writing() || capture.isOpen)) { e.preventDefault(); if (!capture.isOpen) talkIntoDraft(); else if (capture.rec) capture.finish(); }
   else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyC') { e.preventDefault(); if (!capture.isOpen) openCapture({ start: true }); else if (capture.rec) capture.finish(); }
   else if (e.altKey && !m && e.code === 'BracketRight') { e.preventDefault(); setPage(currentWidth() + 40, currentSize()); }
   else if (e.altKey && !m && e.code === 'BracketLeft') { e.preventDefault(); setPage(currentWidth() - 40, currentSize()); }
@@ -2920,7 +2960,7 @@ const canAskServer = () => !!window.__claude || (!!sync.user && navigator.onLine
 // Until writing-out is set up, the recording's chip says so; nothing else nags.
 function writeOut() {
   const opts = { ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows) };
-  return Promise.all([writeOutPending(opts), snapshotPending(opts), sendPending({ send: sendTask, canSend: canSendTask })]);
+  return Promise.all([writeOutPending({ ...opts, draft: { context: draftContext, deliver: deliverDraft } }), snapshotPending(opts), sendPending({ send: sendTask, canSend: canSendTask })]);
 }
 // Send a line to Daybook, as a task in its Inbox that links back here.
 const sendTask = (task) => (window.__daybook ? window.__daybook(task) : sync.backend.addTask(task));
@@ -2969,10 +3009,133 @@ async function showCapture({ line, rows }) {
   writeOut();
 }
 const capture = new CaptureScreen($('.capture'), {
-  onSaved: (saved) => { toast('Kept on today’s page'); showCapture(saved); },
+  onSaved: (saved) => {
+    // Aimed at the draft: you stay where you were writing, and the words follow.
+    if (saved.line.fields?.into) { toast('Kept. Claude is writing it into the draft…'); applyRemote(saved.rows).then(() => { if (writing()) editor.commands.focus(); writeOut(); }); return; }
+    toast('Kept on today’s page');
+    showCapture(saved);
+  },
   onClose: () => currentEditor().commands.focus(),
   toast
 });
+// ---------- walk and talk: say it, and Claude writes it into the draft ----------
+
+// Opens Capture aimed at the chapter you're in, just after the paragraph the caret is on.
+async function talkIntoDraft() {
+  if (!writing() || !state.chapterId) { openCapture(); return; }
+  await openCapture({ start: true, into: await draftSpot() });
+}
+async function draftSpot() {
+  const chapter = await getEntry(state.chapterId);
+  const block = editor.state.selection.$from.node(1);
+  return { chapter: state.chapterId, title: chapter?.title || 'this chapter', after: block?.attrs.eid || null };
+}
+// Picks a recording file for Capture, or for the draft you're in.
+async function fromRecordingFile(draft) {
+  // The file picker needs this tap, so it opens first and Capture follows.
+  const into = draft && writing() && state.chapterId ? await draftSpot() : null;
+  await openCapture({ start: false, into });
+  capture.pick.click();
+}
+// What Claude needs to know about where the words go: the text just before,
+// whether it's a script, and what's being written.
+async function draftContext(into) {
+  const chapter = await getEntry(into.chapter);
+  if (!chapter) return {};
+  const book = await bookOf(chapter);
+  const kids = (await children(chapter.id)).filter((k) => k.kind === 'para' || k.kind === 'heading').sort((a, b) => a.sort - b.sort);
+  const at = kids.findIndex((k) => k.id === into.after);
+  const before = kids.slice(0, at >= 0 ? at + 1 : kids.length).map((k) => (k.text || '').trim()).filter(Boolean).join('\n\n').slice(-3000);
+  return { before, script: !!book && bookType(book) === 'screenplay', book: [book?.title, chapter.title].filter(Boolean).join(', ') };
+}
+// The words land in the chapter (an open one is saved first, then refreshed).
+// If the chapter's gone, they land on the day page like any capture.
+async function deliverDraft(it, answer) {
+  if (state.chapterId === it.into.chapter) await store.flush(editor.state.doc);
+  const { script } = await draftContext(it.into);
+  const types = await noteTypes();
+  const rows = await placeDraft({ ...it.into, line: it.line }, answer, { script, noteType: types[0]?.id || null });
+  const line = await getEntry(it.line);
+  const raw = String(answer.raw || '').trim();
+  if (rows === null) return placeVoice(it, answer, {});
+  if (line && raw) {
+    const kept = { ...line, fields: { ...line.fields, voice: { raw, mode: answer.mode || 'scene', into: it.into.chapter } }, updated_at: Date.now() };
+    await putEntries([kept]);
+    rows.push(kept);
+  }
+  const first = rows.find((r) => r.kind === 'para');
+  // Still on the spot you talked into: carry on writing after what you said.
+  const here = state.chapterId === it.into.chapter && editor.state.selection.$from.node(1)?.attrs.eid;
+  if (here && (here === it.into.after || !it.into.after)) caretAfter = rows.filter((r) => r.kind === 'para' && !r.deleted && r.fields?.voice).at(-1)?.id || null;
+  if (first) toast(`Your words are in “${it.into.title || 'the draft'}”`, state.chapterId === it.into.chapter ? null : { label: 'Show', run: () => openEntry(first.id) });
+  else if (raw === '') toast('Nothing was heard in that recording');
+  return rows;
+}
+
+// A tap on a capture's mode chip: the same words in another mode, or word for word.
+onVoiceChip(async (lineId, chip) => {
+  const info = await voiceInfo(lineId);
+  if (!info) return;
+  const modes = await knownModes();
+  if (canAskServer()) fetchModes(askServer).catch(() => {});
+  const use = (id, name) => async () => {
+    if (id === info.mode) return;
+    if (!info.made.includes(id) && !canAskServer()) { toast('Writing it up another way needs a connection'); return; }
+    await notebook.close();
+    if (!info.made.includes(id)) toast(`Writing it up as ${name}…`);
+    try {
+      await applyRemote(await switchVoice(lineId, id, askServer));
+    } catch (e) { console.error(e); toast(e.message || 'Claude couldn’t write it up that way this time'); }
+  };
+  popMenu(chip, [
+    { label: 'Word for word', current: info.mode === RAW, run: use(RAW, 'Word for word') },
+    ...modes.map((m) => ({ label: m.name, current: info.mode === m.id, run: use(m.id, m.name) })),
+    'sep',
+    { label: 'Copy this version', run: async () => { await notebook.close(); const t = await voiceText(lineId); try { await navigator.clipboard.writeText(t); toast('Copied, ready to paste'); } catch { showCopy({ title: 'Copy this version', value: t }); } } },
+    { label: 'Change your modes…', run: () => openModes() }
+  ]);
+});
+
+// Your modes, the same ones Scribe uses: rename one, change what it does or
+// which Claude writes it, add one, or delete one.
+async function openModes(anchor = $('.corner [data-cmd="palette"]')) {
+  if (!canAskServer()) { toast('Your modes live on your account; sign in and get online to change them'); return; }
+  let modes;
+  try { modes = await fetchModes(askServer); } catch { toast('Couldn’t reach your modes. Try again.'); return; }
+  const save = async (item) => {
+    try {
+      const out = await askServer({ mode: 'voice-save-mode', item });
+      if (out?.error) throw new Error(out.error);
+      await fetchModes(askServer);
+      toast(`Saved “${item.name}”. Scribe has it too.`);
+    } catch (e) { toast(e.message || 'Couldn’t save that mode. Try again.'); }
+  };
+  const CLAUDES = [['haiku', 'Haiku: quick, for light jobs'], ['sonnet', 'Sonnet: everyday writing'], ['opus', 'Opus: when the writing matters']];
+  popMenu(anchor, [
+    { note: 'Your modes, shared with Scribe' },
+    ...modes.map((m) => ({ label: m.name, sub: [
+      { label: 'Rename…', run: async () => { const name = await askText({ title: 'Rename this mode', value: m.name }); if (name && name !== m.name) save({ ...m, name }); } },
+      { label: 'What it does…', run: async () => { const prompt = await askText({ title: `What ${m.name} does`, body: 'In plain words, how what you say gets written up.', value: m.prompt || '' }); if (prompt !== null && prompt !== m.prompt) save({ ...m, prompt }); } },
+      { label: 'Which Claude writes it', sub: CLAUDES.map(([id, label]) => ({ label, current: m.model === id, run: () => save({ ...m, model: id }) })) },
+      'sep',
+      { label: 'Delete', danger: true, run: async () => {
+        if (!(await ask({ title: `Delete “${m.name}”?`, body: 'It goes from Scribe too. Anything already written up with it stays as it is.', ok: 'Delete', danger: true }))) return;
+        const out = await askServer({ mode: 'voice-delete-mode', id: m.id }).catch((e) => ({ error: e.message }));
+        if (out?.error) { toast(out.error); return; }
+        await fetchModes(askServer);
+        toast(`Deleted “${m.name}”`);
+      } }
+    ] })),
+    'sep',
+    { label: 'New mode…', run: async () => {
+      const name = await askText({ title: 'New mode', placeholder: 'Like “Pitch” or “Lyrics”', ok: 'Next' });
+      if (!name) return;
+      const prompt = await askText({ title: `What ${name} does`, body: 'In plain words, how what you say gets written up.', ok: 'Add' });
+      if (prompt) save({ name, prompt, model: 'opus' });
+    } }
+  ]);
+}
+
 async function openCapture(opts) {
   if (!$('.palette').hidden) closePalette(false);
   // Anything typed is saved first, so the new line can't clash with it.
