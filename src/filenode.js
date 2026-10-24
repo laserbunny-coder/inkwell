@@ -84,13 +84,21 @@ export const FileEmbed = Node.create({
           fold.className = 'pic-fold';
           fold.title = 'Show or fold the picture';
           fold.setAttribute('aria-label', 'Show or fold the picture');
-          fold.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); });
+          for (const ev of ['pointerdown', 'mousedown']) fold.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); });
           fold.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             choosePic(a.id, img.offsetParent === null);
           });
           dom.prepend(fold);
+          // An open one folds again with a tap on the picture itself.
+          img.addEventListener('mousedown', (e) => { if (dom.classList.contains('from-link')) e.preventDefault(); });
+          img.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            choosePic(a.id, false);
+          });
+          img.title = 'Tap to fold the picture';
         }).catch(() => {});
         // One sent from another device may still be on its way up; try again a few times.
         const show = (tries) => fileUrl(a.id).then((url) => {
@@ -177,7 +185,7 @@ export const FileEmbed = Node.create({
         });
       }
       // The scrub bar is the chip's own: the editor leaves its clicks and drags alone.
-      return { dom, ignoreMutation: () => true, stopEvent: (e) => !!e.target?.closest?.('.scrub, .pic-fold') };
+      return { dom, ignoreMutation: () => true, stopEvent: (e) => !!e.target?.closest?.('.scrub, .pic-fold, .from-link img') };
     };
   },
   addProseMirrorPlugins() {
