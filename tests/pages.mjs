@@ -107,7 +107,7 @@ async function check(name, fn) {
   try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message.split('\n').slice(0, 8).join('\n     ')}`); }
 }
 const SHOTS = process.env.SHOTS;
-const shot = async (p, name) => { if (SHOTS) { await sleep(250); await p.screenshot({ path: `${SHOTS}/${name}.png` }); } };
+const shot = async (p, name) => { if (SHOTS) { await p.evaluate(() => document.querySelector(".toast")?.remove()); await sleep(250); await p.screenshot({ path: `${SHOTS}/${name}.png` }); } };
 
 try {
   await page.goto(URL);
