@@ -1,5 +1,5 @@
 import { byKind, children, getEntry, putEntries, linkedFrom, getMeta, setMeta } from './db.js';
-import { entry, newId, outline } from './model.js';
+import { entry, newId, outline, tagsIn } from './model.js';
 
 // How the vault is organized: areas (Writing, Filmmaking…) hold worlds. A
 // world is everything about one story or show: its bible (pages, which can
@@ -108,12 +108,17 @@ export async function newPiece(parentId, type, title, lines, label) {
     const script = entry('chapter', { parent_id: act.id, title: 'Script', sort: 1 });
     rows.push(act, script);
     const body = lines?.length ? lines : [{ el: 'scene', text: '' }];
-    body.forEach((l, i) => rows.push(l.el === 'section'
-      ? entry('scene', { id: newId('sc'), parent_id: script.id, sort: (i + 1) * 1024, title: l.text })
-      : entry('para', {
-        id: newId('pa'), parent_id: script.id, sort: (i + 1) * 1024, text: l.text,
-        content: l.text ? [{ type: 'text', text: l.text }] : null, fields: { el: l.el, ...(l.code ? { code: l.code } : {}) }
-      })));
+    body.forEach((l, i) => {
+      const row = l.el === 'section'
+        ? entry('scene', { id: newId('sc'), parent_id: script.id, sort: (i + 1) * 1024, title: l.text, fields: { ...(l.level > 1 ? { level: l.level } : {}), ...(l.synopsis ? { synopsis: l.synopsis } : {}) } })
+        : entry('para', {
+          id: newId('pa'), parent_id: script.id, sort: (i + 1) * 1024, text: l.text,
+          content: l.text ? [{ type: 'text', text: l.text }] : null, fields: { el: l.el, ...(l.code ? { code: l.code } : {}) }
+        });
+      rows.push(row);
+      // Notes in the script ([[…]]) sit beside their line.
+      for (const text of l.notes || []) rows.push(entry('note', { parent_id: row.id, text, tags: tagsIn(text), fields: { chapter_id: script.id } }));
+    });
   }
   await putEntries(rows);
   return project;

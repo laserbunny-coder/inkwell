@@ -10,6 +10,9 @@ export class NotesLayer {
     this.editor = editor;
     this.notes = [];
     this.types = [];
+    // The threads of the plot grid this chapter's world follows; a note can
+    // belong to one, and then it's in that thread's column on the grid.
+    this.threads = [];
     this.chapterId = null;
     this.visible = false;
     this.saveTimers = new Map();
@@ -149,7 +152,23 @@ export class NotesLayer {
     hide.addEventListener('click', () => { this.setVisible(false); this.editor.commands.focus(); });
     const head = document.createElement('div');
     head.className = 'note-head';
-    head.append(select, hide);
+    head.append(select);
+    if (this.threads.length || note.fields?.thread) {
+      const thread = document.createElement('select');
+      thread.className = 'note-thread';
+      thread.setAttribute('aria-label', 'Thread on the plot grid');
+      thread.title = 'Which thread of the plot grid this belongs to';
+      thread.add(new Option('No thread', ''));
+      for (const t of this.threads) thread.add(new Option(t.title || 'Untitled', t.id, false, t.id === note.fields?.thread));
+      thread.value = note.fields?.thread && this.threads.some((t) => t.id === note.fields.thread) ? note.fields.thread : '';
+      thread.addEventListener('change', () => {
+        const { thread: _t, beat: _b, ...rest } = note.fields || {};
+        note.fields = thread.value ? { ...rest, thread: thread.value, ...(note.fields?.beat ? { beat: note.fields.beat } : {}) } : rest;
+        this.save(note);
+      });
+      head.append(thread);
+    }
+    head.append(hide);
 
     card.append(head, text);
     return card;
@@ -250,6 +269,8 @@ export class NotesLayer {
       let bottom = -Infinity;
       const cards = [...this.el.children].map((card) => {
         const note = this.notes.find((n) => n.id === card.dataset.note);
+        // A note on the chapter as a whole (from the plot grid) sits at the top.
+        if (note && note.parent_id === this.chapterId) return { card, top: 0 };
         const p = note && this.paragraphEl(note.parent_id);
         return { card, top: p ? p.getBoundingClientRect().top - base : null };
       }).sort((a, b) => (a.top ?? Infinity) - (b.top ?? Infinity));

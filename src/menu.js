@@ -255,3 +255,61 @@ export function showCopy({ title, body, value, ok = 'Copy', extra = null }) {
     input.select();
   });
 }
+
+// Bringing in a script: pick a file, or paste the text (straight Fountain, or
+// a bullet list copied out of an outliner). `places` are where it can go, as
+// [[id, label]]; the first is chosen. Resolves { text, name, into } or null.
+export function askScript({ places }) {
+  return new Promise((resolve) => {
+    const back = make('div', 'ask-backdrop');
+    const box = make('form', 'ask ask-script');
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    const area = make('textarea', 'ask-input ask-paste');
+    area.rows = 8;
+    area.placeholder = 'Paste a script here: Fountain text, or the bullets copied out of Workflowy or Tana.';
+    area.setAttribute('aria-label', 'Script text');
+    area.spellcheck = false;
+    let fileName = '';
+    const file = make('button', 'ghost-btn', 'Choose a file…');
+    file.type = 'button';
+    file.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.fountain,.spmd,.txt,.md,text/plain';
+      input.addEventListener('change', async () => {
+        const f = input.files?.[0];
+        if (!f) return;
+        fileName = f.name.replace(/\.[^.]+$/, '');
+        area.value = await f.text();
+        file.textContent = f.name;
+        yes.disabled = false;
+      });
+      input.click();
+    });
+    const where = make('select', 'ask-input');
+    where.setAttribute('aria-label', 'Where it goes');
+    for (const [id, label] of places) where.add(new Option(label, id));
+    const whereRow = make('label', 'ask-where');
+    whereRow.append(document.createTextNode('Goes in '), where);
+    const row = make('div', 'ask-actions');
+    const no = make('button', 'ghost-btn', 'Cancel');
+    no.type = 'button';
+    const yes = make('button', 'pill primary', 'Bring it in');
+    yes.type = 'submit';
+    yes.disabled = true;
+    area.addEventListener('input', () => { yes.disabled = !area.value.trim(); });
+    row.append(no, yes);
+    const pick = make('div', 'ask-file');
+    pick.append(file, make('span', 'hint', 'A .fountain file, or a WriterDuet or Final Draft script exported as Fountain'));
+    box.append(make('h2', '', 'Bring in a script'), pick, area, whereRow, row);
+    back.append(box);
+    document.body.append(back);
+    const done = (v) => { back.remove(); resolve(v); };
+    no.addEventListener('click', () => done(null));
+    box.addEventListener('submit', (e) => { e.preventDefault(); if (area.value.trim()) done({ text: area.value, name: fileName, into: where.value }); });
+    back.addEventListener('pointerdown', (e) => { if (e.target === back) done(null); });
+    box.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); } });
+    area.focus();
+  });
+}

@@ -1,7 +1,7 @@
 import './style.css';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import { EntryIds, SceneBreak } from './schema.js';
+import { EntryIds, SceneBreak, sectionName, SECTION_NAMES } from './schema.js';
 import { isMac, keyLabel, showKeysForThisComputer } from './keys.js';
 import { StatsPanel, record as recordProgress } from './stats.js';
 import { AltMark, ParagraphVersions, AltPanel, flip, newParagraphVersion, altsHere } from './alts.js';
@@ -13,7 +13,7 @@ import { getMeta, setMeta, putEntries, children, getEntry, snapshots, byKind, on
 import { trash, restore, trashed, deleteForever, contents } from './trash.js';
 import { searchIndex, searchChanged } from './search.js';
 import { keep, versionsOf, tidyHistory, blocks as docBlocks, compare, deletedFrom, bringBack } from './history.js';
-import { popMenu, menuButton, onContextMenu, ask, askText, askPiece, showCopy, toast, closeMenu } from './menu.js';
+import { popMenu, menuButton, onContextMenu, ask, askText, askPiece, askScript, showCopy, toast, closeMenu } from './menu.js';
 import { Sync } from './sync.js';
 import { ensureSeed, outline, entry, wordCount, noteTypes } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
@@ -25,12 +25,13 @@ import { Conflicts } from './conflicts.js';
 import { FileEmbed, insertFiles } from './filenode.js';
 import { MAX_BYTES, SPACE, spaceUsed, unsentFiles } from './files.js';
 import { vaultZip, vaultFiles, pageMarkdown } from './vault.js';
-import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain, SceneCodes, NUMBER_SCENES, assignCodes, codeOrder } from './script.js';
+import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain, fromOutline, looksLikeOutline, SceneCodes, NUMBER_SCENES, assignCodes, codeOrder } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
 import { moveLine, toggleDone, foldKey } from './outline.js';
 import { SlashMenu, setSlashItems } from './slash.js';
 import { openHandleMenu } from './handlemenu.js';
 import { openPicker } from './picker.js';
+import { PlotGrid, threadsOf, worldPromises } from './grid.js';
 import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, RAW } from './voice.js';
 import { takeShares, snapshotPending } from './share.js';
@@ -45,7 +46,7 @@ const $ = (s) => document.querySelector(s);
 const body = document.body;
 const root = document.documentElement;
 const extensions = [
-  StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false }), EntryIds, SceneBreak, AltMark, ParagraphVersions,
+  StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false }), EntryIds, SceneBreak.configure({ names: () => sectionNames() }), AltMark, ParagraphVersions,
   EntryRef.configure({ onPick: openPicker, onOpen: openEntry }),
   TagMarks.configure({ onTag: (t) => notebook.showTag(t) }),
   ScriptElements.configure({ isScript: () => isScript() }),
@@ -55,13 +56,17 @@ const extensions = [
 // The scene numbers in the numbered script's other chapters, around the one open.
 let numbering = { before: null, after: null, used: [] };
 const isScript = () => root.classList.contains('script');
+// What the levels of a script's sections are called (Act, Sequence, Scene…), per piece.
+const sectionNames = () => state.project?.fields?.sections || SECTION_NAMES;
 function tooBig(f) { toast(`“${f.name}” is too big to add (the limit is ${Math.round(MAX_BYTES / 1048576)} MB)`); }
 // Deleted, missing, or in the Trash.
 const gone = (r) => !r || r.deleted || isTrashed(r);
 
 // project: the piece open in the manuscript view. bookId: the piece whose home is
 // shown. worldId: the world whose home is shown.
-const state = { project: null, acts: [], chapterId: null, bookId: null, worldId: null, libArea: null };
+const state = { project: null, acts: [], chapterId: null, bookId: null, worldId: null, gridId: null, libArea: null };
+// The plot grid wrote to the open chapter's entries: read it afresh on the way back.
+let gridTouched = false;
 const view = () => root.dataset.view || 'write';
 const inNotebook = () => view() === 'notebook';
 
@@ -110,12 +115,15 @@ function paragraphMenu({ node, index, count, handle }) {
   const at = (fn) => () => fn(handle.range(index).from);
   const into = (fn) => at((from) => fn(editor.chain().setTextSelection(from + 1)).focus().run());
   const title = kind === 'heading' ? 'Heading' : kind === 'sceneBreak' ? (script ? 'Section' : 'Scene break') : script ? elementLabel(el) : 'Paragraph';
-  const turn = !text ? null : script
+  const depthChips = kind === 'sceneBreak' && script
+    ? { label: 'Turn into', chips: [1, 2, 3, ...(node.attrs.level > 3 ? [node.attrs.level] : [])].map((l) => ({ label: sectionName(l, sectionNames()), current: (node.attrs.level || 1) === l, run: at((from) => editor.view.dispatch(editor.state.tr.setNodeMarkup(from, undefined, { ...editor.state.doc.nodeAt(from).attrs, level: l }))) })) }
+    : null;
+  const turn = depthChips || (!text ? null : script
     ? { label: 'Turn into', chips: ELEMENTS.map((x) => ({ label: x.short || x.label, current: el === x.id, run: into((c) => (kind === 'heading' ? c.setNode('paragraph') : c).updateAttributes('paragraph', { el: x.id })) })) }
     : { label: 'Turn into', chips: [
       { label: 'Paragraph', current: kind === 'paragraph', run: into((c) => c.setNode('paragraph')) },
       { label: 'Heading', current: kind === 'heading', run: into((c) => c.setNode('heading', { level: 2 })) }
-    ] };
+    ] });
   return {
     title,
     sections: [
@@ -126,7 +134,7 @@ function paragraphMenu({ node, index, count, handle }) {
       ],
       [turn],
       [script
-        ? { label: 'Section above', run: at((from) => { editor.chain().insertContentAt(from, { type: 'sceneBreak' }).run(); requestAnimationFrame(() => editor.view.nodeDOM(from)?.querySelector('input')?.focus()); }) }
+        ? { label: 'Section above', run: at((from) => insertSection(from)) }
         : { label: 'Scene break above', run: at((from) => editor.chain().insertContentAt(from, { type: 'sceneBreak' }).focus().run()) }],
       [
         { label: 'Move up', keys: 'Alt+⇧↑', stay: true, half: 'move', off: index === 0, run: () => handle.move(index, index - 1) },
@@ -141,6 +149,14 @@ function paragraphMenu({ node, index, count, handle }) {
       } }]
     ]
   };
+}
+// A new section in a script, at the same depth as the one it follows (a
+// scene after a scene), ready to name. Tab in its name goes a level deeper.
+function insertSection(at) {
+  let level = 1;
+  editor.state.doc.forEach((n, pos) => { if (pos < at && n.type.name === 'sceneBreak') level = n.attrs.level || 1; });
+  editor.chain().insertContentAt(at, { type: 'sceneBreak', attrs: { level } }).run();
+  requestAnimationFrame(() => editor.view.nodeDOM(at)?.querySelector('input')?.focus());
 }
 const blocks = new BlockHandle(editor, $('.sheet'), { menu: paragraphMenu });
 
@@ -233,9 +249,7 @@ tapBar(scriptBar, 'button[data-el], button[data-alt], button[data-ins], button[d
     alts.askClaude();
   } else if (what === 'prev' || what === 'next') flip(editor, what === 'prev' ? -1 : 1);
   else if (b.dataset.el === 'section') {
-    const at = editor.state.selection.$from.before(1);
-    editor.chain().insertContentAt(at, { type: 'sceneBreak' }).run();
-    requestAnimationFrame(() => editor.view.nodeDOM(at)?.querySelector('input')?.focus());
+    insertSection(editor.state.selection.$from.before(1));
   } else editor.chain().focus().updateAttributes('paragraph', { el: b.dataset.el }).run();
   placeScriptBar();
 });
@@ -461,11 +475,14 @@ async function go(place) {
   // A book saved as a place before worlds: if it became a world, show that.
   if (place.view === 'project' && (await getEntry(place.id))?.kind === 'world') place = { view: 'world', id: place.id };
   if (place.view === 'world' && gone(await getEntry(place.id))) place = { view: 'library' };
+  if (place.view === 'grid' && gone(await getEntry(place.id))) place = { view: 'library' };
   if (place.view === 'notebook' && place.pageId && !place.pageId.startsWith('day-') && gone(await getEntry(place.pageId))) place = { view: 'notebook', pageId: dayId(isoToday()) };
   if (place.view === 'notebook' && !place.pageId && notebook.page && !notebook.isDay && gone(await getEntry(notebook.page.id))) place = { view: 'notebook', pageId: dayId(isoToday()) };
   const from = view();
   // Switch at once so the next keystroke lands in the right place; saving catches up.
   if (from === 'write' && place.view !== 'write') store.close(editor.state.doc);
+  // The grid reads the manuscript as saved, so the last words go first.
+  if (place.view === 'grid') await store.close(editor.state.doc);
   if (from === 'notebook' && place.view !== 'notebook') notebook.close();
   if (place.view === 'write') delete root.dataset.view;
   else root.dataset.view = place.view;
@@ -476,6 +493,9 @@ async function go(place) {
     editor.commands.focus();
     const id = place.chapterId || state.chapterId || (await lastChapterAnywhere());
     if (!id) return go({ view: 'library' });
+    // Back from the grid after it changed things: read the chapter afresh.
+    if (gridTouched && id === state.chapterId) state.chapterId = null;
+    gridTouched = false;
     if (id !== state.chapterId) await openChapter(id);
     else remember({ view: 'write', chapterId: id });
     if (place.focus) focusParagraph(place.focus);
@@ -511,6 +531,10 @@ async function go(place) {
   } else if (place.view === 'tags') {
     remember(place);
     await tagsPage?.show(place);
+  } else if (place.view === 'grid') {
+    state.gridId = place.id;
+    remember(place);
+    await grid.show(place.id);
   }
   renderCrumb();
   renderRail();
@@ -725,6 +749,7 @@ async function applyRemote(rows) {
   }
   if (rows.some((r) => r.parent_id === state.chapterId && ['para', 'scene', 'heading'].includes(r.kind))) await applyRemoteChapter();
   if (rows.some((r) => r.kind === 'note' && r.fields?.chapter_id === state.chapterId)) await notes.load(state.chapterId);
+  if (view() === 'grid' && rows.some((r) => ['note', 'thread', 'para', 'scene', 'chapter', 'act', 'project', 'world'].includes(r.kind))) grid.refresh();
   await notebook.applyRemote(rows);
   if (inNotebook() && notebook.isDay && rows.some((r) => r.kind === 'review' || r.parent_id === notebook.page.id || r.parent_id === 'pg_mulling')) dayReview?.refresh();
 }
@@ -774,6 +799,7 @@ async function openChapter(id) {
   else statusEl.textContent = 'Saved';
   freshenRefs(editor);
   if (state.project) state.acts = await outline(state.project.id);
+  notes.threads = await threadsOf(book && (await worldOf(book)));
   await notes.load(id);
   await renderChapterLinks();
   await setMeta('lastChapter', id);
@@ -994,9 +1020,11 @@ async function drawRail() {
   let piece = null;
   if (view() === 'write') piece = state.project;
   else if (view() === 'project') piece = await getEntry(state.bookId);
+  else if (view() === 'grid') { const g = await getEntry(state.gridId); if (g?.kind === 'project') piece = g; }
   else if (inNotebook() && notebook.page && !notebook.isDay) piece = await bookOf(notebook.page);
   let world = null;
   if (view() === 'world') world = await getEntry(state.worldId);
+  else if (view() === 'grid' && !piece) world = await getEntry(state.gridId);
   else if (piece) world = await worldOf(piece);
   else if (inNotebook() && notebook.page && !notebook.isDay) world = await worldOf(notebook.page);
   const pageId = inNotebook() ? notebook.page?.id : null;
@@ -1125,14 +1153,19 @@ function renderScenes() {
   const box = $('#outline-scenes');
   if (!box) return;
   box.replaceChildren();
+  // In a script, sections are your story's own headings, nested (act,
+  // sequence, scene…), and the INT./EXT. scene headings sit under them.
+  let depth = 0;
+  const pad = box.style.getPropertyValue('--pad');
   editor.state.doc.forEach((node, pos) => {
-    // In a script, sections are your story's own headings and the INT./EXT.
-    // scene headings sit under them.
     const slug = isScript() && node.type.name === 'paragraph' && node.attrs.el === 'scene' && node.textContent.trim();
     if (node.type.name !== 'sceneBreak' && !slug) return;
+    const level = node.type.name === 'sceneBreak' ? node.attrs.level || 1 : 0;
+    if (level) depth = level;
     const code = slug && root.classList.contains('numbered') && node.attrs.code ? `${node.attrs.code}  ` : '';
-    const b = make('button', slug ? 'tree-scene tree-slug' : 'tree-scene', slug ? code + slug.toUpperCase() : node.attrs.title || (isScript() ? 'Untitled section' : 'Untitled scene'));
-    b.style.paddingLeft = slug ? `calc(${box.style.getPropertyValue('--pad')} + 12px)` : box.style.getPropertyValue('--pad');
+    const b = make('button', slug ? 'tree-scene tree-slug' : 'tree-scene', slug ? code + slug.toUpperCase() : node.attrs.title || (isScript() ? `Untitled ${sectionName(level, sectionNames()).toLowerCase()}` : 'Untitled scene'));
+    if (level) b.dataset.level = level;
+    b.style.paddingLeft = `calc(${pad} + ${(slug ? depth : level - 1) * 12}px)`;
     b.addEventListener('click', () => {
       editor.view.nodeDOM(pos)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       editor.commands.focus(pos + node.nodeSize + 1);
@@ -1172,6 +1205,11 @@ async function drawCrumb() {
   } else if (view() === 'world') {
     const w = await getEntry(state.worldId);
     if (w) parts.push(lib, ...(await areaParts(w.area_id)), bookPart(w));
+  } else if (view() === 'grid') {
+    const g = await getEntry(state.gridId);
+    if (g?.kind === 'world') parts.push(lib, ...(await areaParts(g.area_id)), bookPart(g));
+    else if (g) { const up = await within(g); parts.push(...(up ? up.out : [lib]), bookPart(g)); }
+    parts.push(link('Plot grid', () => {}, 'here'));
   } else if (view() === 'project') {
     const b = await getEntry(state.bookId);
     const up = b && (await within(b));
@@ -1977,6 +2015,28 @@ async function renderWorld() {
 
   $('#wh-pieces').replaceChildren(...s.pieces.map(({ row, depth }) => pieceRow(row, depth)));
   $('#wh-pieces-empty').hidden = s.pieces.length > 0;
+  // The stage board: every piece by stage, one column each, instead of the list.
+  const board = boardOn() && s.pieces.length > 0;
+  const toggle = $('#wh-board-toggle');
+  toggle.hidden = !s.pieces.length;
+  toggle.textContent = board ? 'List' : 'Board';
+  toggle.onclick = () => { try { localStorage.setItem('stageBoard', board ? 'list' : 'board'); } catch { /* full */ } renderWorld(); };
+  $('#wh-pieces').hidden = board;
+  $('#wh-board').hidden = !board;
+  if (board) renderBoard(w, s.pieces);
+  else $('#wh-board').replaceChildren();
+  // Promises made in this world, and whether they've been paid off yet.
+  const promises = await worldPromises(w);
+  $('#wh-promises-box').hidden = !promises.length;
+  $('#wh-promises').replaceChildren(...promises.map((p) => {
+    const li = make('li', p.paid ? 'paid' : 'unpaid');
+    const btn = make('button');
+    const where = [p.thread?.title, p.piece?.title].filter(Boolean).join(' · ');
+    btn.append(make('span', 'from', where), make('span', 'line', p.note.text || ''), make('span', 'state', p.paid ? `Paid off${p.payoffPiece && p.payoffPiece.id !== p.piece?.id ? ` in ${p.payoffPiece.title}` : ''}: ${p.payoff.text || ''}` : 'Not paid off yet'));
+    btn.addEventListener('click', () => go({ view: 'grid', id: p.piece?.id || w.id }));
+    li.append(btn);
+    return li;
+  }));
   $('#wh-new-piece').onclick = () => addPiece(w.id);
 
   const { pages } = await worldTree(w.id);
@@ -2001,6 +2061,98 @@ async function renderWorld() {
     return li;
   }));
   $('#wh-daily-empty').hidden = mentions.length > 0;
+}
+
+// ---------- the plot grid: the manuscript as a table ----------
+
+const grid = new PlotGrid($('#grid-view'), {
+  // A row opens where it is in the text.
+  async open(r) {
+    if (r.focus) return openEntry(r.focus);
+    if (r.kind === 'piece') return openBook(r.id);
+    if (r.kind === 'act') { const ch = (await outline((await getEntry(r.id)).parent_id)).find((a) => a.id === r.id)?.chapters[0]; return ch ? go({ view: 'write', chapterId: ch.id }) : null; }
+    if (r.kind === 'chapter' || (r.kind === 'opening' && r.id === r.chapterId)) return go({ view: 'write', chapterId: r.chapterId || r.id });
+    if (r.chapterId) return go({ view: 'write', chapterId: r.chapterId, focus: r.id });
+    return openEntry(r.id);
+  },
+  leave: (owner) => (owner.kind === 'world' ? go({ view: 'world', id: owner.id }) : openBook(owner.id)),
+  changed(rows) {
+    gridTouched = true;
+    if (rows.some((r) => r && ['chapter', 'act', 'project'].includes(r.kind))) renderRail();
+  },
+  beforeMove: () => store.close(editor.state.doc),
+  menu: (anchor, items) => popMenu(anchor, items),
+  menuButton: (items, label) => menuButton(items, label),
+  ask, askText, toast,
+  noteType: () => notes.types[0]?.id || null,
+  askServer: (body) => askServer(body),
+  canAsk: () => canAskServer()
+});
+window.__grid = grid;
+
+// What the grid is for, from where you are: the piece you're writing or
+// looking at, or the world.
+async function gridOwner() {
+  if (view() === 'write') return state.project?.id || null;
+  if (view() === 'project') return state.bookId;
+  if (view() === 'world') return state.worldId;
+  if (view() === 'grid') return state.gridId;
+  if (inNotebook() && notebook.page && !notebook.isDay) return (await bookOf(notebook.page))?.id || (await worldOf(notebook.page))?.id || null;
+  return null;
+}
+
+// Ctrl+Shift+G: the grid, and back to the text.
+async function toggleGrid() {
+  if (view() === 'grid') { const g = await getEntry(state.gridId); return grid.hooks.leave(g); }
+  const id = await gridOwner();
+  if (!id) { toast('Open a piece or a world to see its plot grid'); return; }
+  return go({ view: 'grid', id });
+}
+
+// ---------- the stage board: a world's pieces by stage ----------
+
+const boardOn = () => { try { return localStorage.getItem('stageBoard') === 'board'; } catch { return false; } };
+
+function renderBoard(w, pieces) {
+  const touch = matchMedia('(hover: none)').matches;
+  const cols = STAGES.map((stage) => {
+    const col = make('section', 'sb-col');
+    col.dataset.stage = stage;
+    const mine = pieces.filter(({ row }) => stageOf(row) === stage);
+    const head = make('div', 'sb-head');
+    head.append(make('span', '', stage), make('span', 'sb-n', mine.length ? String(mine.length) : ''));
+    col.append(head);
+    for (const { row: p } of mine) {
+      const card = make('button', 'sb-card');
+      card.dataset.id = p.id;
+      card.append(make('span', 'sb-title', p.title || 'Untitled'), make('span', 'sb-kind', kindName(p)));
+      card.addEventListener('click', () => (touch ? popMenu(card, [
+        { label: 'Open', run: () => go({ view: 'project', id: p.id }) },
+        { label: 'Stage', sub: STAGES.map((st) => ({ label: st, current: stageOf(p) === st, run: () => setStage(p, st) })) }
+      ]) : go({ view: 'project', id: p.id })));
+      onContextMenu(card, () => bookMenu(p));
+      if (!touch) {
+        card.draggable = true;
+        card.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/x-piece', p.id); e.dataTransfer.effectAllowed = 'move'; card.classList.add('dragging'); });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+      }
+      col.append(card);
+    }
+    if (!touch) {
+      col.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('text/x-piece')) { e.preventDefault(); col.classList.add('drop'); } });
+      col.addEventListener('dragleave', (e) => { if (!col.contains(e.relatedTarget)) col.classList.remove('drop'); });
+      col.addEventListener('drop', async (e) => {
+        const id = e.dataTransfer.getData('text/x-piece');
+        col.classList.remove('drop');
+        if (!id) return;
+        e.preventDefault();
+        const p = pieces.find(({ row }) => row.id === id)?.row;
+        if (p && stageOf(p) !== stage) await setStage(p, stage);
+      });
+    }
+    return col;
+  });
+  $('#wh-board').replaceChildren(...cols);
 }
 
 // ---------- panels revealed by edges ----------
@@ -2392,21 +2544,43 @@ async function exportFountain() {
   download(`${state.project.title}.fountain`, toFountain(state.project.title, rows));
 }
 
-// Pick a .fountain file and make it a new screenplay in the Library.
-function importFountain() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.fountain,.spmd,.txt,text/plain';
-  input.addEventListener('change', async () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    const { title, lines } = fromFountain(await file.text());
-    const area = (await areas())[0];
-    const book = await newBook('screenplay', title || file.name.replace(/\.[^.]+$/, ''), area?.id || null, lines);
-    renderRail();
-    openBook(book.id);
-  });
-  input.click();
+// What a script calls its section levels, top down, in your own words.
+async function nameSectionLevels() {
+  const b = await getEntry(state.project.id);
+  const now = b.fields?.sections || SECTION_NAMES.slice(0, 4);
+  const got = await askText({ title: 'Section levels', body: 'Top level first, separated by commas. For example: Act, Sequence, Scene.', value: now.join(', '), ok: 'Save' });
+  if (!got) return;
+  const names = got.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 6);
+  if (!names.length) return;
+  const next = { ...b, fields: { ...b.fields, sections: names }, updated_at: Date.now() };
+  await putEntries([next]);
+  state.project = next;
+  await store.close(editor.state.doc);
+  const id = state.chapterId;
+  state.chapterId = null;
+  await openChapter(id);
+}
+
+// Bring in a script: a .fountain file, or Fountain pasted from an outliner.
+// It becomes a new screenplay piece in the world you're in (or another, or a
+// world of its own), sections nested as they were.
+async function importFountain() {
+  const here = state.worldId && (await getEntry(state.worldId));
+  const others = (await worlds()).filter((w) => w.id !== here?.id).sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  const places = [...(here && !gone(here) ? [[here.id, here.title || 'Untitled']] : []), ['', 'A new world of its own'], ...others.map((w) => [w.id, w.title || 'Untitled'])];
+  const got = await askScript({ places });
+  if (!got) return;
+  const { title, lines } = looksLikeOutline(got.text) ? fromOutline(got.text) : fromFountain(got.text);
+  if (!lines.length) { toast('That doesn’t look like a script: nothing came in.'); return; }
+  const name = title || got.name || 'Untitled script';
+  let book;
+  if (got.into) book = await newPiece(got.into, 'screenplay', name, lines);
+  else book = await newBook('screenplay', name, (await areas())[0]?.id || null, lines);
+  await refreshViews();
+  await openBook(book.id);
+  const sections = lines.filter((l) => l.el === 'section').length;
+  const scenes = lines.filter((l) => l.el === 'scene').length;
+  toast(`“${name}” is in: ${plural(scenes, 'scene')}${sections ? `, ${plural(sections, 'section')}` : ''}`);
 }
 
 async function exportBook() {
@@ -2432,7 +2606,7 @@ const commands = [
   { group: 'new', label: 'New novel', keys: '', run: () => showNewBook('novel') },
   { group: 'new', label: 'New screenplay', keys: '', run: () => showNewBook('screenplay') },
   { group: 'new', label: 'New notes collection', keys: '', run: () => showNewBook('notes') },
-  { group: 'new', label: 'Bring in a Fountain script (.fountain)', keys: '', run: importFountain },
+  { group: 'new', label: 'Bring in a script (Fountain file or pasted text)…', keys: '', run: importFountain },
   { group: 'new', label: 'New page', keys: '', run: newPageHere },
   { group: 'new', label: 'New area', keys: '', run: () => go({ view: 'library' }).then(() => [...document.querySelectorAll('#lib-areas .chip.add')].at(-1)?.click()) },
   { group: 'new', label: 'New chapter', keys: '', run: () => go({ view: 'write' }).then(newChapter), when: () => !!state.project },
@@ -2441,7 +2615,7 @@ const commands = [
   { group: 'write', label: 'Zoom out', keys: 'Esc', run: () => notebook.zoomTo(null), when: () => inNotebook() && !!notebook.zoom },
   { group: 'write', label: 'Fold or unfold this line', keys: `${mod}↑ ${mod}↓`, run: () => notebook.toggleFold(), when: inNotebook },
   ...ELEMENTS.map((x) => ({ group: 'write', label: `Script: ${x.label}`, keys: 'Tab', run: () => editor.chain().focus().updateAttributes('paragraph', { el: x.id }).run(), when: () => writing() && isScript() })),
-  { group: 'write', label: 'Script: Section (your own heading)', keys: '# ', run: () => { const at = editor.state.selection.$from.before(1); editor.chain().insertContentAt(at, { type: 'sceneBreak' }).run(); requestAnimationFrame(() => editor.view.nodeDOM(at)?.querySelector('input')?.focus()); }, when: () => writing() && isScript() },
+  { group: 'write', label: 'Script: Section (your own heading)', keys: '# ', run: () => { insertSection(editor.state.selection.$from.before(1)); }, when: () => writing() && isScript() },
   { group: 'write', label: 'Insert the time', keys: `${mod}⇧;`, run: () => insertTime(currentEditor()), when: () => writing() || inNotebook() },
   { group: 'write', label: 'Insert today’s date', keys: `${mod};`, run: () => insertDay(currentEditor(), 0), when: () => writing() || inNotebook() },
   { group: 'write', label: 'Insert something (time, date, link…)', keys: '/', run: () => typeHere(currentEditor(), '/'), when: () => writing() || inNotebook() },
@@ -2498,6 +2672,10 @@ const commands = [
   { group: 'write', label: 'Number the scenes (for production)…', keys: '', run: async () => { const b = await currentBook(); if (!b.fields?.numbered) toggleNumbering(b); }, when: () => writing() && isScript() && !state.project?.fields?.numbered },
   { group: 'write', label: 'Scene numbers: turn off', keys: '', run: async () => toggleNumbering(await currentBook()), when: () => writing() && isScript() && !!state.project?.fields?.numbered },
   { group: 'view', label: 'Show or hide scene numbers', keys: '', run: () => setShown('codes', hidden().has('codes')), when: () => writing() && isScript() },
+  { group: 'view', label: 'Plot grid (the story as a table)', keys: `${mod}⇧G`, run: toggleGrid, when: () => view() !== 'grid' && view() !== 'library' },
+  { group: 'view', label: 'Back to the text from the grid', keys: `${mod}⇧G`, run: toggleGrid, when: () => view() === 'grid' },
+  { group: 'view', label: 'Show or hide section summaries', keys: '', run: () => setShown('synopsis', hidden().has('synopsis')), when: () => writing() && isScript() },
+  { group: 'page', label: 'Name the section levels (Act, Sequence, Scene…)', keys: '', run: nameSectionLevels, when: () => writing() && isScript() },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
   { group: 'sync', label: 'Connect Scribe, the dictation keyboard…', keys: '', run: () => connectScribe() },
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
@@ -2566,7 +2744,7 @@ setSlashItems((ed) => {
     { id: 'picture', label: 'Picture or file', words: ['image', 'photo', 'file', 'attach'], run: () => setTimeout(pickFiles, 120) },
     outline && { id: 'done', label: 'Done', hint: 'strike the line through', keys: '⌘↵', words: ['todo', 'check'], run: (e) => toggleDone(e) },
     !outline && !inScript && { id: 'scene', label: 'Scene break', keys: '⌘⇧↵', words: ['break', 'divider'], run: (e) => e.chain().focus().insertSceneBreak().run() },
-    inScript && { id: 'section', label: 'Section', hint: 'your own heading', words: ['act', 'sequence', 'heading'], run: () => { const at = editor.state.selection.$from.before(1); editor.chain().insertContentAt(at, { type: 'sceneBreak' }).run(); requestAnimationFrame(() => editor.view.nodeDOM(at)?.querySelector('input')?.focus()); } },
+    inScript && { id: 'section', label: 'Section', hint: 'your own heading', words: ['act', 'sequence', 'heading'], run: () => { insertSection(editor.state.selection.$from.before(1)); } },
     ...days
   ].filter(Boolean);
 });
@@ -2916,6 +3094,7 @@ document.addEventListener('click', (e) => {
   if (cmd === 'shortcuts') toggleShortcuts();
   if (cmd === 'stats') progressPanel.toggle();
   if (cmd === 'library') go({ view: 'library', area: null });
+  if (cmd === 'grid') toggleGrid();
   if (cmd === 'today') go({ view: 'notebook', pageId: dayId(isoToday()) });
   if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
   if (cmd === 'tags') go({ view: 'tags' });
@@ -2946,6 +3125,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.altKey && !e.shiftKey && !m && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && writing() && editor.isFocused) { if (flip(editor, e.key === 'ArrowDown' ? 1 : -1)) e.preventDefault(); }
   else if (m && e.shiftKey && k === 'h' && (writing() || inNotebook())) { e.preventDefault(); openHistory(); }
   else if (m && e.shiftKey && k === 'l') { e.preventDefault(); toggleTheme(); }
+  else if (m && e.shiftKey && k === 'g') { e.preventDefault(); toggleGrid(); }
   // Alt+C: Capture, recording at once; Alt+C again keeps it.
   else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyV' && (writing() || capture.isOpen)) { e.preventDefault(); if (!capture.isOpen) talkIntoDraft(); else if (capture.rec) capture.finish(); }
   else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyC') { e.preventDefault(); if (!capture.isOpen) openCapture({ start: true }); else if (capture.rec) capture.finish(); }
