@@ -68,7 +68,7 @@ const lines = (p) => p.evaluate(() => new Promise((res) => {
 const outlineText = (p) => p.locator('#outline-editor .ProseMirror').innerText();
 
 const browser = await chromium.launch();
-const ctx = await browser.newContext();
+const ctx = await browser.newContext({ colorScheme: 'dark' });
 await ctx.exposeFunction('__remote', remote);
 await ctx.addInitScript(fake);
 const page = await ctx.newPage();
@@ -140,7 +140,23 @@ try {
     assert.equal(top.content[0].attrs.id, 'fi_snapshot1');
     assert.match(top.text, /Ninja reel by @studio/);
     assert.match(top.text, /Check this out/);
-    await page.waitForSelector('#outline-editor .file-embed.picture img[src^="blob:"]', { timeout: 8000 });
+    await page.waitForSelector('#outline-editor .file-embed.picture img[src^="blob:"]', { state: 'attached', timeout: 8000 });
+  });
+
+  await check('the link’s picture is folded to a small arrow, opens with a tap, and the Show switch opens them all', async () => {
+    const pic = page.locator('#outline-editor .file-embed.from-link');
+    await pic.locator('.pic-fold').waitFor();
+    assert.equal(await pic.locator('img').isVisible(), false, 'folded at first');
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/desktop-12-link-folded.png` });
+    await pic.locator('.pic-fold').click();
+    await pic.locator('img').waitFor({ state: 'visible' });
+    await pic.hover();
+    await pic.locator('.pic-fold').click();
+    await pic.locator('img').waitFor({ state: 'hidden' });
+    await page.evaluate(() => { const c = document.querySelector('[data-show="linkpics"]'); c.checked = true; c.dispatchEvent(new Event('change')); });
+    await pic.locator('img').waitFor({ state: 'visible' });
+    await page.evaluate(() => { const c = document.querySelector('[data-show="linkpics"]'); c.checked = false; c.dispatchEvent(new Event('change')); });
+    await pic.locator('img').waitFor({ state: 'hidden' });
   });
 
   await check('a video shared from Brave as just “YouTube” gets its real title, summary and tag', async () => {

@@ -206,6 +206,21 @@ try {
     assert.ok(await laptop.locator('.scene-break[data-eid="sp_s1"] .scene-synopsis').isVisible());
   });
 
+  await check('focus mode is just the words: a script’s sections and summaries fold away, and come back after', async () => {
+    const box = () => laptop.locator('.scene-break[data-eid="sp_s1"]').boundingBox();
+    const before = await box();
+    assert.ok(before.height > 20);
+    await laptop.keyboard.press('Control+Period');
+    await sleep(400);
+    assert.ok(await laptop.evaluate(() => document.documentElement.classList.contains('focus')));
+    assert.equal((await box()).height, 0, 'the section folds away');
+    assert.equal((await laptop.locator('.scene-break[data-eid="sp_q1"]').boundingBox()).height, 0, 'sequences too');
+    assert.ok(await laptop.locator('#editor p[data-el="scene"]', { hasText: 'INT. KITCHEN' }).isVisible(), 'the script itself stays');
+    await laptop.keyboard.press('Control+Period');
+    await sleep(400);
+    assert.ok((await box()).height > 20, 'and is back after focus');
+  });
+
   // ---------- the grid ----------
 
   await check('Ctrl+Shift+G shows the script as a grid: scenes as rows, acts and sequences heading them', async () => {

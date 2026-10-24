@@ -132,6 +132,11 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 .scene-synopsis:focus { outline: none; background: var(--tint); color: var(--ink); }
 :root.hide-synopsis .scene-break .scene-synopsis { display: none !important; }
 :root.reading .scene-break { display: none; }
+/* Focus is just the words: a script's sections and their summaries fold away entirely
+   (they come back while selected, so nothing is deleted unseen), and
+   #tags read as plain text. */
+:root.focus.script .scene-break:not(.ProseMirror-selectednode):not(:focus-within) { height: 0; min-height: 0; margin: 0; padding: 0; border: 0; overflow: hidden; }
+:root.focus #editor .tag { color: inherit; }
 .tree-slug { font-size: 11px; color: var(--muted); letter-spacing: .02em; }
 /* An empty line says what it's for. */
 :root.script #editor p:has(> br:only-child)::before { color: var(--faint); float: left; height: 0; pointer-events: none; content: 'Action'; }
@@ -1283,3 +1288,14 @@ body.beside-on .page, body.talk-on .page { padding-right: min(44vw, 620px); }
   @page screenplay { size: letter; margin: 1in 1in 1in 1.5in; @top-right { content: counter(page) "."; font: 12pt 'Courier Prime', 'Courier New', monospace; } }
   @page screenplay:first { @top-right { content: none; } }
 }
+/* A shared link's picture, folded: just a small arrow before the title. */
+.file-embed.picture.from-link { position: relative; }
+.pic-fold { position: absolute; top: 6px; left: 6px; z-index: 1; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: rgba(0, 0, 0, .45); color: #fff; font: 13px/26px var(--ui); opacity: 0; cursor: pointer; }
+.pic-fold::before { content: '▾'; }
+.file-embed.from-link:hover .pic-fold, .pic-fold:focus-visible { opacity: 1; }
+@media (hover: none) { .pic-fold { opacity: .8; } }
+:root.hide-linkpics .file-embed.from-link:not(.open), .file-embed.from-link.shut { display: inline; position: static; margin: 0; line-height: inherit; }
+:root.hide-linkpics .file-embed.from-link:not(.open) img, .file-embed.from-link.shut img { display: none; }
+:root.hide-linkpics .file-embed.from-link:not(.open) .pic-fold, .file-embed.from-link.shut .pic-fold { position: static; display: inline-block; width: auto; height: auto; padding: 0 4px 0 0; background: transparent; color: var(--faint); opacity: 1; font: inherit; vertical-align: baseline; }
+:root.hide-linkpics .file-embed.from-link:not(.open) .pic-fold::before, .file-embed.from-link.shut .pic-fold::before { content: '▸'; }
+:root.hide-linkpics .file-embed.from-link:not(.open) .pic-fold:hover, .file-embed.from-link.shut .pic-fold:hover { color: var(--ink); }

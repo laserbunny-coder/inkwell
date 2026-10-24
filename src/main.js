@@ -22,7 +22,7 @@ import { retitleLinks, freshenRefs } from './links.js';
 import { keepStorage, oldestUnsent, unsentLabel, unsentFilesLabel, spaceWarning, mb, STALE_AFTER } from './keep.js';
 import { setMoveHooks, moveEntries } from './move.js';
 import { Conflicts } from './conflicts.js';
-import { FileEmbed, insertFiles } from './filenode.js';
+import { FileEmbed, insertFiles, resetLinkPics } from './filenode.js';
 import { MAX_BYTES, SPACE, spaceUsed, unsentFiles } from './files.js';
 import { vaultZip, vaultFiles, pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain, fromOutline, looksLikeOutline, SceneCodes, NUMBER_SCENES, assignCodes, codeOrder } from './script.js';
@@ -2767,6 +2767,7 @@ function setShown(name, on) {
   localStorage.setItem('hide', JSON.stringify([...h]));
   root.classList.toggle(`hide-${name}`, !on);
   if (name === 'claude' || name === 'comments') notes.render();
+  if (name === 'linkpics') resetLinkPics();
   syncSwitches();
 }
 // Reading a script through: only the script pages, no sections, notes or tools.
@@ -2985,6 +2986,7 @@ const commands = [
   { group: 'view', label: 'Show or hide alternate marks', keys: '', run: () => setShown('alts', hidden().has('alts')) },
   { group: 'view', label: 'Show or hide the six-dot handle', keys: '', run: () => setShown('handle', hidden().has('handle')) },
   { group: 'view', label: 'Show or hide bullets on notebook lines', keys: '', run: () => setShown('bullets', hidden().has('bullets')) },
+  { group: 'view', label: 'Show or hide pictures on shared links', keys: '', run: () => setShown('linkpics', hidden().has('linkpics')) },
   { group: 'view', label: 'Show or hide mode chips on voice captures', keys: '', run: () => setShown('voice', hidden().has('voice')) },
   { group: 'view', label: 'Progress: words and pages over time (stats)', keys: `${mod}⇧P`, run: () => progressPanel.open() },
   { group: 'write', label: 'Move this line to another page or day…', keys: '', run: moveLinePicker, when: inNotebook },
