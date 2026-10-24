@@ -48,6 +48,17 @@ export function readShare({ title = '', text = '', url = '' }) {
   return { link, name, words };
 }
 
+// A shared title that's only the site's name ("YouTube") doesn't name the page,
+// so the snapshot's real title replaces it.
+export function namesPage(title, link) {
+  const t = (title || '').trim().toLowerCase().replace(/^www\./, '');
+  if (!t) return false;
+  try {
+    const host = new URL(link).hostname.toLowerCase().replace(/^(www|m|mobile)\./, '');
+    return t !== host && !host.split('.').includes(t.replace(/\s+/g, ''));
+  } catch { return true; }
+}
+
 const fileNode = (row) => ({ type: 'file', attrs: { id: row.id, name: row.title, type: row.fields.type, size: row.fields.size, duration: row.fields.duration || 0 } });
 const textOf = (content) => (content || []).map((n) => (n.type === 'text' ? n.text : n.type === 'entryRef' ? n.attrs?.title || '' : '')).join('');
 const blankFields = { done: false, gather: null, gathered: null, mirror: null };
@@ -81,7 +92,7 @@ export async function addShare(share, day = today()) {
   const spark = entry('line', { parent_id: line.id, sort: GAP, fields: { ...blankFields } });
   rows.push(line, ...files, spark);
   await putEntries([...rows.filter((r) => !files.includes(r))]);
-  if (link) await queue({ line: line.id, url: link, named: !!share.title?.trim(), picture: files.some((f) => /^image\//.test(f.fields.type)), wrote: text, at: Date.now() });
+  if (link) await queue({ line: line.id, url: link, named: namesPage(share.title, link), picture: files.some((f) => /^image\//.test(f.fields.type)), wrote: text, at: Date.now() });
   return { line, spark, rows };
 }
 
