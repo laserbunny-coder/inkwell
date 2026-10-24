@@ -202,7 +202,8 @@ export function promiseState(beats) {
   const out = new Map();
   for (const b of beats) {
     if (b.beat !== 'promise') continue;
-    const paid = beats.find((x) => x.thread === b.thread && x.beat === 'payoff' && x.at >= b.at);
+    // The nearest payoff after it in the story, not just any later one.
+    const paid = beats.filter((x) => x.thread === b.thread && x.beat === 'payoff' && x.at >= b.at).sort((x, y) => x.at - y.at)[0];
     out.set(b.id, paid ? { paid: true, by: paid.id } : { paid: false });
   }
   return out;
