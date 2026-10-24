@@ -45,7 +45,12 @@ function cell(b, words, side, markClaude) {
     for (const w of words) {
       if (w.op === '=') div.append(document.createTextNode(w.t));
       else if ((w.op === '-' && side === 'a') || (w.op === '+' && side === 'b')) div.append(make(w.op === '-' ? 'del' : 'ins', '', w.t));
-      else if (side === 'i') div.append(make(w.op === '-' ? 'del' : 'ins', '', w.t));
+      else if (side === 'i') {
+        // Cut words run straight into the words that replaced them: keep a space between.
+        const last = div.lastChild;
+        if (last && last.nodeName !== '#text' && last.nodeName !== (w.op === '-' ? 'DEL' : 'INS') && !/\s$/.test(last.textContent) && !/^\s/.test(w.t)) div.append(document.createTextNode(' '));
+        div.append(make(w.op === '-' ? 'del' : 'ins', '', w.t));
+      }
     }
   } else div.textContent = b.text || ' ';
   return div;
@@ -72,6 +77,8 @@ export class CompareView {
     this.focus = place.focus || null;
     this.claude = null;
     await this.render();
+    // Open at the top, not wherever the page you came from was scrolled to.
+    window.scrollTo(0, 0);
   }
 
   get place() { return { view: 'compare', id: this.pieceId, a: this.a, b: this.b }; }

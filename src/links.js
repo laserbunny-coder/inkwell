@@ -51,7 +51,8 @@ export async function freshenRefs(editor) {
   const titles = new Map();
   for (const id of ids) {
     const e = await getEntry(id);
-    if (e && !e.deleted) titles.set(id, titleOf(e));
+    // A paragraph or line has no name of its own: its link keeps the words it was made with.
+    if (e && !e.deleted && (RENAMEABLE.has(e.kind) || e.kind === 'day')) titles.set(id, titleOf(e));
   }
   if (editor.isDestroyed) return;
   const tr = editor.state.tr;

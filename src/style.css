@@ -1212,7 +1212,8 @@ div.pd-scene-title { cursor: default; }
 /* An earlier draft beside the one you're writing; talking it over with Claude. */
 .beside, .talk { position: fixed; top: 0; right: 0; bottom: 0; width: min(44vw, 620px); z-index: 30; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; padding: 52px 22px 16px; }
 .beside[hidden], .talk[hidden] { display: none; }
-body.beside-on .page, body.talk-on .page { padding-right: min(44vw, 620px); }
+/* Room for the panel; a page too wide for what's left keeps its start (scene numbers) on screen. */
+body.beside-on .page, body.talk-on .page { padding-right: calc(min(44vw, 620px) + 16px); padding-left: 56px; justify-content: safe center; }
 .bs-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .bs-head .panel-label { flex: 1; }
 .bs-head select { flex: 1; min-width: 0; }
@@ -1259,7 +1260,9 @@ body.beside-on .page, body.talk-on .page { padding-right: min(44vw, 620px); }
   .printing-doc .print-doc { display: block !important; color: #000; }
   .pr-novel { page: manuscript; font: 12pt/2 'Times New Roman', Times, serif; }
   .pr-script { page: screenplay; font: 12pt/1 'Courier Prime', 'Courier New', Courier, monospace; }
-  .pr-title-page { break-after: page; position: relative; min-height: 8.9in; }
+  .pr-title-page { break-after: page; position: relative; }
+  /* A script's title page isn't counted: the script starts on page 1. */
+  .pr-script .pr-title-page { page: screenplay-title; }
   .pr-novel .pr-corner { font-size: 12pt; line-height: 1.2; }
   .pr-novel .pr-count { position: absolute; top: 0; right: 0; }
   .pr-novel .pr-big { text-align: center; margin-top: 3in; font-size: 14pt; font-weight: bold; text-transform: uppercase; }
@@ -1281,12 +1284,14 @@ body.beside-on .page, body.talk-on .page { padding-right: min(44vw, 620px); }
   .pr-dialogue { padding-left: 1in; width: 4.5in; }
   .pr-transition { margin-top: 1em !important; text-align: right; }
   .pr-code { position: absolute; font-weight: normal; }
-  .pr-code-l { left: -.75in; }
-  .pr-code-r { right: -.5in; }
+  /* Scene codes sit in the page's padding, not its margin: a PDF cuts off anything in the margin. */
+  .pr-script .pr-chapter { padding: 0 .5in 0 .75in; }
+  .pr-code-l { left: -.7in; }
+  .pr-code-r { right: -.45in; }
   @page manuscript { size: letter; margin: 1in; @top-right { content: counter(page); font: 12pt 'Times New Roman', serif; } }
   @page manuscript:first { @top-right { content: none; } }
-  @page screenplay { size: letter; margin: 1in 1in 1in 1.5in; @top-right { content: counter(page) "."; font: 12pt 'Courier Prime', 'Courier New', monospace; } }
-  @page screenplay:first { @top-right { content: none; } }
+  @page screenplay { size: letter; margin: 1in .5in 1in .75in; @top-right { content: counter(page) "."; font: 12pt 'Courier Prime', 'Courier New', monospace; } }
+  @page screenplay-title { size: letter; margin: 1in; counter-increment: page 0; }
 }
 /* A shared link's picture, folded: just a small arrow before the title. */
 .file-embed.picture.from-link { position: relative; }

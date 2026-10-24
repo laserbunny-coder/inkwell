@@ -110,8 +110,13 @@ export async function startDraft(piece, { script = false } = {}) {
       const c = entry('chapter', { parent_id: fresh.id, title: ch.title, sort: ch.sort, fields: { words: 0 } });
       rows.push(c);
       if (!first) first = c;
-      // A script opens on a scene heading, as a new one does.
-      if (script) rows.push(entry('para', { id: newId('pa'), parent_id: c.id, sort: 1024, fields: { el: 'scene' } }));
+      if (!script) continue;
+      // A script keeps its sections (acts, sequences…) to write into, and
+      // opens on a scene heading under the first, as a new one does.
+      const sections = (await children(ch.id)).filter((r) => r.kind === 'scene' && (r.title || '').trim()).sort((x, y) => x.sort - y.sort);
+      for (const sec of sections) rows.push(entry('scene', { parent_id: c.id, title: sec.title, sort: sec.sort, fields: { ...(sec.fields?.level ? { level: sec.fields.level } : {}), ...(sec.fields?.synopsis ? { synopsis: sec.fields.synopsis } : {}) } }));
+      const at = sections.length && sections[0].sort < 1024 ? (sections[0].sort + Math.min(1024, sections[1]?.sort ?? Infinity)) / 2 : 1024;
+      rows.push(entry('para', { id: newId('pa'), parent_id: c.id, sort: at, fields: { el: 'scene' } }));
     }
   }
   if (!first) {

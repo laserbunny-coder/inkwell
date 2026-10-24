@@ -222,6 +222,8 @@ try {
     assert.match(doc.count, /about \d+ words/);
     assert.equal(doc.author, 'by Michael');
     assert.doesNotMatch(doc.text, /Private: is this too slow/);
+    const pdf = (await laptop.pdf({ preferCSSPageSize: true })).toString('latin1');
+    assert.equal((pdf.match(/\/Type\s*\/Page\b/g) || []).length, 3, 'title page, then a page for each chapter');
     await laptop.evaluate(() => dispatchEvent(new Event('afterprint')));
     assert.equal(await laptop.locator('.print-doc').count(), 0);
   });
@@ -240,6 +242,9 @@ try {
     assert.deepEqual(doc.kinds, ['pr-scene', 'pr-action', 'pr-character', 'pr-dialogue']);
     assert.equal(doc.scene, '1INT. KITCHEN - MORNING1');
     assert.doesNotMatch(doc.text, /Act One/, 'sections are for finding your way, not for the page');
+    // Saved as a PDF: a title page and one page of script, no blank page between.
+    const pdf = (await laptop.pdf({ preferCSSPageSize: true })).toString('latin1');
+    assert.equal((pdf.match(/\/Type\s*\/Page\b/g) || []).length, 2);
     await laptop.evaluate(() => dispatchEvent(new Event('afterprint')));
   });
 
@@ -271,6 +276,13 @@ try {
     assert.ok(!(await visible()).includes('This beat lands; let it breathe.'), 'hidden with one switch');
     assert.ok((await visible()).includes('Private: is this too slow?'), 'his own notes stay');
     await palette(laptop, 'Show or hide Claude’s notes');
+    // The fix list's links read as the paragraph's first words, not "Untitled".
+    await go(laptop, { view: 'notebook', pageId: 'pg_fix-ch_1' });
+    await laptop.waitForSelector('html[data-view="notebook"] a.ref');
+    await sleep(400);
+    assert.deepEqual(await laptop.locator('.notebook a.ref').allTextContents(), ['The rain fell on the dojo…']);
+    await go(laptop, { view: 'write', chapterId: 'ch_1' });
+    await laptop.waitForSelector('#editor p[data-eid="pa_1"]');
   });
 
   await check('talk it over: a conversation about the chapter, kept with it', async () => {
@@ -473,8 +485,26 @@ try {
     await phone.waitForSelector('html[data-view="compare"] .cmp-row.op-chg');
     const shown = await phone.evaluate(() => [...document.querySelectorAll('.cmp-row.op-chg')].map((r) => [getComputedStyle(r.querySelector('.cmp-a')).display, getComputedStyle(r.querySelector('.cmp-i')).display])[0]);
     assert.deepEqual(shown, ['none', 'block']);
+    const inline = await phone.locator('.cmp-row.op-chg .cmp-i').allTextContents();
+    for (const t of inline) assert.doesNotMatch(t, /[a-z][A-Z]|[.,][A-Za-z]/, `words run together: ${t}`);
     await shot(phone, '11-phone-compare');
     assert.deepEqual(phone.errors, []);
+  });
+
+  await check('a script’s new draft keeps its sections and opens on a scene heading under the first', async () => {
+    await go(laptop, { view: 'write', chapterId: 'ch_s' });
+    await laptop.waitForSelector('#editor p[data-eid="ps_2"]');
+    await laptop.locator('#editor p[data-eid="ps_2"]').click();
+    await palette(laptop, 'Start a new draft from scratch');
+    await laptop.locator('.ask .pill', { hasText: 'Start draft 2' }).click();
+    await laptop.waitForSelector('.beside:not([hidden]) .bs-text .cmp-b');
+    await sleep(400);
+    await settle(laptop);
+    const act = live().find((r) => r.kind === 'act' && r.parent_id === 'pr_s');
+    const ch = live().find((r) => r.kind === 'chapter' && r.parent_id === act.id);
+    const kids = live().filter((r) => r.parent_id === ch.id).sort((x, y) => x.sort - y.sort).map((r) => [r.kind, r.title || r.fields?.el]);
+    assert.deepEqual(kids, [['scene', 'Act One'], ['para', 'scene']]);
+    await laptop.keyboard.press('Control+Shift+B');
   });
 
   await check('no page errors', async () => assert.deepEqual(laptop.errors, []));
