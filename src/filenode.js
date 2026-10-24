@@ -1,6 +1,25 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { addFile, fileUrl, isImage, isAudio, sizeLabel, lengthLabel, MAX_BYTES } from './files.js';
+import { getEntry } from './db.js';
+
+// A shared link's picture (the page's own, kept by its snapshot) can fold
+// away so only the link's title shows. Folded or not is per device: the Show
+// switch "Pictures on shared links" sets it for all, and the small arrow by
+// each one opens or folds just that one.
+const PIC_KEY = 'linkPics';
+const picChoices = () => { try { return JSON.parse(localStorage.getItem(PIC_KEY) || '{}'); } catch { return {}; } };
+function choosePic(id, open) {
+  const all = picChoices();
+  all[id] = open;
+  try { localStorage.setItem(PIC_KEY, JSON.stringify(all)); } catch { /* full */ }
+  for (const el of document.querySelectorAll(`.file-embed.from-link[data-file="${CSS.escape(id)}"]`)) { el.classList.toggle('open', open); el.classList.toggle('shut', !open); }
+}
+// Starting afresh with the switch: each one follows it again.
+export function resetLinkPics() {
+  try { localStorage.removeItem(PIC_KEY); } catch { /* private */ }
+  for (const el of document.querySelectorAll('.file-embed.from-link')) el.classList.remove('open', 'shut');
+}
 
 // A picture or file in a paragraph or line. Pictures show in the text at
 // reading width; other files show as a small chip that opens the file.
@@ -55,6 +74,32 @@ export const FileEmbed = Node.create({
         img.alt = a.name;
         img.draggable = false;
         dom.append(img);
+        getEntry(a.id).then((row) => {
+          if (!row?.fields?.from) return;
+          dom.classList.add('from-link');
+          const choice = picChoices()[a.id];
+          if (choice != null) dom.classList.add(choice ? 'open' : 'shut');
+          const fold = document.createElement('button');
+          fold.type = 'button';
+          fold.className = 'pic-fold';
+          fold.title = 'Show or fold the picture';
+          fold.setAttribute('aria-label', 'Show or fold the picture');
+          for (const ev of ['pointerdown', 'mousedown']) fold.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); });
+          fold.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            choosePic(a.id, img.offsetParent === null);
+          });
+          dom.prepend(fold);
+          // An open one folds again with a tap on the picture itself.
+          img.addEventListener('mousedown', (e) => { if (dom.classList.contains('from-link')) e.preventDefault(); });
+          img.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            choosePic(a.id, false);
+          });
+          img.title = 'Tap to fold the picture';
+        }).catch(() => {});
         // One sent from another device may still be on its way up; try again a few times.
         const show = (tries) => fileUrl(a.id).then((url) => {
           if (url) { img.src = url; dom.classList.remove('missing'); dom.title = ''; return; }
@@ -140,7 +185,7 @@ export const FileEmbed = Node.create({
         });
       }
       // The scrub bar is the chip's own: the editor leaves its clicks and drags alone.
-      return { dom, ignoreMutation: () => true, stopEvent: (e) => !!e.target?.closest?.('.scrub') };
+      return { dom, ignoreMutation: () => true, stopEvent: (e) => !!e.target?.closest?.('.scrub, .pic-fold, .from-link img') };
     };
   },
   addProseMirrorPlugins() {

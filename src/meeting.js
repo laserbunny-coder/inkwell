@@ -1,4 +1,4 @@
-import { putEntries, getEntry, children, getMeta, setMeta, topTags, CLAUDE } from './db.js';
+import { putEntries, getEntry, children, getMeta, setMeta, topTags, byKind, CLAUDE } from './db.js';
 import { entry, tagsIn } from './model.js';
 import { GAP } from './order.js';
 import { addFile, localFile, uploadPending, isAudio } from './files.js';
@@ -88,6 +88,14 @@ function lineRow(id, parent, sort, content, extra = {}, prev = null) {
 }
 const plain = (text) => [{ type: 'text', text }];
 
+// A life project can take a kind of meeting ("Meeting notes go here" in its
+// menu sets fields.meetings); the meeting page is filed under the first one
+// that does. Otherwise it stays a loose page.
+export async function homeFor(kind) {
+  if (!kind) return null;
+  return (await byKind('world')).find((x) => x.fields?.life && (x.fields.meetings || []).includes(kind)) || null;
+}
+
 // The page, with the recording at the top and the write-out under it. Notes
 // (summary, decisions, tasks) go between them once Claude has written them.
 export async function placeMeeting(it, { said = [], duration = 0, notes = null, names = {} }) {
@@ -97,7 +105,9 @@ export async function placeMeeting(it, { said = [], duration = 0, notes = null, 
   const title = notes?.title || prevPage?.title || `Meeting ${day}`;
   const now = Date.now();
   const rows = [];
-  rows.push({ ...(prevPage || entry('page', { id: pid })), kind: 'page', title, parent_id: prevPage?.parent_id ?? null, deleted: false, updated_at: now, fields: { ...(prevPage?.fields || {}), meeting: { file: it.file, line: it.line, day, duration, kind: notes?.kind || prevPage?.fields?.meeting?.kind || null, names } } });
+  // Filed once, when its kind is first known; after that it stays wherever you move it.
+  const home = !prevPage?.parent_id && !prevPage?.fields?.meeting?.kind && notes ? await homeFor(notes.kind) : null;
+  rows.push({ ...(prevPage || entry('page', { id: pid })), kind: 'page', title, parent_id: home ? home.id : (prevPage?.parent_id ?? null), ...(home ? { area_id: home.area_id || null } : {}), deleted: false, updated_at: now, fields: { ...(prevPage?.fields || {}), meeting: { file: it.file, line: it.line, day, duration, kind: notes?.kind || prevPage?.fields?.meeting?.kind || null, names } } });
   const kids = new Map((await children(pid)).map((k) => [k.id, k]));
   const file = await getEntry(it.file);
   const top = [];

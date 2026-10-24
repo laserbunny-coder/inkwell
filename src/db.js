@@ -156,6 +156,21 @@ export async function topTags(limit = 30) {
   return out;
 }
 
+// Every (tag, entry) pair, one entry per tag it carries.
+export async function eachTagged(fn) {
+  const db = await open();
+  await new Promise((resolve, reject) => {
+    const req = db.transaction('entries').objectStore('entries').index('tags').openCursor();
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const c = req.result;
+      if (!c) return resolve();
+      fn(c.key, c.value);
+      c.continue();
+    };
+  });
+}
+
 export async function byKind(kind, { withTrash = false } = {}) {
   const db = await open();
   const rows = await result(db.transaction('entries').objectStore('entries').index('kind').getAll(kind));

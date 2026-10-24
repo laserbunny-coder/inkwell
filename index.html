@@ -29,8 +29,10 @@
       const hide = JSON.parse(localStorage.getItem('hide') || '[]');
       // Outlines start without bullets (once per device; the Aa panel brings them back).
       if (!localStorage.getItem('bulletsOff')) { hide.push('bullets'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('bulletsOff', '1'); }
+      if (!localStorage.getItem('linkPicsOff')) { hide.push('linkpics'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('linkPicsOff', '1'); }
       for (const h of hide) d.classList.add('hide-' + h);
       if (localStorage.getItem('focus') === '1') d.classList.add('focus');
+      if (localStorage.getItem('typewriter') === '1') d.classList.add('typewriter');
       if (w) d.style.setProperty('--page-width', w + 'px');
       if (z) d.style.setProperty('--text-size', z + 'px');
       else if (matchMedia('(max-width: 700px)').matches) d.style.setProperty('--text-size', '18px');
@@ -73,6 +75,7 @@
     <div class="lib-sheet">
       <div class="lib-head">
         <h1>Library</h1>
+        <button type="button" class="ghost-btn lib-tags" data-cmd="tags">Tags</button>
         <div id="lib-areas" class="chips" role="group" aria-label="Areas"></div>
       </div>
       <div class="lib-bar"><div id="lib-path" class="hint"></div><label class="lib-sort">Sort <select id="lib-sort" aria-label="Sort books"><option value="recent">Recently edited</option><option value="title">Title</option><option value="made">Newest first</option><option value="custom">My order</option></select></label></div>
@@ -96,11 +99,17 @@
     </div>
   </main>
 
+  <main class="tags-home" aria-label="Tags">
+    <div class="lib-sheet" id="tags-sheet"></div>
+  </main>
+
   <main class="project-home" aria-label="Book">
     <div class="lib-sheet">
       <div class="ph-head">
         <h1 id="ph-title" spellcheck="false"></h1>
         <button type="button" class="pill" id="ph-continue">Continue writing</button>
+        <button type="button" class="ghost-btn ph-grid-btn" data-cmd="grid" title="The story as a table (Ctrl + Shift + G)">Plot grid</button>
+        <button type="button" class="ghost-btn ph-grid-btn ph-prod-btn" data-cmd="production" title="Shots, kit, shoot days and posting (Ctrl + Shift + S)">Production</button>
         <span id="ph-more"></span>
       </div>
       <div class="ph-meta"><input id="ph-label" class="ph-label" list="piece-labels" aria-label="What this is (Novel, Gag, Episode…)" autocomplete="off" spellcheck="false"> · <label>Written as <select id="ph-kind" aria-label="How it's written"></select></label> · <label>Stage <select id="ph-stage" aria-label="Stage"></select></label> · <span id="ph-stats"></span> · <span id="ph-world"></span></div>
@@ -128,14 +137,20 @@
       <div class="ph-head">
         <h1 id="wh-title" spellcheck="false"></h1>
         <button type="button" class="pill" id="wh-continue" hidden>Continue writing</button>
+        <button type="button" class="ghost-btn ph-grid-btn" data-cmd="grid" title="The world's pieces as a table (Ctrl + Shift + G)">Plot grid</button>
         <span id="wh-more"></span>
       </div>
       <div class="ph-meta"><span id="wh-stats"></span> · <label>Area <select id="wh-area"></select></label></div>
+      <div id="wh-board" class="stage-board" hidden></div>
       <div class="ph-grid">
         <section>
-          <div class="ph-row"><span class="panel-label">Pieces</span><button type="button" class="ghost-btn" id="wh-new-piece">+ Piece</button></div>
+          <div class="ph-row"><span class="panel-label">Pieces</span><span><button type="button" class="ghost-btn wh-board-btn" id="wh-board-toggle" title="Every piece by stage, from idea to posted">Board</button><button type="button" class="ghost-btn" id="wh-new-piece">+ Piece</button></span></div>
           <ul id="wh-pieces" class="loose-list tree-list"></ul>
           <div class="hint" id="wh-pieces-empty">Anything you make in this world, at any size: a gag, a short, an episode, a novel, a film.</div>
+          <div id="wh-promises-box" hidden>
+            <div class="panel-label ph-gap">Promises</div>
+            <ul id="wh-promises" class="ref-list promise-list"></ul>
+          </div>
           <div class="panel-label ph-gap">From your daily pages</div>
           <ul id="wh-daily" class="ref-list"></ul>
           <div class="hint" id="wh-daily-empty">Link a line on a daily page to this world, its pieces or its pages with [[ and it shows here.</div>
@@ -147,6 +162,18 @@
         </section>
       </div>
     </div>
+  </main>
+
+  <main class="grid-view" aria-label="Plot grid">
+    <div class="gv-sheet" id="grid-view"></div>
+  </main>
+
+  <main class="prod-view" aria-label="Production">
+    <div class="gv-sheet pd-sheet-wrap" id="prod-view"></div>
+  </main>
+
+  <main class="compare-view" aria-label="Compare versions">
+    <div class="gv-sheet cmp-sheet" id="compare-view"></div>
   </main>
 
   <main class="notebook" aria-label="Notebook">
@@ -221,6 +248,9 @@
     </div>
   </main>
 
+  <aside class="beside" aria-label="An earlier draft, to read" hidden></aside>
+  <aside class="talk" aria-label="Talk it over with Claude" hidden></aside>
+
   <aside class="history" aria-label="Version history" hidden>
     <div class="history-head">
       <span class="panel-label" id="history-title">History</span>
@@ -242,13 +272,17 @@
 
   <div class="capture" role="dialog" aria-label="Capture an idea" hidden>
     <button type="button" class="cap-cancel" aria-label="Close without keeping">Cancel</button>
+    <p class="cap-into" hidden></p>
     <div class="cap-middle">
       <span class="cap-level" aria-hidden="true"></span>
       <button type="button" class="cap-big" aria-label="Start talking"><svg class="cap-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><svg class="cap-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg></button>
       <p class="cap-time" aria-live="off"></p>
       <p class="cap-hint" aria-live="polite">Tap to talk</p>
     </div>
-    <label class="cap-auto"><input type="checkbox"> Start recording as soon as Capture opens</label>
+    <div class="cap-foot">
+      <label class="cap-file"><input type="file" accept="audio/*,.m4a,.mp3,.wav,.ogg,.opus,.webm,.aac,.amr,.3gp" hidden> Use a recording file instead</label>
+      <label class="cap-auto"><input type="checkbox"> Start recording as soon as Capture opens</label>
+    </div>
   </div>
 
   <div class="palette-backdrop" hidden></div>
@@ -274,6 +308,13 @@
     <label class="switch"><input type="checkbox" data-show="handle"> Six-dot handle</label>
     <label class="switch"><input type="checkbox" data-show="bullets"> Bullets on notebook lines</label>
     <label class="switch"><input type="checkbox" data-show="alts"> Marks on words and paragraphs with alternates</label>
+    <label class="switch"><input type="checkbox" data-show="voice"> Mode chips on voice captures</label>
+    <label class="switch"><input type="checkbox" data-show="linkpics"> Pictures on shared links</label>
+    <label class="switch"><input type="checkbox" data-show="synopsis"> Section summaries in scripts</label>
+    <label class="switch"><input type="checkbox" data-show="claude"> Claude’s notes in the margin</label>
+    <label class="switch"><input type="checkbox" data-show="comments"> Readers’ comments in the margin</label>
+    <label class="switch"><input type="checkbox" id="fresh-eyes"> Fresh eyes: reread it in a new font, page and colour <span class="keys">⌘⇧Y</span></label>
+    <label class="switch"><input type="checkbox" id="typewriter-mode"> Typewriter: the line you’re on stays put</label>
     <label class="switch"><input type="checkbox" id="focus-mode"> Focus: just the text <span class="keys">⌘.</span></label>
     <div class="actions">
       <button type="button" class="ghost-btn" id="page-reset">Reset</button>
@@ -293,6 +334,7 @@
 
   <div class="script-bar" role="toolbar" aria-label="Script elements and alternates" hidden>
     <button type="button" data-ins="1" aria-label="Insert (time, date, link…)">+</button>
+    <button type="button" data-talk="1" aria-label="Talk into the draft">Talk</button>
     <button type="button" data-el="scene">Scene</button>
     <button type="button" data-el="action">Action</button>
     <button type="button" data-el="character">Character</button>
@@ -343,11 +385,14 @@
       <dt>⌘⇧F</dt><dd>Search inside all your writing</dd>
       <dt>⌘J</dt><dd>Today’s page, and back to writing</dd>
       <dt>⌥C</dt><dd>Capture by voice (again to keep it, Esc to throw it away)</dd>
+      <dt>⌥V</dt><dd>Talk into the draft where you are (again to keep it)</dd>
       <dt>⌘⇧O</dt><dd>Library</dd>
       <dt>⌘⌥↓ ⌘⌥↑</dt><dd>Next or previous chapter (or day)</dd>
       <dt>⌘[ ⌘]</dt><dd>Back and forward</dd>
       <dt>⌘/</dt><dd>This list</dd>
       <dt>⌘⇧P</dt><dd>Progress: words and pages over time</dd>
+      <dt>⌘⇧G</dt><dd>Plot grid: the story as a table, and back</dd>
+      <dt>⌘⇧S</dt><dd>Production: shots, kit, shoot days, posting, and back</dd>
       <dt>Esc</dt><dd>Close whatever is open</dd>
     </dl>
     <h3>What shows</h3>
@@ -373,6 +418,13 @@
       <dt>⌘⇧↵</dt><dd>Scene break</dd>
       <dt>⌘⇧H</dt><dd>Earlier versions of this chapter</dd>
     </dl>
+    <h3>Revising</h3>
+    <dl>
+      <dt>⌘⇧Y</dt><dd>Fresh eyes: a new font, page and colour, to reread it cold</dd>
+      <dt>⌘⇧X</dt><dd>Compare drafts, or the text then and now</dd>
+      <dt>⌘⇧B</dt><dd>An earlier draft beside the one you’re writing</dd>
+      <dt>⌘P</dt><dd>Print, or save as PDF, as a manuscript or a script</dd>
+    </dl>
     <h3>Notebook</h3>
     <dl>
       <dt>⌘↑ ⌘↓</dt><dd>Fold or unfold this line</dd>
@@ -385,7 +437,8 @@
     <dl>
       <dt>↵</dt><dd>Next element (character → dialogue → action)</dd>
       <dt>Tab ⇧Tab</dt><dd>Change this line’s element</dd>
-      <dt># then space</dt><dd>Start a section</dd>
+      <dt># then space</dt><dd>Start a section (## a sequence inside it, ### a scene)</dd>
+      <dt>Tab ⇧Tab</dt><dd>In a section’s name: a level deeper or back up</dd>
       <dt>(</dt><dd>Parenthetical, on an empty dialogue line</dd>
     </dl>
   </div>

@@ -84,11 +84,13 @@ function supabaseBackend() {
     // again, only its words and link change: wherever it was moved, done or
     // not, stays as Daybook has it. With an area, it goes straight into that
     // area as a task of its own; without, to the Inbox.
-    async addTask({ id, title, notes, link, area_id = null }) {
-      const { error } = await sb.from('items').insert({ id, title, notes, link, parent_id: null, area_id, kind: null, sort: Date.now() / 1000 });
+    // A task can sit on a day (a shoot day), at a time (its call time).
+    async addTask({ id, title, notes, link, area_id = null, day, start_min }) {
+      const when = { ...(day ? { day } : {}), ...(day && Number.isFinite(start_min) ? { start_min } : {}) };
+      const { error } = await sb.from('items').insert({ id, title, notes, link, parent_id: null, area_id, kind: null, sort: Date.now() / 1000, ...when });
       if (!error) return;
       if (error.code !== '23505') throw error;
-      const again = await sb.from('items').update({ title, notes, link, deleted: false }).eq('id', id);
+      const again = await sb.from('items').update({ title, notes, link, deleted: false, ...when }).eq('id', id);
       if (again.error) throw again.error;
     },
     // Daybook's areas (Business, Filmmaking…), for where a task should go.
@@ -106,6 +108,36 @@ function supabaseBackend() {
       const { data, error } = await sb.storage.from('writing-files').download(path);
       if (error) throw error;
       return data;
+    },
+    // Share links (a piece or page someone can read and comment on). The
+    // reader's copy lives in writing_shares; comments come back from
+    // writing_comments. Both are this account's alone under row-level security.
+    async saveShare(row) {
+      const { error } = await sb.from('writing_shares').upsert(row);
+      if (error) throw error;
+    },
+    async comments(tokens, since) {
+      if (!tokens.length) return [];
+      const { data, error } = await sb.from('writing_comments').select('id,share_id,parent_id,block,quote,name,text,owner,resolved,created_at')
+        .in('share_id', tokens).gt('created_at', since).order('created_at').limit(500);
+      if (error) throw error;
+      return data;
+    },
+    async reply(row) {
+      const { data: auth } = await sb.auth.getSession();
+      const { data, error } = await sb.from('writing_comments').insert({ ...row, owner: true, user_id: auth.session?.user?.id }).select('id,created_at').single();
+      if (error) throw error;
+      return data;
+    },
+    async resolveComment(id, resolved) {
+      const { error } = await sb.from('writing_comments').update({ resolved }).eq('id', id);
+      if (error) throw error;
+    },
+    // The name on the account, for replies and the title page of a print.
+    async name() {
+      const { data } = await sb.auth.getSession();
+      const m = data.session?.user?.user_metadata || {};
+      return m.full_name || m.name || '';
     },
     subscribe(userId, fn) {
       if (channel) sb.removeChannel(channel);

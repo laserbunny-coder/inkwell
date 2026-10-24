@@ -28,6 +28,7 @@ function remote(op, arg) {
   if (op === 'download') return bucket.get(arg) || null;
   if (op === 'snapshot') {
     if (arg.includes('gone.example')) return { __error: 'The page couldn’t be read', status: 422 };
+    if (arg.includes('youtube.com')) return { title: 'How to fake a ninja fight', summary: 'A video by Stunt School on YouTube showing a staged fight.', site: 'YouTube', image: null, tag: '#stunts' };
     if (arg.includes('instagram.com')) {
       // A 1x1 PNG, put in the person's folder as the server would.
       bucket.set('u1/fi_snapshot1', { path: 'u1/fi_snapshot1', type: 'image/png', data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' });
@@ -67,7 +68,7 @@ const lines = (p) => p.evaluate(() => new Promise((res) => {
 const outlineText = (p) => p.locator('#outline-editor .ProseMirror').innerText();
 
 const browser = await chromium.launch();
-const ctx = await browser.newContext();
+const ctx = await browser.newContext({ colorScheme: 'dark' });
 await ctx.exposeFunction('__remote', remote);
 await ctx.addInitScript(fake);
 const page = await ctx.newPage();
@@ -139,7 +140,36 @@ try {
     assert.equal(top.content[0].attrs.id, 'fi_snapshot1');
     assert.match(top.text, /Ninja reel by @studio/);
     assert.match(top.text, /Check this out/);
-    await page.waitForSelector('#outline-editor .file-embed.picture img[src^="blob:"]', { timeout: 8000 });
+    await page.waitForSelector('#outline-editor .file-embed.picture img[src^="blob:"]', { state: 'attached', timeout: 8000 });
+  });
+
+  await check('the link’s picture is folded to a small arrow, opens with a tap, and the Show switch opens them all', async () => {
+    const pic = page.locator('#outline-editor .file-embed.from-link');
+    await pic.locator('.pic-fold').waitFor();
+    assert.equal(await pic.locator('img').isVisible(), false, 'folded at first');
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/desktop-12-link-folded.png` });
+    await pic.locator('.pic-fold').click();
+    await pic.locator('img').waitFor({ state: 'visible' });
+    await pic.locator('.pic-fold').click();
+    await pic.locator('img').waitFor({ state: 'hidden' });
+    await pic.locator('.pic-fold').click();
+    await pic.locator('img').waitFor({ state: 'visible' });
+    await pic.locator('img').click();
+    await pic.locator('img').waitFor({ state: 'hidden' });
+    await page.evaluate(() => { const c = document.querySelector('[data-show="linkpics"]'); c.checked = true; c.dispatchEvent(new Event('change')); });
+    await pic.locator('img').waitFor({ state: 'visible' });
+    await page.evaluate(() => { const c = document.querySelector('[data-show="linkpics"]'); c.checked = false; c.dispatchEvent(new Event('change')); });
+    await pic.locator('img').waitFor({ state: 'hidden' });
+  });
+
+  await check('a video shared from Brave as just “YouTube” gets its real title, summary and tag', async () => {
+    await share({ title: 'YouTube', text: '', url: 'https://m.youtube.com/watch?v=abc' });
+    await page.waitForFunction(() => /How to fake a ninja fight/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''), null, { timeout: 8000 });
+    const all = await lines(page);
+    const top = all.find((l) => l.fields?.url === 'https://m.youtube.com/watch?v=abc');
+    assert.match(top.text, /^How to fake a ninja fight/);
+    assert.ok(top.tags.includes('stunts'), top.tags.join(','));
+    assert.ok(all.some((l) => l.parent_id === top.id && /Stunt School/.test(l.text)));
   });
 
   await check('a shared picture lands with its words, and a page that can’t be read stays a plain link', async () => {

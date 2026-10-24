@@ -10,10 +10,18 @@ export class NotesLayer {
     this.editor = editor;
     this.notes = [];
     this.types = [];
+    // The threads of the plot grid this chapter's world follows; a note can
+    // belong to one, and then it's in that thread's column on the grid.
+    this.threads = [];
     this.chapterId = null;
     this.visible = false;
     this.saveTimers = new Map();
     this.frame = 0;
+    // Notes left out of the margin: resolved comments, and categories switched
+    // off (Claude's notes, readers' comments). Set by the app.
+    this.skip = () => false;
+    // Answering and resolving a reader's comment (src/sharelink.js).
+    this.comments = null;
     window.addEventListener('resize', () => this.layout());
     // Turning notes on narrows the text column over a quarter second, and the
     // paragraphs rewrap as it goes; lining up once at the start left cards
@@ -90,7 +98,7 @@ export class NotesLayer {
     this.el.replaceChildren();
     this.gutter.replaceChildren();
     if (!this.visible) {
-      for (const eid of new Set(this.notes.filter((n) => n.text).map((n) => n.parent_id))) {
+      for (const eid of new Set(this.notes.filter((n) => n.text && !this.hides(n)).map((n) => n.parent_id))) {
         const dot = document.createElement('button');
         dot.type = 'button';
         dot.className = 'note-dot';
@@ -99,8 +107,73 @@ export class NotesLayer {
         dot.addEventListener('click', () => this.setVisible(true));
         this.gutter.append(dot);
       }
-    } else for (const note of this.notes) this.el.append(this.card(note));
+    } else for (const note of this.notes) if (!this.hides(note)) this.el.append(note.fields?.comment ? this.commentCard(note) : this.card(note));
     this.layout();
+  }
+
+  hides(note) { return !!note.fields?.resolved || this.skip(note); }
+
+  // A reader's comment from a share link: their words (not editable), the
+  // replies, and a way to answer or resolve it.
+  commentCard(note) {
+    const type = this.types.find((t) => t.id === note.type);
+    const c = note.fields.comment;
+    const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+    const card = make('div', 'note note-comment');
+    card.dataset.note = note.id;
+    card.style.setProperty('--hat', type?.color || '#2E8B7A');
+    const head = make('div', 'note-head');
+    head.append(make('span', 'nc-who', c.owner ? 'You, on the link' : c.name || 'A reader'), make('span', 'nc-when', new Date(c.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })));
+    const hide = make('button', 'note-hide', 'Hide notes');
+    hide.type = 'button';
+    hide.addEventListener('click', () => { this.setVisible(false); this.editor.commands.focus(); });
+    head.append(hide);
+    card.append(head);
+    if (c.quote) card.append(make('div', 'nc-quote', `“${c.quote}”`));
+    card.append(make('div', 'nc-text', note.text));
+    for (const r of note.fields.replies || []) {
+      const d = make('div', `nc-reply${r.owner ? ' nc-mine' : ''}`);
+      d.append(make('b', '', r.owner ? 'You' : r.name || 'A reader'), document.createTextNode(` ${r.text}`));
+      card.append(d);
+    }
+    const actions = make('div', 'nc-actions');
+    const reply = make('button', 'ghost-btn', 'Reply');
+    reply.type = 'button';
+    const resolve = make('button', 'ghost-btn', 'Resolve');
+    resolve.type = 'button';
+    resolve.title = 'Done with it: it leaves the margin, and the reader sees it as resolved';
+    resolve.addEventListener('click', async () => {
+      const next = await this.comments?.resolve(note);
+      if (next) { note.fields = next.fields; this.render(); }
+    });
+    reply.addEventListener('click', () => {
+      const box = make('textarea');
+      box.rows = 2;
+      box.placeholder = 'Your reply (they see it under their comment)…';
+      box.setAttribute('aria-label', 'Reply');
+      const send = make('button', 'pill', 'Send');
+      send.type = 'button';
+      send.addEventListener('click', async () => {
+        const text = box.value.trim();
+        if (!text) return;
+        send.disabled = true;
+        try {
+          const next = await this.comments?.reply(note, text);
+          if (next) { note.fields = next.fields; this.render(); }
+        } catch (e) { send.disabled = false; this.comments?.toast?.(e.message || 'Couldn’t send that'); }
+      });
+      box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send.click(); if (e.key === 'Escape') { e.preventDefault(); this.render(); } });
+      actions.replaceWith(box, send);
+      box.focus();
+      this.layout();
+    });
+    actions.append(reply, resolve);
+    card.append(actions);
+    const hl = (on) => this.paragraphEl(note.parent_id)?.classList.toggle('noted', on);
+    card.addEventListener('mouseenter', () => hl(true));
+    card.addEventListener('mouseleave', () => hl(false));
+    requestAnimationFrame(() => this.layout());
+    return card;
   }
 
   card(note) {
@@ -149,7 +222,23 @@ export class NotesLayer {
     hide.addEventListener('click', () => { this.setVisible(false); this.editor.commands.focus(); });
     const head = document.createElement('div');
     head.className = 'note-head';
-    head.append(select, hide);
+    head.append(select);
+    if (this.threads.length || note.fields?.thread) {
+      const thread = document.createElement('select');
+      thread.className = 'note-thread';
+      thread.setAttribute('aria-label', 'Thread on the plot grid');
+      thread.title = 'Which thread of the plot grid this belongs to';
+      thread.add(new Option('No thread', ''));
+      for (const t of this.threads) thread.add(new Option(t.title || 'Untitled', t.id, false, t.id === note.fields?.thread));
+      thread.value = note.fields?.thread && this.threads.some((t) => t.id === note.fields.thread) ? note.fields.thread : '';
+      thread.addEventListener('change', () => {
+        const { thread: _t, beat: _b, ...rest } = note.fields || {};
+        note.fields = thread.value ? { ...rest, thread: thread.value, ...(note.fields?.beat ? { beat: note.fields.beat } : {}) } : rest;
+        this.save(note);
+      });
+      head.append(thread);
+    }
+    head.append(hide);
 
     card.append(head, text);
     return card;
@@ -250,6 +339,8 @@ export class NotesLayer {
       let bottom = -Infinity;
       const cards = [...this.el.children].map((card) => {
         const note = this.notes.find((n) => n.id === card.dataset.note);
+        // A note on the chapter as a whole (from the plot grid) sits at the top.
+        if (note && note.parent_id === this.chapterId) return { card, top: 0 };
         const p = note && this.paragraphEl(note.parent_id);
         return { card, top: p ? p.getBoundingClientRect().top - base : null };
       }).sort((a, b) => (a.top ?? Infinity) - (b.top ?? Infinity));

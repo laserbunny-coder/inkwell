@@ -104,7 +104,10 @@ export class ChapterStore {
       const pvi = versions ? node.attrs.pvi || 0 : 0;
       const claude = versions && node.attrs.pclaude?.length ? node.attrs.pclaude : null;
       const code = node.attrs.code || null;
-      const same = prev && !prev.deleted && prev.sort === index && prev.kind === kind && prev.title === title && (prev.fields?.el || null) === el &&
+      // A section's depth (act, sequence, scene…) and its summary.
+      const level = kind === 'scene' && node.attrs.level > 1 ? node.attrs.level : null;
+      const synopsis = kind === 'scene' && node.attrs.synopsis ? node.attrs.synopsis : null;
+      const same = (kind !== 'scene' || ((prev?.fields?.level || null) === level && (prev?.fields?.synopsis || null) === synopsis)) && prev && !prev.deleted && prev.sort === index && prev.kind === kind && prev.title === title && (prev.fields?.el || null) === el &&
         JSON.stringify(prev.fields?.versions || null) === JSON.stringify(versions) && (prev.fields?.pvi || 0) === pvi &&
         JSON.stringify(prev.fields?.claude || null) === JSON.stringify(claude) && (prev.fields?.code || null) === code &&
         JSON.stringify(prev.content) === JSON.stringify(content) && prev.parent_id === chapter.id;
@@ -124,6 +127,7 @@ export class ChapterStore {
       };
       delete row._by;
       if (kind === 'heading') row.fields = { ...row.fields, level: node.attrs.level };
+      if (kind === 'scene') { const { level: _l, synopsis: _s, ...rest } = row.fields || {}; row.fields = { ...rest, ...(level ? { level } : {}), ...(synopsis ? { synopsis } : {}) }; }
       if (kind === 'para') { const { el: _old, code: _c, ...rest } = row.fields || {}; row.fields = { ...rest, ...(el ? { el } : {}), ...(code ? { code } : {}) }; }
       // Other versions of this paragraph, kept with it but not part of the text.
       if (kind !== 'scene') { const { versions: _v, pvi: _i, claude: _cl, ...rest } = row.fields || {}; row.fields = versions ? { ...rest, versions, pvi, ...(claude ? { claude } : {}) } : rest; }
@@ -184,7 +188,7 @@ function readWal(id) {
 
 function toDoc(rows) {
   const content = rows.map((r) => {
-    if (r.kind === 'scene') return { type: 'sceneBreak', attrs: { eid: r.id, title: r.title || '' } };
+    if (r.kind === 'scene') return { type: 'sceneBreak', attrs: { eid: r.id, title: r.title || '', level: r.fields?.level || 1, synopsis: r.fields?.synopsis || '' } };
     const versions = r.fields?.versions ? { versions: r.fields.versions, pvi: r.fields.pvi || 0, ...(r.fields.claude ? { pclaude: r.fields.claude } : {}) } : {};
     if (r.kind === 'heading') return { type: 'heading', attrs: { eid: r.id, level: r.fields?.level || 2, ...versions }, ...(r.content ? { content: r.content } : {}) };
     return { type: 'paragraph', attrs: { eid: r.id, ...(r.fields?.el ? { el: r.fields.el } : {}), ...(r.fields?.code ? { code: r.fields.code } : {}), ...versions }, ...(r.content ? { content: r.content } : {}) };

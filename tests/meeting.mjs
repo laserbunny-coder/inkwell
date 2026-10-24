@@ -107,6 +107,18 @@ try {
   await page.waitForSelector('#editor .ProseMirror');
   await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 }).catch(async () => { await page.reload(); await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 }); });
 
+  // A life project that takes business meetings ("Meeting notes go here").
+  await page.evaluate(() => new Promise((res) => {
+    const r = indexedDB.open('writing');
+    r.onsuccess = () => {
+      const tx = r.result.transaction('entries', 'readwrite');
+      const base = { parent_id: null, sort: 0, text: '', content: null, tags: [], type: null, links: [], deleted: false, created_at: 1, updated_at: 1 };
+      tx.objectStore('entries').put({ ...base, id: 'wd_film', kind: 'world', title: 'Ninja Bunch', area_id: 'area-filmmaking', fields: { life: true, meetings: ['filmmaking'] } });
+      tx.objectStore('entries').put({ ...base, id: 'wd_acro', kind: 'world', title: 'Acro Dance', area_id: 'area-business', fields: { life: true, meetings: ['business'] } });
+      tx.oncomplete = res;
+    };
+  }));
+
   let meeting;
   await check('a shared meeting recording becomes a meeting page, linked from today’s line', async () => {
     await shareRecording('Camp meeting.m4a');
@@ -114,6 +126,8 @@ try {
     meeting = (await entries(page, 'page')).find((p) => p.fields?.meeting);
     assert.equal(meeting.title, 'Summer camp with Nate');
     assert.equal(meeting.fields.meeting.kind, 'business');
+    assert.equal(meeting.parent_id, 'wd_acro', 'filed in the life project that takes business meetings');
+    assert.equal(meeting.area_id, 'area-business');
     const lines = await entries(page, 'line');
     const day = lines.find((l) => l.fields?.meeting === meeting.id);
     assert.ok(day, 'today’s line points to it');

@@ -1,6 +1,6 @@
 // Fountain in and out, without a browser.
 import assert from 'node:assert/strict';
-import { fromFountain, toFountain, detect, assignCodes, codeOrder } from '../src/script.js';
+import { fromFountain, toFountain, fromOutline, looksLikeOutline, detect, assignCodes, codeOrder } from '../src/script.js';
 
 let failed = 0;
 const check = (name, fn) => { try { fn(); console.log(`ok   ${name}`); } catch (e) { failed++; console.log(`FAIL ${name}\n     ${e.message}`); } };
@@ -40,9 +40,9 @@ check('reads a Fountain script into elements', () => {
 
 check('writes elements back out as Fountain that reads the same', () => {
   const { title, lines } = fromFountain(sample);
-  const rows = lines.map((l) => (l.el === 'section' ? { kind: 'scene', title: l.text } : { kind: 'para', fields: { el: l.el }, content: [{ type: 'text', text: l.text }] }));
+  const rows = lines.map((l) => (l.el === 'section' ? { kind: 'scene', title: l.text, fields: { synopsis: l.synopsis } } : { kind: 'para', fields: { el: l.el }, content: [{ type: 'text', text: l.text }] }));
   const out = toFountain(title, rows);
-  assert.match(out, /^Title: The Harbour\n\n# The light goes out\n\nINT\. LIGHTHOUSE - NIGHT\n\nRain/);
+  assert.match(out, /^Title: The Harbour\n\n# The light goes out\n= Mara finds the keeper\.\n\nINT\. LIGHTHOUSE - NIGHT\n\nRain/);
   assert.match(out, /\nMARA\n\(out of breath\)\nIs anyone up here\?\n/);
   assert.match(out, /\n\.UNDERWATER\n/);
   assert.deepEqual(fromFountain(out).lines, lines);
@@ -90,6 +90,73 @@ check('scene numbers go out to Fountain as #3A# and come back in', () => {
   const back = fromFountain(out).lines[0];
   assert.equal(back.text, 'INT. DOJO - NIGHT');
   assert.equal(back.code, '3A');
+});
+
+check('sections nest (# act, ## sequence, ### scene) and keep their summaries, both ways', () => {
+  const src = `Title: Ninja Bunch
+
+# Act One
+= The family moves in.
+
+## The new dojo
+
+### Breakfast fight
+= Mom wins without looking up.
+
+INT. KITCHEN - MORNING
+
+KENJI
+Pass the rice.
+`;
+  const { lines } = fromFountain(src);
+  const secs = lines.filter((l) => l.el === 'section');
+  assert.deepEqual(secs.map((l) => [l.text, l.level || 1, l.synopsis || '']), [['Act One', 1, 'The family moves in.'], ['The new dojo', 2, ''], ['Breakfast fight', 3, 'Mom wins without looking up.']]);
+  const rows = lines.map((l) => (l.el === 'section' ? { kind: 'scene', title: l.text, fields: { level: l.level, synopsis: l.synopsis } } : { kind: 'para', fields: { el: l.el }, content: [{ type: 'text', text: l.text }] }));
+  const out = toFountain('Ninja Bunch', rows);
+  assert.match(out, /\n# Act One\n= The family moves in\.\n\n## The new dojo\n\n### Breakfast fight\n= Mom wins without looking up\.\n/);
+  assert.deepEqual(fromFountain(out).lines, lines);
+});
+
+check('notes in a script ([[…]]) come in beside their line instead of being dropped', () => {
+  const { lines } = fromFountain(`INT. DOJO - NIGHT
+= Kenji alone.
+
+Kenji sweeps. [[make this funnier]]
+
+[[a note on its own]]
+
+KENJI
+Again.
+`);
+  assert.deepEqual(lines.map((l) => [l.el, l.text, l.notes || []]), [
+    ['scene', 'INT. DOJO - NIGHT', ['Kenji alone.']],
+    ['action', 'Kenji sweeps.', ['make this funnier', 'a note on its own']],
+    ['character', 'KENJI', []],
+    ['dialogue', 'Again.', []]
+  ]);
+});
+
+check('Fountain pasted out of Workflowy or Tana as bullets reads as a script', () => {
+  const pasted = `- Title: Ninja Bunch
+- # Act One
+  - ## The new dojo
+    - INT. KITCHEN - MORNING
+    - The family eats in silence.
+    - MOM
+    - (not looking up)
+    - Elbows.
+    - KENJI
+      - Pass the rice.
+    - CUT TO:`;
+  assert.ok(looksLikeOutline(pasted));
+  assert.ok(!looksLikeOutline(sample));
+  const { title, lines } = fromOutline(pasted);
+  assert.equal(title, 'Ninja Bunch');
+  assert.deepEqual(lines.map((l) => [l.el, l.text, l.level || 1]), [
+    ['section', 'Act One', 1], ['section', 'The new dojo', 2], ['scene', 'INT. KITCHEN - MORNING', 1],
+    ['action', 'The family eats in silence.', 1], ['character', 'MOM', 1], ['paren', '(not looking up)', 1], ['dialogue', 'Elbows.', 1],
+    ['character', 'KENJI', 1], ['dialogue', 'Pass the rice.', 1], ['transition', 'CUT TO:', 1]
+  ]);
 });
 
 console.log(failed ? `\n${failed} failed` : '\nall passed');
