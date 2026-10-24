@@ -122,6 +122,14 @@ Every line, paragraph and page records who first wrote it and who last changed i
 - **Send to Daybook.** `Ctrl + K`, "Send this line to Daybook" puts the line in Daybook's Inbox as a task (without its #tags), with an "Open in Inkwell" link back to the line. Sending again updates the same task.
 - **Day review.** At 9 pm (Pacific) Daybook gets a note, "Your day review", if today's page has something on it and hasn't been reviewed. Its link (`?review=<date>`) opens the day, and Claude writes three or four sentences on how it went, then a card for each thread: **Add to Daybook** (change the words and area, then send; it links back to the line), **Keep thinking** (goes on the "Still thinking about" page, with a link to the day, and comes back in later reviews as "Still on your mind?"), **Split** (a ramble into its parts) or **Let go**. Nothing goes to Daybook until you tap. Any day page: `Ctrl + K`, "Review the day". The review stays folded at the bottom of the day; hide it under Show, "Day review on day pages".
 
+### Tags
+
+The Tags page (the **Tags** button in the Library, **All tags…** on the left edge, or `Ctrl + K`, "Tags") lists every #tag with how many things carry it and when it was last used, sorted by most used, recently used or A to Z.
+
+- **Groups.** "Sort into groups with Claude" puts your tags into families (Film references, Music…). Drag a tag to another group, rename a group by clicking its name, add one with **+ Group**. Asked again, Claude leaves your groups alone and only places new tags.
+- **Tidy up.** Claude points out tags that look like the same thing (#stunt and #stunts): **Merge** or **Not the same**. Open any tag and use **Rename or merge…** to rename it everywhere; typing a tag that already exists merges into it.
+- **Go through a tag.** One thing at a time, with its picture, link and what's under it. A notes box under each takes what you got from it (each line becomes a line under the item). **Done** checks it off (skipped next time unless you untick "Skip ones marked done"), **Keep, next** moves on, **Untag** takes the tag off just that one. Keys: `Alt + Right arrow` next, `Alt + Left arrow` back, `Ctrl + Enter` done.
+
 ## How it's built
 
 - [Tiptap](https://tiptap.dev) (on ProseMirror) is the editor. Plain JavaScript, built with [Vite](https://vite.dev).

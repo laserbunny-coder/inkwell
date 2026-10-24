@@ -74,6 +74,7 @@
     <div class="lib-sheet">
       <div class="lib-head">
         <h1>Library</h1>
+        <button type="button" class="ghost-btn lib-tags" data-cmd="tags">Tags</button>
         <div id="lib-areas" class="chips" role="group" aria-label="Areas"></div>
       </div>
       <div class="lib-bar"><div id="lib-path" class="hint"></div><label class="lib-sort">Sort <select id="lib-sort" aria-label="Sort books"><option value="recent">Recently edited</option><option value="title">Title</option><option value="made">Newest first</option><option value="custom">My order</option></select></label></div>
@@ -95,6 +96,10 @@
         <ul id="lib-trash" class="loose-list"></ul>
       </details>
     </div>
+  </main>
+
+  <main class="tags-home" aria-label="Tags">
+    <div class="lib-sheet" id="tags-sheet"></div>
   </main>
 
   <main class="project-home" aria-label="Book">
