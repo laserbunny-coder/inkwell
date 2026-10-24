@@ -1,0 +1,73 @@
+/* The share link's reading page: the words, quiet, in the reader's own light or dark. */
+:root {
+  --bg: #F7F4EE; --ink: #24211C; --muted: #8A8275; --line: #E3DDD2; --accent: #2E8B7A; --pick: rgba(46, 139, 122, .10); --card: #FFFFFF;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1C1A17; --ink: #E8E2D6; --muted: #8E877B; --line: #34302A; --accent: #5FBFAB; --pick: rgba(95, 191, 171, .12); --card: #26231F; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 19px/1.65 Literata, Georgia, serif; -webkit-text-size-adjust: 100%; }
+button, input, textarea { font: inherit; color: inherit; }
+.rd-top { position: sticky; top: 0; display: flex; align-items: center; gap: 12px; padding: 10px 16px; font: 13px/1.4 Inter, system-ui, sans-serif; color: var(--muted); background: var(--bg); z-index: 3; }
+.rd-from { flex: 1; }
+.rd-sheet { max-width: 680px; margin: 0 auto; padding: 24px 16px 180px; }
+h1 { font: 600 30px/1.25 Literata, Georgia, serif; margin: 12px 0 8px; }
+.rd-hint { color: var(--muted); font: 14px/1.5 Inter, system-ui, sans-serif; }
+.rd-gone { margin-top: 30vh; text-align: center; font-size: 16px; }
+.rd-ch { font: 600 22px/1.3 Literata, Georgia, serif; margin: 48px 0 16px; }
+.rd-block { position: relative; border-radius: 4px; transition: background .15s; }
+.rd-p { margin: 0 0 .9em; }
+.rd-h { font-size: 1.1em; margin: 1.4em 0 .6em; }
+.rd-break { text-align: center; color: var(--muted); margin: 1.4em 0; letter-spacing: .3em; }
+.rd-line { padding-left: calc(var(--d) * 22px); margin: 0 0 .3em; }
+.rd-done { text-decoration: line-through; color: var(--muted); }
+.rd-picked { background: var(--pick); box-shadow: -8px 0 0 var(--pick), 8px 0 0 var(--pick); }
+@media (hover: hover) { body:not(.rd-nocomment) .rd-block:hover { background: var(--pick); cursor: text; } }
+
+/* Screenplay format, sized to the screen. */
+.rd-screenplay #rd-body { font: 16px/1.5 'Courier Prime', 'Courier New', Courier, monospace; }
+.rd-screenplay .rd-block { margin: 0; }
+.rd-scene { text-transform: uppercase; font-weight: 700; margin: 1.6em 0 .6em !important; }
+.rd-code { color: var(--muted); font-weight: 400; margin-right: 1ch; }
+.rd-action { margin: 0 0 1em !important; }
+.rd-character { margin: 1em 0 0 !important; padding-left: 37%; }
+.rd-paren { padding-left: 29%; max-width: 70%; }
+.rd-dialogue { padding-left: 17%; max-width: 78%; margin: 0 0 1em !important; }
+.rd-transition { text-align: right; text-transform: uppercase; margin: 1em 0 !important; }
+.rd-section { font: 600 12px/1.4 Inter, system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin: 2.2em 0 .4em; }
+@media (max-width: 700px) {
+  .rd-character { padding-left: 30%; }
+  .rd-paren { padding-left: 18%; max-width: 85%; }
+  .rd-dialogue { padding-left: 10%; max-width: 92%; }
+}
+
+/* Comments, under what they're about. */
+.rd-thread { margin: -.3em 0 1.2em 16px; padding: 8px 12px; border-left: 2px solid var(--accent); font: 14px/1.5 Inter, system-ui, sans-serif; background: var(--card); border-radius: 0 6px 6px 0; }
+.rd-resolved { opacity: .55; }
+.rd-hide-comments .rd-thread, .rd-hide-comments .rd-loose { display: none; }
+.rd-c + .rd-c { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.rd-c-when { color: var(--muted); }
+.rd-c-quote { color: var(--muted); font-style: italic; }
+.rd-c-text { white-space: pre-wrap; }
+.rd-owner b::after { content: ' · writer'; font-weight: 400; color: var(--accent); }
+.rd-link { background: none; border: 0; padding: 4px 0 0; color: var(--accent); cursor: pointer; font-size: 13px; }
+.rd-label { font: 600 12px/1.4 Inter, system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin: 48px 0 8px; }
+
+.rd-ghost { background: none; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; font: 13px Inter, system-ui, sans-serif; color: var(--muted); }
+.rd-pill { background: var(--accent); color: #fff; border: 0; border-radius: 999px; padding: 7px 16px; cursor: pointer; font: 500 14px Inter, system-ui, sans-serif; }
+@media (prefers-color-scheme: dark) { .rd-pill { color: #10201C; } }
+.rd-pill:disabled { opacity: .6; }
+
+/* The Comment button: beside the paragraph on a computer, along the bottom on a phone. */
+.rd-bar { position: absolute; left: calc(50% + 350px); z-index: 4; }
+@media (max-width: 1000px) {
+  .rd-bar { position: fixed; left: 0; right: 0; bottom: 0; top: auto !important; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); text-align: right; }
+}
+.rd-compose { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; background: var(--card); border-top: 1px solid var(--line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 24px rgba(0, 0, 0, .12); font: 15px/1.5 Inter, system-ui, sans-serif; }
+.rd-compose > * { max-width: 680px; margin-left: auto; margin-right: auto; }
+.rd-quote { color: var(--muted); font-style: italic; margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-compose textarea { display: block; width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); resize: vertical; }
+.rd-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.rd-row input { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--bg); width: 180px; max-width: 45vw; }
+.rd-grow { flex: 1; }

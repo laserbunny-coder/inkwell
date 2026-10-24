@@ -171,6 +171,10 @@
     <div class="gv-sheet pd-sheet-wrap" id="prod-view"></div>
   </main>
 
+  <main class="compare-view" aria-label="Compare versions">
+    <div class="gv-sheet cmp-sheet" id="compare-view"></div>
+  </main>
+
   <main class="notebook" aria-label="Notebook">
     <div class="nb-sheet">
       <div id="nb-kind" class="panel-label"></div>
@@ -243,6 +247,9 @@
     </div>
   </main>
 
+  <aside class="beside" aria-label="An earlier draft, to read" hidden></aside>
+  <aside class="talk" aria-label="Talk it over with Claude" hidden></aside>
+
   <aside class="history" aria-label="Version history" hidden>
     <div class="history-head">
       <span class="panel-label" id="history-title">History</span>
@@ -302,6 +309,9 @@
     <label class="switch"><input type="checkbox" data-show="alts"> Marks on words and paragraphs with alternates</label>
     <label class="switch"><input type="checkbox" data-show="voice"> Mode chips on voice captures</label>
     <label class="switch"><input type="checkbox" data-show="synopsis"> Section summaries in scripts</label>
+    <label class="switch"><input type="checkbox" data-show="claude"> Claude’s notes in the margin</label>
+    <label class="switch"><input type="checkbox" data-show="comments"> Readers’ comments in the margin</label>
+    <label class="switch"><input type="checkbox" id="fresh-eyes"> Fresh eyes: reread it in a new font, page and colour <span class="keys">⌘⇧Y</span></label>
     <label class="switch"><input type="checkbox" id="typewriter-mode"> Typewriter: the line you’re on stays put</label>
     <label class="switch"><input type="checkbox" id="focus-mode"> Focus: just the text <span class="keys">⌘.</span></label>
     <div class="actions">
@@ -405,6 +415,13 @@
       <dt>⌥⇧↑ ⌥⇧↓</dt><dd>Move the paragraph up or down</dd>
       <dt>⌘⇧↵</dt><dd>Scene break</dd>
       <dt>⌘⇧H</dt><dd>Earlier versions of this chapter</dd>
+    </dl>
+    <h3>Revising</h3>
+    <dl>
+      <dt>⌘⇧Y</dt><dd>Fresh eyes: a new font, page and colour, to reread it cold</dd>
+      <dt>⌘⇧X</dt><dd>Compare drafts, or the text then and now</dd>
+      <dt>⌘⇧B</dt><dd>An earlier draft beside the one you’re writing</dd>
+      <dt>⌘P</dt><dd>Print, or save as PDF, as a manuscript or a script</dd>
     </dl>
     <h3>Notebook</h3>
     <dl>

@@ -128,13 +128,14 @@ export function toast(text, action) {
 
 // Ask for a name. Resolves the new text, or null if left alone.
 // `list` offers earlier answers to pick from as you type.
-export function askText({ title, value = '', ok = 'Save', placeholder = '', body = '', list = null }) {
+export function askText({ title, value = '', ok = 'Save', placeholder = '', body = '', list = null, type = 'text' }) {
   return new Promise((resolve) => {
     const back = make('div', 'ask-backdrop');
     const box = make('form', 'ask');
     box.setAttribute('role', 'dialog');
     box.setAttribute('aria-modal', 'true');
     const input = make('input', 'ask-input');
+    input.type = type;
     input.value = value;
     input.placeholder = placeholder;
     input.setAttribute('aria-label', title);

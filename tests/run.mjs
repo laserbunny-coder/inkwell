@@ -734,15 +734,15 @@ try {
     await p.keyboard.press('Control+K');
     await p.waitForSelector('.palette', { state: 'visible' });
     const top = await p.locator('#palette-list li .label').allInnerTexts();
-    assert.equal(top.length, 8, top.join(' | '));
+    assert.equal(top.length, 9, top.join(' | '));
     assert.match(top[3], /^View/);
-    assert.match(top[7], /^Keyboard shortcuts/);
+    assert.match(top[8], /^Keyboard shortcuts/);
     await p.keyboard.press('ArrowDown'); await p.keyboard.press('ArrowDown'); await p.keyboard.press('ArrowDown');
     await p.keyboard.press('Enter');
     await p.waitForFunction(() => document.querySelector('#palette-input').placeholder === 'View…');
     assert.match(await p.locator('#palette-list li[aria-selected="true"]').innerText(), /Sidebar/);
     await p.keyboard.press('Backspace');
-    await p.waitForFunction(() => document.querySelectorAll('#palette-list li').length === 8);
+    await p.waitForFunction(() => document.querySelectorAll('#palette-list li').length === 9);
     await p.keyboard.type('light / dark');
     assert.match(await p.locator('#palette-list li').first().innerText(), /Light \/ dark/);
     await p.keyboard.press('Escape');
