@@ -84,11 +84,13 @@ function supabaseBackend() {
     // again, only its words and link change: wherever it was moved, done or
     // not, stays as Daybook has it. With an area, it goes straight into that
     // area as a task of its own; without, to the Inbox.
-    async addTask({ id, title, notes, link, area_id = null }) {
-      const { error } = await sb.from('items').insert({ id, title, notes, link, parent_id: null, area_id, kind: null, sort: Date.now() / 1000 });
+    // A task can sit on a day (a shoot day), at a time (its call time).
+    async addTask({ id, title, notes, link, area_id = null, day, start_min }) {
+      const when = { ...(day ? { day } : {}), ...(day && Number.isFinite(start_min) ? { start_min } : {}) };
+      const { error } = await sb.from('items').insert({ id, title, notes, link, parent_id: null, area_id, kind: null, sort: Date.now() / 1000, ...when });
       if (!error) return;
       if (error.code !== '23505') throw error;
-      const again = await sb.from('items').update({ title, notes, link, deleted: false }).eq('id', id);
+      const again = await sb.from('items').update({ title, notes, link, deleted: false, ...when }).eq('id', id);
       if (again.error) throw again.error;
     },
     // Daybook's areas (Business, Filmmaking…), for where a task should go.

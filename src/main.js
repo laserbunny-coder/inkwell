@@ -32,11 +32,12 @@ import { SlashMenu, setSlashItems } from './slash.js';
 import { openHandleMenu } from './handlemenu.js';
 import { openPicker } from './picker.js';
 import { PlotGrid, threadsOf, worldPromises } from './grid.js';
+import { ProductionView } from './prodview.js';
 import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, RAW } from './voice.js';
 import { takeShares, snapshotPending } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
-import { sendToDaybook, sendPending } from './daybook.js';
+import { sendToDaybook, sendPending, queueTask } from './daybook.js';
 import { DayReview, getReview } from './review.js';
 import { TagsPage } from './tags.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
@@ -64,7 +65,7 @@ const gone = (r) => !r || r.deleted || isTrashed(r);
 
 // project: the piece open in the manuscript view. bookId: the piece whose home is
 // shown. worldId: the world whose home is shown.
-const state = { project: null, acts: [], chapterId: null, bookId: null, worldId: null, gridId: null, libArea: null };
+const state = { project: null, acts: [], chapterId: null, bookId: null, worldId: null, gridId: null, prodId: null, libArea: null };
 // The plot grid wrote to the open chapter's entries: read it afresh on the way back.
 let gridTouched = false;
 const view = () => root.dataset.view || 'write';
@@ -476,13 +477,14 @@ async function go(place) {
   if (place.view === 'project' && (await getEntry(place.id))?.kind === 'world') place = { view: 'world', id: place.id };
   if (place.view === 'world' && gone(await getEntry(place.id))) place = { view: 'library' };
   if (place.view === 'grid' && gone(await getEntry(place.id))) place = { view: 'library' };
+  if (place.view === 'production' && gone(await getEntry(place.id))) place = { view: 'library' };
   if (place.view === 'notebook' && place.pageId && !place.pageId.startsWith('day-') && gone(await getEntry(place.pageId))) place = { view: 'notebook', pageId: dayId(isoToday()) };
   if (place.view === 'notebook' && !place.pageId && notebook.page && !notebook.isDay && gone(await getEntry(notebook.page.id))) place = { view: 'notebook', pageId: dayId(isoToday()) };
   const from = view();
   // Switch at once so the next keystroke lands in the right place; saving catches up.
   if (from === 'write' && place.view !== 'write') store.close(editor.state.doc);
   // The grid reads the manuscript as saved, so the last words go first.
-  if (place.view === 'grid') await store.close(editor.state.doc);
+  if (place.view === 'grid' || place.view === 'production') await store.close(editor.state.doc);
   if (from === 'notebook' && place.view !== 'notebook') notebook.close();
   if (place.view === 'write') delete root.dataset.view;
   else root.dataset.view = place.view;
@@ -535,6 +537,10 @@ async function go(place) {
     state.gridId = place.id;
     remember(place);
     await grid.show(place.id);
+  } else if (place.view === 'production') {
+    state.prodId = place.id;
+    remember({ view: 'production', id: place.id });
+    await production.show(place.id, place);
   }
   renderCrumb();
   renderRail();
@@ -584,6 +590,8 @@ async function openEntry(id) {
   if (row.kind === 'project') return go({ view: 'project', id: row.id });
   if (row.kind === 'world') return go({ view: 'world', id: row.id });
   if (row.kind === 'area') return go({ view: 'library', area: row.id });
+  if (row.kind === 'shootday') return go({ view: 'production', id: row.parent_id, day: row.id });
+  if (row.kind === 'shot') { const piece = row.fields?.piece || (await bookOf(row))?.id; if (piece) return go({ view: 'production', id: piece, tab: 'shots', shot: row.id }); }
   const home = await rootOf(row);
   if (!home) return;
   const focus = home.id === row.id ? null : row.id;
@@ -750,6 +758,7 @@ async function applyRemote(rows) {
   if (rows.some((r) => r.parent_id === state.chapterId && ['para', 'scene', 'heading'].includes(r.kind))) await applyRemoteChapter();
   if (rows.some((r) => r.kind === 'note' && r.fields?.chapter_id === state.chapterId)) await notes.load(state.chapterId);
   if (view() === 'grid' && rows.some((r) => ['note', 'thread', 'para', 'scene', 'chapter', 'act', 'project', 'world'].includes(r.kind))) grid.refresh();
+  if (view() === 'production' && rows.some((r) => ['shot', 'breakdown', 'shootday', 'file', 'page', 'note', 'para', 'scene', 'chapter', 'act', 'project', 'world'].includes(r.kind))) production.refresh();
   await notebook.applyRemote(rows);
   if (inNotebook() && notebook.isDay && rows.some((r) => r.kind === 'review' || r.parent_id === notebook.page.id || r.parent_id === 'pg_mulling')) dayReview?.refresh();
 }
@@ -1210,6 +1219,10 @@ async function drawCrumb() {
     if (g?.kind === 'world') parts.push(lib, ...(await areaParts(g.area_id)), bookPart(g));
     else if (g) { const up = await within(g); parts.push(...(up ? up.out : [lib]), bookPart(g)); }
     parts.push(link('Plot grid', () => {}, 'here'));
+  } else if (view() === 'production') {
+    const g = await getEntry(state.prodId);
+    if (g) { const up = await within(g); parts.push(...(up ? up.out : [lib]), bookPart(g)); }
+    parts.push(link('Production', () => {}, 'here'));
   } else if (view() === 'project') {
     const b = await getEntry(state.bookId);
     const up = b && (await within(b));
@@ -1474,6 +1487,7 @@ async function bookMenu(book) {
     { label: 'Written as', sub: KINDS.map(([id, label]) => ({ label, current: bookType(b) === id, run: () => setKind(b, id) })) },
     { label: 'Stage', sub: STAGES.map((st) => ({ label: st, current: stageOf(b) === st, run: () => setStage(b, st) })) },
     ...(script ? [{ label: b.fields?.numbered ? 'Scene numbers: turn off' : 'Number the scenes (for production)…', run: () => toggleNumbering(b) }] : []),
+    ...(hasManuscript(b) ? [{ label: 'Production (shots, kit, shoot days)', run: () => go({ view: 'production', id: b.id }) }] : []),
     { label: 'New piece inside (an episode in a season…)', run: () => addPiece(b.id) },
     { label: 'New page in it', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(b.id); } },
     { label: 'Move to', sub: (await homesFor(b)).map((h) => ({ label: h.label, current: b.parent_id === h.id, run: () => movePiece(b, h.id) })) },
@@ -2090,6 +2104,42 @@ const grid = new PlotGrid($('#grid-view'), {
 });
 window.__grid = grid;
 
+// ---------- production: shots, the kit, shoot days, posting ----------
+
+const production = new ProductionView($('#prod-view'), {
+  open: (r) => grid.hooks.open(r),
+  openPage: (id) => go({ view: 'notebook', pageId: id }),
+  leave: (piece) => openBook(piece.id),
+  changed(rows) { if (rows.some((r) => r && ['project', 'world', 'page'].includes(r.kind))) renderRail(); },
+  menu: (anchor, items) => popMenu(anchor, items),
+  menuButton: (items, label) => menuButton(items, label),
+  ask, askText, toast,
+  askServer: (body) => askServer(body),
+  canAsk: () => canAskServer(),
+  numberScenes: async (piece) => { await toggleNumbering(piece); await production.refresh(); },
+  sendTask: async (task) => { await queueTask(task); await sendPending({ send: sendTask, canSend: canSendTask }); },
+  base: () => location.origin + location.pathname
+});
+window.__production = production;
+
+// The piece production is for, from where you are.
+async function productionOwner() {
+  if (view() === 'production') return state.prodId;
+  if (view() === 'grid') { const g = await getEntry(state.gridId); return g?.kind === 'project' ? g.id : null; }
+  if (view() === 'write') return state.project?.id || null;
+  if (view() === 'project') return state.bookId;
+  if (view() === 'world') { const w = await getEntry(state.worldId); return (await worldStats(w)).pieces.find((p) => hasManuscript(p.row))?.row.id || null; }
+  return null;
+}
+
+// Ctrl+Shift+S: production, and back to the text.
+async function toggleProduction() {
+  if (view() === 'production') { const p = await getEntry(state.prodId); return p ? openBook(p.id) : go({ view: 'library' }); }
+  const id = await productionOwner();
+  if (!id) { toast('Open a script or draft to see its production'); return; }
+  return go({ view: 'production', id });
+}
+
 // What the grid is for, from where you are: the piece you're writing or
 // looking at, or the world.
 async function gridOwner() {
@@ -2674,6 +2724,8 @@ const commands = [
   { group: 'view', label: 'Show or hide scene numbers', keys: '', run: () => setShown('codes', hidden().has('codes')), when: () => writing() && isScript() },
   { group: 'view', label: 'Plot grid (the story as a table)', keys: `${mod}⇧G`, run: toggleGrid, when: () => view() !== 'grid' && view() !== 'library' },
   { group: 'view', label: 'Back to the text from the grid', keys: `${mod}⇧G`, run: toggleGrid, when: () => view() === 'grid' },
+  { group: 'view', label: 'Production (shots, kit, shoot days, posting)', keys: `${mod}⇧S`, run: toggleProduction, when: () => view() !== 'production' && view() !== 'library' },
+  { group: 'view', label: 'Back to the text from production', keys: `${mod}⇧S`, run: toggleProduction, when: () => view() === 'production' },
   { group: 'view', label: 'Show or hide section summaries', keys: '', run: () => setShown('synopsis', hidden().has('synopsis')), when: () => writing() && isScript() },
   { group: 'page', label: 'Name the section levels (Act, Sequence, Scene…)', keys: '', run: nameSectionLevels, when: () => writing() && isScript() },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
@@ -3095,6 +3147,7 @@ document.addEventListener('click', (e) => {
   if (cmd === 'stats') progressPanel.toggle();
   if (cmd === 'library') go({ view: 'library', area: null });
   if (cmd === 'grid') toggleGrid();
+  if (cmd === 'production') toggleProduction();
   if (cmd === 'today') go({ view: 'notebook', pageId: dayId(isoToday()) });
   if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
   if (cmd === 'tags') go({ view: 'tags' });
@@ -3126,6 +3179,7 @@ document.addEventListener('keydown', (e) => {
   else if (m && e.shiftKey && k === 'h' && (writing() || inNotebook())) { e.preventDefault(); openHistory(); }
   else if (m && e.shiftKey && k === 'l') { e.preventDefault(); toggleTheme(); }
   else if (m && e.shiftKey && k === 'g') { e.preventDefault(); toggleGrid(); }
+  else if (m && e.shiftKey && !e.altKey && k === 's') { e.preventDefault(); toggleProduction(); }
   // Alt+C: Capture, recording at once; Alt+C again keeps it.
   else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyV' && (writing() || capture.isOpen)) { e.preventDefault(); if (!capture.isOpen) talkIntoDraft(); else if (capture.rec) capture.finish(); }
   else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyC') { e.preventDefault(); if (!capture.isOpen) openCapture({ start: true }); else if (capture.rec) capture.finish(); }
