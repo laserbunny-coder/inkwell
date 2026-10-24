@@ -150,8 +150,11 @@ try {
     if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/desktop-12-link-folded.png` });
     await pic.locator('.pic-fold').click();
     await pic.locator('img').waitFor({ state: 'visible' });
-    await pic.hover();
     await pic.locator('.pic-fold').click();
+    await pic.locator('img').waitFor({ state: 'hidden' });
+    await pic.locator('.pic-fold').click();
+    await pic.locator('img').waitFor({ state: 'visible' });
+    await pic.locator('img').click();
     await pic.locator('img').waitFor({ state: 'hidden' });
     await page.evaluate(() => { const c = document.querySelector('[data-show="linkpics"]'); c.checked = true; c.dispatchEvent(new Event('change')); });
     await pic.locator('img').waitFor({ state: 'visible' });

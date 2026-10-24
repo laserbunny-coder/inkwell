@@ -1297,8 +1297,9 @@ body.beside-on .page, body.talk-on .page { padding-right: calc(min(44vw, 620px) 
 .file-embed.picture.from-link { position: relative; }
 .pic-fold { position: absolute; top: 6px; left: 6px; z-index: 1; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: rgba(0, 0, 0, .45); color: #fff; font: 13px/26px var(--ui); opacity: 0; cursor: pointer; }
 .pic-fold::before { content: '▾'; }
+.file-embed.from-link .pic-fold { opacity: .75; }
 .file-embed.from-link:hover .pic-fold, .pic-fold:focus-visible { opacity: 1; }
-@media (hover: none) { .pic-fold { opacity: .8; } }
+.file-embed.from-link img { cursor: pointer; }
 :root.hide-linkpics .file-embed.from-link:not(.open), .file-embed.from-link.shut { display: inline; position: static; margin: 0; line-height: inherit; }
 :root.hide-linkpics .file-embed.from-link:not(.open) img, .file-embed.from-link.shut img { display: none; }
 :root.hide-linkpics .file-embed.from-link:not(.open) .pic-fold, .file-embed.from-link.shut .pic-fold { position: static; display: inline-block; width: auto; height: auto; padding: 0 4px 0 0; background: transparent; color: var(--faint); opacity: 1; font: inherit; vertical-align: baseline; }
