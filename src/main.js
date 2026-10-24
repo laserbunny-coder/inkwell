@@ -825,6 +825,31 @@ async function connectClaude() {
   }
 }
 
+// Scribe, the dictation app: Scribe opens Inkwell at ?connect=scribe, and this
+// makes a secret for that device and hands it back to the app. Each device
+// has its own; connecting the same one again replaces its old secret.
+async function connectScribe() {
+  const user = sync.user || await sync.backend?.user?.().catch(() => null);
+  if (!user || !sync.backend?.rpc) { toast('Sign in to sync first: Scribe connects through your Inkwell account.'); return; }
+  const android = /Android/i.test(navigator.userAgent);
+  const ok = await ask({
+    title: android ? 'Connect Scribe on this phone?' : 'Connect Scribe?',
+    body: 'Scribe, your dictation keyboard, can then write out what you say and have Claude tidy it. It only uses your account for that; it can’t read your writing.',
+    ok: 'Connect'
+  });
+  if (!ok) return;
+  let token;
+  try { token = await sync.backend.rpc('new_scribe_token', { device: android ? 'phone' : 'computer' }); } catch (e) { console.error(e); toast('Couldn’t connect Scribe. Check your connection and try again.'); return; }
+  const query = `token=${token}&url=${encodeURIComponent(sync.backend.functionsUrl)}`;
+  if (android) {
+    // Opening the app needs a tap, so it's its own button.
+    const go = await ask({ title: 'Scribe is connected', body: 'Go back to Scribe to finish.', ok: 'Open Scribe' });
+    if (go) location.href = `intent://connect?${query}#Intent;scheme=scribe;package=com.laserbunny.scribe;end`;
+    return;
+  }
+  await showCopy({ title: 'Scribe connection link', body: 'Paste this into Scribe on your computer. It’s only shown once.', value: `scribe://connect?${query}` });
+}
+
 // What links to this chapter, shown after its last paragraph.
 async function renderChapterLinks() {
   if (!state.chapterId) return;
@@ -2421,6 +2446,7 @@ const commands = [
   { group: 'write', label: 'Scene numbers: turn off', keys: '', run: async () => toggleNumbering(await currentBook()), when: () => writing() && isScript() && !!state.project?.fields?.numbered },
   { group: 'view', label: 'Show or hide scene numbers', keys: '', run: () => setShown('codes', hidden().has('codes')), when: () => writing() && isScript() },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
+  { group: 'sync', label: 'Connect Scribe, the dictation keyboard…', keys: '', run: () => connectScribe() },
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
   ...Object.entries(LISTS).map(([list, name]) => ({ group: 'page', label: `Make this page a ${name.toLowerCase()} (Claude links each title)`, keys: '', run: () => makeList(list), when: () => inNotebook() && notebook.page?.kind === 'page' && listOf(notebook.page) !== list })),
   { group: 'tidy', label: 'Review the day with Claude (what goes to Daybook, what to keep thinking about)', keys: '', run: () => dayReview.run(), when: () => inNotebook() && notebook.isDay },
@@ -3038,7 +3064,7 @@ async function start() {
     if (sp.get('capture')) openCapture();
     if (/^\d{4}-\d{2}-\d{2}$/.test(sp.get('review') || '')) { reviewing = sp.get('review'); reviewAsked(); }
   });
-  if (asked.has('capture') || asked.has('share') || asked.has('open') || asked.has('review')) history.replaceState(history.state, '', location.pathname);
+  if (asked.has('capture') || asked.has('share') || asked.has('open') || asked.has('review') || asked.has('connect')) history.replaceState(history.state, '', location.pathname);
   if (/^\d{4}-\d{2}-\d{2}$/.test(asked.get('review') || '')) {
     reviewing = asked.get('review');
     // Signed in, wait for this device to catch up first (the review may
@@ -3052,6 +3078,8 @@ async function start() {
   await landShares();
   sync.start();
   conflicts.count();
+  // Scribe sent here to connect.
+  if (asked.get('connect') === 'scribe') connectScribe().catch((e) => console.error(e));
   // Deleted things are remembered for six months, then this device lets go of them.
   forgetDeleted(Date.now() - 182 * 864e5).catch((e) => console.warn(e));
   keepStorage();

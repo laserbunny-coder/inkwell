@@ -63,8 +63,8 @@ function supabaseBackend() {
       return data;
     },
     // A database function, such as the one that makes the connector address.
-    async rpc(name) {
-      const { data, error } = await sb.rpc(name);
+    async rpc(name, args) {
+      const { data, error } = await sb.rpc(name, args);
       if (error) throw error;
       return data;
     },
