@@ -426,6 +426,8 @@ html.focus .past-days:not(.open) { display: none !important; }
 .day-review.busy .dr-left, .day-review.busy .dr-start { color: var(--muted); }
 .dr-body { padding: 6px 0 4px; }
 .dr-summary { font-family: var(--prose); font-size: calc(var(--text-size, 21px) * .86); line-height: 1.55; color: var(--muted); margin: 6px 0 18px; }
+.dr-summary p { margin: 0 0 .8em; }
+.dr-summary p:last-child { margin-bottom: 0; }
 .dr-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .dr-card { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 .dr-card.decided { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 8px 14px; border-style: dashed; }

@@ -30,7 +30,7 @@ function claude(body) {
   }
   const dana = find(/Dana/), bakery = find(/bakery/), ramble = find(/ramble/);
   return {
-    summary: 'You spent the day on The Ninja Bunch: storyboards, a new idea for where the ninjas grew up, and a list of odds and ends.',
+    summary: 'You spent the day on The Ninja Bunch: storyboards, a new idea for where the ninjas grew up, and a list of odds and ends.\n\nBy evening you were tired.',
     threads: [
       dana && { title: 'Storyboards with Dana', gist: 'Talk to Dana before Friday.', lines: [dana], suggest: 'daybook', task: { title: 'Call Dana about the storyboards', area_id: 'area-film' }, parts: [] },
       bakery && { title: 'Ninjas raised by a bakery', gist: 'A backstory idea.', lines: [bakery], suggest: 'mull', task: { title: 'Develop the bakery backstory', area_id: '' }, parts: [] },
@@ -98,6 +98,7 @@ try {
     assert.equal(asked[0].lines.length, 4, 'every line with words goes');
     assert.deepEqual(asked[0].areas.map((a) => a.title), ['Filmmaking', 'Personal'], 'with Daybook’s areas');
     assert.match(await page.textContent('.dr-summary'), /Ninja Bunch/);
+    assert.equal(await page.locator('.dr-summary p').count(), 2, 'a longer summary keeps its paragraphs');
     assert.equal(await page.locator('.dr-card').count(), 3);
     assert.match(await page.textContent('.dr-toggle'), /3 to sort/);
     assert.equal(await card(page, 'Storyboards with Dana').locator('.dr-suggested').textContent(), 'Add to Daybook', 'Claude’s suggestion stands out');
