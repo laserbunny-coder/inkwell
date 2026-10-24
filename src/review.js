@@ -286,7 +286,7 @@ export class DayReview {
     body.hidden = folded;
     box.classList.toggle('open', !folded);
     if (folded) return;
-    body.querySelector('.dr-summary').textContent = review.summary;
+    body.querySelector('.dr-summary').replaceChildren(...review.summary.split(/\n\s*\n/).map((t) => t.trim()).filter(Boolean).map((t) => make('p', '', t)));
     const cards = body.querySelector('.dr-cards');
     cards.replaceChildren();
     review.still.forEach((s, i) => cards.append(this.card(['still', i], s, true)));
