@@ -844,8 +844,8 @@ try {
     await ph.locator('.script-bar button[data-el="character"]').tap();
     await ph.waitForSelector('#editor p[data-el="character"]');
     // + (the insert menu) first, then the script buttons; alternates come last.
-    const row = await ph.locator('.script-bar:not(.outline-bar) button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => (b.dataset.ins ? 'insert' : b.dataset.alt || b.dataset.el)));
-    assert.deepEqual(row, ['insert', 'scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'section', 'word', 'ask', 'para', 'prev', 'next']);
+    const row = await ph.locator('.script-bar:not(.outline-bar) button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => (b.dataset.ins ? 'insert' : b.dataset.talk ? 'talk' : b.dataset.alt || b.dataset.el)));
+    assert.deepEqual(row, ['insert', 'talk', 'scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'section', 'word', 'ask', 'para', 'prev', 'next']);
 
     // Outlines get their own row: indent, outdent, move, tag.
     await ph.keyboard.press('Control+J');
