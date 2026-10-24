@@ -290,7 +290,7 @@ async function keepCopy(piece) {
   const now = Date.now();
   const kept = await draftsOf(piece.id);
   const n = Math.max(piece.fields?.draft ? piece.fields.draft : 1, ...kept.map((d) => (d.fields?.n || 0) + 1));
-  const draft = entry('draft', { id: newId('dr'), parent_id: piece.id, title: `Draft ${n}`, sort: n, fields: { n, at: now } });
+  const draft = entry('draft', { id: newId('dr'), parent_id: piece.id, title: `Draft ${n}`, sort: n, fields: { n, at: now, copy: true } });
   const rows = [draft];
   let words = 0;
   let first = null;
