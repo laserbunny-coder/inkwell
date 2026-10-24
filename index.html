@@ -29,6 +29,7 @@
       const hide = JSON.parse(localStorage.getItem('hide') || '[]');
       // Outlines start without bullets (once per device; the Aa panel brings them back).
       if (!localStorage.getItem('bulletsOff')) { hide.push('bullets'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('bulletsOff', '1'); }
+      if (!localStorage.getItem('linkPicsOff')) { hide.push('linkpics'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('linkPicsOff', '1'); }
       for (const h of hide) d.classList.add('hide-' + h);
       if (localStorage.getItem('focus') === '1') d.classList.add('focus');
       if (localStorage.getItem('typewriter') === '1') d.classList.add('typewriter');
@@ -301,6 +302,7 @@
     <label class="switch"><input type="checkbox" data-show="bullets"> Bullets on notebook lines</label>
     <label class="switch"><input type="checkbox" data-show="alts"> Marks on words and paragraphs with alternates</label>
     <label class="switch"><input type="checkbox" data-show="voice"> Mode chips on voice captures</label>
+    <label class="switch"><input type="checkbox" data-show="linkpics"> Pictures on shared links</label>
     <label class="switch"><input type="checkbox" data-show="synopsis"> Section summaries in scripts</label>
     <label class="switch"><input type="checkbox" id="typewriter-mode"> Typewriter: the line you’re on stays put</label>
     <label class="switch"><input type="checkbox" id="focus-mode"> Focus: just the text <span class="keys">⌘.</span></label>
