@@ -94,14 +94,10 @@ export async function addShare(share, day = today(), skipped = []) {
   const spark = entry('line', { parent_id: line.id, sort: GAP, fields: { ...blankFields } });
   rows.push(line, ...files, spark);
   await putEntries([...rows.filter((r) => !files.includes(r))]);
-<<<<<<< HEAD
   // A shared recording is written out: a meeting becomes a meeting page, one voice an idea.
   const audio = files.find((f) => isAudio(f.fields.type));
   if (audio) await queueMeeting({ line: line.id, file: audio.id, wrote: text, at: Date.now() });
-  if (link) await queue({ line: line.id, url: link, named: !!share.title?.trim(), picture: files.some((f) => /^image\//.test(f.fields.type)), wrote: text, at: Date.now() });
-=======
   if (link) await queue({ line: line.id, url: link, named: namesPage(share.title, link), picture: files.some((f) => /^image\//.test(f.fields.type)), wrote: text, at: Date.now() });
->>>>>>> origin/main
   return { line, spark, rows };
 }
 

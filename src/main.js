@@ -37,12 +37,8 @@ import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, RAW } from './voice.js';
 import { takeShares, snapshotPending } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
-<<<<<<< HEAD
-import { sendToDaybook, sendPending } from './daybook.js';
-import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker, speakersOn, mine } from './meeting.js';
-=======
 import { sendToDaybook, sendPending, queueTask } from './daybook.js';
->>>>>>> origin/main
+import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker, speakersOn, mine } from './meeting.js';
 import { DayReview, getReview } from './review.js';
 import { TagsPage } from './tags.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
@@ -3531,8 +3527,7 @@ const canAskServer = () => !!window.__claude || (!!sync.user && navigator.onLine
 // Until writing-out is set up, the recording's chip says so; nothing else nags.
 function writeOut() {
   const opts = { ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows) };
-<<<<<<< HEAD
-  return Promise.all([writeOutPending(opts), snapshotPending(opts), meetingPending({ ...opts, ...meetingOpts }), sendPending({ send: sendTask, canSend: canSendTask })]);
+  return Promise.all([writeOutPending({ ...opts, draft: { context: draftContext, deliver: deliverDraft } }), snapshotPending(opts), meetingPending({ ...opts, ...meetingOpts }), sendPending({ send: sendTask, canSend: canSendTask })]);
 }
 // Meetings: your tasks go to Daybook in the meeting's area (Business, Filmmaking).
 const daybookAreas = () => (window.__areas ? window.__areas() : sync.user && sync.backend?.areas ? sync.backend.areas() : null);
@@ -3582,9 +3577,6 @@ async function fixSpeaker() {
     await notebook.close();
     await applyRemote(await renameSpeaker(pid, from, to));
   } })), menuSpot());
-=======
-  return Promise.all([writeOutPending({ ...opts, draft: { context: draftContext, deliver: deliverDraft } }), snapshotPending(opts), sendPending({ send: sendTask, canSend: canSendTask })]);
->>>>>>> origin/main
 }
 // Send a line to Daybook, as a task in its Inbox that links back here.
 const sendTask = (task) => (window.__daybook ? window.__daybook(task) : sync.backend.addTask(task));

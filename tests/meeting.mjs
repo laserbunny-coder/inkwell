@@ -2,7 +2,7 @@
 // written out with each speaker told apart, and becomes a meeting page with a
 // summary, what was decided, the tasks and the write-out; your own tasks go
 // to Daybook in the meeting's area. A shared recording with one voice is an
-// idea, written out like a Capture. window.__claude stands in for the server,
+// idea, written up like a Capture. window.__claude stands in for the server,
 // window.__daybook for Daybook's table and window.__areas for its areas.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
@@ -38,7 +38,7 @@ function claude(body) {
       tasks: [{ title: 'Send the camp flyer to parents', owner: 'Michael', notes: '', due: '2026-10-30' }, { title: 'Call the gym about the big room', owner: 'Nate', notes: '', due: '' }, { title: 'Decide the sibling price', owner: '', notes: 'Talk next week.', due: '' }]
     };
   }
-  if (body.mode === 'capture') return { transcript: body.transcript, outline: ['Premise: the smallest ninja is the only one who can hide'], tag: 'ninja-bunch', refs: [] };
+  if (body.mode === 'voice') return { raw: body.transcript, mode: 'idea', blocks: [{ text: 'Premise: the smallest ninja is the only one who can hide', el: 'paragraph', new_scene: false }], notes: [], tag: 'ninja-bunch', refs: [] };
   throw new Error(`unexpected ${body.mode}`);
 }
 
@@ -176,14 +176,16 @@ try {
     assert.equal(p.fields.meeting.names[1], 'Nathan');
   });
 
-  await check('a shared recording with one voice is written out like a Capture, not a meeting', async () => {
+  await check('a shared recording with one voice is written up like a Capture, not a meeting', async () => {
     const before = (await entries(page, 'page')).length;
     await shareRecording('Ninja idea.m4a');
-    await page.waitForFunction(() => /only one who can actually hide/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''), null, { timeout: 10000 });
+    await page.waitForFunction(() => /smallest ninja is the only one who can hide/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''), null, { timeout: 10000 });
     assert.equal((await entries(page, 'page')).length, before, 'no meeting page');
-    const line = (await entries(page, 'line')).find((l) => /only one who can actually hide/.test(l.text));
+    const line = (await entries(page, 'line')).find((l) => l.fields?.voice);
     assert.match(line.text, /#idea/);
-    assert.ok((await entries(page, 'line')).some((l) => l.parent_id === line.id && /^Premise/.test(l.text)));
+    assert.equal(line.fields.voice.raw, IDEA[0].text, 'the words kept word for word');
+    assert.match(line.text, /Premise: the smallest ninja/, 'Claude’s write-up on the line');
+    assert.equal(line.fields.voice.mode, 'idea');
   });
 
   await check('nothing is left waiting', async () => {

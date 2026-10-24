@@ -3,7 +3,8 @@ import { entry, tagsIn } from './model.js';
 import { GAP } from './order.js';
 import { addFile, localFile, uploadPending, isAudio } from './files.js';
 import { setFileNote } from './filenode.js';
-import { placeWriteOut } from './capture.js';
+import { withTag } from './capture.js';
+import { placeVoice } from './voice.js';
 import { queueTask } from './daybook.js';
 
 // Meetings: a recording of a meeting (Samsung's Voice Recorder shared into
@@ -14,7 +15,7 @@ import { queueTask } from './daybook.js';
 // Business or Filmmaking depending on what the meeting was about.
 //
 // A shared recording with only one voice in it is an idea said out loud, so
-// it's written out like a Capture instead.
+// it's written up like a Capture instead.
 
 const pad = (n) => String(n).padStart(2, '0');
 const isoOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -220,9 +221,9 @@ export function meetingPending({ ask, canAsk, onRows, me = () => '', areas, base
         // A shared recording with one voice is an idea, written out like a Capture.
         if (!it.asked && !isMeeting(said)) {
           const transcript = said.map((x) => x.text).join(' ');
-          let answer = { transcript };
-          try { answer = { ...(await ask({ mode: 'capture', transcript, tags: await topTags(40) })), transcript }; } catch (e) { console.warn(e); }
-          const rows = await placeWriteOut({ line: it.line, wrote: it.wrote }, answer);
+          let answer = { raw: transcript };
+          try { answer = { raw: transcript, ...(await ask({ mode: 'voice', transcript, duration, place: 'day', tags: await topTags(40) })) }; } catch (e) { console.warn(e); }
+          const rows = await placeVoice({ line: it.line, wrote: it.wrote }, answer, { withTag });
           await unqueue(it.line);
           setFileNote(it.file, '');
           if (rows.length) onRows(rows);
