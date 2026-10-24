@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
+import { promiseState } from '../src/grid.js';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -140,6 +141,17 @@ async function check(name, fn) {
 }
 
 try {
+  await check('a promise is kept by the nearest payoff after it, not a later one', () => {
+    const st = promiseState([
+      { id: 'p', thread: 't', beat: 'promise', at: 1 },
+      { id: 'far', thread: 't', beat: 'payoff', at: 9 },
+      { id: 'other', thread: 'u', beat: 'payoff', at: 2 },
+      { id: 'near', thread: 't', beat: 'payoff', at: 3 },
+      { id: 'before', thread: 't', beat: 'payoff', at: 0 }
+    ]);
+    assert.deepEqual(st.get('p'), { paid: true, by: 'near' });
+  });
+
   const laptop = await device();
   await settle(laptop);
 
