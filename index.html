@@ -108,6 +108,7 @@
         <h1 id="ph-title" spellcheck="false"></h1>
         <button type="button" class="pill" id="ph-continue">Continue writing</button>
         <button type="button" class="ghost-btn ph-grid-btn" data-cmd="grid" title="The story as a table (Ctrl + Shift + G)">Plot grid</button>
+        <button type="button" class="ghost-btn ph-grid-btn ph-prod-btn" data-cmd="production" title="Shots, kit, shoot days and posting (Ctrl + Shift + S)">Production</button>
         <span id="ph-more"></span>
       </div>
       <div class="ph-meta"><input id="ph-label" class="ph-label" list="piece-labels" aria-label="What this is (Novel, Gag, Episode…)" autocomplete="off" spellcheck="false"> · <label>Written as <select id="ph-kind" aria-label="How it's written"></select></label> · <label>Stage <select id="ph-stage" aria-label="Stage"></select></label> · <span id="ph-stats"></span> · <span id="ph-world"></span></div>
@@ -164,6 +165,10 @@
 
   <main class="grid-view" aria-label="Plot grid">
     <div class="gv-sheet" id="grid-view"></div>
+  </main>
+
+  <main class="prod-view" aria-label="Production">
+    <div class="gv-sheet pd-sheet-wrap" id="prod-view"></div>
   </main>
 
   <main class="notebook" aria-label="Notebook">
@@ -375,6 +380,7 @@
       <dt>⌘/</dt><dd>This list</dd>
       <dt>⌘⇧P</dt><dd>Progress: words and pages over time</dd>
       <dt>⌘⇧G</dt><dd>Plot grid: the story as a table, and back</dd>
+      <dt>⌘⇧S</dt><dd>Production: shots, kit, shoot days, posting, and back</dd>
       <dt>Esc</dt><dd>Close whatever is open</dd>
     </dl>
     <h3>What shows</h3>
