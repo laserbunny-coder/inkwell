@@ -93,11 +93,12 @@ export const ScriptElements = Extension.create({
           const { $from } = view.state.selection;
           const p = $from.parent;
           // "# " at the start of a line starts a section: your own name for a
-          // stretch of story, which can hold several INT./EXT. scenes.
-          if (text === ' ' && p.type.name === 'paragraph' && p.textContent === '#' && $from.depth === 1) {
+          // stretch of story, which can hold several INT./EXT. scenes. "## "
+          // starts one a level down (a sequence in an act), "### " further.
+          if (text === ' ' && p.type.name === 'paragraph' && /^#{1,6}$/.test(p.textContent) && $from.depth === 1) {
             const at = $from.before();
             const schema = view.state.schema;
-            const tr = view.state.tr.replaceWith(at, at + p.nodeSize, [schema.nodes.sceneBreak.create(), schema.nodes.paragraph.create({ el: 'scene' })]);
+            const tr = view.state.tr.replaceWith(at, at + p.nodeSize, [schema.nodes.sceneBreak.create({ level: p.textContent.length }), schema.nodes.paragraph.create({ el: 'scene' })]);
             view.dispatch(tr);
             requestAnimationFrame(() => view.nodeDOM(at)?.querySelector?.('input')?.focus());
             return true;
@@ -253,7 +254,12 @@ export function toFountain(title, rows) {
   if (title) out.push(`Title: ${title}`, '');
   let prev = null;
   for (const r of rows) {
-    if (r.kind === 'scene') { out.push('', `# ${r.title || 'Section'}`); prev = null; continue; }
+    if (r.kind === 'scene') {
+      out.push('', `${'#'.repeat(r.fields?.level || 1)} ${r.title || 'Section'}`);
+      if (r.fields?.synopsis) out.push(`= ${r.fields.synopsis}`);
+      prev = null;
+      continue;
+    }
     const el = r.fields?.el || 'action';
     const text = plain(r.content).trim();
     if (!text) continue;
@@ -271,47 +277,118 @@ export function toFountain(title, rows) {
   return out.join('\n').replace(/^\n+/, '').replace(/\n{3,}/g, '\n\n').trim() + '\n';
 }
 
-// Fountain text to { title, lines: [{ el, text }] }. Notes, sections and
-// synopses are left out; everything you'd see on the page comes in.
+// Fountain text to { title, lines: [{ el, text }] }. Sections come in at
+// their depth (# act, ## sequence, ### scene) with their summaries (= …);
+// notes ([[…]]) and summaries under a scene heading come in as notes beside
+// the line they follow. Only the boneyard (/* … */) is left out.
 export function fromFountain(src) {
-  let text = src.replace(/\r\n?/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\[\[[\s\S]*?\]\]/g, '');
+  const notes = [];
+  let text = src.replace(/\r\n?/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\[\[([\s\S]*?)\]\]/g, (_m, n) => { notes.push(n.replace(/\s+/g, ' ').trim()); return `\u0001${notes.length - 1}\u0002`; });
   let title = '';
   const titlePage = text.match(/^(?:[A-Za-z][A-Za-z ]*:.*\n?(?:[ \t]+.*\n?)*)+\n/);
   if (titlePage && /^title:/im.test(titlePage[0])) {
-    title = (titlePage[0].match(/^title:[ \t]*(.*)$/im)?.[1] || '').replace(/[_*]/g, '').trim();
+    title = (titlePage[0].match(/^title:[ \t]*(.*)$/im)?.[1] || '').replace(/[_*]/g, '').replace(/\u0001\d+\u0002/g, '').trim();
     text = text.slice(titlePage[0].length);
   }
   const lines = [];
+  const noteOn = (line, n) => { if (n) (line.notes || (line.notes = [])).push(n); };
   for (const block of text.split(/\n[ \t]*\n/)) {
     const all = block.split('\n').filter((l) => l.trim());
-    // Sections (# Title) come in as sections; synopses (= …) are left out.
-    while (all.length && /^\s*#/.test(all[0])) lines.push({ el: 'section', text: all.shift().replace(/^\s*#+\s*/, '').trim() });
-    const rows = all.filter((l) => !/^\s*(#|=(?!=))/.test(l));
+    // Sections (# Title) and their summaries (= …) come in as they are.
+    while (all.length && /^\s*(#|=(?!=))/.test(all[0])) {
+      const t = all.shift().trim();
+      if (t.startsWith('#')) {
+        const level = Math.min(t.match(/^#+/)[0].length, 6);
+        lines.push({ el: 'section', text: t.replace(/^#+\s*/, '').trim(), ...(level > 1 ? { level } : {}) });
+        continue;
+      }
+      const summary = t.replace(/^=\s*/, '').trim();
+      const last = lines.at(-1);
+      if (last?.el === 'section' && !last.synopsis) last.synopsis = summary;
+      else if (last) noteOn(last, summary);
+    }
+    const rows = all;
     if (!rows.length) continue;
     const first = rows[0].trim();
     if (/^===+$/.test(first)) continue;
     // A scene number (#3A#) comes in as the scene's code.
     const scene = (t) => { const m = t.match(/\s+#([^#\s]+)#$/); lines.push({ el: 'scene', text: t.replace(/\s+#[^#]+#$/, ''), ...(m ? { code: m[1].toUpperCase() } : {}) }); };
-    if (/^\.[^.]/.test(first)) { scene(first.slice(1).trim()); continue; }
-    if (SCENE.test(first) && rows.length === 1) { scene(first); continue; }
+    const synopses = () => { for (const r of rows.slice(1)) if (/^\s*=(?!=)/.test(r)) noteOn(lines.at(-1), r.trim().replace(/^=\s*/, '')); };
+    if (/^\.[^.]/.test(first)) { scene(first.slice(1).trim()); synopses(); continue; }
+    if (SCENE.test(first) && rows.filter((r) => !/^\s*=(?!=)/.test(r)).length === 1) { scene(first); synopses(); continue; }
+    const body = rows.filter((l) => !/^\s*(#|=(?!=))/.test(l));
+    if (!body.length) continue;
     if (/^>/.test(first) && !/<$/.test(first)) { lines.push({ el: 'transition', text: first.slice(1).trim() }); continue; }
-    if (rows.length === 1 && isTransition(first)) { lines.push({ el: 'transition', text: first }); continue; }
+    if (body.length === 1 && isTransition(first)) { lines.push({ el: 'transition', text: first }); continue; }
     const name = first.startsWith('@') ? first.slice(1).trim() : first.replace(/\s*\^$/, '');
-    if (rows.length > 1 && !first.startsWith('!') && (first.startsWith('@') || isCaps(name.replace(/\(.*?\)/g, '')))) {
+    if (body.length > 1 && !first.startsWith('!') && (first.startsWith('@') || isCaps(name.replace(/\(.*?\)/g, '').replace(/\u0001\d+\u0002/g, '')))) {
       lines.push({ el: 'character', text: name });
       let speech = [];
       const say = () => { if (speech.length) lines.push({ el: 'dialogue', text: speech.join(' ') }); speech = []; };
-      for (const r of rows.slice(1)) {
+      for (const r of body.slice(1)) {
         const t = r.trim();
         if (/^\(.*\)$/.test(t)) { say(); lines.push({ el: 'paren', text: t }); } else speech.push(t);
       }
       say();
       continue;
     }
-    for (const r of rows) {
+    for (const r of body) {
       const t = r.trim().replace(/^!/, '').replace(/^>\s*(.*?)\s*<$/, '$1');
       lines.push({ el: 'action', text: t });
     }
   }
-  return { title, lines };
+  // Notes out of the text and beside their line; a note on a line of its own
+  // goes with the line before it.
+  const out = [];
+  for (const l of lines) {
+    const found = [...l.text.matchAll(/\u0001(\d+)\u0002/g)].map((m) => notes[Number(m[1])]).filter(Boolean);
+    const clean = l.text.replace(/\s*\u0001\d+\u0002\s*/g, ' ').replace(/\s+/g, ' ').trim();
+    const target = clean || l.el === 'section' ? { ...l, text: clean } : out.at(-1);
+    if (target === undefined) continue;
+    for (const n of found) noteOn(target, n);
+    if (clean || l.el === 'section') { if (!target.notes?.length) delete target.notes; out.push(target); }
+  }
+  return { title, lines: out };
+}
+
+// Fountain kept in an outliner (Workflowy, Tana, a bullet list): every line is
+// a bullet, so the blank lines Fountain needs between blocks are gone. This
+// puts them back. A character's name owns what's nested under it, or else the
+// line right after it (and a parenthetical before that), as their speech;
+// every other bullet is a block of its own.
+export const looksLikeOutline = (src) => {
+  const rows = src.split(/\r?\n/).filter((l) => l.trim());
+  return rows.length > 1 && rows.filter((l) => /^\s*([-•*◦▪‣]|\d+[.)])\s+/.test(l)).length >= rows.length * 0.6;
+};
+
+export function fromOutline(src) {
+  const rows = src.replace(/\r\n?/g, '\n').split('\n').filter((l) => l.trim()).map((l) => {
+    const m = l.match(/^(\s*)(?:[-•*◦▪‣]|\d+[.)])?\s*(.*)$/);
+    return { depth: m[1].replace(/\t/g, '    ').length, text: m[2].trim() };
+  });
+  const blocks = [];
+  // A title page (Title: …, Author: …) stays together at the top.
+  const head = [];
+  while (rows.length && /^[A-Za-z][A-Za-z ]*:\s*\S/.test(rows[0].text) && !SCENE.test(rows[0].text)) head.push(rows.shift().text);
+  if (head.some((t) => /^title:/i.test(t))) blocks.push(head.join('\n'));
+  else rows.unshift(...head.map((text) => ({ depth: 0, text })));
+  const cue = (t) => !SCENE.test(t) && !/^[#=.!>]/.test(t) && (t.startsWith('@') || (detect(t) === 'character'));
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (!cue(r.text)) { blocks.push(r.text); continue; }
+    const speech = [r.text];
+    let j = i + 1;
+    if (rows[j] && rows[j].depth > r.depth) {
+      while (rows[j] && rows[j].depth > r.depth) speech.push(rows[j++].text);
+    } else {
+      if (rows[j] && /^\(.*\)$/.test(rows[j].text)) speech.push(rows[j++].text);
+      if (rows[j] && !cue(rows[j].text) && !SCENE.test(rows[j].text) && !/^[#=.>]/.test(rows[j].text) && !isTransition(rows[j].text)) speech.push(rows[j++].text);
+    }
+    // A name with nothing to say is just a line in capitals.
+    if (speech.length === 1) speech[0] = `!${r.text}`;
+    blocks.push(speech.join('\n'));
+    i = j - 1;
+  }
+  return fromFountain(blocks.join('\n\n'));
 }
