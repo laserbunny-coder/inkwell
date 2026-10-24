@@ -282,7 +282,10 @@ try {
     await sleep(400);
     assert.deepEqual(await laptop.locator('.notebook a.ref').allTextContents(), ['The rain fell on the dojo…']);
     await go(laptop, { view: 'write', chapterId: 'ch_1' });
+    await laptop.waitForFunction(() => !document.documentElement.dataset.view);
     await laptop.waitForSelector('#editor p[data-eid="pa_1"]');
+    await laptop.locator('#editor p[data-eid="pa_1"]').click();
+    await sleep(300);
   });
 
   await check('talk it over: a conversation about the chapter, kept with it', async () => {
