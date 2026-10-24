@@ -37,6 +37,7 @@ import { takeShares, snapshotPending } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
 import { sendToDaybook, sendPending } from './daybook.js';
 import { DayReview, getReview } from './review.js';
+import { TagsPage } from './tags.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf } from './library.js';
 
@@ -247,6 +248,7 @@ window.visualViewport?.addEventListener('scroll', placeScriptBar);
 // ---------- notebook ----------
 
 let railTimer;
+let tagsPage = null; // the Tags page (set up with capture, below)
 let dayReview = null; // the day review under a day page (set up with capture, below)
 const notebook = new Notebook({
   onPick: openPicker,
@@ -506,6 +508,9 @@ async function go(place) {
     state.worldId = place.id;
     remember(place);
     await renderWorld();
+  } else if (place.view === 'tags') {
+    remember(place);
+    await tagsPage?.show(place);
   }
   renderCrumb();
   renderRail();
@@ -691,6 +696,7 @@ async function migrateWorlds() {
 
 async function applyRemote(rows) {
   searchChanged(rows);
+  if (view() === 'tags' && tagsPage && rows.some((r) => r.tags?.length || r.id === 'settings-tag-groups')) tagsPage.refresh();
   if (rows.some((r) => r.kind === 'settings')) await notes.reloadTypes();
   if (state.chapterId && rows.some((r) => r.links?.includes(state.chapterId))) renderChapterLinks();
   const structural = rows.some((r) => ['project', 'world', 'act', 'chapter', 'area', 'page'].includes(r.kind));
@@ -1101,6 +1107,11 @@ async function drawRail() {
     b.addEventListener('click', () => notebook.showTag(t));
     return b;
   }));
+  if (tags.length) {
+    const all = make('button', 'tag-chip all-tags', 'All tags…');
+    all.addEventListener('click', () => go({ view: 'tags' }));
+    $('#shelves-tags').append(all);
+  }
   $('#shelves-tags-label').hidden = !tags.length;
 }
 
@@ -1175,6 +1186,10 @@ async function drawCrumb() {
     // The book you're writing in is a switcher: it lists every world and piece.
     if (same) parts.pop();
     parts.push(bookPart(state.project), link(ch?.title || '', () => {}, 'here'));
+  } else if (view() === 'tags') {
+    const at = tagsPage?.place || {};
+    parts.push(lib, link('Tags', () => go({ view: 'tags' }), at.tag ? '' : 'here'));
+    if (at.tag) parts.push(link(`#${at.tag}`, () => go({ view: 'tags', tag: at.tag }), at.walk == null ? 'here' : ''));
   } else if (inNotebook() && notebook.page) {
     const p = notebook.page;
     if (p.kind === 'day') parts.push(link('Daily pages', () => go({ view: 'notebook', pageId: dayId(isoToday()) })), link(titleOf(p), () => {}, 'here'));
@@ -2404,6 +2419,7 @@ const commands = [
   { group: 'go', label: 'Go to… a book, chapter or page', keys: `${mod}O`, run: () => openPalette('go') },
   { group: 'go', label: 'Search inside all your writing', keys: `${mod}⇧F`, run: () => openPalette('search') },
   { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
+  { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
   { group: 'go', label: 'Today’s page', keys: `${mod}J`, run: () => go({ view: 'notebook', pageId: dayId(isoToday()) }) },
   { group: 'go', label: 'Back to writing', keys: `${mod}J`, run: () => go({ view: 'write' }), when: () => !writing() },
   { group: 'go', label: 'Next chapter (or day)', keys: `${mod}⌥↓`, run: () => step(1), when: () => writing() || inNotebook() },
@@ -2902,6 +2918,7 @@ document.addEventListener('click', (e) => {
   if (cmd === 'library') go({ view: 'library', area: null });
   if (cmd === 'today') go({ view: 'notebook', pageId: dayId(isoToday()) });
   if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
+  if (cmd === 'tags') go({ view: 'tags' });
   if (cmd === 'close-tag') { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
 });
 
@@ -3154,6 +3171,20 @@ dayReview = new DayReview($('.day-review'), {
   base: () => location.origin + location.pathname,
   onRows: (rows) => applyRemote(rows),
   onOpen: (id) => openEntry(id),
+  toast
+});
+// The Tags page: every tag, grouped, merged and gone through one by one.
+tagsPage = new TagsPage({
+  sheet: $('#tags-sheet'),
+  go: async (place, { replace = false } = {}) => {
+    const mode = historyMode;
+    if (replace) historyMode = 'replace';
+    try { await go(place); } finally { historyMode = mode; }
+  },
+  open: (id) => openEntry(id),
+  ask: askServer,
+  canAsk: canAskServer,
+  changed: (rows) => applyRemote(rows),
   toast
 });
 // The 9 pm note in Daybook links to ?review=<date>: open that day and its
