@@ -238,6 +238,21 @@ try {
     await page.waitForSelector('.capture', { state: 'hidden' });
   });
 
+  await check('Alt + C starts Capture recording, and Alt + C again keeps it', async () => {
+    await page.evaluate(() => localStorage.setItem('captureAutostart', 'off'));
+    await page.reload();
+    await page.waitForSelector('#outline-editor .ProseMirror', { state: 'attached' });
+    await sleep(500);
+    const before = (await lines(page)).filter((l) => l.fields?.capture === 'voice').length;
+    await page.keyboard.press('Alt+C');
+    await page.waitForSelector('.capture[data-state="recording"]', { timeout: 8000 });
+    await sleep(1500);
+    await page.keyboard.press('Alt+C');
+    await page.waitForSelector('.capture', { state: 'hidden', timeout: 8000 });
+    await sleep(500);
+    assert.equal((await lines(page)).filter((l) => l.fields?.capture === 'voice').length, before + 1);
+  });
+
   await check('the play button plays the recording', async () => {
     await page.locator('#outline-editor .file-embed.audio .play').first().click();
     await page.waitForSelector('#outline-editor .file-embed.audio.playing', { timeout: 5000 });
