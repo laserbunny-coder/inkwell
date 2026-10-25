@@ -87,6 +87,12 @@ export class Nav {
     document.body.append(line, bar, handle, this.backdrop, this.panel);
     this.bar = bar;
     this.line = line;
+    // While the panel is open, only it takes the caret: a page that finishes
+    // opening a moment later doesn't pull your typing back into its text.
+    document.addEventListener('focusin', (e) => {
+      if (!this.isOpen || this.panel.contains(e.target)) return;
+      (this.find ? this.panel.querySelector('.go-find') : this.panel).focus();
+    });
     // The keyboard is up while something on a touch screen is being typed in.
     document.addEventListener('focusin', (e) => { if (this.hooks.isTouch() && this.typingIn(e.target)) document.body.classList.add('kb-up'); });
     document.addEventListener('focusout', () => setTimeout(() => { if (!this.typingIn(document.activeElement)) document.body.classList.remove('kb-up'); }, 50));
@@ -112,7 +118,16 @@ export class Nav {
     this.name = name;
     this.context = context;
     this.draw();
-    if (this.isOpen) this.drawPanel();
+    if (this.isOpen) {
+      // Redrawn while open (a page finished opening): keep the caret and anything typed.
+      const old = this.panel.querySelector('.go-find');
+      const had = old && document.activeElement === old;
+      const typed = old?.value || '';
+      this.drawPanel();
+      const find = this.panel.querySelector('.go-find');
+      find.value = typed;
+      if (had) find.focus();
+    }
   }
 
   // A place's name was changed (a rename): keep the list's words fresh.
@@ -148,6 +163,7 @@ export class Nav {
     this.backdrop.hidden = false;
     document.body.classList.add('go-on');
     // On a phone the keyboard would cover the sheet, so nothing is focused there.
+    this.find = find;
     if (find) this.panel.querySelector('.go-find')?.focus();
     else this.panel.focus?.();
   }
