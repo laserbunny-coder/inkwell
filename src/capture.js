@@ -50,15 +50,24 @@ export const canRecord = () => !!navigator.mediaDevices?.getUserMedia && recorde
 
 // Adds a line at the end of today's page (making the day if it's new) and
 // returns the rows written.
-export async function addLine(content, fields, day = today()) {
-  const dayId = `day-${day}`;
+export async function addLine(content, fields, day = today(), { page = null, after = null } = {}) {
   const rows = [];
-  const dayRow = await getEntry(dayId);
-  if (!dayRow || dayRow.deleted) rows.push({ ...(dayRow || entry('day', { id: dayId, title: day })), deleted: false, updated_at: Date.now() });
-  const kids = await children(dayId);
-  const sort = kids.length ? Math.max(...kids.map((k) => k.sort || 0)) + GAP : GAP;
+  // On a page: just after the line you were on (as its next sibling), else at the end.
+  let parent = page;
+  if (!page) {
+    parent = `day-${day}`;
+    const dayRow = await getEntry(parent);
+    if (!dayRow || dayRow.deleted) rows.push({ ...(dayRow || entry('day', { id: parent, title: day })), deleted: false, updated_at: Date.now() });
+  }
+  const at = after ? await getEntry(after) : null;
+  if (at && !at.deleted && at.kind === 'line') parent = at.parent_id;
+  const kids = (await children(parent)).filter((k) => !k.deleted).sort((a, b) => (a.sort || 0) - (b.sort || 0));
+  const i = at ? kids.findIndex((k) => k.id === at.id) : -1;
+  const sort = i >= 0
+    ? (kids[i + 1] ? (kids[i].sort + kids[i + 1].sort) / 2 : kids[i].sort + GAP)
+    : kids.length ? Math.max(...kids.map((k) => k.sort || 0)) + GAP : GAP;
   const text = textOf(content);
-  const line = entry('line', { parent_id: dayId, sort, text, content, tags: tagsIn(text), links: refsIn(content), fields: { done: false, gather: null, gathered: null, mirror: null, ...fields } });
+  const line = entry('line', { parent_id: parent, sort, text, content, tags: tagsIn(text), links: refsIn(content), fields: { done: false, gather: null, gathered: null, mirror: null, ...fields } });
   rows.push(line);
   await putEntries(rows);
   return { line, rows };
@@ -71,9 +80,11 @@ function textOf(content) {
 
 const fileNode = (row) => ({ type: 'file', attrs: { id: row.id, name: row.title, type: row.fields.type, size: row.fields.size, duration: row.fields.duration || 0 } });
 
-// Keeps a finished recording and puts it on today's page. `into` aims it at a
-// chapter ({ chapter, title, after }): the words go there, and the day page
-// keeps the recording with a link to where they went. Returns the rows written.
+// Keeps a finished recording and puts it on today's page. `into` aims it
+// somewhere else: at a chapter ({ chapter, title, after }) the words go into
+// the draft and the day page keeps the recording with a link to where they
+// went; at a page ({ page, title, after }) the recording and its write-up go
+// on that page and the day page gets a line linking to it. Returns the rows written.
 export async function saveRecording(blob, duration, started = new Date(), { into = null, name = '' } = {}) {
   const type = (blob.type || 'audio/webm').split(';')[0];
   const ext = /mp4|m4a|aac/.test(type) ? 'm4a' : type.includes('ogg') ? 'ogg' : type.includes('mpeg') ? 'mp3' : type.includes('wav') ? 'wav' : 'webm';
@@ -82,10 +93,18 @@ export async function saveRecording(blob, duration, started = new Date(), { into
   if (!row) return null;
   // The time it was said goes just after the recording, so the day page reads like a log.
   const said = clock(started);
+  const day = dayOf(started);
+  if (into?.page) { const pg = await getEntry(into.page); if (!pg || pg.deleted) into = null; } // the page is gone: today, like any capture
+  if (into?.page) {
+    const { line, rows } = await addLine([fileNode(row), { type: 'text', text: ` ${said} #idea` }], { capture: 'voice', said }, day, { page: into.page, after: into.after });
+    const log = await addLine([{ type: 'text', text: `${said} said on ` }, { type: 'entryRef', attrs: { id: into.page, title: into.title || 'a page' } }], { capture: 'voice-link', said, on: line.id }, day);
+    await queue({ line: line.id, file: row.id, wrote: line.text, duration: Math.round(duration), at: Date.now() });
+    return { line, rows: [row, ...rows, ...log.rows] };
+  }
   const content = into
     ? [fileNode(row), { type: 'text', text: ` ${said} into ` }, { type: 'entryRef', attrs: { id: into.chapter, title: into.title || 'the draft' } }, { type: 'text', text: ' #draft' }]
     : [fileNode(row), { type: 'text', text: ` ${said} #idea` }];
-  const { line, rows } = await addLine(content, { capture: 'voice', said, ...(into ? { into } : {}) }, dayOf(started));
+  const { line, rows } = await addLine(content, { capture: 'voice', said, ...(into ? { into } : {}) }, day);
   await queue({ line: line.id, file: row.id, wrote: line.text, duration: Math.round(duration), at: Date.now(), ...(into ? { into } : {}) });
   return { line, rows: [row, ...rows] };
 }
@@ -175,6 +194,13 @@ export class CaptureScreen {
     this.hint = el.querySelector('.cap-hint');
     this.level = el.querySelector('.cap-level');
     this.where = el.querySelector('.cap-into');
+    this.dest = el.querySelector('.cap-dest');
+    // A thought that doesn't belong where you are goes to today instead.
+    el.querySelector('.cap-today').addEventListener('click', () => {
+      this.aim(null);
+      if (this.rec) this.rec.into = null;
+      this.big.focus();
+    });
     this.pick = el.querySelector('.cap-file input');
     this.pick.addEventListener('change', () => { const f = this.pick.files?.[0]; this.pick.value = ''; if (f) this.fromFile(f); });
     this.auto = el.querySelector('.cap-auto input');
@@ -190,17 +216,24 @@ export class CaptureScreen {
 
   get isOpen() { return !this.el.hidden; }
 
-  // `into` aims what's said at a chapter ({ chapter, title, after }).
+  // `into` aims what's said at a chapter ({ chapter, title, after }) or a
+  // page ({ page, title, after }); without it, it goes on today's page.
   async show({ start = autostart(), into = null } = {}) {
-    this.into = into;
-    this.where.hidden = !into;
-    this.where.textContent = into ? `Talking into ${into.title || 'the draft'}` : '';
-    this.el.setAttribute('aria-label', into ? 'Talk into the draft' : 'Capture an idea');
+    this.aim(into);
     this.el.hidden = false;
     document.documentElement.classList.add('capturing');
     this.render('ready');
     this.big.focus();
     if (start) await this.start();
+  }
+
+  // Says where what's said will land.
+  aim(into) {
+    this.into = into;
+    this.where.hidden = false;
+    this.where.classList.toggle('today', !into);
+    this.dest.textContent = !into ? 'Onto today’s page' : into.chapter ? `Into ${into.title || 'the draft'}` : `Onto ${into.title || 'this page'}`;
+    this.el.setAttribute('aria-label', into?.chapter ? 'Talk into the draft' : 'Capture an idea');
   }
 
   render(state, note = '') {
