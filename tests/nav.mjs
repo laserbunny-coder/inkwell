@@ -22,6 +22,13 @@ async function check(name, fn) {
   try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message}`); }
 }
 const viewOf = (p) => p.evaluate(() => document.documentElement.dataset.view || 'write');
+// The page puts the caret back in the text a moment after you arrive, which brings up the
+// keyboard (and its own bar) on a phone; put the keyboard away, as a person would.
+const settle = async (p) => {
+  await sleep(1000);
+  await p.waitForFunction(() => { document.activeElement?.blur(); return !document.body.classList.contains('kb-up') && !document.querySelector('.outline-bar')?.offsetParent && !document.querySelector('.script-bar')?.offsetParent; });
+  await sleep(200);
+};
 const toToday = async (p) => {
   await p.keyboard.press('Control+J');
   await sleep(300);
@@ -44,7 +51,7 @@ try {
     await p.keyboard.press('Control+Shift+O');
     await p.waitForFunction(() => document.documentElement.dataset.view === 'library');
     await sleep(300);
-    assert.equal(await p.locator('.placeline .pl-back').innerText(), '‹ Today');
+    await p.waitForFunction(() => document.querySelector('.placeline .pl-back')?.textContent === '‹ Today');
     assert.equal(await p.locator('.placebar').isVisible(), false, 'no phone bar on a computer');
   });
 
@@ -56,7 +63,7 @@ try {
     await p.keyboard.press('Enter');
     await p.waitForSelector('.notebook', { state: 'visible' });
     assert.equal(await p.locator('.go-panel').isVisible(), false);
-    assert.equal(await p.locator('.placeline .pl-back').innerText(), '‹ Library');
+    await p.waitForFunction(() => document.querySelector('.placeline .pl-back')?.textContent === '‹ Library');
   });
 
   await check('the Go panel’s desk reaches Today, the Drawer, the Library and Tags', async () => {
@@ -102,11 +109,10 @@ try {
   await sleep(500);
 
   await check('on a phone a bar along the bottom names the place, with Today, the mic and Menu', async () => {
-    await ph.evaluate(() => document.activeElement?.blur());
+    await settle(ph);
     await ph.locator('.pb-today').tap();
     await ph.waitForSelector('.notebook', { state: 'visible' });
-    await ph.evaluate(() => document.activeElement?.blur());
-    await sleep(300);
+    await settle(ph);
     assert.equal(await ph.locator('.placebar').isVisible(), true);
     assert.match(await ph.locator('.pb-place .pb-name').innerText(), /^Today/);
     assert.equal(await ph.locator('.corner').isVisible(), false, 'the corner buttons are gone on a phone');
@@ -120,8 +126,8 @@ try {
     assert.notEqual(await ph.evaluate(() => document.activeElement?.className), 'go-find', 'no keyboard over the sheet');
     await ph.locator('.go-desk .go-tab', { hasText: 'Library' }).tap();
     await ph.waitForFunction(() => document.documentElement.dataset.view === 'library');
-    await sleep(300);
-    assert.equal(await ph.locator('.pb-back').innerText(), '‹ Today');
+    await settle(ph);
+    await ph.waitForFunction(() => document.querySelector('.pb-back')?.textContent === '‹ Today');
     await ph.locator('.pb-back').tap();
     await ph.waitForSelector('.notebook', { state: 'visible' });
     assert.equal(await viewOf(ph), 'notebook');
@@ -130,7 +136,8 @@ try {
   });
 
   await check('in focus the phone bar shrinks to a handle that brings it back', async () => {
-    await ph.evaluate(() => document.activeElement?.blur());
+    // The keyboard's own bar (and the outline buttons) sit there while typing, so put the keyboard away first.
+    await settle(ph);
     await ph.evaluate(() => document.documentElement.classList.add('focus'));
     await sleep(200);
     assert.equal(await ph.locator('.placebar').isVisible(), false);

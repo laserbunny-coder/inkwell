@@ -161,6 +161,9 @@ try {
     await go(laptop, { view: 'write', chapterId: 'ch_p' });
     await laptop.waitForSelector('html.script #editor .scene-break[data-level="3"]');
     await laptop.waitForFunction(() => document.querySelector('#outline-scenes .tree-scene')?.textContent === 'Act One');
+    // The tree is redrawn a moment after the chapter opens; read it once it has settled.
+    await laptop.waitForFunction(() => [...document.querySelectorAll('#outline-scenes .tree-scene')].every((b) => b.isConnected && !Number.isNaN(parseFloat(getComputedStyle(b).paddingLeft))));
+    await sleep(500);
     const tree = await laptop.locator('#outline-scenes .tree-scene').evaluateAll((bs) => bs.map((b) => [b.textContent, b.dataset.level || 'slug', parseFloat(getComputedStyle(b).paddingLeft)]));
     assert.deepEqual(tree.slice(0, 5).map((t) => t[0]), ['Act One', 'The dojo', 'Breakfast fight', 'INT. KITCHEN - MORNING', 'The challenge']);
     assert.ok(tree[1][2] > tree[0][2] && tree[2][2] > tree[1][2], `deeper sections indent: ${JSON.stringify(tree.slice(0, 4))}`);
