@@ -252,7 +252,7 @@ function tapBar(bar, selector, run) {
 }
 tapBar(scriptBar, 'button[data-el], button[data-alt], button[data-ins], button[data-talk]', (b) => {
   const what = b.dataset.alt;
-  if (b.dataset.talk) talkIntoDraft();
+  if (b.dataset.talk) captureHere({ start: true });
   else if (b.dataset.ins) typeHere(editor, '/');
   else if (what === 'word' || what === 'para') alts.toggle({ scope: what });
   else if (what === 'ask') {
@@ -2603,7 +2603,7 @@ const nav = new Nav({
   active: () => strip.ctx?.active || null,
   crumb: () => [...document.querySelectorAll('#crumb .crumb-part')],
   search: (text) => { openPalette('go'); const input = $('#palette-input'); input.value = text; filterPalette(); },
-  capture: () => openCapture({ start: true }),
+  capture: () => captureHere({ start: true }),
   menu: () => openPalette(),
   outline: () => body.classList.add('show-outline'),
   isTouch: () => touch.matches,
@@ -3250,10 +3250,8 @@ const commands = [
   { group: 'go', label: 'Back to writing', keys: `${mod}J`, run: () => go({ view: 'write' }), when: () => !writing() },
   { group: 'go', label: 'Next chapter (or day)', keys: `${mod}⌥↓`, run: () => step(1), when: () => writing() || inNotebook() },
   { group: 'go', label: 'Previous chapter (or day)', keys: `${mod}⌥↑`, run: () => step(-1), when: () => writing() || inNotebook() },
-  { group: 'new', label: 'Capture an idea by voice', keys: '⌥C', run: () => openCapture() },
-  { group: 'new', label: 'Talk into the draft here (Claude writes it up)', keys: '⌥V', words: ['dictate', 'voice', 'walk', 'speak'], run: () => talkIntoDraft(), when: () => writing() },
-  { group: 'new', label: 'Capture from a recording file…', words: ['audio', 'voice memo', 'upload'], run: () => fromRecordingFile(false) },
-  { group: 'new', label: 'Draft from a recording file…', words: ['audio', 'voice memo', 'upload'], run: () => fromRecordingFile(true), when: () => writing() },
+  { group: 'new', label: 'Capture an idea by voice (it lands where you are)', keys: '⌥C', words: ['dictate', 'voice', 'walk', 'speak', 'talk', 'draft'], run: () => captureHere() },
+  { group: 'new', label: 'Capture from a recording file…', words: ['audio', 'voice memo', 'upload', 'draft'], run: () => fromRecordingFile() },
   { group: 'write', label: 'Your voice modes (shared with Scribe)…', words: ['journal', 'scene', 'idea', 'email', 'mode'], run: () => openModes() },
   { group: 'new', label: 'New novel', keys: '', run: () => showNewBook('novel') },
   { group: 'new', label: 'New screenplay', keys: '', run: () => showNewBook('screenplay') },
@@ -3406,8 +3404,7 @@ setSlashItems((ed) => {
     { id: 'link', label: 'Link to a page', keys: '[[', words: ['page'], run: (e) => openPicker(e) },
     { id: 'tag', label: 'Tag', keys: '#', run: (e) => e.chain().focus().insertContent('#').run() },
     !outline && { id: 'note', label: 'Note on this paragraph', keys: '⌘⇧N', words: ['comment'], run: () => notes.add() },
-    !outline && { id: 'talk', label: 'Talk into the draft', hint: 'say it; Claude writes it up', keys: '⌥V', words: ['voice', 'dictate', 'speak', 'record'], run: () => setTimeout(talkIntoDraft, 60) },
-    outline && { id: 'talk', label: 'Capture by voice', hint: 'say it; Claude writes it up', keys: '⌥C', words: ['voice', 'dictate', 'speak', 'record'], run: () => setTimeout(() => openCapture(), 60) },
+    { id: 'talk', label: 'Talk', hint: 'say it; Claude writes it up here', keys: '⌥C', words: ['voice', 'dictate', 'speak', 'record', 'capture'], run: () => setTimeout(() => captureHere({ start: true }), 60) },
     { id: 'picture', label: 'Picture or file', words: ['image', 'photo', 'file', 'attach'], run: () => setTimeout(pickFiles, 120) },
     outline && { id: 'done', label: 'Done', hint: 'strike the line through', keys: '⌘↵', words: ['todo', 'check'], run: (e) => toggleDone(e) },
     !outline && !inScript && { id: 'scene', label: 'Scene break', keys: '⌘⇧↵', words: ['break', 'divider'], run: (e) => e.chain().focus().insertSceneBreak().run() },
@@ -3806,8 +3803,8 @@ document.addEventListener('keydown', (e) => {
   // Alt + 0 to 6: the pages (Overview, then Gather to Deliver).
   else if (e.altKey && !m && !e.shiftKey && /^Digit[0-6]$/.test(e.code) && strip.byNumber(Number(e.code.slice(5)))) { e.preventDefault(); goPage(strip.byNumber(Number(e.code.slice(5)))); }
   // Alt+C: Capture, recording at once; Alt+C again keeps it.
-  else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyV' && (writing() || capture.isOpen)) { e.preventDefault(); if (!capture.isOpen) talkIntoDraft(); else if (capture.rec) capture.finish(); }
-  else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyC') { e.preventDefault(); if (!capture.isOpen) openCapture({ start: true }); else if (capture.rec) capture.finish(); }
+  // Alt + C talks, and lands where you are (Alt + V, the old draft key, does the same).
+  else if (e.altKey && !m && !e.shiftKey && (e.code === 'KeyC' || e.code === 'KeyV')) { e.preventDefault(); if (!capture.isOpen) captureHere({ start: true }); else if (capture.rec) capture.finish(); }
   else if (e.altKey && !m && e.code === 'BracketRight') { e.preventDefault(); setPage(currentWidth() + 40, currentSize()); }
   else if (e.altKey && !m && e.code === 'BracketLeft') { e.preventDefault(); setPage(currentWidth() - 40, currentSize()); }
   else if (e.altKey && !m && e.code === 'Equal') { e.preventDefault(); setPage(currentWidth(), currentSize() + 1); }
@@ -3888,29 +3885,38 @@ async function showCapture({ line, rows }) {
 const capture = new CaptureScreen($('.capture'), {
   onSaved: (saved) => {
     // Aimed at the draft: you stay where you were writing, and the words follow.
-    if (saved.line.fields?.into) { toast('Kept. Claude is writing it into the draft…'); applyRemote(saved.rows).then(() => { if (writing()) editor.commands.focus(); writeOut(); }); return; }
-    toast('Kept on today’s page');
+    if (saved.line.fields?.into?.chapter) { toast('Kept. Claude is writing it into the draft…'); applyRemote(saved.rows).then(() => { if (writing()) editor.commands.focus(); writeOut(); }); return; }
+    toast(saved.line.parent_id?.startsWith('day-') ? 'Kept on today’s page' : 'Kept here, and noted on today’s page');
     showCapture(saved);
   },
   onClose: () => currentEditor().commands.focus(),
   toast
 });
-// ---------- walk and talk: say it, and Claude writes it into the draft ----------
+// ---------- walk and talk: say it, and it lands where you are ----------
 
-// Opens Capture aimed at the chapter you're in, just after the paragraph the caret is on.
-async function talkIntoDraft() {
-  if (!writing() || !state.chapterId) { openCapture(); return; }
-  await openCapture({ start: true, into: await draftSpot() });
+// One voice button, one rule: in a chapter Claude writes it into the draft
+// just after the paragraph the caret is on; on a page it goes on that page,
+// after the line you're on; anywhere else (and on a day) it goes on today.
+// Today's page always gets a line for it, linking to where it went.
+async function captureSpot() {
+  if (writing() && state.chapterId) return draftSpot();
+  const page = inNotebook() && !notebook.isDay ? notebook.page : null;
+  // The title as shown (a page named a moment ago may not be saved yet).
+  if (page && !page.deleted) return { page: page.id, title: $('#nb-title')?.textContent.trim() || titleOf(page), after: notebook.currentLine() };
+  return null;
+}
+async function captureHere(opts = {}) {
+  await openCapture({ ...opts, into: await captureSpot() });
 }
 async function draftSpot() {
   const chapter = await getEntry(state.chapterId);
   const block = editor.state.selection.$from.node(1);
   return { chapter: state.chapterId, title: chapter?.title || 'this chapter', after: block?.attrs.eid || null };
 }
-// Picks a recording file for Capture, or for the draft you're in.
-async function fromRecordingFile(draft) {
+// Picks a recording file for Capture; it lands where you are, like talking.
+async function fromRecordingFile() {
   // The file picker needs this tap, so it opens first and Capture follows.
-  const into = draft && writing() && state.chapterId ? await draftSpot() : null;
+  const into = await captureSpot();
   await openCapture({ start: false, into });
   capture.pick.click();
 }

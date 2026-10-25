@@ -125,6 +125,10 @@ try {
         ? { raw, mode: 'scene', blocks: [{ text: 'The river ran slow under the bridge.', el: 'paragraph', new_scene: false }], notes: [] }
         : { raw, mode: 'journal', blocks: [{ text: 'Today I walked the river.', el: 'paragraph', new_scene: false }, { text: 'I kept thinking about the bridge.', el: 'paragraph', new_scene: false }], notes: [{ text: 'Call Mum.', after: 1 }], tag: '' });
     }, RAW);
+    // On today's page, so it lands there (in a chapter it would go into the draft).
+    await page.keyboard.press('Control+J');
+    await page.waitForSelector('.notebook', { state: 'visible' });
+    await sleep(500);
     await palette('Capture an idea');
     await record(1500);
     await page.waitForFunction(() => /walked the river/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''), null, { timeout: 10000 });
@@ -218,7 +222,7 @@ try {
     await page.waitForFunction(() => /Scribe has it too/.test(document.querySelector('.toast')?.textContent || ''));
   });
 
-  await check('Alt + V in a chapter talks into the draft: paragraphs per beat, the raw words one flip away', async () => {
+  await check('Alt + C in a chapter talks into the draft (Alt + V too): paragraphs per beat, the raw words one flip away', async () => {
     await page.keyboard.press('Control+J');
     await page.waitForFunction(() => document.documentElement.dataset.view !== 'notebook');
     await page.click('#editor .ProseMirror');
@@ -238,9 +242,10 @@ try {
         notes: [{ text: 'Is it winter?', after: 1 }]
       });
     });
-    await page.keyboard.press('Alt+V');
+    await page.keyboard.press('Alt+C');
     await page.waitForSelector('.capture[data-state="recording"]');
-    assert.match(await page.locator('.cap-into').innerText(), /^Talking into /);
+    assert.match(await page.locator('.cap-dest').innerText(), /^Into /);
+    assert.ok(await page.locator('.cap-today').isVisible(), 'a way to send it to today instead');
     await sleep(1500);
     await page.keyboard.press('Alt+V');
     await page.waitForSelector('.capture', { state: 'hidden', timeout: 8000 });
@@ -287,7 +292,7 @@ try {
       window.__voice = async () => ({ raw: 'the river again', mode: 'scene', blocks: [{ text: 'The river again.', el: 'paragraph', new_scene: false, said: 'the river again' }], notes: [] });
     });
     const chooser = page.waitForEvent('filechooser');
-    await palette('Draft from a recording file');
+    await palette('Capture from a recording file');
     await (await chooser).setFiles(wavPath);
     await page.waitForFunction(() => /The river again\./.test(document.querySelector('#editor .ProseMirror')?.innerText || ''), null, { timeout: 10000 });
     const files = await all(page, 'file');
@@ -310,6 +315,60 @@ try {
     assert.equal(await page.evaluate(() => localStorage.getItem('typewriter')), '1', 'remembered on this device');
     await palette('Typewriter mode');
     assert.ok(!(await page.evaluate(() => document.documentElement.classList.contains('typewriter'))));
+  });
+
+  await check('on a page, a capture lands on that page after your line, and today gets a line linking to it', async () => {
+    await page.evaluate(() => { window.__voice = async () => ({ raw: 'red headband', mode: 'idea', blocks: [{ text: 'Kenji wears a red headband his dad gave him.', el: 'paragraph', new_scene: false }], notes: [] }); });
+    await page.keyboard.press('Escape');
+    if (!(await page.locator('.notebook').isVisible())) await page.keyboard.press('Control+J');
+    await page.waitForSelector('.notebook', { state: 'visible' });
+    await sleep(400);
+    await palette('New page');
+    await page.waitForFunction(() => document.activeElement?.id === 'nb-title');
+    await sleep(300);
+    await page.click('#nb-title');
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Kenji');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Kenji');
+    await sleep(200);
+    await page.keyboard.type('Nine years old.');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Wants it more than anyone.');
+    await page.locator('#outline-editor li > p', { hasText: 'Nine years old.' }).click();
+    await sleep(900);
+    await page.keyboard.press('Alt+C');
+    await page.waitForSelector('.capture[data-state="recording"]');
+    assert.equal(await page.locator('.cap-dest').innerText(), 'Onto Kenji');
+    await sleep(1300);
+    await page.keyboard.press('Alt+C');
+    await page.waitForSelector('.capture', { state: 'hidden', timeout: 8000 });
+    await page.waitForFunction(() => /red headband his dad/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''), null, { timeout: 10000 });
+    assert.equal(await page.locator('#nb-title').innerText(), 'Kenji', 'you stay on the page');
+    const lines = await page.locator('#outline-editor li > p').allInnerTexts();
+    const at = lines.findIndex((t) => t.includes('red headband'));
+    assert.ok(at > lines.findIndex((t) => t === 'Nine years old.') && at < lines.findIndex((t) => t === 'Wants it more than anyone.'), `just after the line you were on: ${lines.join(' | ')}`);
+    const line = await capLine();
+    const pg = (await all(page, 'page')).find((r) => r.title === 'Kenji');
+    assert.equal(line.parent_id, pg.id);
+    const log = (await all(page, 'line')).find((l) => l.fields?.on === line.id);
+    assert.ok(log?.parent_id.startsWith('day-'), 'today gets a line for it');
+    assert.ok(log.links.includes(pg.id), 'linking to the page');
+  });
+
+  await check('Today instead sends it to today’s page', async () => {
+    await page.locator('#outline-editor li > p', { hasText: 'Wants it more' }).click();
+    await sleep(500);
+    await page.keyboard.press('Alt+C');
+    await page.waitForSelector('.capture[data-state="recording"]');
+    await page.click('.cap-today');
+    assert.equal(await page.locator('.cap-dest').innerText(), 'Onto today’s page');
+    await sleep(1200);
+    await page.click('.cap-big');
+    await page.waitForSelector('.capture', { state: 'hidden', timeout: 8000 });
+    await page.waitForFunction(() => document.querySelector('#nb-title')?.innerText !== 'Kenji');
+    const line = await capLine();
+    assert.ok(line.parent_id.startsWith('day-'), line.parent_id);
   });
 
   await check('on a phone, the chip and its menu fit, and Talk sits on the writing bar', async () => {

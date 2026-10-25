@@ -839,7 +839,11 @@ html.capturing body { overflow: hidden; }
 .cap-file { color: var(--muted); font-size: 14px; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
 .cap-file:hover { color: var(--ink); background: var(--tint); }
 .capture[data-state="recording"] .cap-foot, .capture[data-state="saving"] .cap-foot { visibility: hidden; }
-.cap-into { position: absolute; top: max(22px, env(safe-area-inset-top)); left: 90px; right: 90px; margin: 0; text-align: center; color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cap-into { position: absolute; top: max(22px, env(safe-area-inset-top)); left: 90px; right: 90px; margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; }
+.cap-dest { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cap-today { border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--muted); font: 13px var(--ui); padding: 4px 12px; cursor: pointer; }
+.cap-today:hover { color: var(--ink); border-color: var(--muted); }
+.cap-into.today .cap-today { display: none; }
 /* Links on lines and in the writing: the accent colour, a quiet underline. */
 .ProseMirror a[href] { color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); text-underline-offset: 3px; }
 
