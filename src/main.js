@@ -34,6 +34,7 @@ import { openPicker } from './picker.js';
 import { PlotGrid, threadsOf, worldPromises } from './grid.js';
 import { ProductionView } from './prodview.js';
 import { PageStrip, TodayPanel, isLife } from './pages.js';
+import { Nav } from './nav.js';
 import { StagePage, intoDrawer, gatherItems } from './stages.js';
 import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, RAW } from './voice.js';
@@ -465,7 +466,9 @@ const currentEditor = () => (inNotebook() ? notebook.editor : editor);
 // Each place also goes in the browser's history, so Back and Forward (mouse
 // buttons, Alt+← →, ⌘[ ]) step through where you've been.
 let historyMode = 'replace';
+let lastPlace = null; // where you are, for the place bar (named once the crumb is drawn)
 function remember(place) {
+  lastPlace = place;
   try { localStorage.setItem('place', JSON.stringify(place)); } catch { /* full */ }
   if (JSON.stringify(history.state) === JSON.stringify(place)) return;
   if (historyMode === 'push') history.pushState(place, '');
@@ -509,7 +512,6 @@ async function go(place) {
   if (place.view === 'write') delete root.dataset.view;
   else root.dataset.view = place.view;
   body.classList.remove('show-outline');
-  $('#view-toggle').textContent = place.view === 'notebook' ? 'Write' : 'Today';
 
   if (place.view === 'write') {
     editor.commands.focus();
@@ -1307,6 +1309,8 @@ async function drawCrumb() {
   parts.forEach((p, i) => { if (i) crumb.append(make('span', 'sep', '›')); crumb.append(p); });
   refreshWords();
   await renderStrip();
+  const isToday = lastPlace?.view === 'notebook' && lastPlace.pageId === dayId(isoToday());
+  nav.here(lastPlace, isToday ? ['Today'] : parts.map((p) => p.textContent.replace(/\s*▾\s*$/, '').trim()).filter(Boolean));
 }
 
 // ---------- tidying up: rename, move, change kind, the Trash ----------
@@ -2592,6 +2596,22 @@ const PAGE_NAMES = { gather: 'Gather', shape: 'Shape', write: 'Write', revise: '
 // Views you look at rather than type in: the tabs sit faintly at the top there.
 const LOOKING = ['library', 'tags', 'world', 'project', 'grid', 'production', 'deliver', 'compare', 'stage', 'drawer'];
 const strip = new PageStrip($('#page-tabs'), { pick: (id) => goPage(id) });
+const nav = new Nav({
+  go: (place) => go(place),
+  goPage: (id) => goPage(id),
+  tabs: () => strip.tabs,
+  active: () => strip.ctx?.active || null,
+  crumb: () => [...document.querySelectorAll('#crumb .crumb-part')],
+  search: (text) => { openPalette('go'); const input = $('#palette-input'); input.value = text; filterPalette(); },
+  capture: () => openCapture({ start: true }),
+  menu: () => openPalette(),
+  outline: () => body.classList.add('show-outline'),
+  isTouch: () => touch.matches,
+  keyLabel,
+  refocus: () => { if (!touch.matches && (writing() || inNotebook())) currentEditor().commands.focus(); }
+});
+// A phone has no keys, so the menu button says what it is.
+if (touch.matches) document.querySelectorAll('[data-cmd="palette"]').forEach((b) => { b.textContent = 'Menu'; });
 
 // Where you are, as a page: on the desk, or in a world or piece, and which of its pages.
 async function pageContext() {
@@ -2601,7 +2621,8 @@ async function pageContext() {
     if (row.kind === 'world') return { scope: 'world', id: row.id, life: isLife(row), active };
     return { scope: 'piece', id: row.id, life: false, active };
   };
-  if (v === 'library' || v === 'tags') return { scope: 'desk', active: 'library' };
+  if (v === 'library') return { scope: 'desk', active: 'library' };
+  if (v === 'tags') return { scope: 'desk', active: 'tags' };
   if (v === 'drawer') return { scope: 'desk', active: 'drawer' };
   if (v === 'notebook') {
     const p = notebook.page;
@@ -2635,6 +2656,7 @@ async function goPage(id) {
   if (id === 'today') return go({ view: 'notebook', pageId: dayId(isoToday()) });
   if (id === 'drawer') return go({ view: 'drawer' });
   if (id === 'library') return go({ view: 'library', area: null });
+  if (id === 'tags') return go({ view: 'tags' });
   const ctx = await pageContext();
   if (!ctx?.id) return;
   return openPage(await getEntry(ctx.id), id);
@@ -3216,7 +3238,8 @@ async function exportBook() {
 
 const writing = () => view() === 'write';
 const commands = [
-  { group: 'go', label: 'Go to… a book, chapter or page', keys: `${mod}O`, run: () => openPalette('go') },
+  { group: 'go', label: 'Go: back to the last place, this piece’s pages, the desk', keys: `${mod}O`, words: ['back', 'recent', 'jump', 'switch'], run: () => setTimeout(() => nav.open(), 60) },
+  { group: 'go', label: 'Go to… a book, chapter or page', keys: '', run: () => openPalette('go') },
   { group: 'go', label: 'Search inside all your writing', keys: `${mod}⇧F`, run: () => openPalette('search') },
   { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
   { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
@@ -3720,7 +3743,7 @@ $('.palette-backdrop').addEventListener('click', () => closePalette());
 function toggleNotes() {
   notes.setVisible(!notes.visible);
 }
-document.addEventListener('notes-visibility', () => { $('#notes-toggle').textContent = notes.visible ? 'Hide notes' : 'Notes'; });
+document.addEventListener('notes-visibility', () => { $('#notes-toggle').setAttribute('aria-pressed', String(notes.visible)); });
 
 const toggleWriteToday = () => go(inNotebook() ? { view: 'write' } : { view: 'notebook', pageId: dayId(isoToday()) });
 
@@ -3743,6 +3766,8 @@ document.addEventListener('click', (e) => {
   if (cmd === 'grid') toggleGrid();
   if (cmd === 'production') toggleProduction();
   if (cmd === 'today') go({ view: 'notebook', pageId: dayId(isoToday()) });
+  if (cmd === 'drawer') go({ view: 'drawer' });
+  if (cmd === 'go') nav.toggle();
   if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
   if (cmd === 'tags') go({ view: 'tags' });
   if (cmd === 'close-tag') { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
@@ -3755,7 +3780,7 @@ document.addEventListener('keydown', (e) => {
   else if (m && e.key === '.') { e.preventDefault(); toggleFocus(); }
   else if (m && e.shiftKey && k === 'f') { e.preventDefault(); openPalette('search'); }
   else if (m && e.shiftKey && k === 'o') { e.preventDefault(); go({ view: 'library', area: null }); }
-  else if (m && k === 'o') { e.preventDefault(); openPalette('go'); }
+  else if (m && k === 'o') { e.preventDefault(); if (!$('.palette').hidden) closePalette(false); nav.toggle(true); }
   else if (m && e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); step(e.key === 'ArrowDown' ? 1 : -1); }
   else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketLeft') { e.preventDefault(); history.back(); }
   else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketRight') { e.preventDefault(); history.forward(); }
@@ -3795,6 +3820,7 @@ document.addEventListener('keydown', (e) => {
     if (!$('.tag-results').hidden) { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
     if (!$('.versions').hidden) conflicts.close();
     if (!$('.shortcuts').hidden) toggleShortcuts();
+    nav.close();
     if (progressPanel.isOpen) progressPanel.close();
     body.classList.remove('show-outline', 'show-top');
   }

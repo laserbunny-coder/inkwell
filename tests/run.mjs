@@ -493,7 +493,7 @@ try {
     await p.keyboard.type('Ferry tickets for Dad #gift');
     await sleep(900);
     await p.keyboard.press('Control+O');
-    await p.waitForSelector('.palette', { state: 'visible' });
+    await p.waitForSelector('.go-panel', { state: 'visible' });
     await sleep(300);
     await p.keyboard.type('Gift');
     await sleep(300);
@@ -1059,7 +1059,7 @@ try {
     await p.keyboard.type('A ship in a bottle for Dad. #gift');
     await sleep(900);
     await p.keyboard.press('Control+O');
-    await p.waitForSelector('.palette', { state: 'visible' });
+    await p.waitForSelector('.go-panel', { state: 'visible' });
     await sleep(300);
     await p.keyboard.type('Gift');
     await sleep(300);

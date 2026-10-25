@@ -392,7 +392,7 @@ try {
     await command(page, 'The Drawer');
     await page.waitForFunction(() => document.documentElement.dataset.view === 'drawer');
     await page.waitForSelector('.st-drawer .st-card');
-    assert.deepEqual(await tabs(page), ['today', 'drawer*', 'library']);
+    assert.deepEqual(await tabs(page), ['today', 'drawer*', 'library', 'tags']);
     assert.equal(await page.locator('.st-drawer .st-card').count(), 2);
     assert.match(await page.locator('.st-drawer .st-card[data-id="li_d"] .st-went').innerText(), /→ The Ninja Bunch/);
     await shot(page, 'pages-drawer');
