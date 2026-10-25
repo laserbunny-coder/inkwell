@@ -193,7 +193,7 @@ try {
   };
   const openPage = async (p, title) => {
     await p.keyboard.press('Control+O');
-    await p.waitForSelector('.palette', { state: 'visible' });
+    await p.waitForSelector('.go-panel', { state: 'visible' });
     await sleep(300);
     await p.keyboard.type(title);
     await sleep(300);
@@ -203,7 +203,7 @@ try {
   };
   const today = async (p) => {
     await p.keyboard.press('Control+O');
-    await p.waitForSelector('.palette', { state: 'visible' });
+    await p.waitForSelector('.go-panel', { state: 'visible' });
     await sleep(300);
     await p.keyboard.press('Escape');
     await p.keyboard.press('Control+J');
