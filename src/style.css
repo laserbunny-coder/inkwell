@@ -1364,7 +1364,8 @@ body.looking .topbar:hover, body.looking .topbar:focus-within, body.show-top .to
 }
 /* On a computer the faint bar stays on the pages you look at, so they start below it. */
 @media (min-width: 701px) {
-  body.looking:not(.typing) :is(.library, .project-home, .world-home, .tags-home, .grid-view, .prod-view, .stage-view, .compare-view) { padding-top: max(104px, calc(var(--topbar-h, 88px) + 20px)); }
+  /* Not tied to typing, so the page doesn't jump when a box gets or loses the caret. */
+  body.looking :is(.library, .project-home, .world-home, .tags-home, .grid-view, .prod-view, .stage-view, .compare-view) { padding-top: max(104px, calc(var(--topbar-h, 88px) + 20px)); }
 }
 
 /* ---------- The Today panel ---------- */

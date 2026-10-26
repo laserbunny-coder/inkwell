@@ -2996,15 +2996,23 @@ $('.outline').addEventListener('mouseleave', () => body.classList.remove('show-o
 // The top bar comes down as the mouse nears the top of the page, and also when
 // it overshoots into the window's own title bar. It goes away once the mouse
 // is well below it, not the moment it slips off an edge.
+// A short pause first, so reaching for something near the top of the page
+// (and clicking it) doesn't pull the bar down over it.
 const TOP_ZONE = 48;
 let topByMouse = false;
-const showTop = () => { body.classList.add('show-top'); topByMouse = true; };
+let topTimer = 0;
+let mouseY = Infinity;
+const showTop = () => { clearTimeout(topTimer); body.classList.add('show-top'); topByMouse = true; };
+const topAllowed = () => !body.classList.contains('show-outline') && !document.querySelector('.go-panel:not([hidden]), .palette:not([hidden])');
 document.addEventListener('mousemove', (e) => {
-  if (!hovers() || e.buttons) return;
+  mouseY = e.clientY;
+  if (!hovers() || e.buttons) { clearTimeout(topTimer); topTimer = 0; return; }
   const open = body.classList.contains('show-top');
-  if (!open && e.clientY <= TOP_ZONE && e.clientX > 18 && !body.classList.contains('show-outline') && !document.querySelector('.go-panel:not([hidden]), .palette:not([hidden])')) showTop();
-  else if (open && topByMouse && e.clientY > $('.topbar').getBoundingClientRect().bottom + 24) { body.classList.remove('show-top'); topByMouse = false; }
+  if (!open && e.clientY <= TOP_ZONE && e.clientX > 18 && topAllowed()) {
+    if (!topTimer) topTimer = setTimeout(() => { topTimer = 0; if (mouseY <= TOP_ZONE && topAllowed()) showTop(); }, 150);
+  } else if (open && topByMouse && e.clientY > $('.topbar').getBoundingClientRect().bottom + 24) { body.classList.remove('show-top'); topByMouse = false; }
 });
+document.addEventListener('mousedown', () => { clearTimeout(topTimer); topTimer = 0; }, true);
 document.documentElement.addEventListener('mouseleave', (e) => { if (e.clientY <= 0 && hovers()) showTop(); });
 $('.edge-top').addEventListener('click', () => body.classList.add('show-top'));
 // The pages you look at start below the bar, however tall it is.
