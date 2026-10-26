@@ -1,24 +1,44 @@
 # Inkwell
 
-One quiet place to catch ideas, build worlds, write them, and take them all the way to something finished: a novel, a screenplay, a season of AI-generated reels, a song. On the computer and on an Android phone, offline first, synced between them.
+**From a voice note to a finished reel.** Inkwell is a writing and production studio for solo storytellers making AI video: talk an idea out on a walk, shape it into a world and a script, break the script into shots and prompts, keep the takes that worked, and post it. One app on your computer and your Android phone, offline first, synced between them.
 
-Inkwell started as a calm editor for novels and screenplays. It's now the whole road from a spark to a finished piece:
+Most tools cover one step: a notes app for ideas, a screenwriting app for the script, a spreadsheet for shots, folders for renders. Inkwell keeps the whole road in one place, so a line you said on Tuesday is still linked to the shot it became on Friday.
 
-- **Catch** anything: one voice button that lands where you are, a daily page, links and pictures shared from any app, and a Drawer for ideas with no home yet.
-- **Build worlds**: every project is a world with a bible (characters, places, props, songs) and pieces of any size inside it, shaped as one piece, a book series, a show with seasons and episodes, or a collection.
-- **Work through it in order**: each project has the same seven tabs, Overview, Gather, Shape, Write, Revise, Make and Deliver, so you always know where a thing goes next.
-- **Write** with nothing on screen but your words, or talk a scene out on a walk and have Claude turn it into paragraphs or screenplay format.
-- **Structure** the story in a plot grid, track promises until they pay off, and move every piece along a stage board.
-- **Make it**: shots with codes that never change, prompts and renders, a storyboard, the production kit, shoot days and call sheets.
-- **Deliver it**: captions and links for each platform, files, and read-and-comment links for readers.
+- **Talk it out.** One voice button. Claude writes up what you said as an idea, a journal entry, or paragraphs and screenplay format right in your draft, and always keeps your exact words.
+- **Build the world.** A bible of characters, places and props that every piece shares, from a 30-second gag to a season of episodes.
+- **Write and structure.** A distraction-free editor, screenplays that format themselves, a plot grid with threads across every piece, and promises tracked until they pay off.
+- **Make it.** Shots with codes that never change, still and video prompts written from your bible and style rules, renders with the best take starred, a storyboard you can play, and call sheets for live shoots.
+- **Get it out.** Captions for YouTube, Instagram, Facebook, TikTok and X, subtitles and shot lists for Resolve, and read-and-comment links for collaborators.
 
-Claude helps when you ask and stays quiet while you write.
+Novels and other writing go through the same tabs, with their own stages. Claude helps when you ask and stays quiet while you write.
 
 Live at https://laserbunny-coder.github.io/inkwell/
 
-## A look around
+## From a voice note to a reel
 
-Every screenshot below uses made-up sample data built around **The Ninja Bunch**, an anime mockumentary musical told in reels first, plus one novel. They're in dark mode; there's a light mode too. Shortcuts are written for Windows.
+Every screenshot here uses made-up sample data: **The Ninja Bunch**, an anime mockumentary musical told in short reels, about a family bakery that raises a troupe of hopeless ninjas. They're in dark mode; there's a light mode too. Shortcuts are written for Windows.
+
+**1. Say it.** On a walk, tap the mic: "Kenji catches Grandpa on the roof at night, using the rolling pin for real. Scratch that, he sees it by accident. Note to self, ask Dana about the roof set." It lands on today's page, written up as an idea, with the note to self on its own line.
+
+![A voice idea written up on today's page](docs/screenshots/desktop-today.webp)
+
+**2. Give it a home.** The Ninja Bunch is a world: a show with reels, gags, songs and a season of episodes, each at its own stage, with a bible every piece shares.
+
+![The Ninja Bunch's Overview](docs/screenshots/desktop-overview.webp)
+
+**3. Write the reel.** The script formats itself, with your own acts and sequences above the scene headings. Or talk the scene into the draft, and Claude writes it in screenplay format.
+
+![Reel 2: Breakfast](docs/screenshots/desktop-script.webp)
+
+**4. Break it into shots.** Each scene knows which characters, places and props it uses. Each shot gets a code that never changes, prompts written from the bible's looks and the show's style rules, and its renders, with the best one starred.
+
+![Shots for Reel 2](docs/screenshots/desktop-shots.webp)
+
+**5. See it and ship it.** Play the storyboard as a rough animatic, then write captions for each platform and keep the links once it's posted.
+
+![The storyboard](docs/screenshots/desktop-storyboard.webp)
+
+## The whole tour
 
 ### Start here: four things
 
@@ -35,13 +55,12 @@ You only need four things to use Inkwell. Everything else is there when you reac
 
 **Today's page** (`Ctrl + J`) is one page a day for anything: plans, ideas, research, links to pieces and pages, and #tags. A voice capture lands with a play button, the time, and a small chip naming the mode Claude wrote it up in (here, Idea). "Note to self" became its own line, and the words you really said are always kept.
 
-![Today's page with a voice capture written up as an idea](docs/screenshots/desktop-today.webp)
 
 **One voice button.** `Alt + C` (or the mic on the phone) records and lands where you are: on today's page, into the draft at the cursor, or on the page you're looking at, with a link line on today either way. The record screen says where it will go, with "Today instead" if you change your mind. Said out loud, "scratch that", "start again", "new paragraph" and "next scene" are carried out.
 
 ![The record screen, saying the recording goes into the script](docs/screenshots/desktop-record.webp)
 
-Voice modes (Idea, Journal, Scene, Text message, Email, or your own) are shared with **Scribe**, the dictation keyboard, so a mode made in either app shows in both. Tap a chip to see the same words in another mode, or word for word.
+Voice modes (Idea, Journal, Scene, Text message, Email, or your own) are yours to edit: rename them, say what each does, and pick which Claude writes it. Tap a chip to see the same words in another mode, or word for word.
 
 **Share into Inkwell** from Chrome, Instagram, Pinterest or any Android app. The link or picture lands on today with a snapshot (title, picture, a short summary) so it stays useful if the page goes away.
 
@@ -49,7 +68,7 @@ Voice modes (Idea, Journal, Scene, Text message, Email, or your own) are shared 
 
 ![The Drawer](docs/screenshots/desktop-drawer.webp)
 
-**Day review.** At 9 pm Daybook nudges you to review the day. Claude writes a few sentences on how it went, then offers a card per thread: Add to Daybook, Keep thinking, Split or Let go. Nothing goes to Daybook until you tap.
+**Day review.** In the evening Inkwell can nudge you to review the day. Claude writes a few sentences on how it went, then offers a card per thread: send it to your task app, Keep thinking, Split or Let go. Nothing is sent until you tap.
 
 ### Every project is a world
 
@@ -59,7 +78,6 @@ Voice modes (Idea, Journal, Scene, Text message, Email, or your own) are shared 
 
 **Overview** (`Alt + 0`) is a world's home: its logline, pieces by stage, and what to do next (things to file, promises not paid off, the next shoot day). The Ninja Bunch is a Show, so it talks in seasons and episodes, alongside its reels, gags and songs. Each piece has its own label and stage.
 
-![The Ninja Bunch's Overview](docs/screenshots/desktop-overview.webp)
 
 ### The seven tabs
 
@@ -79,7 +97,6 @@ Every project has the same tabs across the top, hidden while you type. Hold `Alt
 
 **Write** (`Alt + 3`) lists the pieces to write in and opens them. Screenplays format themselves as you type (scene headings, action, characters, dialogue). Above the scene headings, a script can have its own levels: `# ` an act, `## ` a sequence, `### ` a named scene, each with a one-line summary only you see. Scene numbers appear only once you choose "Number the scenes (for production)", and never change after that (a scene added between 3 and 4 is 3A).
 
-![Reel 2: Breakfast, with sections, summaries and scene numbers](docs/screenshots/desktop-script.webp)
 
 Prose is just the page. Notes sit in the margin beside the paragraph they belong to (`Ctrl + 2` shows or hides them; `Alt + N` adds one).
 
@@ -112,13 +129,11 @@ Prose is just the page. Notes sit in the margin beside the paragraph they belong
 
 Inside a piece, **Production** (`Ctrl + Shift + S`) turns the script into what's needed to generate or shoot it. Each scene shows the bible elements it uses (found in its words), its production notes and its shots. Shot codes like `NB-R02-S01-01` never change, so file names and Resolve clips keep pointing at the right shot. Each shot has still and video prompts and its renders; the star marks the one that worked, and earlier prompts are never lost. Each shot says how it's made (Generated, From reference, or Live action), and each scene with lines says whether its voices are recorded, generated or both. "Download kit" zips a shot's prompts and reference pictures for PixAI, Seedance or ComfyUI.
 
-![Shots for Reel 2, one opened to show its prompts and starred render](docs/screenshots/desktop-shots.webp)
 
 The **storyboard** shows every shot in order with its starred still. "Play" runs them as a rough animatic.
 
-![The storyboard](docs/screenshots/desktop-storyboard.webp)
 
-**Kit** is the world's bible pages that are elements (characters, locations, props, wardrobe), each with reference pictures, a locked look and the few words that go into every prompt. **Shoot days** turn into a one-page call sheet (who's needed, locations, props, notes) to print, or send to Daybook on that day at call time. A **To plan** list gathers the scenes that still need shooting or voices recorded, and **voice sessions** sit beside shoot days.
+**Kit** is the world's bible pages that are elements (characters, locations, props, wardrobe), each with reference pictures, a locked look and the few words that go into every prompt. **Shoot days** turn into a one-page call sheet (who's needed, locations, props, notes) to print, or send to your task app on that day at call time. A **To plan** list gathers the scenes that still need shooting or voices recorded, and **voice sessions** sit beside shoot days.
 
 ![A shoot day and its call sheet](docs/screenshots/desktop-shoot-day.webp)
 
@@ -178,7 +193,7 @@ Every line, paragraph and page records who wrote it, you or Claude.
 
 Being built right now, and not in the screenshots yet:
 
-- **Meeting notes** from a recording: speakers, a summary, decisions and tasks sent to Daybook.
+- **Meeting notes** from a recording: speakers, a summary, decisions and tasks.
 
 ## Shortcuts
 
