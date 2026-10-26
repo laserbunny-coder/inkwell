@@ -45,13 +45,13 @@ try {
   await p.waitForSelector('#editor .ProseMirror');
   await sleep(500);
 
-  await check('on a computer the place line names where you are, and Back names the last place', async () => {
+  await check('on a computer the top bar names where you are, and its Back button names the last place', async () => {
     await toToday(p);
-    assert.match(await p.locator('.placeline .pl-path').innerText(), /Today/);
+    assert.match(await p.locator('#crumb').innerText(), /Daily pages/);
     await p.keyboard.press('Control+Shift+O');
     await p.waitForFunction(() => document.documentElement.dataset.view === 'library');
     await sleep(300);
-    await p.waitForFunction(() => document.querySelector('.placeline .pl-back')?.textContent === '‹ Today');
+    await p.waitForFunction(() => document.querySelector('#tb-back')?.textContent === '‹ Today');
     assert.equal(await p.locator('.placebar').isVisible(), false, 'no phone bar on a computer');
   });
 
@@ -63,7 +63,7 @@ try {
     await p.keyboard.press('Enter');
     await p.waitForSelector('.notebook', { state: 'visible' });
     assert.equal(await p.locator('.go-panel').isVisible(), false);
-    await p.waitForFunction(() => document.querySelector('.placeline .pl-back')?.textContent === '‹ Library');
+    await p.waitForFunction(() => document.querySelector('#tb-back')?.textContent === '‹ Library');
   });
 
   await check('the Go panel’s desk reaches Today, the Drawer, the Library and Tags', async () => {
@@ -88,16 +88,34 @@ try {
     await p.keyboard.press('Escape');
   });
 
-  await check('Escape closes the Go panel, and the corner keeps its labels', async () => {
+  await check('Escape closes the Go panel; the top bar holds the buttons and comes down near the top', async () => {
     await p.keyboard.press('Control+O');
     await p.waitForSelector('.go-panel', { state: 'visible' });
     await p.keyboard.press('Escape');
     await p.waitForSelector('.go-panel', { state: 'hidden' });
-    await p.locator('#go-toggle').click({ force: true });
+    await toToday(p);
+    assert.equal(await p.locator('.corner').count(), 0, 'no corner strip');
+    assert.equal(await p.locator('.placeline').count(), 0, 'no place line');
+    // Nothing shows until the mouse nears the top: 40px down is close enough.
+    await p.mouse.move(640, 400);
+    await sleep(300);
+    assert.equal(await p.evaluate(() => document.body.classList.contains('show-top')), false);
+    await p.mouse.move(640, 40, { steps: 4 });
+    await p.waitForFunction(() => document.body.classList.contains('show-top'));
+    await sleep(300);
+    assert.deepEqual(await p.locator('.tb-tools button').allInnerTexts(), ['Mic', 'Today', 'Library', 'Drawer', 'Go', 'Notes', 'Focus', 'Aa', 'Ctrl+K']);
+    await p.locator('#go-toggle').click();
     await p.waitForSelector('.go-panel', { state: 'visible' });
     await p.keyboard.press('Escape');
-    await toToday(p);
-    assert.equal(await p.locator('#view-toggle').innerText(), 'Today');
+    await p.waitForSelector('.go-panel', { state: 'hidden' });
+    // Well below the bar it tucks away again.
+    await p.mouse.move(640, 500, { steps: 4 });
+    await p.waitForFunction(() => !document.body.classList.contains('show-top'));
+    // Overshooting into the window's title bar still brings it down.
+    await p.evaluate(() => document.documentElement.dispatchEvent(new MouseEvent('mouseleave', { clientX: 640, clientY: -5 })));
+    assert.equal(await p.evaluate(() => document.body.classList.contains('show-top')), true);
+    await p.mouse.move(640, 500, { steps: 4 });
+    await p.waitForFunction(() => !document.body.classList.contains('show-top'));
   });
   await ctx.close();
 
@@ -115,7 +133,7 @@ try {
     await settle(ph);
     assert.equal(await ph.locator('.placebar').isVisible(), true);
     assert.match(await ph.locator('.pb-place .pb-name').innerText(), /^Today/);
-    assert.equal(await ph.locator('.corner').isVisible(), false, 'the corner buttons are gone on a phone');
+    assert.equal(await ph.locator('#mic-toggle').isVisible(), false, 'the computer’s tools stay off the phone');
     assert.equal(await ph.locator('.pb-menu').getAttribute('aria-label'), 'Menu');
   });
 

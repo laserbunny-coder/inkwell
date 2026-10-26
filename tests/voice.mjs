@@ -227,13 +227,16 @@ try {
     await page.waitForFunction(() => /Scribe has it too/.test(document.querySelector('.toast')?.textContent || ''));
   });
 
-  await check('the Mic in the corner starts the same capture, aimed where the caret is', async () => {
+  await check('the Mic in the top bar starts the same capture, aimed where the caret is', async () => {
     await page.keyboard.press('Control+J');
     await page.waitForFunction(() => document.documentElement.dataset.view !== 'notebook');
     await page.click('#editor .ProseMirror');
     await page.keyboard.press('Control+End');
     await sleep(700);
-    await page.locator('#mic-toggle').click({ force: true });
+    await page.mouse.move(700, 20, { steps: 3 });
+    await page.waitForFunction(() => document.body.classList.contains('show-top'));
+    await sleep(300);
+    await page.locator('#mic-toggle').click();
     await page.waitForSelector('.capture[data-state="recording"]');
     assert.match(await page.locator('.cap-dest').innerText(), /^Into /);
     await page.keyboard.press('Escape');

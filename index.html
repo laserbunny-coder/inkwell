@@ -44,16 +44,35 @@
   <div class="edge edge-top" aria-hidden="true"></div>
 
   <header class="topbar">
-    <nav class="crumb" id="crumb" aria-label="Where you are"></nav>
-    <nav class="page-tabs" id="page-tabs" aria-label="Pages" hidden></nav>
-    <span class="spacer"></span>
-    <button type="button" class="pill links-pill" id="chapter-links-chip" hidden></button>
-    <button type="button" id="words" data-cmd="stats" title="Progress: words and pages over time"></button>
-    <span id="status" role="status"></span>
-    <button type="button" class="pill" id="versions" hidden title="The same text was changed on two devices"></button>
-    <button type="button" class="pill" id="sync" hidden></button>
-    <button type="button" class="pill" data-cmd="page" aria-label="Page width and text size">Aa</button>
-    <button type="button" class="pill" data-cmd="palette">⌘K</button>
+    <div class="tb-row tb-where">
+      <button type="button" class="tb-back" id="tb-back" hidden></button>
+      <nav class="crumb" id="crumb" aria-label="Where you are"></nav>
+      <span class="spacer"></span>
+      <button type="button" class="pill links-pill" id="chapter-links-chip" hidden></button>
+      <button type="button" id="words" data-cmd="stats" title="Progress: words and pages over time"></button>
+      <span id="status" role="status"></span>
+      <button type="button" class="pill" id="versions" hidden title="The same text was changed on two devices"></button>
+      <button type="button" class="pill" id="sync" hidden></button>
+    </div>
+    <div class="tb-row tb-do">
+      <nav class="page-tabs" id="page-tabs" aria-label="Pages" hidden></nav>
+      <span class="spacer"></span>
+      <div class="tb-tools" role="toolbar" aria-label="Tools">
+        <span class="tb-group tb-mic"><button type="button" class="tb-btn mic" data-cmd="mic" id="mic-toggle" title="Capture by voice; it lands where you are (⌥C)">Mic</button></span>
+        <span class="tb-group tb-places">
+          <button type="button" class="tb-btn" data-cmd="today" id="view-toggle" title="Today’s page (⌘J)">Today</button>
+          <button type="button" class="tb-btn" data-cmd="library" id="library-toggle" title="Library (⌘⇧O)">Library</button>
+          <button type="button" class="tb-btn" data-cmd="drawer" id="drawer-toggle" title="The Drawer: ideas with no home yet">Drawer</button>
+          <button type="button" class="tb-btn" data-cmd="go" id="go-toggle" title="Go: the last place, this piece’s pages, the desk (⌘O)">Go</button>
+        </span>
+        <span class="tb-group tb-view">
+          <button type="button" class="tb-btn" data-cmd="notes" id="notes-toggle" title="Notes beside the text (⌘2)">Notes</button>
+          <button type="button" class="tb-btn" data-cmd="focus" id="focus-toggle" title="Focus: just the text (⌘.)">Focus</button>
+          <button type="button" class="tb-btn" data-cmd="page" aria-label="Page width and text size" title="Page width, text size, what to show">Aa</button>
+        </span>
+        <button type="button" class="pill" data-cmd="palette" id="palette-toggle" title="Everything you can do (⌘K). Shortcuts: ⌘/">⌘K</button>
+      </div>
+    </div>
   </header>
 
   <nav class="outline" aria-label="Library">
@@ -340,17 +359,6 @@
     <div class="hint">Saved on this device only, so your phone and laptop can differ. Alt+[ ] for width, Alt+− = for size.</div>
   </div>
 
-  <div class="corner">
-    <button type="button" class="ghost-btn" data-cmd="page" aria-label="Page width and text size" title="Page width, text size, what to show">Aa</button>
-    <button type="button" class="ghost-btn" data-cmd="notes" id="notes-toggle" title="Notes beside the text (⌘2)">Notes</button>
-    <button type="button" class="ghost-btn" data-cmd="mic" id="mic-toggle" title="Capture by voice; it lands where you are (⌥C)">Mic</button>
-    <button type="button" class="ghost-btn" data-cmd="today" id="view-toggle" title="Today’s page (⌘J)">Today</button>
-    <button type="button" class="ghost-btn" data-cmd="drawer" id="drawer-toggle" title="The Drawer: ideas with no home yet">Drawer</button>
-    <button type="button" class="ghost-btn" data-cmd="library" id="library-toggle" title="Library (⌘⇧O)">Library</button>
-    <button type="button" class="ghost-btn" data-cmd="go" id="go-toggle" title="Go: the last place, this piece’s pages, the desk (⌘O)">Go</button>
-    <button type="button" class="ghost-btn" data-cmd="focus" id="focus-toggle" title="Focus: just the text (⌘.)">Focus</button>
-    <button type="button" class="ghost-btn" data-cmd="palette" title="Everything you can do (⌘K). Shortcuts: ⌘/">⌘K</button>
-  </div>
 
   <div class="script-bar" role="toolbar" aria-label="Script elements and alternates" hidden>
     <button type="button" class="bar-mic" data-talk="1" aria-label="Capture by voice (it lands where you are)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>

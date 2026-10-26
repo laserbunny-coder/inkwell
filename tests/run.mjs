@@ -176,7 +176,7 @@ try {
   await check('the Aa panel picks a font by kind, and it sticks after reload', async () => {
     const family = () => p.locator('#editor .ProseMirror').evaluate((el) => getComputedStyle(el).fontFamily);
     assert.match(await family(), /Newsreader/);
-    await p.evaluate(() => document.querySelector('.corner [data-cmd=page]').click());
+    await p.evaluate(() => document.querySelector('.tb-tools [data-cmd=page]').click());
     assert.equal(await p.locator('.font-groups button.current').innerText(), 'Serif');
     await p.locator('.font-groups button', { hasText: 'Mono' }).click();
     await p.locator('.font-list button', { hasText: 'JetBrains Mono' }).click();
@@ -190,7 +190,7 @@ try {
     await p.waitForSelector('#editor .ProseMirror');
     assert.match(await family(), /JetBrains Mono/);
     assert.equal(await p.evaluate(() => !!document.getElementById('font-jetbrains')), true);
-    await p.evaluate(() => document.querySelector('.corner [data-cmd=page]').click());
+    await p.evaluate(() => document.querySelector('.tb-tools [data-cmd=page]').click());
     assert.equal(await p.locator('.font-groups button.current').innerText(), 'Mono');
     await p.locator('.font-groups button', { hasText: 'Serif' }).click();
     await p.locator('.font-list button', { hasText: 'Newsreader' }).click();
@@ -660,9 +660,9 @@ try {
     assert.equal(await p.locator('.palette').isVisible(), false);
     await p.keyboard.press('Escape');
     assert.equal(await p.locator('.shortcuts').isVisible(), false);
-    await p.locator('#focus-toggle').click({ force: true });
+    await p.evaluate(() => document.querySelector('#focus-toggle').click());
     assert.equal(await p.evaluate(() => document.documentElement.classList.contains('focus')), true);
-    await p.locator('#focus-toggle').click({ force: true });
+    await p.evaluate(() => document.querySelector('#focus-toggle').click());
     assert.equal(await p.evaluate(() => document.documentElement.classList.contains('focus')), false);
     await p.keyboard.press('Control+J');
   });
