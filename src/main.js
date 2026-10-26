@@ -743,6 +743,7 @@ onLocalWrites((rows) => {
 });
 window.__sync = sync;
 window.__notebook = notebook;
+window.__foldKey = foldKey;
 window.__vaultFiles = vaultFiles;
 syncEl.addEventListener('click', () => { if (syncEl.dataset.state === 'signed-out') sync.signIn(); else sync.soon(0); });
 
@@ -3934,6 +3935,7 @@ document.addEventListener('click', (e) => {
   if (cmd === 'today') go({ view: 'notebook', pageId: dayId(isoToday()) });
   if (cmd === 'drawer') go({ view: 'drawer' });
   if (cmd === 'go') nav.toggle();
+  if (cmd === 'mic') captureHere({ start: true });
   if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
   if (cmd === 'tags') go({ view: 'tags' });
   if (cmd === 'close-tag') { $('.tag-results').hidden = true; currentEditor().commands.focus(); }

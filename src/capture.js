@@ -1,5 +1,5 @@
 import { putEntries, getEntry, children, getMeta, setMeta, topTags } from './db.js';
-import { refsIn } from './outline.js';
+import { refsIn, foldAway } from './outline.js';
 import { entry, tagsIn } from './model.js';
 import { GAP } from './order.js';
 import { addFile, localFile, uploadPending, lengthLabel } from './files.js';
@@ -152,7 +152,12 @@ export function writeOutPending({ ask, canAsk, onRows, draft = null }) {
       const rows = it.into && draft ? await draft.deliver(it, answer || {}) : await placeVoice(it, answer || {}, { withTag });
       await unqueue(it.line);
       setFileNote(it.file, '');
-      if (rows.length) onRows(rows);
+      if (rows.length) await onRows(rows);
+      // The write-up shows as its first line; the rest stays folded under it.
+      // (If you'd already written on the line, the write-up itself is under
+      // it, so it stays open.)
+      const host = rows.find((r) => r.id === it.line)?.fields?.voice?.host;
+      if (!(it.into && draft) && host === it.line && rows.some((r) => r.parent_id === it.line && !r.deleted && r.kind === 'line')) foldAway(it.line);
     }
   })().catch((e) => console.error(e)).finally(() => {
     busy = null;

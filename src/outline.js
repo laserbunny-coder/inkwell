@@ -263,6 +263,26 @@ const FOLDED = 'folded';
 const loadFolded = () => { try { return new Set(JSON.parse(localStorage.getItem(FOLDED) || '[]')); } catch { return new Set(); } };
 const saveFolded = (set) => { try { localStorage.setItem(FOLDED, JSON.stringify([...set].slice(-2000))); } catch {} };
 const kidsOf = (li) => (li.lastChild?.type.name === 'bulletList' ? li.lastChild : null);
+// Folds a line away on this device, in any page that's open too (a voice
+// capture lands with the lines under it folded, so a long ramble stays one line).
+const openViews = new Set();
+export function foldAway(eid) {
+  const set = loadFolded();
+  set.add(eid);
+  saveFolded(set);
+  for (const view of openViews) {
+    const tr = view.state.tr.setMeta(foldKey, { fold: eid, on: true });
+    // A caret in what's being folded moves up to the end of the line itself.
+    view.state.doc.descendants((node, pos) => {
+      if (node.type.name !== 'listItem' || node.attrs.eid !== eid) return true;
+      const kids = kidsOf(node);
+      const from = pos + node.nodeSize - kids?.nodeSize - 1;
+      if (kids && tr.selection.head > from && tr.selection.head < pos + node.nodeSize) tr.setSelection(Selection.near(tr.doc.resolve(pos + 1 + node.firstChild.nodeSize - 1), -1));
+      return false;
+    });
+    view.dispatch(tr);
+  }
+}
 
 // Where each line sits, and which parts of the page are out of sight.
 function hiddenRanges(doc, { folded, zoom }) {
@@ -471,13 +491,17 @@ export const OutlineFold = Extension.create({
           return next;
         }
       },
-      view: () => ({
-        update(view, prev) {
-          const a = foldKey.getState(view.state);
-          const b = foldKey.getState(prev);
-          if (a.zoom !== b.zoom) onZoom(a.zoom);
-        }
-      }),
+      view: (view) => {
+        openViews.add(view);
+        return {
+          update(view, prev) {
+            const a = foldKey.getState(view.state);
+            const b = foldKey.getState(prev);
+            if (a.zoom !== b.zoom) onZoom(a.zoom);
+          },
+          destroy() { openViews.delete(view); }
+        };
+      },
       // Keep the caret where you can see it: arrows skip over folded lines,
       // and anything typed or moved into a fold opens it.
       appendTransaction(trs, oldState, state) {
