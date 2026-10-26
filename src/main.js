@@ -49,7 +49,7 @@ import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
-import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf } from './library.js';
+import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf } from './library.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -1564,15 +1564,16 @@ async function bookMenu(book) {
 async function worldMenu(world) {
   const w = await getEntry(world.id);
   const all = await areas();
+  const top = await piecesIn(w.id);
   return [
     ...(view() !== 'world' || state.worldId !== w.id ? [{ label: 'Open', run: () => go({ view: 'world', id: w.id }) }] : []),
     { label: 'Rename…', run: () => rename(w) },
     { label: 'New piece…', run: () => addPiece(w.id) },
     { label: 'New page in its bible', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(w.id); } },
     { label: 'Move to area', sub: (await areaOptions(all)).map(([id, label]) => ({ label: label.trim(), current: w.area_id === id, run: () => moveBookToArea(w, id) })) },
-    { label: 'Kind', sub: [
-      { label: 'Creative world (pieces, the six pages)', current: !isLife(w), run: () => setLife(w, false) },
-      { label: 'Life project (Overview, Gather, Notes; never shared)', current: isLife(w), run: () => setLife(w, true) }
+    { label: 'Shape', sub: [
+      ...SHAPES.map((sh) => ({ label: `${sh.name}: ${sh.about.toLowerCase()}`, current: shapeOf(w, top.length).id === sh.id, run: () => setShape(w, sh.id) })),
+      ...(shapeOf(w, top.length).levels.length ? ['sep', { label: `Rename levels (${levelsOf(w, shapeOf(w, top.length)).map((l) => l.label).join(' › ')})…`, run: () => renameLevels(w) }] : [])
     ] },
     ...(isLife(w) ? [{ label: 'Meeting notes go here', sub: [['business', 'Business meetings'], ['filmmaking', 'Filmmaking meetings'], ['other', 'Other meetings']].map(([k, label]) => ({ label, current: (w.fields?.meetings || []).includes(k), run: () => setMeetings(w, k) })) }] : []),
     ...(view() === 'library' ? [
@@ -1582,6 +1583,63 @@ async function worldMenu(world) {
     'sep',
     { label: 'Move to Trash…', danger: true, run: () => toTrash(w) }
   ];
+}
+
+// What a project is. Nothing moves or gets renamed: the shape only says
+// what new pieces start as (Seasons and Episodes in a Show).
+async function setShape(world, id) {
+  const w = await getEntry(world.id);
+  if (id === 'life') return setLife(w, true);
+  if (isLife(w)) { await setLife(w, false); }
+  const fresh = await getEntry(w.id);
+  const now = { ...fresh, fields: { ...fresh.fields, shape: id }, updated_at: Date.now() };
+  await putEntries([now]);
+  await refreshViews();
+  const sh = SHAPES.find((x) => x.id === id);
+  const levels = levelsOf(now, sh);
+  toast(`Now ${id === 'one' ? 'one piece' : `a ${sh.name.toLowerCase()}`}. Nothing moved${levels.length ? `; new pieces start as ${levels.map((l) => l.label + 's').join(', then ')}` : ''}.`);
+  if (id === 'show') await offerSeason(now, levels);
+}
+
+// A project that became a Show can put what it already has into Season 1,
+// as its Episodes, only if you say so; Undo puts everything back.
+async function offerSeason(world, levels) {
+  const [group, piece] = levels.map((l) => l.label);
+  const loose = (await piecesIn(world.id)).filter((p) => kindName(p) !== group);
+  if (!loose.length) return;
+  const one = loose.length === 1;
+  const ok = await ask({ title: `Put ${one ? `${loose[0].title || 'it'}` : `these ${loose.length} pieces`} into ${group} 1?`, body: `${one ? 'It becomes' : 'They become'} ${one ? `${piece} 1` : `its ${piece.toLowerCase()}s`}, in the same order. Nothing in ${one ? 'it' : 'them'} changes, and you can undo it.`, ok: `Put ${one ? 'it' : 'them'} in`, cancel: 'Leave as is' });
+  if (!ok) return;
+  const before = loose.map((p) => ({ ...p }));
+  const season = await newPiece(world.id, 'lines', `${group} 1`, null, group);
+  const t = Date.now();
+  await putEntries([
+    { ...season, sort: Math.min(...loose.map((p) => p.sort || 0)) - 1, updated_at: t },
+    ...loose.map((p) => ({ ...p, parent_id: season.id, fields: { ...p.fields, ...(p.fields?.label ? {} : { label: piece }) }, updated_at: t }))
+  ]);
+  await refreshViews();
+  toast(`${one ? `${loose[0].title || 'It'} is` : `${loose.length} pieces are`} in ${group} 1 now`, { label: 'Undo', run: async () => {
+    const s = await getEntry(season.id);
+    await putEntries([...before.map((p) => ({ ...p, updated_at: Date.now() })), { ...s, deleted: true, updated_at: Date.now() }]);
+    await refreshViews();
+  } });
+}
+
+// Your own names for a shape's levels in this project. Pieces you already
+// have keep theirs; new ones start with the new names.
+async function renameLevels(world) {
+  const w = await getEntry(world.id);
+  const shape = shapeOf(w, (await piecesIn(w.id)).length);
+  const now = levelsOf(w, shape).map((l) => l.label);
+  const got = await askText({ title: 'Rename levels', body: `What ${shape.levels.length > 1 ? 'they are' : 'it is'} called in ${w.title || 'this project'}, biggest first${shape.levels.length > 1 ? ', with › or a comma between' : ''}. For example ${shape.levels.length > 1 ? 'Batch › Reel' : 'Reel'}. Pieces you already have keep their names.`, value: now.join(' › '), ok: 'Save' });
+  if (got === null || got === undefined) return;
+  const names = got.split(/›|>|,/).map((x) => x.trim()).slice(0, shape.levels.length);
+  const levelNames = shape.levels.map((l, i) => (names[i] && names[i] !== l.label ? names[i] : ''));
+  const fields = { ...w.fields, levelNames };
+  if (!levelNames.some(Boolean)) delete fields.levelNames;
+  await putEntries([{ ...w, fields, updated_at: Date.now() }]);
+  await refreshViews();
+  toast(`New pieces in ${w.title || 'it'} start as ${levelsOf({ fields }, shape).map((l) => l.label + 's').join(', then ')}`);
 }
 
 // A life project: Overview, Gather and Notes only, and never shared. Nothing
@@ -1650,9 +1708,13 @@ async function setStage(piece, stage) {
 // A new piece in a world or inside a piece: its name, what it is, how it's written.
 async function addPiece(parentId) {
   const parent = await getEntry(parentId);
+  const next = await nextLevel(parent);
   const got = await askPiece({
-    title: `New piece in ${nameOf(parent)}`,
+    title: `New ${next ? next.label.toLowerCase() : 'piece'} in ${nameOf(parent)}`,
     labels: await usedLabels(),
+    label: next?.label || '',
+    name: next ? `${next.label} ${next.n}` : '',
+    type: next?.type,
     formats: [['screenplay', 'Script', 'A short, an episode, a film'], ['novel', 'Prose', 'A novel, a story'], ['lines', 'Outline', 'A gag, a season, loose lines']]
   });
   if (!got) return;
@@ -1826,7 +1888,8 @@ async function renderLibrary() {
     const kind = make('span', 'card-kind');
     // A world says what's in it: its one piece, how many pieces, or just pages.
     const top = s.pieces.filter((p) => p.depth === 0).map((p) => p.row);
-    const what = isLife(b) ? 'life project' : top.length === 1 && !s.pieces.slice(1).length ? kindName(top[0]).toLowerCase() : s.pieces.length ? 'world' : 'pages';
+    const shape = shapeOf(b, top.length);
+    const what = shape.id !== 'one' ? shape.name.toLowerCase() : top.length === 1 && !s.pieces.slice(1).length ? kindName(top[0]).toLowerCase() : s.pieces.length ? 'collection' : 'pages';
     kind.append(dot(areaColor(area)), document.createTextNode(`${area?.title || 'No area'} · ${what}`));
     const n = (x, word) => `${x} ${word}${x === 1 ? '' : 's'}`;
     const detail = [
@@ -1866,7 +1929,7 @@ async function renderLibrary() {
     cards.push(wrap);
   }
   const add = make('button', 'card card-new');
-  add.append(make('span', 'plus', '+'), make('span', '', 'New world: a novel, a show, a film, or notes'));
+  add.append(make('span', 'plus', '+'), make('span', '', 'New: a novel, a show, a book series, a life project…'));
   add.addEventListener('click', () => showNewBook('novel'));
   cards.push(add);
   $('#lib-books').replaceChildren(...cards);
@@ -1935,11 +1998,31 @@ async function areaOptions(allAreas) {
   return out;
 }
 
-async function showNewBook(type) {
+// New: what are you making? The shape can change any time from the ⋯ menu.
+let newShape = 'one';
+function pickShape(id) {
+  newShape = id;
+  $('#lib-new-shapes').querySelectorAll('.lib-shape').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.shape === id)));
+  $('#lib-new-type-box').hidden = id !== 'one';
+  const sh = SHAPES.find((x) => x.id === id);
+  $('#lib-new-levels').textContent = sh.levels.length ? `Starts with ${id === 'show' ? 'Season 1 and Episode 1' : id === 'series' ? 'Book 1' : 'nothing yet'}. New pieces inside are ${sh.levels.map((l) => l.label + 's').join(', then ')}.` : id === 'universe' ? 'Put a Show, a Book series or a Film inside; they all share one bible.' : '';
+}
+$('#lib-new-shapes').replaceChildren(...SHAPES.map((sh) => {
+  const b = make('button', 'lib-shape');
+  b.type = 'button';
+  b.dataset.shape = sh.id;
+  b.setAttribute('role', 'radio');
+  b.append(make('b', '', sh.name), make('span', '', sh.about));
+  b.addEventListener('click', () => { pickShape(sh.id); $('#lib-new-title').focus(); });
+  return b;
+}));
+
+async function showNewBook(type = 'novel', shape = 'one') {
   if (view() !== 'library') await go({ view: 'library' });
   const form = $('#lib-new');
   form.hidden = false;
-  $('#lib-new-type').value = type;
+  $('#lib-new-type').value = type === 'notes' ? 'world' : type;
+  pickShape(shape);
   $('#lib-new-title').value = '';
   $('#lib-new-title').focus();
 }
@@ -1950,16 +2033,11 @@ $('#lib-new').addEventListener('submit', async (e) => {
   if (!title) return;
   const type = $('#lib-new-type').value;
   const area = $('#lib-new-area').value || null;
-  let world = type === 'world' || type === 'life' ? await newWorld(title, area) : await worldOf(await newBook(type, title, area));
+  const world = await newShaped(newShape, title, area, type);
   $('#lib-new').hidden = true;
-  // A life project (a remodel, research for someone ill) opens on its overview.
-  if (type === 'life') {
-    world = await getEntry(world.id);
-    await putEntries([{ ...world, fields: { ...world.fields, life: true }, updated_at: Date.now() }]);
-    return go({ view: 'world', id: world.id });
-  }
-  // A new world opens on its Idea page, the place to think it through.
-  const idea = (await pagesIn(world.id))[0];
+  // One piece opens on its Idea page, the place to think it through; anything
+  // bigger opens on its overview, to see what's inside.
+  const idea = newShape === 'one' && (await pagesIn(world.id))[0];
   if (idea) await go({ view: 'notebook', pageId: idea.id });
   else await go({ view: 'world', id: world.id });
 });
@@ -2059,6 +2137,8 @@ async function renderProject() {
   const inside = await piecesIn(b.id);
   $('#ph-pieces').replaceChildren(...inside.map((x) => pieceRow(x, 0)));
   $('#ph-new-piece').onclick = () => addPiece(b.id);
+  const nextIn = await nextLevel(b);
+  $('#ph-new-piece').textContent = `+ ${nextIn ? nextIn.label : 'Piece'}`;
   const pages = await pagesIn(b.id);
   // Empty sections stay out of the way: just the two ways to add one.
   $('#ph-pieces-head').hidden = !inside.length;
@@ -2137,7 +2217,8 @@ async function renderWorld() {
   }
 
   const life = isLife(w);
-  $('#wh-kind').textContent = life ? 'Life project · ' : '';
+  const shape = shapeOf(w, s.pieces.filter((p) => p.depth === 0).length);
+  $('#wh-kind').textContent = shape.id === 'one' ? '' : `${shape.name} · `;
   // What it is, in a sentence: type over it.
   const log = $('#wh-logline');
   log.textContent = w.fields?.logline || '';
@@ -2170,6 +2251,8 @@ async function renderWorld() {
   $('#wh-pieces').replaceChildren(...s.pieces.map(({ row, depth }) => pieceRow(row, depth)));
   $('#wh-pieces-empty').hidden = s.pieces.length > 0;
   $('#wh-new-piece').onclick = () => addPiece(w.id);
+  const nextHere = await nextLevel(w);
+  $('#wh-new-piece').textContent = `+ ${nextHere ? nextHere.label : 'Piece'}`;
   $('#wh-board').hidden = true;
 
   // A life project's tasks go to Daybook, linked back here.
@@ -3258,6 +3341,9 @@ const commands = [
   { group: 'new', label: 'New novel', keys: '', run: () => showNewBook('novel') },
   { group: 'new', label: 'New screenplay', keys: '', run: () => showNewBook('screenplay') },
   { group: 'new', label: 'New notes collection', keys: '', run: () => showNewBook('notes') },
+  { group: 'new', label: 'New show (seasons, episodes)', keys: '', words: ['series', 'tv', 'reels'], run: () => showNewBook('novel', 'show') },
+  { group: 'new', label: 'New book series', keys: '', run: () => showNewBook('novel', 'series') },
+  { group: 'new', label: 'New project: what are you making?', keys: '', words: ['world', 'universe', 'collection', 'life'], run: () => showNewBook('novel', 'one') },
   { group: 'new', label: 'Bring in a script (Fountain file or pasted text)…', keys: '', run: importFountain },
   { group: 'new', label: 'New page', keys: '', run: newPageHere },
   { group: 'new', label: 'New area', keys: '', run: () => go({ view: 'library' }).then(() => [...document.querySelectorAll('#lib-areas .chip.add')].at(-1)?.click()) },

@@ -395,8 +395,18 @@ button.tree-area:hover { color: var(--ink); }
 .card-when { font-size: 12px; color: var(--faint); }
 .card-new { border-style: dashed; background: transparent; align-items: center; justify-content: center; color: var(--muted); min-height: 130px; }
 .card-new .plus { font-size: 22px; }
-.lib-new { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -18px 0 30px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
-.lib-new input { flex: 1 1 220px; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 9px 12px; font-size: 16px; outline: none; }
+.lib-new { display: flex; flex-direction: column; gap: 10px; margin: -18px 0 30px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.lib-new-q { font-family: var(--prose); font-weight: 500; font-size: 22px; margin: 0; }
+.lib-shapes { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.lib-shape { text-align: left; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; color: var(--ink); }
+.lib-shape:hover { border-color: var(--faint); }
+.lib-shape[aria-checked="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+.lib-shape b { font-weight: 600; font-size: 14px; }
+.lib-shape span { color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+.lib-new-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lib-new-type { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 14px; }
+.lib-new .hint { margin: 0; }
+.lib-new input { flex: 1 1 220px; min-width: 0; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 9px 12px; font-size: 16px; outline: none; }
 .lib-new select, .ph-meta select, .loose-list select { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 7px 8px; }
 .loose-list { list-style: none; margin: 8px 0 0; padding: 0; }
 .loose-list li { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--line); padding: 6px 0; }

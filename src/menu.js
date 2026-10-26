@@ -169,7 +169,7 @@ export function askText({ title, value = '', ok = 'Save', placeholder = '', body
 
 // A new piece: its name, what it is in your own words, and how it's written.
 // Resolves { title, label, type } or null.
-export function askPiece({ title, labels = [], formats }) {
+export function askPiece({ title, labels = [], formats, label: preset = '', name: suggested = '', type: preferred }) {
   return new Promise((resolve) => {
     const back = make('div', 'ask-backdrop');
     const box = make('form', 'ask ask-piece');
@@ -179,10 +179,12 @@ export function askPiece({ title, labels = [], formats }) {
     name.placeholder = 'Name, like “Reel 4: The Dentist”';
     name.setAttribute('aria-label', 'Name');
     name.autocomplete = 'off';
+    name.value = suggested;
     const label = make('input', 'ask-input');
     label.placeholder = 'What it is: Gag, Short, Episode, Season…';
     label.setAttribute('aria-label', 'What it is');
     label.autocomplete = 'off';
+    label.value = preset;
     const dl = make('datalist');
     dl.id = `piece-labels-${Date.now()}`;
     dl.append(...labels.map((v) => Object.assign(make('option'), { value: v })));
@@ -190,7 +192,7 @@ export function askPiece({ title, labels = [], formats }) {
     const how = make('div', 'ask-choices');
     how.setAttribute('role', 'radiogroup');
     how.setAttribute('aria-label', 'Written as');
-    let type = formats[0][0];
+    let type = formats.some(([id]) => id === preferred) ? preferred : formats[0][0];
     for (const [id, text, hint] of formats) {
       const b = make('button', 'chip' + (id === type ? ' on' : ''), text);
       b.title = hint || '';

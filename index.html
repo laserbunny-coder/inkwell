@@ -82,11 +82,17 @@
       <div class="lib-bar"><div id="lib-path" class="hint"></div><label class="lib-sort">Sort <select id="lib-sort" aria-label="Sort books"><option value="recent">Recently edited</option><option value="title">Title</option><option value="made">Newest first</option><option value="custom">My order</option></select></label></div>
       <div id="lib-books" class="cards"></div>
       <form id="lib-new" class="lib-new" hidden>
-        <input id="lib-new-title" placeholder="Title" aria-label="Title" autocomplete="off" required>
-        <select id="lib-new-type" aria-label="Starts with"><option value="novel">Novel</option><option value="screenplay">Screenplay</option><option value="lines">Outline (a gag, a short…)</option><option value="world">Pages only (notes, a bible)</option><option value="life">Life project (a remodel, research, the business)</option></select>
-        <select id="lib-new-area" aria-label="Area"></select>
-        <button type="submit" class="pill">Create</button>
-        <button type="button" class="ghost-btn" id="lib-new-cancel">Cancel</button>
+        <h2 class="lib-new-q">What are you making?</h2>
+        <div id="lib-new-shapes" class="lib-shapes" role="radiogroup" aria-label="What are you making?"></div>
+        <div class="lib-new-row">
+          <input id="lib-new-title" placeholder="Title" aria-label="Title" autocomplete="off" required>
+          <label id="lib-new-type-box" class="lib-new-type">Written as <select id="lib-new-type" aria-label="Written as"><option value="novel">Prose (a novel)</option><option value="screenplay">Script (a screenplay)</option><option value="lines">Outline (a gag, a short…)</option><option value="world">Just pages (notes, a bible)</option></select></label>
+          <select id="lib-new-area" aria-label="Area"></select>
+          <button type="submit" class="pill">Create</button>
+          <button type="button" class="ghost-btn" id="lib-new-cancel">Cancel</button>
+        </div>
+        <p class="hint lib-new-levels" id="lib-new-levels"></p>
+        <p class="hint">You can change this any time from its ⋯ menu, under Shape. Nothing moves and nothing is lost.</p>
       </form>
       <section id="lib-loose-box" hidden>
         <div class="panel-label">Loose pages, not in a world yet</div>
