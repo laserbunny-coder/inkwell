@@ -315,6 +315,7 @@ try {
     await go(page, { view: 'production', id: 'pr_reel1', tab: 'shots' });
     await page.waitForSelector('.prod-view .gv-levels .chip[data-tab="shots"]');
     assert.deepEqual(await page.locator('.prod-view .gv-levels .chip').evaluateAll((els) => els.map((e) => e.dataset.tab)), ['shots', 'board', 'kit']);
+    await shot(page, 'workflow-make-tools');
     await go(page, { view: 'stage', id: 'wd_nb', page: 'make', sub: 'board' });
     await page.waitForSelector('#st-board .sb-card');
     await openStages(page);
@@ -341,6 +342,7 @@ try {
     assert.deepEqual({ base: own.fields.base, stages: own.fields.stages, tools: own.fields.tools }, { base: 'ai', stages: ['Idea', 'Written', 'Boarded', 'Generated', 'Edited', 'Live shoot', 'Posted'], tools: ['shots', 'board', 'kit', 'days'] });
     assert.equal(await page.locator('.se-tabs .chip.on').getAttribute('data-set'), own.id);
     assert.equal(await page.locator('.se-use select[data-type="screenplay"]').inputValue(), own.id);
+    await shot(page, 'workflow-own');
     await page.locator('.stage-edit .pill.primary').click();
     await sleep(600);
     assert.equal((await get(page, 'wd_nb')).fields.stageFor.screenplay, own.id);
@@ -361,6 +363,7 @@ try {
     await page.waitForSelector('#lib-new-how .se-tabs .chip.on');
     assert.equal(await page.locator('#lib-new-how .se-tabs .chip.on').getAttribute('data-set'), 'ai');
     assert.match(await page.locator('#lib-new-how .se-preview').innerText(), /Idea › Written › Boarded › Generated › Edited › Posted[\s\S]*Make: Shots, Storyboard, Kit, Shoot days/);
+    await shot(page, 'workflow-new-preview');
     // A book series starts as Book; a life project has no workflow.
     await page.locator('.lib-shape[data-shape="series"]').click();
     assert.equal(await page.locator('#lib-new-how .se-tabs .chip.on').getAttribute('data-set'), 'book');
