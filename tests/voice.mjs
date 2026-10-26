@@ -138,6 +138,11 @@ try {
     assert.deepEqual(line.tags, ['journal']);
     assert.equal(line.fields.voice.raw, RAW, 'word for word, kept');
     assert.deepEqual((await kidsOf(line.id)).map((k) => k.text), ['I kept thinking about the bridge.', 'Note to self: Call Mum.']);
+    // Only its first line shows; the rest is folded under it, a click away.
+    await page.waitForFunction((id) => document.querySelector(`#outline-editor li[data-eid="${id}"]`)?.classList.contains('folded'), line.id);
+    assert.equal(await page.locator('#outline-editor .ProseMirror').innerText().then((t) => t.includes('I kept thinking about the bridge.')), false, 'the rest is out of sight');
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/desktop-0-folded.png` });
+    await page.evaluate((id) => window.__notebook.editor.view.dispatch(window.__notebook.editor.state.tr.setMeta(window.__foldKey, { fold: id, on: false })), line.id);
     const asked = page.evaluate(() => window.__asked.find((a) => a.mode === 'voice'));
     assert.equal((await asked).place, 'day');
   });
@@ -220,6 +225,22 @@ try {
     const saved = await page.evaluate(() => window.__asked.find((a) => a.mode === 'voice-save-mode').item);
     assert.deepEqual(saved, { name: 'Lyrics', prompt: 'Song lyrics, in verses and a chorus.', model: 'opus' });
     await page.waitForFunction(() => /Scribe has it too/.test(document.querySelector('.toast')?.textContent || ''));
+  });
+
+  await check('the Mic in the corner starts the same capture, aimed where the caret is', async () => {
+    await page.keyboard.press('Control+J');
+    await page.waitForFunction(() => document.documentElement.dataset.view !== 'notebook');
+    await page.click('#editor .ProseMirror');
+    await page.keyboard.press('Control+End');
+    await sleep(700);
+    await page.locator('#mic-toggle').click({ force: true });
+    await page.waitForSelector('.capture[data-state="recording"]');
+    assert.match(await page.locator('.cap-dest').innerText(), /^Into /);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.capture', { state: 'hidden' });
+    await page.keyboard.press('Control+J');
+    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
+    await sleep(700);
   });
 
   await check('Alt + C in a chapter talks into the draft (Alt + V too): paragraphs per beat, the raw words one flip away', async () => {

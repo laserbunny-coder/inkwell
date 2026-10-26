@@ -141,7 +141,11 @@ try {
     const text = await outlineText(page);
     assert.match(text, /\d{1,2}:\d\d [ap]m\s*Idea\s*Ninjas who are terrible at hiding, filmed like a nature documentary\. #idea #ninja-bunch/, 'the time stays after the recording, then the mode chip, then the words');
     assert.equal(await page.locator('#outline-editor .voice-chip').first().innerText(), 'Idea');
-    assert.match(text, /Premise: ninjas who can’t hide/);
+    // The summary line shows; the rest of the write-up is folded under it.
+    await page.waitForFunction(() => document.querySelector('#outline-editor li.folded')?.innerText.includes('terrible at hiding'));
+    assert.doesNotMatch(await outlineText(page), /Premise: ninjas who can’t hide/);
+    await page.locator('#outline-editor li.folded .fold').first().click();
+    await page.waitForFunction(() => /Premise: ninjas who can’t hide/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''));
     const all = await lines(page);
     const cap = all.find((l) => l.fields?.capture === 'voice');
     assert.deepEqual(cap.tags, ['idea', 'ninja-bunch']);
