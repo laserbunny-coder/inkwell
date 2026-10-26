@@ -2649,6 +2649,7 @@ async function openShare(target) {
 const production = new ProductionView($('#prod-view'), {
   open: (r) => grid.hooks.open(r),
   openPage: (id) => go({ view: 'notebook', pageId: id }),
+  go: (place) => go(place),
   leave: (piece) => openBook(piece.id),
   changed(rows) { if (rows.some((r) => r && ['project', 'world', 'page'].includes(r.kind))) renderRail(); },
   menu: (anchor, items) => popMenu(anchor, items),
