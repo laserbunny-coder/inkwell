@@ -92,7 +92,7 @@ const pieceSet = async (p, name) => {
   await sleep(400);
 };
 const openStages = async (p) => {
-  await p.locator('.st-board-tools button', { hasText: 'Stages' }).click();
+  await p.locator('.st-board-tools button', { hasText: 'Workflow' }).click();
   await p.waitForSelector('.stage-edit');
 };
 
@@ -117,11 +117,11 @@ try {
     await shot(page, 'stagesets-board');
   });
 
-  await check('Stages… renames a stage and the piece on it follows', async () => {
+  await check('Workflow… renames a step and the piece on it follows', async () => {
     await openStages(page);
     assert.equal(await page.locator('.se-use select[data-type="screenplay"]').inputValue(), 'ai');
     assert.equal(await page.locator('.se-use select[data-type="novel"]').inputValue(), 'book');
-    assert.match(await page.locator('.se-row').last().innerText(), /out in the world/);
+    assert.equal(await page.locator('.se-list .se-row:has(.se-name)').last().locator('.se-out').count(), 1);
     await page.locator('.se-name').nth(2).fill('Storyboarded');
     await shot(page, 'stagesets-edit');
     await page.locator('.stage-edit .pill.primary').click();
@@ -135,7 +135,7 @@ try {
 
   await check('removing the stage a piece is on warns first, moves it back, and Undo puts it all back', async () => {
     await openStages(page);
-    await page.locator('.se-row').nth(2).locator('button', { hasText: 'Remove' }).click();
+    await page.locator('.se-row').nth(2).locator('.se-del').click();
     assert.match(await page.locator('.se-moves').innerText(), /Reel 2: Breakfast is on Storyboarded; it will move to Written\./);
     await page.locator('.stage-edit .pill.primary').click();
     await sleep(600);
@@ -149,10 +149,10 @@ try {
 
   await check('adding a stage puts it before the last one; Back to the usual stages undoes the names', async () => {
     await openStages(page);
-    await page.locator('.se-tools button', { hasText: '+ Add a stage' }).click();
+    await page.locator('.se-add').click();
     const names = await page.locator('.se-name').evaluateAll((els) => els.map((e) => e.value));
-    assert.deepEqual(names, ['Idea', 'Written', 'Storyboarded', 'Generated', 'Edited', 'New stage', 'Posted']);
-    await page.locator('.se-tools button', { hasText: 'Back to the usual AI video stages' }).click();
+    assert.deepEqual(names, ['Idea', 'Written', 'Storyboarded', 'Generated', 'Edited', 'New step', 'Posted']);
+    await page.locator('.se-reset', { hasText: 'Back to the usual AI video' }).click();
     const back = await page.locator('.se-name').evaluateAll((els) => els.map((e) => e.value));
     assert.deepEqual(back, ['Idea', 'Written', 'Boarded', 'Generated', 'Edited', 'Posted']);
     await page.locator('.stage-edit .pill.primary').click();
@@ -292,6 +292,100 @@ try {
     // The old world's board can still be up for a moment; wait for this one's tabs.
     await page.waitForFunction(() => document.querySelectorAll('.st-chips .chip').length === 3).catch(() => {});
     assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['board', 'kit', 'days']);
+  });
+
+  await check('a step moves with Alt + Left; a tool turned off leaves Make; Undo brings both back', async () => {
+    await go(page, { view: 'stage', id: 'wd_nb', page: 'make', sub: 'board' });
+    await page.waitForSelector('#st-board .sb-card');
+    await openStages(page);
+    await page.locator('.se-tabs .chip[data-set="ai"]').click();
+    await page.locator('.se-name').nth(2).focus();
+    await page.keyboard.press('Alt+ArrowLeft');
+    assert.deepEqual(await page.locator('.se-name').evaluateAll((els) => els.map((e) => e.value)), ['Idea', 'Boarded', 'Written', 'Generated', 'Edited', 'Posted']);
+    // Focus follows the step, so it can keep moving.
+    assert.equal(await page.evaluate(() => document.activeElement.value), 'Boarded');
+    await page.locator('.se-toolchips .chip[data-tool="days"]').click();
+    assert.equal(await page.locator('.se-toolchips .chip[data-tool="days"]').getAttribute('aria-pressed'), 'false');
+    await shot(page, 'workflow-edit');
+    await page.locator('.stage-edit .pill.primary').click();
+    await sleep(600);
+    const w = await get(page, 'wd_nb');
+    assert.deepEqual(w.fields.stageLists.ai, ['Idea', 'Boarded', 'Written', 'Generated', 'Edited', 'Posted']);
+    assert.deepEqual(w.fields.toolLists.ai, ['shots', 'board', 'kit']);
+    await go(page, { view: 'production', id: 'pr_reel1', tab: 'shots' });
+    await page.waitForSelector('.prod-view .gv-levels .chip[data-tab="shots"]');
+    assert.deepEqual(await page.locator('.prod-view .gv-levels .chip').evaluateAll((els) => els.map((e) => e.dataset.tab)), ['shots', 'board', 'kit']);
+    await shot(page, 'workflow-make-tools');
+    await go(page, { view: 'stage', id: 'wd_nb', page: 'make', sub: 'board' });
+    await page.waitForSelector('#st-board .sb-card');
+    await openStages(page);
+    await page.locator('.se-tabs .chip[data-set="ai"]').click();
+    await page.locator('.se-reset').click();
+    assert.equal(await page.locator('.se-toolchips .chip[data-tool="days"]').getAttribute('aria-pressed'), 'true');
+    await page.locator('.stage-edit .pill.primary').click();
+    await sleep(600);
+    assert.equal((await get(page, 'wd_nb')).fields.toolLists, undefined);
+  });
+
+  await check('Save as my own workflow keeps it on every device and points the project at it', async () => {
+    await openStages(page);
+    await page.locator('.se-tabs .chip[data-set="ai"]').click();
+    await page.locator('.se-add').click();
+    await page.locator('.se-name').nth(5).fill('Live shoot');
+    await page.locator('.se-keep').click();
+    await page.fill('.se-own-name', 'Reels with a live shoot');
+    await page.locator('.se-tools .pill', { hasText: 'Keep' }).click();
+    await sleep(400);
+    const own = (await all(page)).find((r) => r.kind === 'workflow');
+    assert.ok(own, 'the workflow is saved');
+    assert.equal(own.title, 'Reels with a live shoot');
+    assert.deepEqual({ base: own.fields.base, stages: own.fields.stages, tools: own.fields.tools }, { base: 'ai', stages: ['Idea', 'Written', 'Boarded', 'Generated', 'Edited', 'Live shoot', 'Posted'], tools: ['shots', 'board', 'kit', 'days'] });
+    assert.equal(await page.locator('.se-tabs .chip.on').getAttribute('data-set'), own.id);
+    assert.equal(await page.locator('.se-use select[data-type="screenplay"]').inputValue(), own.id);
+    await shot(page, 'workflow-own');
+    await page.locator('.stage-edit .pill.primary').click();
+    await sleep(600);
+    assert.equal((await get(page, 'wd_nb')).fields.stageFor.screenplay, own.id);
+    assert.equal((await get(page, 'wd_nb')).fields.stageLists, undefined);
+    assert.equal((await get(page, 'pr_reel1')).fields.stage, 'Posted');
+    await page.locator('.toast button', { hasText: 'Undo' }).click();
+    await sleep(600);
+    assert.equal((await get(page, 'wd_nb')).fields.stageFor?.screenplay, undefined);
+  });
+
+  await check('New fills in how it gets made from what you are making, and Customize changes it in place', async () => {
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+K');
+    await page.keyboard.type('New show');
+    await page.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('New show'));
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('#lib-new', { state: 'visible' });
+    await page.waitForSelector('#lib-new-how .se-tabs .chip.on');
+    assert.equal(await page.locator('#lib-new-how .se-tabs .chip.on').getAttribute('data-set'), 'ai');
+    assert.match(await page.locator('#lib-new-how .se-preview').innerText(), /Idea › Written › Boarded › Generated › Edited › Posted[\s\S]*Make: Shots, Storyboard, Kit, Shoot days/);
+    await shot(page, 'workflow-new-preview');
+    // A book series starts as Book; a life project has no workflow.
+    await page.locator('.lib-shape[data-shape="series"]').click();
+    assert.equal(await page.locator('#lib-new-how .se-tabs .chip.on').getAttribute('data-set'), 'book');
+    await page.locator('.lib-shape[data-shape="life"]').click();
+    assert.equal(await page.locator('#lib-new-how').isHidden(), true);
+    await page.locator('.lib-shape[data-shape="show"]').click();
+    // Your own workflow is under More.
+    await page.locator('#lib-new-how .se-more').click();
+    assert.ok(await page.locator('#lib-new-how .se-tabs .chip', { hasText: 'Reels with a live shoot' }).count());
+    await page.locator('#lib-new-how .se-tabs .chip[data-set="ai"]').click();
+    await page.locator('#lib-new-how .se-customize').click();
+    await page.locator('#lib-new-how .se-name').nth(1).fill('Scripted');
+    await page.locator('#lib-new-how .se-toolchips .chip[data-tool="kit"]').click();
+    await shot(page, 'workflow-new');
+    await page.fill('#lib-new-title', 'Bakery Nights');
+    await page.locator('#lib-new button[type="submit"]').click();
+    await sleep(800);
+    const w = (await all(page)).find((r) => r.kind === 'world' && r.title === 'Bakery Nights');
+    assert.equal(w.fields.shape, 'show');
+    assert.deepEqual(w.fields.stageLists, { ai: ['Idea', 'Scripted', 'Boarded', 'Generated', 'Edited', 'Posted'] });
+    assert.deepEqual(w.fields.toolLists, { ai: ['shots', 'board', 'days'] });
+    assert.equal(w.fields.stageFor, undefined);
   });
 
   await check('nothing broke', async () => { assert.deepEqual(page.errors, []); });

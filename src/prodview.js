@@ -1,7 +1,7 @@
 import { getEntry, getMany, putEntries, byKind } from './db.js';
 import { tagsIn } from './model.js';
 import { loadStructure, rowsAt } from './grid.js';
-import { bookType, hasManuscript, worldOf, stageSetOf } from './library.js';
+import { bookType, hasManuscript, worldOf, stageSetOf, toolsOf, toolsIn } from './library.js';
 import { addFile, fileUrl, fileBlob, isImage } from './files.js';
 import { zip } from './vault.js';
 import { download } from './export.js';
@@ -66,7 +66,11 @@ export class ProductionView {
   }
 
   get isOpen() { return !!this.piece && ['production', 'deliver'].includes(document.documentElement.dataset.view); }
-  get tabs() { return this.mode === 'deliver' ? DELIVER_TABS : TABS; }
+  get tabs() {
+    if (this.mode === 'deliver') return DELIVER_TABS;
+    const on = TABS.filter((t) => !this.tools || this.tools.includes(t.id));
+    return on.length ? on : TABS;
+  }
   get tabKey() { return this.mode === 'deliver' ? 'deliverTab' : 'prodTab'; }
   get tab() { const t = pref(this.tabKey, this.tabs[0].id); return this.tabs.some((x) => x.id === t) ? t : this.tabs[0].id; }
 
@@ -108,7 +112,10 @@ export class ProductionView {
       await putEntries([this.world]);
     }
     this.script = bookType(piece) === 'screenplay';
-    this.set = stageSetOf(piece, this.world).id;
+    // Your own workflow behaves like the set it came from (shots in one made
+    // from Live action start as live action).
+    const set = stageSetOf(piece, this.world);
+    this.set = set.own ? set.base : set.id;
     const st = hasManuscript(piece) ? await loadStructure(piece) : { acts: [], pieces: [] };
     this.items = st.acts.length ? rowsAt(this.script ? 'slug' : 'scene', st, piece) : [];
     this.scenes = this.items.filter((x) => x.type === 'row');
@@ -150,6 +157,11 @@ export class ProductionView {
       s.talk = this.script ? speechesIn(rows).length > 0 : false;
       s.changed = s.shots.length > 0 && !!s.bd?.fields?.sig && s.bd.fields.sig !== s.sig;
     }
+    // The tools on Make come from the workflow; a piece that already has
+    // shots keeps them even if its workflow has none.
+    this.setTools = toolsIn(stageSetOf(piece, this.world), this.world);
+    this.tools = toolsOf(piece, this.world);
+    if (!this.tools.length && (this.scenes.some((s) => s.shots.length) || this.lost.length)) this.tools = TABS.map((t) => t.id);
     // Which renders are videos, for the storyboard's stills.
     const fileIds = new Set();
     for (const sh of shots) for (const t of sh.fields?.tries || []) for (const id of t.files || []) fileIds.add(id);
@@ -211,7 +223,7 @@ export class ProductionView {
   // Shots, storyboards and shoot days are for video. A book, a stage piece
   // or short writing doesn't get them unless it asks, or already has shots.
   videoTools() {
-    return ['ai', 'live'].includes(this.set) || !!this.piece.fields?.videoTools || this.scenes.some((s) => s.shots.length) || this.lost.length > 0;
+    return this.tools.length > 0;
   }
 
   notVideo() {
@@ -222,7 +234,9 @@ export class ProductionView {
       short: 'Short writing goes straight from Polished to Deliver, where you can share it or copy it out.',
       stage: 'A stage piece’s own Make page (cast, rehearsals, cues) is on the way.'
     }[set.id] || '';
-    box.append(make('p', 'pd-notvideo-what', `${this.piece.title || 'This piece'} goes through ${set.name} stages, so the video tools (shots, storyboard, shoot days) are put away.`));
+    box.append(make('p', 'pd-notvideo-what', (set.tools || []).length
+      ? `The tools on Make are turned off in this project’s workflow. Turn them back on from the project’s ⋯ menu, Workflow….`
+      : `${this.piece.title || 'This piece'} goes through ${set.name} stages, so the video tools (shots, storyboard, shoot days) are put away.`));
     if (next) box.append(make('p', 'hint', next));
     const acts = make('div', 'pd-add');
     const stages = make('button', 'pill', 'Deliver');
@@ -1500,8 +1514,8 @@ export class ProductionView {
       { label: hide.has('notes') ? 'Show production notes' : 'Hide production notes', run: () => flip('notes') },
       { label: hide.has('summary') ? 'Show scene summaries' : 'Hide scene summaries', run: () => flip('summary') },
       { label: hide.has('empty') ? 'Show scenes with no shots' : 'Hide scenes with no shots', run: () => flip('empty') },
-      this.piece.fields?.videoTools && !['ai', 'live'].includes(this.set) && 'sep',
-      this.piece.fields?.videoTools && !['ai', 'live'].includes(this.set) && { label: 'Put the video tools away', run: () => this.setVideoTools(false) }
+      this.piece.fields?.videoTools && !this.setTools.length && 'sep',
+      this.piece.fields?.videoTools && !this.setTools.length && { label: 'Put the video tools away', run: () => this.setVideoTools(false) }
     ].filter(Boolean);
   }
 

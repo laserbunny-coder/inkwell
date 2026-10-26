@@ -13,7 +13,7 @@ import { getMeta, setMeta, putEntries, children, getEntry, snapshots, byKind, on
 import { trash, restore, trashed, deleteForever, contents } from './trash.js';
 import { searchIndex, searchChanged } from './search.js';
 import { keep, versionsOf, tidyHistory, blocks as docBlocks, compare, deletedFrom, bringBack } from './history.js';
-import { editStages } from './stageedit.js';
+import { editStages, newWorkflow } from './stageedit.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, askPiece, askScript, showCopy, toast, closeMenu } from './menu.js';
 import { Sync } from './sync.js';
 import { ensureSeed, outline, entry, wordCount, noteTypes, newId as newIdLocal } from './model.js';
@@ -50,7 +50,7 @@ import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
-import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, STAGE_SETS, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
+import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -762,6 +762,7 @@ async function dropEmptySeed(keep) {
 
 // Books from before worlds (or from a device still on an older version) become worlds.
 async function migrateWorlds() {
+  setOwnWorkflows(await byKind('workflow'));
   if (await ensureWorlds()) await refreshViews();
 }
 
@@ -769,6 +770,7 @@ async function applyRemote(rows) {
   searchChanged(rows);
   if (view() === 'tags' && tagsPage && rows.some((r) => r.tags?.length || r.id === 'settings-tag-groups')) tagsPage.refresh();
   if (rows.some((r) => r.kind === 'settings')) await notes.reloadTypes();
+  if (rows.some((r) => r.kind === 'workflow')) setOwnWorkflows(await byKind('workflow'));
   if (state.chapterId && rows.some((r) => r.links?.includes(state.chapterId))) renderChapterLinks();
   const structural = rows.some((r) => ['project', 'world', 'act', 'chapter', 'area', 'page', 'draft'].includes(r.kind));
   if (structural) {
@@ -1554,7 +1556,7 @@ async function bookMenu(book) {
     { label: 'What it is (Gag, Episode…)…', run: () => setLabel(b) },
     { label: 'Written as', sub: KINDS.map(([id, label]) => ({ label, current: bookType(b) === id, run: () => setKind(b, id) })) },
     { label: 'Stage', sub: stagesOf(b, world).map((st) => ({ label: st, current: stageOf(b, world) === st, run: () => setStage(b, st) })) },
-    { label: `Stages: ${stageSetOf(b, world).name}`, sub: STAGE_SETS.map((set) => ({ label: `${set.name}: ${set.about.toLowerCase()}`, current: stageSetOf(b, world).id === set.id, run: () => setPieceStages(b, set.id) })) },
+    { label: `Stages: ${stageSetOf(b, world).name}`, sub: allSets().map((set) => ({ label: `${set.name}: ${set.about.toLowerCase()}`, current: stageSetOf(b, world).id === set.id, run: () => setPieceStages(b, set.id) })) },
     ...(script ? [{ label: b.fields?.numbered ? 'Scene numbers: turn off' : 'Number the scenes (for production)…', run: () => toggleNumbering(b) }] : []),
     ...(hasManuscript(b) ? [{ label: 'Production (shots, kit, shoot days)', run: () => go({ view: 'production', id: b.id }) }] : []),
     ...(hasManuscript(b) ? [{ label: 'Revise', sub: [
@@ -1582,7 +1584,7 @@ async function worldMenu(world) {
     { label: 'New piece…', run: () => addPiece(w.id) },
     { label: 'New page in its bible', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(w.id); } },
     { label: 'Move to area', sub: (await areaOptions(all)).map(([id, label]) => ({ label: label.trim(), current: w.area_id === id, run: () => moveBookToArea(w, id) })) },
-    ...(!isLife(w) ? [{ label: 'Stages…', run: () => openStages(w) }] : []),
+    ...(!isLife(w) ? [{ label: 'Workflow…', run: () => openStages(w) }] : []),
     { label: 'Shape', sub: [
       ...SHAPES.map((sh) => ({ label: `${sh.name}: ${sh.about.toLowerCase()}`, current: shapeOf(w, top.length).id === sh.id, run: () => setShape(w, sh.id) })),
       ...(shapeOf(w, top.length).levels.length ? ['sep', { label: `Rename levels (${levelsOf(w, shapeOf(w, top.length)).map((l) => l.label).join(' › ')})…`, run: () => renameLevels(w) }] : [])
@@ -1658,13 +1660,20 @@ async function renameLevels(world) {
 async function openStages(world) {
   const w = await getEntry(world.id);
   const pieces = (await worldTree(w.id)).pieces.map(({ row }) => row);
-  const rows = await editStages(w, pieces);
+  const rows = await editStages(w, pieces, { keepOwn });
   if (!rows) return;
   const before = [w, ...pieces.filter((p) => rows.some((r) => r.id === p.id))];
   await putEntries(rows);
   await refreshViews();
   const moved = rows.length - 1;
-  toast(`Stages saved${moved ? `; ${plural(moved, 'piece')} moved with them` : ''}`, { label: 'Undo', run: async () => { await putEntries(before.map((r) => ({ ...r, updated_at: Date.now() }))); await refreshViews(); } });
+  toast(`Workflow saved${moved ? `; ${plural(moved, 'piece')} moved with them` : ''}`, { label: 'Undo', run: async () => { await putEntries(before.map((r) => ({ ...r, updated_at: Date.now() }))); await refreshViews(); } });
+}
+
+// A workflow of your own, to start the next project from.
+async function keepOwn(row) {
+  await putEntries([row]);
+  addOwnWorkflow(row);
+  toast(`“${row.title}” is one of your workflows now; pick it under More when you make something new`);
 }
 
 // One piece through a different set of stages (a live-action short in a Show of AI reels).
@@ -2039,8 +2048,12 @@ async function areaOptions(allAreas) {
 
 // New: what are you making? The shape can change any time from the ⋯ menu.
 let newShape = 'one';
-function pickShape(id) {
+const newHow = newWorkflow($('#lib-new-how'), { keepOwn });
+const pickHow = (force) => newHow.pick(setForNew(newShape, $('#lib-new-type').value), { force });
+$('#lib-new-type').addEventListener('change', () => pickHow());
+function pickShape(id, force) {
   newShape = id;
+  pickHow(force);
   $('#lib-new-shapes').querySelectorAll('.lib-shape').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.shape === id)));
   $('#lib-new-type-box').hidden = id !== 'one';
   const sh = SHAPES.find((x) => x.id === id);
@@ -2061,7 +2074,8 @@ async function showNewBook(type = 'novel', shape = 'one') {
   const form = $('#lib-new');
   form.hidden = false;
   $('#lib-new-type').value = type === 'notes' ? 'world' : type;
-  pickShape(shape);
+  newHow.reset();
+  pickShape(shape, true);
   $('#lib-new-title').value = '';
   $('#lib-new-title').focus();
 }
@@ -2072,7 +2086,9 @@ $('#lib-new').addEventListener('submit', async (e) => {
   if (!title) return;
   const type = $('#lib-new-type').value;
   const area = $('#lib-new-area').value || null;
+  const how = newHow.value();
   const world = await newShaped(newShape, title, area, type);
+  if (how) await useWorkflow(world, how);
   $('#lib-new').hidden = true;
   // One piece opens on its Idea page, the place to think it through; anything
   // bigger opens on its overview, to see what's inside.
@@ -2080,6 +2096,16 @@ $('#lib-new').addEventListener('submit', async (e) => {
   if (idea) await go({ view: 'notebook', pageId: idea.id });
   else await go({ view: 'world', id: world.id });
 });
+// The workflow picked at New: its kind of piece (and outlines, which go the
+// project's way) goes through it, with any steps and tools you customized.
+async function useWorkflow(world, how) {
+  const w = await getEntry(world.id);
+  const stageFor = { ...(w.fields?.stageFor || {}) };
+  for (const t of [typeForSet(how.set), 'lines']) if (stageSetOf({ fields: { type: t } }, w).id !== how.set) stageFor[t] = how.set;
+  const fields = { ...w.fields, stageFor, stageLists: { ...(w.fields?.stageLists || {}), ...how.stageLists }, toolLists: { ...(w.fields?.toolLists || {}), ...how.toolLists } };
+  for (const k of ['stageFor', 'stageLists', 'toolLists']) if (!Object.keys(fields[k]).length) delete fields[k];
+  if (JSON.stringify(fields) !== JSON.stringify(w.fields)) await putEntries([{ ...w, fields, updated_at: Date.now() }]);
+}
 $('#lib-new-cancel').addEventListener('click', () => { $('#lib-new').hidden = true; });
 
 // ---------- a book's home ----------

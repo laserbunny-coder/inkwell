@@ -65,14 +65,40 @@ export const STAGES = ['Idea', 'Written', 'Boarded', 'Generated', 'Edited', 'Pos
 // pick another set for its scripts, prose or outlines, a piece can pick its
 // own, and a project can rename, add, remove and reorder a set's stages. The
 // last stage always means out in the world: canon, posted, published.
-export const STAGE_SETS = [
-  { id: 'ai', name: 'AI video', about: 'Generated video, like the reels', stages: STAGES },
-  { id: 'live', name: 'Live action', about: 'Video you shoot with a camera', stages: ['Idea', 'Written', 'Prepped', 'Shot', 'Edited', 'Released'] },
-  { id: 'book', name: 'Book', about: 'A novel, each book in a series', stages: ['Idea', 'Outlined', 'Drafted', 'Revised', 'Edited', 'Published'] },
-  { id: 'stage', name: 'Stage', about: 'A musical, a play', stages: ['Idea', 'Written', 'Workshopped', 'Rehearsed', 'Performed'] },
-  { id: 'short', name: 'Short writing', about: 'Gags, poems, posts, songs', stages: ['Idea', 'Drafted', 'Polished', 'Out'] }
+// The tools a workflow puts on Make. Video work gets them all; a book or a
+// poem none (until its own tools come), and any project can turn them on.
+export const TOOLS = [
+  { id: 'shots', label: 'Shots' },
+  { id: 'board', label: 'Storyboard' },
+  { id: 'kit', label: 'Kit' },
+  { id: 'days', label: 'Shoot days' }
 ];
-export const setById = (id) => STAGE_SETS.find((x) => x.id === id) || STAGE_SETS[0];
+const VIDEO = ['shots', 'board', 'kit', 'days'];
+export const STAGE_SETS = [
+  { id: 'ai', name: 'AI video', about: 'Generated video, like the reels', stages: STAGES, tools: VIDEO },
+  { id: 'live', name: 'Live action', about: 'Video you shoot with a camera', stages: ['Idea', 'Written', 'Prepped', 'Shot', 'Edited', 'Released'], tools: VIDEO, more: true },
+  { id: 'book', name: 'Book', about: 'A novel, each book in a series', stages: ['Idea', 'Outlined', 'Drafted', 'Revised', 'Edited', 'Published'], tools: [] },
+  { id: 'stage', name: 'Stage', about: 'A musical, a play', stages: ['Idea', 'Written', 'Workshopped', 'Rehearsed', 'Performed'], tools: [], more: true },
+  { id: 'short', name: 'Short writing', about: 'Gags, poems, posts, songs', stages: ['Idea', 'Drafted', 'Polished', 'Out'], tools: [] }
+];
+// Workflows you saved as your own: stages and tools to start the next
+// project from. They're entries (kind 'workflow'), so every device has them.
+let OWN = [];
+const ownSet = (r) => ({ id: r.id, name: r.title || 'My workflow', about: 'Yours', stages: r.fields?.stages?.length >= 2 ? r.fields.stages : STAGES, tools: r.fields?.tools || [], base: r.fields?.base || 'ai', own: true, more: true });
+export function setOwnWorkflows(rows) { OWN = rows.filter((r) => r && !r.deleted && r.kind === 'workflow').map(ownSet); }
+export const addOwnWorkflow = (row) => { OWN = [...OWN.filter((x) => x.id !== row.id), ownSet(row)]; };
+export const dropOwnWorkflow = (id) => { OWN = OWN.filter((x) => x.id !== id); };
+export const allSets = () => [...STAGE_SETS, ...OWN];
+export const setById = (id) => allSets().find((x) => x.id === id) || STAGE_SETS[0];
+// Which set a new project starts with, from what it is and how it's written.
+export function setForNew(shape, type) {
+  if (shape === 'life') return null;
+  if (shape === 'series') return 'book';
+  if (shape === 'one') return type === 'world' ? null : { novel: 'book', screenplay: 'ai', lines: 'short' }[type] || 'book';
+  return 'ai';
+}
+// The kind of piece a set is mostly for, so New can point that kind at it.
+export const typeForSet = (id) => ({ ai: 'screenplay', live: 'screenplay', stage: 'screenplay', book: 'novel', short: 'lines' })[id] || typeForSet(setById(id).base || 'ai');
 const SET_FOR_TYPE = { screenplay: 'ai', novel: 'book' };
 // An outline or a page of notes is usually a step toward the project's real
 // work (a season outlined before its episodes), so it goes the way the
@@ -85,6 +111,13 @@ export const stageSetOf = (p, world) => setById(p?.fields?.stageSet || world?.fi
 // A set's stages in this world (yours, if you've edited them).
 export const stagesIn = (set, world) => world?.fields?.stageLists?.[set.id] || set.stages;
 export const stagesOf = (p, world) => stagesIn(stageSetOf(p, world), world);
+// The tools on Make for a set in this world, and for a piece. A piece that
+// asked for the video tools anyway gets them on top.
+export const toolsIn = (set, world) => world?.fields?.toolLists?.[set.id] || set.tools || [];
+export function toolsOf(p, world) {
+  const t = toolsIn(stageSetOf(p, world), world);
+  return p?.fields?.videoTools ? TOOLS.map((x) => x.id).filter((id) => t.includes(id) || VIDEO.includes(id)) : TOOLS.map((x) => x.id).filter((id) => t.includes(id));
+}
 // Where a piece is. A stage its set doesn't have (a novel marked Boarded
 // before sets, or a stage since removed) reads as the one at the same point.
 export function stageOf(p, world) {
@@ -92,7 +125,7 @@ export function stageOf(p, world) {
   const at = p?.fields?.stage;
   if (!at) return list[0];
   if (list.includes(at)) return at;
-  const from = STAGE_SETS.map((x) => x.stages).find((l) => l.includes(at));
+  const from = allSets().map((x) => x.stages).find((l) => l.includes(at));
   if (!from) return list[0];
   const i = from.indexOf(at) === from.length - 1 ? list.length - 1 : Math.min(list.length - 2, Math.round((from.indexOf(at) / (from.length - 1)) * (list.length - 1)));
   return list[Math.max(0, i)];
