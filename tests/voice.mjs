@@ -238,11 +238,14 @@ try {
     await sleep(300);
     await page.locator('#mic-toggle').click();
     await page.waitForSelector('.capture[data-state="recording"]');
+    // Leave the mouse well below the bar, so it tucks away for the next checks.
+    await page.mouse.move(700, 600, { steps: 3 });
     assert.match(await page.locator('.cap-dest').innerText(), /^Into /);
     await page.keyboard.press('Escape');
     await page.waitForSelector('.capture', { state: 'hidden' });
     await page.keyboard.press('Control+J');
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
+    await page.waitForFunction(() => !document.body.classList.contains('show-top'));
     await sleep(700);
   });
 
