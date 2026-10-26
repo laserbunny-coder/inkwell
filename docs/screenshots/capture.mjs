@@ -174,7 +174,8 @@ const R2 = script('pr_r2');
   l('p2_23', 'Behind him, Mom watches from the back door. She smiles.', 'action');
 }
 
-piece('pr_r3', NB, 'Reel 3: Night Training', 3, { type: 'screenplay', label: 'Reel', stage: 'Written', code: 'R03' });
+// Reel 3 is shot live, on the bakery roof, so it goes through the Live action stages.
+piece('pr_r3', NB, 'Reel 3: Night Training', 3, { type: 'screenplay', label: 'Reel', stage: 'Prepped', stageSet: 'live', code: 'R03' });
 {
   const r = script('pr_r3');
   r.l('p3_1', 'EXT. BAKERY ROOF - NIGHT', 'scene', { code: '1' });
@@ -182,7 +183,7 @@ piece('pr_r3', NB, 'Reel 3: Night Training', 3, { type: 'screenplay', label: 'Re
   note('p3_2', 'ch_pr_r3', 'The pin really was a weapon', { fields: { thread: 'th_grandpa', beat: 'payoff' } });
 }
 piece('pr_g1', NB, 'Pancake on the head', 4, { type: 'screenplay', label: 'Gag', stage: 'Idea' });
-piece('pr_song', NB, 'Silent as the Morning Bread', 5, { type: 'lines', label: 'Song', stage: 'Written' });
+piece('pr_song', NB, 'Silent as the Morning Bread', 5, { type: 'lines', label: 'Song', stage: 'Drafted', stageSet: 'short' });
 piece('pr_s1', NB, 'Season 1', 6, { type: 'lines', label: 'Season', stage: 'Idea' });
 [['Episode 1: The Audition', 'Written'], ['Episode 2: Rent Day', 'Idea'], ['Episode 3: The Rival Bakery', 'Idea'], ['Episode 4: Opening Night', 'Idea']].forEach(([t, stage], i) =>
   piece(`pr_e${i + 1}`, 'pr_s1', t, (i + 1) * 1024, { type: 'screenplay', label: 'Episode', stage }));
@@ -196,12 +197,12 @@ const SHOTS = [
   ['p2_18', '1', 'Wide', 'Kenji half-hidden behind a lamppost.', 'Anime wide, narrow alley behind a bakery, one lamppost, a small ninja failing to hide behind it, laundry lines, afternoon light'],
   ['p2_18', '2', 'Medium', 'Mom in the back doorway, smiling.', 'Anime medium, a calm woman in a red apron leaning in a bakery back doorway, soft smile, warm light']
 ];
-SHOTS.forEach(([scene, n, framing, what, still], i) => put({ id: `sh_${i + 1}`, kind: 'shot', parent_id: scene, sort: (Number(n) || i) * 1024, text: what, fields: { n, framing, piece: 'pr_r2', still, video: i < 4 ? `${framing} shot, slow push in, 3 seconds` : '' } }));
+SHOTS.forEach(([scene, n, framing, what, still], i) => put({ id: `sh_${i + 1}`, kind: 'shot', parent_id: scene, sort: (Number(n) || i) * 1024, text: what, fields: { n, framing, piece: 'pr_r2', ...(i === 3 ? { made: 'ref' } : {}), still, video: i < 4 ? `${framing} shot, slow push in, 3 seconds` : '' } }));
 put({ id: 'sd_1', kind: 'shootday', parent_id: 'pr_r3', fields: { date: iso(now + 12 * DAY), call: '09:00', wrap: '13:00', place: 'The bakery on Sunset (after closing)', scenes: ['p3_1'], notes: 'Bring the real rolling pin. Practice dummies from the garage.' } });
 
 // ----- a novel, for prose -----
 put({ id: 'wd_salt', kind: 'world', title: 'The Salt Keeper', area_id: 'ar_working', fields: { shape: 'one', logline: 'A lighthouse keeper dies; his sister comes to close the station and finds his log tells another story.' }, created_at: now - 40 * DAY });
-put({ id: 'pr_salt', kind: 'project', parent_id: 'wd_salt', title: 'The Salt Keeper', area_id: 'ar_working', sort: 1, fields: { type: 'novel', levels: ['Act', 'Chapter', 'Scene'], label: 'Novel', stage: 'Written' } });
+put({ id: 'pr_salt', kind: 'project', parent_id: 'wd_salt', title: 'The Salt Keeper', area_id: 'ar_working', sort: 1, fields: { type: 'novel', levels: ['Act', 'Chapter', 'Scene'], label: 'Novel', stage: 'Drafted' } });
 put({ id: 'ac_salt1', kind: 'act', parent_id: 'pr_salt', title: 'Act One', sort: 1024 });
 ['The Logbook', 'Low Tide', 'What the Gulls Knew'].forEach((t, i) => put({ id: `ch_salt${i + 1}`, kind: 'chapter', parent_id: 'ac_salt1', title: `${i + 1}. ${t}`, sort: (i + 1) * 1024 }));
 page('pg_lens', 'wd_salt', 'Fresnel lens', 2048, {}, ['First-order lenses stand taller than a person. Hundreds of glass prisms in brass rings. #research']);
@@ -424,6 +425,13 @@ const record = async (page, ms = 1800) => {
   await shot(page, 'desktop-promises');
   await go(page, { view: 'stage', id: NB, page: 'make', sub: 'board' });
   await shot(page, 'desktop-stage-board');
+  // Stages…: each kind of piece goes through its own set, editable per project.
+  await page.getByRole('button', { name: 'Stages…' }).first().click().catch(() => console.log('no Stages… button'));
+  await page.waitForSelector('.stage-edit', { state: 'visible' }).catch(() => {});
+  await sleep(600);
+  await shot(page, 'desktop-stage-sets', { top: false });
+  await page.keyboard.press('Escape');
+  await sleep(300);
 
   // The script, with its sections, summaries and scene numbers.
   await go(page, { view: 'write', chapterId: R2.id }, 1500);

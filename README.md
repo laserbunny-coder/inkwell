@@ -102,11 +102,15 @@ Prose is just the page. Notes sit in the margin beside the paragraph they belong
 - **Claude's notes** gives margin notes and a fix list when you ask, and "Talk this chapter over with Claude" opens a conversation about it.
 - **Print** (`Ctrl + P`) gives clean pages to print or save as PDF.
 
-**Make** (`Alt + 5`) is production. The stage board shows every piece from Idea to Posted; drag a card to move it on.
+**Make** (`Alt + 5`) is production. The stage board shows every piece by stage; drag a card to move it on. Each kind of piece goes through its own **stage set**: AI video (Idea, Written, Boarded, Generated, Edited, Posted), Live action (… Prepped, Shot, Edited, Released), Book (… Outlined, Drafted, Revised, Edited, Published), Stage and Short writing. Here the reels are AI video, Reel 3 is shot live on the bakery roof, and the song is short writing. The last stage always means out in the world.
 
-![Make: the stage board](docs/screenshots/desktop-stage-board.webp)
+![Make: the stage board, one row per stage set](docs/screenshots/desktop-stage-board.webp)
 
-Inside a piece, **Production** (`Ctrl + Shift + S`) turns the script into what's needed to generate or shoot it. Each scene shows the bible elements it uses (found in its words), its production notes and its shots. Shot codes like `NB-R02-S01-01` never change, so file names and Resolve clips keep pointing at the right shot. Each shot has still and video prompts and its renders; the star marks the one that worked, and earlier prompts are never lost. "Download kit" zips a shot's prompts and reference pictures for PixAI, Seedance or ComfyUI.
+"Stages…" picks which set scripts, prose and outlines go through in this project, and renames, adds, removes or reorders a set's stages. It says first what will move, and has Undo. One piece can go through another set from its ⋯ menu.
+
+![Stages… for The Ninja Bunch](docs/screenshots/desktop-stage-sets.webp)
+
+Inside a piece, **Production** (`Ctrl + Shift + S`) turns the script into what's needed to generate or shoot it. Each scene shows the bible elements it uses (found in its words), its production notes and its shots. Shot codes like `NB-R02-S01-01` never change, so file names and Resolve clips keep pointing at the right shot. Each shot has still and video prompts and its renders; the star marks the one that worked, and earlier prompts are never lost. Each shot says how it's made (Generated, From reference, or Live action), and each scene with lines says whether its voices are recorded, generated or both. "Download kit" zips a shot's prompts and reference pictures for PixAI, Seedance or ComfyUI.
 
 ![Shots for Reel 2, one opened to show its prompts and starred render](docs/screenshots/desktop-shots.webp)
 
@@ -114,7 +118,7 @@ The **storyboard** shows every shot in order with its starred still. "Play" runs
 
 ![The storyboard](docs/screenshots/desktop-storyboard.webp)
 
-**Kit** is the world's bible pages that are elements (characters, locations, props, wardrobe), each with reference pictures, a locked look and the few words that go into every prompt. **Shoot days** turn into a one-page call sheet (who's needed, locations, props, notes) to print, or send to Daybook on that day at call time.
+**Kit** is the world's bible pages that are elements (characters, locations, props, wardrobe), each with reference pictures, a locked look and the few words that go into every prompt. **Shoot days** turn into a one-page call sheet (who's needed, locations, props, notes) to print, or send to Daybook on that day at call time. A **To plan** list gathers the scenes that still need shooting or voices recorded, and **voice sessions** sit beside shoot days.
 
 ![A shoot day and its call sheet](docs/screenshots/desktop-shoot-day.webp)
 
@@ -138,7 +142,7 @@ On a computer, a faint line at the top left says where you are and offers "‹ l
 
 ### On an Android phone
 
-Inkwell installs to the home screen from Chrome and syncs with the computer. The bottom bar is always there (it hides while you type): **‹ Back**, named for where it goes; the place you're in, which opens the **Go sheet**; **Today**; the **mic**; and **⋯** for every command.
+Inkwell installs to the home screen from Chrome and syncs with the computer. The bottom bar is always there (it hides while you type): **‹ Back**, named for where it goes; the place you're in, which opens the **Go sheet**; **Today**; the **mic**; and **⋯** for every command. The mic is also first on the rows above the keyboard, so you can talk without closing it.
 
 <p>
   <img src="docs/screenshots/phone-today.webp" width="240" alt="Today's page on a phone, with the bottom bar">
@@ -172,10 +176,8 @@ Every line, paragraph and page records who wrote it, you or Claude.
 
 ## Still landing
 
-These are being built right now and aren't in the screenshots yet:
+Being built right now, and not in the screenshots yet:
 
-- **Stage sets per kind of piece.** Ready-made, editable stages for a Book, AI video, Live action, Stage and Short writing, each ending with "out in the world". Also, per shot, whether it was Generated, Generated from reference, or Live action; per scene, whether its voices are recorded, generated or both; and voice sessions next to shoot days in Make.
-- **The mic first on the rows above the phone keyboard**, so you can talk without closing the keyboard.
 - **Meeting notes** from a recording: speakers, a summary, decisions and tasks sent to Daybook.
 
 ## Shortcuts
