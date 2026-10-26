@@ -294,7 +294,7 @@ try {
     await page.keyboard.press('Alt+Digit6');
     await page.waitForSelector('.st-posted');
     const t = await page.locator('.st-body').innerText();
-    assert.match(t, /Posted[\s\S]*Reel 1: The Audition[\s\S]*Youtube/i);
+    assert.match(t, /Out in the world[\s\S]*Reel 1: The Audition[\s\S]*Youtube/i);
   });
 
   await check('Revise for the world: continuity checked against canon, by Claude', async () => {
