@@ -850,19 +850,14 @@ try {
     // Outlines get their own row: indent, outdent, move, tag.
     await ph.keyboard.press('Control+J');
     await ph.waitForFunction(() => document.querySelector('#nb-kind')?.textContent === 'Today');
-    await sleep(1200); // the page takes the caret back about a second after opening
-    await ph.evaluate(() => { window.__fo = []; document.addEventListener('focusout', (e) => window.__fo.push([performance.now() | 0, e.target.className, e.relatedTarget?.className || null, new Error().stack.split('\n').slice(1, 6).join(' | ')]), true); });
-    await ph.locator('#outline-editor .ProseMirror').tap();
+    // Tap near the top of the page: its middle can sit under the row once the
+    // page has the caret, and a tap there would press a row button.
+    await ph.locator('#outline-editor .ProseMirror').tap({ position: { x: 40, y: 8 } });
     await ph.keyboard.type('Boats');
     await ph.keyboard.press('Enter');
     await ph.keyboard.type('Tides');
     await ph.waitForSelector('.outline-bar', { state: 'visible' });
-    const tap = async (what) => {
-      try { await ph.locator(`.outline-bar [data-do="${what}"]`).tap({ timeout: 8000 }); } catch (e) {
-        console.log('DBG', JSON.stringify(await ph.evaluate(() => ({ bar: document.querySelector('.outline-bar').hidden, cls: document.body.className, active: document.activeElement?.outerHTML.slice(0, 120), place: localStorage.getItem('place'), fo: window.__fo, now: performance.now() | 0, kind: document.querySelector('#nb-kind')?.textContent, btn: (() => { const b = document.querySelector('.outline-bar [data-do="indent"]'); const r = b.getBoundingClientRect(); return [r.x, r.y, r.width, r.height, getComputedStyle(b).display]; })() }))));
-        throw e;
-      }
-    };
+    const tap = (what) => ph.locator(`.outline-bar [data-do="${what}"]`).tap();
     await tap('indent');
     await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li li > p')].some((p) => p.textContent === 'Tides'));
     await tap('outdent');
