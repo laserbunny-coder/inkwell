@@ -850,14 +850,21 @@ try {
     // Outlines get their own row: indent, outdent, move, tag.
     await ph.keyboard.press('Control+J');
     await ph.waitForFunction(() => document.querySelector('#nb-kind')?.textContent === 'Today');
-    // Tap near the top of the page: its middle can sit under the row once the
-    // page has the caret, and a tap there would press a row button.
-    await ph.locator('#outline-editor .ProseMirror').tap({ position: { x: 40, y: 8 } });
+    // The page takes the caret itself; a tap on it could land on the row above
+    // the keyboard (which is up by then) and press one of its buttons.
+    await ph.evaluate(() => {
+      window.__seen = [];
+      const note = (e) => window.__seen.push([performance.now() | 0, e.type, e.target.dataset?.do || e.target.className || e.target.tagName]);
+      for (const t of ['pointerdown', 'pointerup', 'focusout', 'keydown']) document.addEventListener(t, note, true);
+    });
+    await ph.evaluate(() => window.__notebook.editor.commands.focus('end'));
+    await ph.waitForSelector('.outline-bar', { state: 'visible' });
     await ph.keyboard.type('Boats');
     await ph.keyboard.press('Enter');
     await ph.keyboard.type('Tides');
     await ph.waitForSelector('.outline-bar', { state: 'visible' });
-    const tap = (what) => ph.locator(`.outline-bar [data-do="${what}"]`).tap();
+    const tap = (what) => ph.locator(`.outline-bar [data-do="${what}"]`).tap({ timeout: 8000 })
+      .catch(async (e) => { console.log('seen', JSON.stringify(await ph.evaluate(() => [window.__seen, performance.now() | 0]))); throw e; });
     await tap('indent');
     await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li li > p')].some((p) => p.textContent === 'Tides'));
     await tap('outdent');
