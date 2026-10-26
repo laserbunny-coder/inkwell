@@ -184,7 +184,9 @@ function placeScriptBar() {
   const withAlts = !root.classList.contains('hide-alts') && !root.classList.contains('focus');
   // The mic is always on it; only Focus with no script leaves just the text.
   const show = touch.matches && (script || !root.classList.contains('focus')) && writing() && editor.isFocused;
+  const back = show && scriptBar.hidden;
   scriptBar.hidden = !show;
+  if (back) scriptBar.scrollLeft = 0; // a row that comes back starts with the mic in view
   scriptBar.classList.toggle('scripting', script);
   scriptBar.classList.toggle('no-alts', !withAlts);
   body.classList.toggle('script-bar-on', show);
@@ -306,7 +308,9 @@ const notebook = new Notebook({
 const outlineBar = $('.outline-bar');
 function placeOutlineBar() {
   const show = touch.matches && inNotebook() && notebook.editor.isFocused;
+  const back = show && outlineBar.hidden;
   outlineBar.hidden = !show;
+  if (back) outlineBar.scrollLeft = 0; // a row that comes back starts with the mic in view
   body.classList.toggle('outline-bar-on', show);
   if (!show) return;
   const vv = window.visualViewport;

@@ -852,19 +852,13 @@ try {
     await ph.waitForFunction(() => document.querySelector('#nb-kind')?.textContent === 'Today');
     // The page takes the caret itself; a tap on it could land on the row above
     // the keyboard (which is up by then) and press one of its buttons.
-    await ph.evaluate(() => {
-      window.__seen = [];
-      const note = (e) => window.__seen.push([performance.now() | 0, e.type, e.target.dataset?.do || e.target.className || e.target.tagName]);
-      for (const t of ['pointerdown', 'pointerup', 'focusout', 'keydown']) document.addEventListener(t, note, true);
-    });
     await ph.evaluate(() => window.__notebook.editor.commands.focus('end'));
     await ph.waitForSelector('.outline-bar', { state: 'visible' });
     await ph.keyboard.type('Boats');
     await ph.keyboard.press('Enter');
     await ph.keyboard.type('Tides');
     await ph.waitForSelector('.outline-bar', { state: 'visible' });
-    const tap = (what) => ph.locator(`.outline-bar [data-do="${what}"]`).tap({ timeout: 8000 })
-      .catch(async (e) => { console.log('seen', JSON.stringify(await ph.evaluate(() => [window.__seen, performance.now() | 0]))); throw e; });
+    const tap = (what) => ph.locator(`.outline-bar [data-do="${what}"]`).tap();
     await tap('indent');
     await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li li > p')].some((p) => p.textContent === 'Tides'));
     await tap('outdent');
@@ -933,6 +927,9 @@ try {
     await ph.keyboard.type('Gulls');
     await sleep(200);
     const nested = () => ph.evaluate(() => [...document.querySelectorAll('#outline-editor li li > p')].some((x) => x.textContent === 'Gulls'));
+    // The row is still scrolled to its far end from Done and Move to…; back to its start.
+    await ph.evaluate(() => { document.querySelector('.outline-bar').scrollLeft = 0; });
+    await sleep(100);
     const ib = await ph.locator('.outline-bar [data-do="indent"]').boundingBox();
     const cdp = await phoneCtx.newCDPSession(ph);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: ib.x + ib.width / 2, y: ib.y + ib.height / 2 }] });
