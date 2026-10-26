@@ -73,10 +73,15 @@ export const STAGE_SETS = [
   { id: 'short', name: 'Short writing', about: 'Gags, poems, posts, songs', stages: ['Idea', 'Drafted', 'Polished', 'Out'] }
 ];
 export const setById = (id) => STAGE_SETS.find((x) => x.id === id) || STAGE_SETS[0];
-const SET_FOR_TYPE = { screenplay: 'ai', novel: 'book', lines: 'short', notes: 'short' };
+const SET_FOR_TYPE = { screenplay: 'ai', novel: 'book' };
+// An outline or a page of notes is usually a step toward the project's real
+// work (a season outlined before its episodes), so it goes the way the
+// project does: a book series like a book, a single piece of writing as
+// short writing, anything else like the reels.
+const usualFor = (type, world) => SET_FOR_TYPE[type] || (world?.fields?.shape === 'series' ? 'book' : world?.fields?.shape === 'one' ? 'short' : 'ai');
 export const TYPE_NAMES = { screenplay: 'Scripts', novel: 'Prose', lines: 'Outlines' };
 // The set a piece goes through, in its world.
-export const stageSetOf = (p, world) => setById(p?.fields?.stageSet || world?.fields?.stageFor?.[bookType(p)] || SET_FOR_TYPE[bookType(p)] || 'ai');
+export const stageSetOf = (p, world) => setById(p?.fields?.stageSet || world?.fields?.stageFor?.[bookType(p)] || usualFor(bookType(p), world));
 // A set's stages in this world (yours, if you've edited them).
 export const stagesIn = (set, world) => world?.fields?.stageLists?.[set.id] || set.stages;
 export const stagesOf = (p, world) => stagesIn(stageSetOf(p, world), world);
