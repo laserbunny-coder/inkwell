@@ -180,6 +180,29 @@ function stepsAndTools(st, redraw, hooks) {
     queueMicrotask(() => nm.select());
     return wrap;
   }
+  if (st.deleting) {
+    // Asked here, in the panel, rather than in a second dialog on top.
+    const { titles } = st.deleting;
+    const base = setById(set.base);
+    const ask = make('div', 'se-delask');
+    ask.append(make('p', '', `Delete “${set.name}”? ${titles.length
+      ? `${titles.join(', ')} ${titles.length === 1 ? 'uses' : 'use'} it; ${titles.length === 1 ? 'its' : 'their'} pieces move to the matching ${base.name} steps.`
+      : 'No project uses it.'} You can undo.`));
+    const yes = make('button', 'pill danger se-delyes', 'Delete workflow');
+    const no = make('button', 'ghost-btn', 'Cancel');
+    yes.addEventListener('click', async () => { st.deleting = null; if (await hooks.deleteOwn(set)) hooks.deleted?.(set); });
+    no.addEventListener('click', () => { st.deleting = null; redraw(); });
+    ask.append(yes, no);
+    wrap.append(ask);
+    queueMicrotask(() => no.focus());
+    return wrap;
+  }
+  if (set.own && hooks.deleteOwn) {
+    const del = make('button', 'ghost-btn se-delown', 'Delete this workflow…');
+    del.title = 'Delete your own workflow; projects using it go back to the usual steps';
+    del.addEventListener('click', async () => { st.deleting = { titles: await hooks.usedBy(set) }; redraw(); });
+    acts.append(del);
+  }
   if (hooks.keepOwn) {
     const own = make('button', 'ghost-btn se-keep', 'Save as my own workflow…');
     own.title = 'Keep these steps and tools to start your next project from';
@@ -258,6 +281,10 @@ export function editStages(world, pieces, hooks = {}) {
 
     const panelHooks = {
       keepOwn: hooks.keepOwn,
+      deleteOwn: hooks.deleteOwn,
+      usedBy: hooks.usedBy,
+      // Deleting rewrites the projects that used it, so this dialog's copy is stale.
+      deleted: () => done(null),
       // Kinds that went the old way now go the way of your own workflow.
       switched: (from, to) => {
         for (const t of ['screenplay', 'novel', 'lines', ...pieces.map((p) => bookType(p))]) {
@@ -345,7 +372,7 @@ export function newWorkflow(host, hooks = {}) {
     if (!st) return;
     host.append(make('div', 'se-label lib-new-how', 'How it gets made'));
     host.append(setChips(st, (id) => { touched = touched || id !== st.editing; st.editing = id; draw(); }));
-    if (open) { host.append(stepsAndTools(st, draw, hooks)); return; }
+    if (open) { host.append(stepsAndTools(st, draw, { ...hooks, deleted: (set) => { st = workflowState({ fields: {} }, set.base); open = false; draw(); } })); return; }
     const set = setById(st.editing);
     const line = make('div', 'se-preview');
     const tools = st.tools[st.editing].map((id) => TOOLS.find((x) => x.id === id).label);

@@ -337,7 +337,7 @@ try {
     assert.ok(own, 'the workflow is saved');
     assert.equal(own.title, 'Reels with a live shoot');
     assert.deepEqual({ base: own.fields.base, stages: own.fields.stages, tools: own.fields.tools }, { base: 'ai', stages: ['New idea', 'Writing', 'Boarding', 'Generating', 'Editing', 'Live shoot', 'Posted'], tools: ['shots', 'board', 'kit', 'days'] });
-    assert.equal(await page.locator('.se-tabs .chip.on').getAttribute('data-set'), own.id);
+    assert.equal(await page.locator('.stage-edit .se-tabs .chip.on').getAttribute('data-set'), own.id);
     assert.equal(await page.locator('.se-use select[data-type="screenplay"]').inputValue(), own.id);
     await shot(page, 'workflow-own');
     await page.locator('.stage-edit .pill.primary').click();
@@ -383,6 +383,53 @@ try {
     assert.deepEqual(w.fields.stageLists, { ai: ['New idea', 'Scripted', 'Boarding', 'Generating', 'Editing', 'Posted'] });
     assert.deepEqual(w.fields.toolLists, { ai: ['shots', 'board', 'days'] });
     assert.equal(w.fields.stageFor, undefined);
+  });
+
+  await check('your own workflow can be deleted: it warns who uses it, moves their pieces to the usual steps, and Undo puts it back', async () => {
+    const own = (await all(page)).find((r) => r.kind === 'workflow' && !r.deleted);
+    await openMake(page);
+    await openStages(page);
+    await page.selectOption('.se-use select[data-type="screenplay"]', own.id);
+    await page.locator('.stage-edit .pill.primary').click();
+    await sleep(600);
+    assert.equal((await get(page, 'wd_nb')).fields.stageFor.screenplay, own.id);
+    const reel2 = (await get(page, 'pr_reel2')).fields.stage;
+    await openStages(page);
+    assert.equal(await page.locator('.stage-edit .se-tabs .chip.on').getAttribute('data-set'), own.id);
+    await page.locator('.se-delown').click();
+    await page.waitForSelector('.se-delask');
+    assert.match(await page.locator('.se-delask').innerText(), /Delete “Reels with a live shoot”\? The Ninja Bunch uses it; its pieces move to the matching AI video steps\. You can undo\./);
+    await shot(page, 'workflow-delete');
+    await page.locator('.se-delyes').click();
+    await page.waitForSelector('.stage-edit', { state: 'detached' });
+    await sleep(500);
+    assert.equal((await get(page, own.id)).deleted, true);
+    assert.equal((await get(page, 'wd_nb')).fields.stageFor.screenplay, 'ai');
+    assert.equal((await get(page, 'pr_reel1')).fields.stage, 'Posted');
+    assert.ok(['New idea', 'Writing', 'Boarding', 'Generating', 'Editing', 'Posted'].includes((await get(page, 'pr_reel2')).fields.stage));
+    await page.locator('.toast button', { hasText: 'Undo' }).click();
+    await sleep(600);
+    assert.ok(!(await get(page, own.id)).deleted);
+    assert.equal((await get(page, 'wd_nb')).fields.stageFor.screenplay, own.id);
+    assert.equal((await get(page, 'pr_reel2')).fields.stage, reel2);
+  });
+
+  await check('it can be deleted from New too, and leaves the More list', async () => {
+    const own = (await all(page)).find((r) => r.kind === 'workflow' && !r.deleted);
+    await page.keyboard.press('Control+K');
+    await page.keyboard.type('New show');
+    await page.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('New show'));
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('#lib-new-how .se-tabs .chip.on');
+    await page.locator('#lib-new-how .se-more').click();
+    await page.locator(`#lib-new-how .se-tabs .chip[data-set="${own.id}"]`).click();
+    await page.locator('#lib-new-how .se-customize').click();
+    await page.locator('#lib-new-how .se-delown').click();
+    await page.locator('#lib-new-how .se-delyes').click();
+    await page.waitForSelector('#lib-new-how .se-tabs .chip.on[data-set="ai"]');
+    assert.equal(await page.locator(`#lib-new-how .se-tabs .chip[data-set="${own.id}"]`).count(), 0);
+    assert.equal((await get(page, own.id)).deleted, true);
+    await page.keyboard.press('Escape');
   });
 
   await check('nothing broke', async () => { assert.deepEqual(page.errors, []); });

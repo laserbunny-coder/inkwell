@@ -50,7 +50,7 @@ import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
-import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, nextLabel, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
+import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, nextLabel, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, dropOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -1661,7 +1661,7 @@ async function renameLevels(world) {
 async function openStages(world) {
   const w = await getEntry(world.id);
   const pieces = (await worldTree(w.id)).pieces.map(({ row }) => row);
-  const rows = await editStages(w, pieces, { keepOwn });
+  const rows = await editStages(w, pieces, { keepOwn, deleteOwn, usedBy: ownUsedBy });
   if (!rows) return;
   const before = [w, ...pieces.filter((p) => rows.some((r) => r.id === p.id))];
   await putEntries(rows);
@@ -1675,6 +1675,59 @@ async function keepOwn(row) {
   await putEntries([row]);
   addOwnWorkflow(row);
   toast(`“${row.title}” is one of your workflows now; pick it under More when you make something new`);
+}
+
+// Which projects, and which of their pieces, go through one of your own workflows.
+async function ownUses(set) {
+  const out = [];
+  for (const w of await worlds()) {
+    const pieces = (await worldTree(w.id)).pieces.map(({ row }) => row).filter((p) => stageSetOf(p, w).id === set.id);
+    if (pieces.length || Object.values(w.fields?.stageFor || {}).includes(set.id)) out.push({ w, pieces });
+  }
+  return out;
+}
+const ownUsedBy = async (set) => (await ownUses(set)).map(({ w }) => w.title || 'Untitled');
+
+// Delete a workflow of your own. Projects that used it go the way it was
+// built from (its base), and each piece moves to the step at the same point;
+// Undo puts the workflow, the projects and the pieces back.
+async function deleteOwn(set) {
+  const row = await getEntry(set.id);
+  if (!row) return false;
+  const t = Date.now();
+  const before = [row];
+  const rows = [{ ...row, deleted: true, updated_at: t }];
+  for (const { w, pieces } of await ownUses(set)) {
+    const fields = { ...w.fields };
+    const stageFor = Object.fromEntries(Object.entries(fields.stageFor || {}).map(([k, v]) => [k, v === set.id ? set.base : v]));
+    const { [set.id]: _s, ...stageLists } = fields.stageLists || {};
+    const { [set.id]: _t, ...toolLists } = fields.toolLists || {};
+    Object.assign(fields, { stageFor, stageLists, toolLists });
+    for (const k of ['stageFor', 'stageLists', 'toolLists']) if (!Object.keys(fields[k]).length) delete fields[k];
+    before.push(w);
+    rows.push({ ...w, fields, updated_at: t });
+    const after = { ...w, fields };
+    for (const p of pieces) {
+      const old = stagesOf(p, w);
+      const i = old.indexOf(stageOf(p, w));
+      const pf = { ...p.fields };
+      if (pf.stageSet === set.id) pf.stageSet = set.base;
+      const now = stagesOf({ ...p, fields: pf }, after);
+      // The last step stays the last (out in the world); the rest keep their point.
+      if (pf.stage) pf.stage = i === old.length - 1 ? now[now.length - 1] : now[Math.min(i, now.length - 2)];
+      before.push(p);
+      rows.push({ ...p, fields: pf, updated_at: t });
+    }
+  }
+  await putEntries(rows);
+  dropOwnWorkflow(set.id);
+  await refreshViews();
+  toast(`Deleted “${set.name}”`, { label: 'Undo', run: async () => {
+    await putEntries(before.map((r) => ({ ...r, updated_at: Date.now() })));
+    addOwnWorkflow(row);
+    await refreshViews();
+  } });
+  return true;
 }
 
 // One piece through a different set of stages (a live-action short in a Show of AI reels).
@@ -2057,7 +2110,7 @@ async function areaOptions(allAreas) {
 
 // New: what are you making? The shape can change any time from the ⋯ menu.
 let newShape = 'one';
-const newHow = newWorkflow($('#lib-new-how'), { keepOwn });
+const newHow = newWorkflow($('#lib-new-how'), { keepOwn, deleteOwn, usedBy: ownUsedBy });
 const pickHow = (force) => newHow.pick(setForNew(newShape, $('#lib-new-type').value), { force });
 $('#lib-new-type').addEventListener('change', () => pickHow());
 function pickShape(id, force) {
