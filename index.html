@@ -348,8 +348,8 @@
   </div>
 
   <div class="script-bar" role="toolbar" aria-label="Script elements and alternates" hidden>
-    <button type="button" data-ins="1" aria-label="Insert (time, date, link…)">+</button>
-    <button type="button" data-talk="1" aria-label="Talk into the draft">Talk</button>
+    <button type="button" class="bar-mic" data-talk="1" aria-label="Capture by voice (it lands where you are)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    <span class="bar-gap mic-gap" aria-hidden="true"></span>
     <button type="button" data-el="scene">Scene</button>
     <button type="button" data-el="action">Action</button>
     <button type="button" data-el="character">Character</button>
@@ -363,22 +363,28 @@
     <button type="button" data-alt="para">Paragraph</button>
     <button type="button" data-alt="prev" aria-label="Previous alternate">‹</button>
     <button type="button" data-alt="next" aria-label="Next alternate">›</button>
+    <span class="bar-gap ins-gap" aria-hidden="true"></span>
+    <button type="button" data-ins="1" aria-label="Insert (time, date, link…)">+</button>
   </div>
 
   <div class="script-bar outline-bar" role="toolbar" aria-label="Outline" hidden>
+    <button type="button" class="bar-mic" data-do="talk" aria-label="Capture by voice (it lands where you are)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    <span class="bar-gap" aria-hidden="true"></span>
     <button type="button" data-do="undo" aria-label="Undo">↶</button>
     <button type="button" data-do="redo" aria-label="Redo">↷</button>
     <span class="bar-gap" aria-hidden="true"></span>
-    <button type="button" data-do="insert" aria-label="Insert (time, date, link…)">+</button>
     <button type="button" data-do="outdent" aria-label="Outdent">⇤</button>
     <button type="button" data-do="indent" aria-label="Indent">⇥</button>
     <button type="button" data-do="up" aria-label="Move line up">↑</button>
     <button type="button" data-do="down" aria-label="Move line down">↓</button>
-    <button type="button" data-do="zoom" aria-label="Zoom in">Zoom</button>
+    <span class="bar-gap" aria-hidden="true"></span>
     <button type="button" data-do="tag" aria-label="Tag">#</button>
     <button type="button" data-do="link" aria-label="Link to a page">[[ ]]</button>
+    <span class="bar-gap" aria-hidden="true"></span>
     <button type="button" data-do="done" aria-label="Done">Done</button>
     <button type="button" data-do="move" aria-label="Move to another page">Move to…</button>
+    <button type="button" data-do="zoom" aria-label="Zoom in">Zoom</button>
+    <button type="button" data-do="insert" aria-label="Insert (time, date, link…)">+</button>
   </div>
 
   <div class="stats" role="dialog" aria-label="Progress" hidden>

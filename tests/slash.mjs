@@ -124,6 +124,8 @@ try {
     await sleep(600);
     await q.evaluate(() => { window.__notebook.editor.commands.focus('end'); });
     await q.waitForFunction(() => !document.querySelector('.outline-bar').hidden);
+    await q.locator('.outline-bar [data-do="insert"]').evaluate((b) => b.scrollIntoView({ inline: 'end' }));
+    await sleep(100);
     const plus = await q.locator('.outline-bar [data-do="insert"]').boundingBox();
     await q.touchscreen.tap(plus.x + plus.width / 2, plus.y + plus.height / 2);
     await q.waitForFunction(() => !document.querySelector('.slash').hidden);

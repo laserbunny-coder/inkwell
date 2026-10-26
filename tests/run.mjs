@@ -845,7 +845,7 @@ try {
     await ph.waitForSelector('#editor p[data-el="character"]');
     // + (the insert menu) first, then the script buttons; alternates come last.
     const row = await ph.locator('.script-bar:not(.outline-bar) button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => (b.dataset.ins ? 'insert' : b.dataset.talk ? 'talk' : b.dataset.alt || b.dataset.el)));
-    assert.deepEqual(row, ['insert', 'talk', 'scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'section', 'word', 'ask', 'para', 'prev', 'next']);
+    assert.deepEqual(row, ['talk', 'scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'section', 'word', 'ask', 'para', 'prev', 'next', 'insert']);
 
     // Outlines get their own row: indent, outdent, move, tag.
     await ph.keyboard.press('Control+J');
@@ -871,8 +871,10 @@ try {
     await ph.keyboard.type('sea');
     await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].some((p) => p.textContent === 'Tides #sea'));
     assert.equal(await ph.evaluate(() => document.activeElement?.closest('#outline-editor') !== null), true, 'keyboard stays up');
-    // Undo and Redo come first in the row, then + (the insert menu).
-    assert.deepEqual((await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do))).slice(0, 4), ['undo', 'redo', 'insert', 'outdent']);
+    // The mic comes first in the row, then Undo and Redo, the moves, # and link;
+    // Done, Move to, Zoom and + (the insert menu) wait at the end.
+    assert.deepEqual(await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do)), ['talk', 'undo', 'redo', 'outdent', 'indent', 'up', 'down', 'tag', 'link', 'done', 'move', 'zoom', 'insert']);
+    assert.equal(await ph.locator('.outline-bar [data-do="link"]').evaluate((b) => b.getBoundingClientRect().right <= innerWidth), true, 'link fits on the first screen');
     // The line you're on shows its handle; a tap brings its menu up from the bottom.
     // Move down keeps the sheet open so it can be tapped again.
     const here = ph.locator('#outline-editor li.here > .line-gutter .bullet');
@@ -915,7 +917,7 @@ try {
     assert.equal(moved[0].deleted, false);
     // Holding a button doesn't press it (holding is for scrolling the row); a quick tap does.
     const order2 = await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do));
-    assert.equal(order2.indexOf('zoom'), order2.indexOf('down') + 1, order2.join(','));
+    assert.ok(order2.indexOf('zoom') > order2.indexOf('link'), order2.join(','));
     assert.equal(order2.includes('fold'), false);
     await ph.evaluate(() => window.__outline.commands.focus('end'));
     await ph.keyboard.press('Enter');
