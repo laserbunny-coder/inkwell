@@ -843,13 +843,14 @@ try {
     await ph.waitForSelector('#editor p[data-el="dialogue"]');
     await ph.locator('.script-bar button[data-el="character"]').tap();
     await ph.waitForSelector('#editor p[data-el="character"]');
-    // + (the insert menu) first, then the script buttons; alternates come last.
+    // The mic first, then the script buttons, the alternates, and + (the insert menu) last.
     const row = await ph.locator('.script-bar:not(.outline-bar) button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => (b.dataset.ins ? 'insert' : b.dataset.talk ? 'talk' : b.dataset.alt || b.dataset.el)));
     assert.deepEqual(row, ['talk', 'scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'section', 'word', 'ask', 'para', 'prev', 'next', 'insert']);
 
     // Outlines get their own row: indent, outdent, move, tag.
     await ph.keyboard.press('Control+J');
     await ph.waitForFunction(() => document.querySelector('#nb-kind')?.textContent === 'Today');
+    await sleep(1200); // the page takes the caret back about a second after opening
     await ph.locator('#outline-editor .ProseMirror').tap();
     await ph.keyboard.type('Boats');
     await ph.keyboard.press('Enter');
