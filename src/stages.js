@@ -3,7 +3,7 @@ import { entry, newId, tagsIn, outline } from './model.js';
 import { GAP, bySort } from './order.js';
 import {
   worldOf, piecesIn, worldTree, worldStats, dailyMentions, stats, hasManuscript, bookType, kindName,
-  STAGES, stageOf, isOut, isReady, ago, newPage, pagesIn
+  STAGES, stageOf, stageSetOf, isOut, isReady, ago, newPage, pagesIn
 } from './library.js';
 import { worldPromises } from './grid.js';
 import { elementsIn, ELEMENT_TYPES, typeOf, shootDays } from './production.js';
@@ -1193,11 +1193,18 @@ export class StagePage {
   // ---------- Make: the world ----------
 
   async drawMakeWorld(body) {
-    const sub = this.sub(MAKE_WORLD, 'board');
-    body.append(this.chips(MAKE_WORLD, sub, (id) => this.pickSub(id)));
     const w = this.owner;
+    // Shoot days only where something is filmed: a world of books and poems
+    // doesn't get them (unless it already has one).
+    const { pieces: all } = await worldStats(w);
+    const video = all.some(({ row: p }) => ['ai', 'live'].includes(stageSetOf(p, w).id) || p.fields?.videoTools);
+    let days = video;
+    for (const { row: p } of all) { if (days) break; if ((await shootDays(p.id)).length) days = true; }
+    const list = MAKE_WORLD.filter((c) => c.id !== 'days' || days);
+    const sub = this.sub(list, 'board');
+    body.append(this.chips(list, sub, (id) => this.pickSub(id)));
     if (sub === 'board') {
-      const { pieces } = await worldStats(w);
+      const pieces = all;
       const tools = make('div', 'st-tools st-board-tools');
       const edit = make('button', 'ghost-btn', 'Stages…');
       edit.title = 'Which stages scripts, prose and outlines go through here, and your own names for them';

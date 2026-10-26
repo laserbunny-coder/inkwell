@@ -50,7 +50,7 @@ const extOf = (name, type) => (/\.([a-z0-9]{1,5})$/i.exec(name || '')?.[1] || (t
 
 export class ProductionView {
   // hooks: open(row), openPage(id), leave(piece), changed(rows), menu,
-  // menuButton, ask, askText, toast, askServer, canAsk, numberScenes(piece),
+  // menuButton, ask, askText, toast, askServer, canAsk, numberScenes(piece), go(place),
   // sendTask(task), base().
   constructor(el, hooks) {
     this.el = el;
@@ -177,8 +177,9 @@ export class ProductionView {
     back.title = this.mode === 'deliver' ? 'Back to the text' : 'Back to the text (Ctrl + Shift + S)';
     back.addEventListener('click', () => this.hooks.leave(piece));
     tools.append(back);
-    if (this.mode !== 'deliver') tools.append(this.hooks.menuButton(() => this.moreMenu(), 'More for production'));
+    if (this.mode !== 'deliver' && this.videoTools()) tools.append(this.hooks.menuButton(() => this.moreMenu(), 'More for production'));
     head.append(tools);
+    if (this.mode !== 'deliver' && !this.videoTools()) { this.el.replaceChildren(head, this.notVideo()); return; }
     const sub = make('div', 'gv-sub');
     const tabs = make('div', 'gv-levels');
     tabs.setAttribute('role', 'tablist');
@@ -205,6 +206,45 @@ export class ProductionView {
     if (this.tab === 'share') await this.drawShare(body);
     const panel = this.mode === 'deliver' && this.tab !== 'post' ? null : this.claudePanel();
     this.el.replaceChildren(...[head, sub, panel, body].filter(Boolean));
+  }
+
+  // Shots, storyboards and shoot days are for video. A book, a stage piece
+  // or short writing doesn't get them unless it asks, or already has shots.
+  videoTools() {
+    return ['ai', 'live'].includes(this.set) || !!this.piece.fields?.videoTools || this.scenes.some((s) => s.shots.length) || this.lost.length > 0;
+  }
+
+  notVideo() {
+    const box = make('div', 'pd-notvideo');
+    const set = stageSetOf(this.piece, this.world);
+    const next = {
+      book: 'A book’s own Make page is on the way: beta readers, edit, cover and formatting, then publish. Until then, Ctrl + P prints a clean copy for readers.',
+      short: 'Short writing goes straight from Polished to Deliver, where you can share it or copy it out.',
+      stage: 'A stage piece’s own Make page (cast, rehearsals, cues) is on the way.'
+    }[set.id] || '';
+    box.append(make('p', 'pd-notvideo-what', `${this.piece.title || 'This piece'} goes through ${set.name} stages, so the video tools (shots, storyboard, shoot days) are put away.`));
+    if (next) box.append(make('p', 'hint', next));
+    const acts = make('div', 'pd-add');
+    const stages = make('button', 'pill', 'Deliver');
+    stages.addEventListener('click', () => this.hooks.go?.({ view: 'deliver', id: this.piece.id }));
+    const show = make('button', 'ghost-btn', 'Use the video tools anyway');
+    show.title = 'For a book trailer, say. Turn them off again from Make’s ⋯ menu.';
+    show.addEventListener('click', () => this.setVideoTools(true));
+    if (this.hooks.go) acts.append(stages);
+    acts.append(show);
+    box.append(acts);
+    return box;
+  }
+
+  async setVideoTools(on) {
+    const fresh = await getEntry(this.piece.id);
+    const fields = { ...fresh.fields };
+    if (on) fields.videoTools = true; else delete fields.videoTools;
+    const row = { ...fresh, fields, updated_at: Date.now() };
+    await putEntries([row]);
+    this.hooks.changed([row]);
+    await this.render();
+    this.hooks.toast(on ? 'Video tools on for this piece' : 'Video tools put away', { label: 'Undo', run: () => this.setVideoTools(!on) });
   }
 
   // ---------- shots ----------
@@ -1459,7 +1499,9 @@ export class ProductionView {
       { label: hide.has('elements') ? 'Show elements on scenes' : 'Hide elements on scenes', run: () => flip('elements') },
       { label: hide.has('notes') ? 'Show production notes' : 'Hide production notes', run: () => flip('notes') },
       { label: hide.has('summary') ? 'Show scene summaries' : 'Hide scene summaries', run: () => flip('summary') },
-      { label: hide.has('empty') ? 'Show scenes with no shots' : 'Hide scenes with no shots', run: () => flip('empty') }
+      { label: hide.has('empty') ? 'Show scenes with no shots' : 'Hide scenes with no shots', run: () => flip('empty') },
+      this.piece.fields?.videoTools && !['ai', 'live'].includes(this.set) && 'sep',
+      this.piece.fields?.videoTools && !['ai', 'live'].includes(this.set) && { label: 'Put the video tools away', run: () => this.setVideoTools(false) }
     ].filter(Boolean);
   }
 

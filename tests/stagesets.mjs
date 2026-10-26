@@ -35,7 +35,9 @@ const SEED = [
   para('pp_5', 'ch_2', 5120, 'Kenji flips over the fence.', 'action'),
   row('sh_1', 'shot', 'pp_1', 1, { text: 'Mom at the stove', fields: { n: 1, piece: 'pr_reel2' } }),
   row('sh_2', 'shot', 'pp_4', 1, { text: 'The flip', fields: { n: 1, piece: 'pr_reel2' } }),
-  row('pr_novel', 'project', 'wd_nb', 3, { title: 'The Bakery Book', fields: { type: 'novel', stage: 'Drafted' } })
+  row('pr_novel', 'project', 'wd_nb', 3, { title: 'The Bakery Book', fields: { type: 'novel', stage: 'Drafted' } }),
+  row('wd_poems', 'world', null, 2, { title: 'Morning Poems' }),
+  row('pr_poem', 'project', 'wd_poems', 1, { title: 'Flour Dust', fields: { type: 'novel', stage: 'Idea', stageSet: 'short' } })
 ];
 const seed = (rows) => new Promise((res, rej) => {
   const r = indexedDB.open('writing');
@@ -264,6 +266,30 @@ try {
     await page.locator('.toast button', { hasText: 'Undo' }).click();
     await sleep(400);
     assert.equal((await get(page, 'bd-pp_1')).fields.audio, null);
+  });
+
+  await check('a book’s Make puts the video tools away; it can still ask for them, with Undo', async () => {
+    await go(page, { view: 'production', id: 'pr_novel' });
+    await page.waitForSelector('.pd-notvideo');
+    assert.match(await page.locator('.pd-notvideo').innerText(), /goes through Book stages, so the video tools[\s\S]*beta readers/);
+    assert.equal(await page.locator('.prod-view .gv-levels').count(), 0);
+    await shot(page, 'stagesets-book-make');
+    await page.locator('.pd-notvideo button', { hasText: 'Use the video tools anyway' }).click();
+    await page.waitForSelector('.prod-view .gv-levels .chip[data-tab="shots"]');
+    assert.equal((await get(page, 'pr_novel')).fields.videoTools, true);
+    await page.locator('.toast button', { hasText: 'Undo' }).click();
+    await page.waitForSelector('.pd-notvideo');
+    assert.equal((await get(page, 'pr_novel')).fields.videoTools, undefined);
+  });
+
+  await check('a world with nothing to film has no Shoot days in Make; one with scripts does', async () => {
+    await go(page, { view: 'stage', id: 'wd_poems', page: 'make', sub: 'board' });
+    await page.waitForSelector('#st-board .sb-card');
+    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['board', 'kit']);
+    assert.deepEqual((await board(page))[0].cols, ['Idea:1', 'Drafted:0', 'Polished:0', 'Out:0']);
+    await go(page, { view: 'stage', id: 'wd_nb', page: 'make', sub: 'board' });
+    await page.waitForSelector('#st-board .sb-card');
+    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['board', 'kit', 'days']);
   });
 
   await check('nothing broke', async () => { assert.deepEqual(page.errors, []); });
