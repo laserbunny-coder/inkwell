@@ -183,8 +183,11 @@ const touch = matchMedia('(hover: none)');
 function placeScriptBar() {
   const script = isScript();
   const withAlts = !root.classList.contains('hide-alts') && !root.classList.contains('focus');
-  const show = touch.matches && (script || withAlts) && writing() && editor.isFocused;
+  // The mic is always on it; only Focus with no script leaves just the text.
+  const show = touch.matches && (script || !root.classList.contains('focus')) && writing() && editor.isFocused;
+  const back = show && scriptBar.hidden;
   scriptBar.hidden = !show;
+  if (back) scriptBar.scrollLeft = 0; // a row that comes back starts with the mic in view
   scriptBar.classList.toggle('scripting', script);
   scriptBar.classList.toggle('no-alts', !withAlts);
   body.classList.toggle('script-bar-on', show);
@@ -300,11 +303,15 @@ const notebook = new Notebook({
   }
 });
 
-// On a phone, a row above the keyboard for outlines: indent, move, tag, link, fold, zoom.
+// On a phone, a row above the keyboard for outlines. The first screen holds what
+// gets used all the time (mic, undo, indent, move, tag, link); Done, Move to…,
+// Zoom and + wait at the end of the row.
 const outlineBar = $('.outline-bar');
 function placeOutlineBar() {
   const show = touch.matches && inNotebook() && notebook.editor.isFocused;
+  const back = show && outlineBar.hidden;
   outlineBar.hidden = !show;
+  if (back) outlineBar.scrollLeft = 0; // a row that comes back starts with the mic in view
   body.classList.toggle('outline-bar-on', show);
   if (!show) return;
   const vv = window.visualViewport;
@@ -320,7 +327,8 @@ function placeOutlineBar() {
 tapBar(outlineBar, 'button[data-do]', (b) => {
   const ed = notebook.editor;
   const act = b.dataset.do;
-  if (act === 'undo') ed.chain().focus().undo().run();
+  if (act === 'talk') captureHere({ start: true });
+  else if (act === 'undo') ed.chain().focus().undo().run();
   else if (act === 'redo') ed.chain().focus().redo().run();
   else if (act === 'done') toggleDone(ed);
   else if (act === 'move') setTimeout(moveLinePicker, 120); // after the tap's click, so it doesn't land on the menu
