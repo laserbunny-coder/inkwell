@@ -856,7 +856,12 @@ try {
     await ph.keyboard.press('Enter');
     await ph.keyboard.type('Tides');
     await ph.waitForSelector('.outline-bar', { state: 'visible' });
-    const tap = (what) => ph.locator(`.outline-bar [data-do="${what}"]`).tap();
+    const tap = async (what) => {
+      try { await ph.locator(`.outline-bar [data-do="${what}"]`).tap({ timeout: 8000 }); } catch (e) {
+        console.log('DBG', JSON.stringify(await ph.evaluate(() => ({ bar: document.querySelector('.outline-bar').hidden, cls: document.body.className, active: document.activeElement?.outerHTML.slice(0, 120), place: localStorage.getItem('place'), kind: document.querySelector('#nb-kind')?.textContent, btn: (() => { const b = document.querySelector('.outline-bar [data-do="indent"]'); const r = b.getBoundingClientRect(); return [r.x, r.y, r.width, r.height, getComputedStyle(b).display]; })() }))));
+        throw e;
+      }
+    };
     await tap('indent');
     await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li li > p')].some((p) => p.textContent === 'Tides'));
     await tap('outdent');
