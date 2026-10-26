@@ -117,6 +117,37 @@ try {
     await p.mouse.move(640, 500, { steps: 4 });
     await p.waitForFunction(() => !document.body.classList.contains('show-top'));
   });
+
+  await check('the top bar’s buttons stay in the same places everywhere, and the place you’re in is lit', async () => {
+    const tools = () => p.locator('.tb-tools button').evaluateAll((els) => els.map((e) => `${e.textContent}@${Math.round(e.getBoundingClientRect().x)}${e.getAttribute('aria-current') ? '*' : ''}`));
+    const show = () => p.evaluate(() => document.body.classList.add('show-top'));
+    await toToday(p);
+    await show();
+    await sleep(300);
+    const onToday = await tools();
+    assert.ok(onToday.some((t) => t.startsWith('Today@') && t.endsWith('*')), onToday.join(' '));
+    await p.keyboard.press('Control+Shift+O');
+    await p.waitForFunction(() => document.documentElement.dataset.view === 'library');
+    await show();
+    await sleep(300);
+    const onLibrary = await tools();
+    assert.ok(onLibrary.some((t) => t.startsWith('Library@') && t.endsWith('*')), onLibrary.join(' '));
+    assert.deepEqual(onLibrary.map((t) => t.replace('*', '')), onToday.map((t) => t.replace('*', '')), 'nothing moved');
+    await p.evaluate(() => document.body.classList.remove('show-top'));
+  });
+
+  await check('Alt + Left goes back without flashing the tab numbers; holding Alt alone shows them', async () => {
+    await p.keyboard.down('Alt');
+    await p.keyboard.press('ArrowLeft');
+    await sleep(600);
+    assert.equal(await p.evaluate(() => document.body.classList.contains('alt-held')), false);
+    await p.keyboard.up('Alt');
+    await p.keyboard.down('Alt');
+    await sleep(600);
+    assert.equal(await p.evaluate(() => document.body.classList.contains('alt-held')), true);
+    await p.keyboard.up('Alt');
+    assert.equal(await p.evaluate(() => document.body.classList.contains('alt-held')), false);
+  });
   await ctx.close();
 
   const phone = await browser.newContext({ colorScheme: 'dark', viewport: { width: 390, height: 780 }, hasTouch: true, isMobile: true });
