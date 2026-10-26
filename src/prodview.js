@@ -464,14 +464,16 @@ export class ProductionView {
     toggle.addEventListener('click', () => { if (this.open.has(sh.id)) this.open.delete(sh.id); else this.open.add(sh.id); this.render(); });
     const made = madeBy(sh, this.set);
     box.dataset.made = made;
-    row.append(toggle, code, what, framing);
+    // How it's made sits with where it's at, so the row keeps its columns.
+    const state = make('span', 'pd-state');
     if (made !== 'gen') {
       const m = make('button', 'pd-made', MADE_BY.find((x) => x.id === made).label);
       m.title = MADE_BY.find((x) => x.id === made).about;
       m.addEventListener('click', () => this.hooks.menu(m, this.madeMenu(sh)));
-      row.append(m);
+      state.append(m);
     }
-    row.append(dot, this.hooks.menuButton(() => this.shotMenu(sh, s), 'More for this shot'));
+    state.append(dot);
+    row.append(toggle, code, what, framing, state, this.hooks.menuButton(() => this.shotMenu(sh, s), 'More for this shot'));
     box.append(row);
     if (this.open.has(sh.id)) box.append(this.shotDetail(sh, s));
     // Renders dropped on a shot go to it.

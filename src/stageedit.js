@@ -59,9 +59,9 @@ export function editStages(world, pieces) {
       const uses = make('div', 'se-uses');
       for (const t of types) {
         const row = make('label', 'se-use');
-        row.append(make('span', '', `${TYPE_NAMES[t]} go through`));
+        row.append(make('span', '', `${TYPE_NAMES[t]} ${t === 'novel' ? 'goes' : 'go'} through`));
         const sel = make('select');
-        sel.setAttribute('aria-label', `${TYPE_NAMES[t]} go through`);
+        sel.setAttribute('aria-label', `${TYPE_NAMES[t]} ${t === 'novel' ? 'goes' : 'go'} through`);
         sel.dataset.type = t;
         for (const set of STAGE_SETS) sel.append(Object.assign(make('option', '', set.name), { value: set.id }));
         sel.value = stageSetOf({ fields: { type: t } }, { fields: { ...world.fields, stageFor } }).id;

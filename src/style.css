@@ -1156,7 +1156,7 @@ div.pd-scene-title { cursor: default; }
   .prod-view { padding: 56px 16px 12vh; }
   .pd-shot-row { grid-template-columns: 20px auto minmax(0, 1fr) 30px; }
   .pd-shot-row .pd-framing { grid-column: 3 / 4; grid-row: 2; }
-  .pd-shot-row .pd-stage { grid-column: 3 / 4; grid-row: 3; padding: 0 0 4px 4px; }
+  .pd-shot-row .pd-state { grid-column: 3 / 4; grid-row: 3; padding: 0 0 4px 4px; }
   .pd-detail { padding-left: 0; }
   .pd-dayrow { grid-template-columns: 1fr 1fr; }
   .pd-sheet { padding: 18px; }
@@ -1582,3 +1582,5 @@ body.pin-outline .placeline { left: 318px; }
 .pd-plan-what { margin: 6px 0 4px; }
 .pd-plan-list { margin: 0 0 10px; padding-left: 18px; color: var(--muted); }
 .pd-sheet-kind { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
+.pd-state { display: flex; align-items: center; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+@media (max-width: 700px) { .pd-state { justify-content: flex-start; } }
