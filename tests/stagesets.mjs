@@ -285,10 +285,12 @@ try {
   await check('a world with nothing to film has no Shoot days in Make; one with scripts does', async () => {
     await go(page, { view: 'stage', id: 'wd_poems', page: 'make', sub: 'board' });
     await page.waitForSelector('#st-board .sb-card');
+    await page.waitForSelector('.st-chips .chip');
     assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['board', 'kit']);
     assert.deepEqual((await board(page))[0].cols, ['Idea:1', 'Drafted:0', 'Polished:0', 'Out:0']);
     await go(page, { view: 'stage', id: 'wd_nb', page: 'make', sub: 'board' });
-    await page.waitForSelector('#st-board .sb-card');
+    // The old world's board can still be up for a moment; wait for this one's tabs.
+    await page.waitForFunction(() => document.querySelectorAll('.st-chips .chip').length === 3).catch(() => {});
     assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['board', 'kit', 'days']);
   });
 
