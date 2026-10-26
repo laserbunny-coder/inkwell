@@ -52,8 +52,8 @@ export const SHAPE_PIECE = [
   { id: 'develop', label: 'Develop' },
   { id: 'grid', label: 'Plot grid' }
 ];
+// The status board is on the project's Overview now; Make is tools only.
 export const MAKE_WORLD = [
-  { id: 'board', label: 'Stage board' },
   { id: 'kit', label: 'Kit' },
   { id: 'days', label: 'Shoot days' }
 ];
@@ -1201,22 +1201,8 @@ export class StagePage {
     let days = video;
     for (const { row: p } of all) { if (days) break; if ((await shootDays(p.id)).length) days = true; }
     const list = MAKE_WORLD.filter((c) => c.id !== 'days' || days);
-    const sub = this.sub(list, 'board');
+    const sub = this.sub(list, 'kit');
     body.append(this.chips(list, sub, (id) => this.pickSub(id)));
-    if (sub === 'board') {
-      const pieces = all;
-      const tools = make('div', 'st-tools st-board-tools');
-      const edit = make('button', 'ghost-btn', 'Workflow…');
-      edit.title = 'The steps pieces go through here, and the tools on Make';
-      edit.addEventListener('click', () => this.hooks.editStages(w));
-      tools.append(edit);
-      body.append(tools);
-      const board = make('div', 'stage-board st-board');
-      board.id = 'st-board';
-      body.append(board);
-      if (pieces.length) this.hooks.board(board, w, pieces);
-      else body.append(make('p', 'hint', 'Every piece by stage, from idea to out in the world. Make a piece and it shows here.'));
-    }
     if (sub === 'kit') await this.drawKit(body);
     if (sub === 'days') await this.drawDays(body);
   }

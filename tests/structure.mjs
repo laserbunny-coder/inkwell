@@ -463,17 +463,17 @@ try {
     assert.match(items[0], /Paid off in Siege: Takes up the sword again/);
   });
 
-  await check('the stage board (in Make) shows every piece by stage, and dragging a card moves it on', async () => {
-    await go(laptop, { view: 'stage', id: 'wd_monks', page: 'make', sub: 'board' });
-    await laptop.waitForSelector('#st-board .sb-card');
-    const idea = await laptop.locator('.sb-col[data-stage="Idea"] .sb-title').allInnerTexts();
+  await check('the status board (on Overview) shows every piece by status, and dragging a card moves it on', async () => {
+    await go(laptop, { view: 'world', id: 'wd_monks' });
+    await laptop.waitForSelector('#wh-board .sb-card');
+    const idea = await laptop.locator('.sb-col[data-stage="New idea"] .sb-title').allInnerTexts();
     assert.ok(['Monks vs. Zombies', 'Pilot', 'Season One', 'Pilot', 'The Hive', 'Siege'].every((t) => idea.includes(t)), idea.join(', '));
     await shot(laptop, 'stage-board');
-    await laptop.locator('.sb-card[data-id="pr_e1"]').dragTo(laptop.locator('.sb-col[data-stage="Written"]'));
+    await laptop.locator('.sb-card[data-id="pr_e1"]').dragTo(laptop.locator('.sb-col[data-stage="Writing"]'));
     await sleep(500);
     await settle(laptop);
-    assert.equal(row('pr_e1').fields.stage, 'Written');
-    await laptop.waitForSelector('.sb-col[data-stage="Written"] .sb-card[data-id="pr_e1"]');
+    assert.equal(row('pr_e1').fields.stage, 'Writing');
+    await laptop.waitForSelector('.sb-col[data-stage="Writing"] .sb-card[data-id="pr_e1"]');
 
   });
 

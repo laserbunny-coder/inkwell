@@ -50,7 +50,7 @@ import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
-import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
+import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, nextLabel, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -1750,8 +1750,16 @@ async function setLabel(piece) {
 
 async function setStage(piece, stage) {
   const b = await getEntry(piece.id);
+  const was = b.fields?.stage;
   await putEntries([{ ...b, fields: { ...b.fields, stage }, updated_at: Date.now() }]);
   await refreshViews();
+  toast(`${b.title || 'It'}: ${stage}`, { label: 'Undo', run: async () => {
+    const now = await getEntry(b.id);
+    const fields = { ...now.fields, stage: was };
+    if (!was) delete fields.stage;
+    await putEntries([{ ...now, fields, updated_at: Date.now() }]);
+    await refreshViews();
+  } });
 }
 
 // A new piece in a world or inside a piece: its name, what it is, how it's written.
@@ -2151,6 +2159,12 @@ async function renderProject() {
   stageSel.replaceChildren(...stagesOf(b, world).map((st) => Object.assign(make('option', '', st), { value: st })));
   stageSel.value = stageOf(b, world);
   stageSel.onchange = () => setStage(b, stageSel.value);
+  // The one button that moves it on; the menu beside it goes back or skips.
+  const next = $('#ph-next');
+  const nl = nextLabel(stagesOf(b, world), stageOf(b, world));
+  next.hidden = !nl;
+  next.textContent = nl || '';
+  next.onclick = () => { const l = stagesOf(b, world); setStage(b, l[l.indexOf(stageOf(b, world)) + 1]); };
   $('#ph-stats').textContent = bookType(b) === 'screenplay'
     ? `${s.words.toLocaleString()} words`
     : novel
@@ -2298,22 +2312,13 @@ async function renderWorld() {
   };
   log.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); log.blur(); } if (e.key === 'Escape') { e.preventDefault(); log.textContent = w.fields?.logline || ''; log.blur(); } };
 
-  // Where every piece is, idea to posted: click to see the board in Make.
-  const bar = $('#wh-stagebar');
-  bar.hidden = life || !s.pieces.length;
-  // Each set's stages in turn (a Universe can mix AI video and Book).
-  const barSets = [...new Set(s.pieces.map(({ row }) => stageSetOf(row, w).id))].map(setById);
-  bar.replaceChildren(...barSets.flatMap((set) => stagesIn(set, w).map((st, i, list) => ({ set, st, i: Math.round((i / Math.max(1, list.length - 1)) * 5) }))).map(({ set, st, i }) => {
-    const n = s.pieces.filter(({ row }) => stageSetOf(row, w).id === set.id && stageOf(row, w) === st).length;
-    const b = make('button', 'wh-stage', n ? `${st} ${n}` : '');
-    b.style.flexGrow = String(n);
-    b.dataset.stage = st;
-    b.style.setProperty('--i', i);
-    b.hidden = !n;
-    b.title = `${plural(n, 'piece')} at ${st}: see the stage board`;
-    b.addEventListener('click', () => go({ view: 'stage', id: w.id, page: 'make', sub: 'board' }));
-    return b;
-  }));
+  // Where every piece is, from new idea to out in the world: the status
+  // board lives here on the project's home, and the tabs are just rooms.
+  $('#wh-stagebar').hidden = true;
+  const status = $('#wh-status');
+  status.hidden = life || !s.pieces.length;
+  if (!status.hidden) renderBoard(w, s.pieces);
+  $('#wh-workflow').onclick = () => openStages(w);
 
   $('#wh-pieces-box').hidden = life && !s.pieces.length;
   $('#wh-pieces').replaceChildren(...s.pieces.map(({ row, depth }) => pieceRow(row, depth, w)));
@@ -2321,7 +2326,6 @@ async function renderWorld() {
   $('#wh-new-piece').onclick = () => addPiece(w.id);
   const nextHere = await nextLevel(w);
   $('#wh-new-piece').textContent = `+ ${nextHere ? nextHere.label : 'Piece'}`;
-  $('#wh-board').hidden = true;
 
   // A life project's tasks go to Daybook, linked back here.
   $('#wh-task-box').hidden = !life;
@@ -2913,6 +2917,15 @@ window.__today = todayPanel;
 
 
 function renderBoard(w, pieces, el = $('#wh-board')) {
+  // One button on a card moves it to the next status.
+  const nextBtn = (p, list) => {
+    const label = nextLabel(list, stageOf(p, w));
+    if (!label) return null;
+    const b = make('button', 'sb-next', label);
+    b.type = 'button';
+    b.addEventListener('click', (e) => { e.stopPropagation(); setStage(p, list[list.indexOf(stageOf(p, w)) + 1]); });
+    return b;
+  };
   const touch = matchMedia('(hover: none)').matches;
   // One row of columns for each set of stages in the world (a Universe can
   // have reels on AI video and a novel on Book); one set needs no label.
@@ -2929,9 +2942,11 @@ function renderBoard(w, pieces, el = $('#wh-board')) {
       const card = make('button', 'sb-card');
       card.dataset.id = p.id;
       card.append(make('span', 'sb-title', p.title || 'Untitled'), make('span', 'sb-kind', kindName(p)));
+      const nb = nextBtn(p, list);
+      if (nb) card.append(nb);
       card.addEventListener('click', () => (touch ? popMenu(card, [
         { label: 'Open', run: () => go({ view: 'project', id: p.id }) },
-        { label: 'Stage', sub: list.map((st) => ({ label: st, current: stageOf(p, w) === st, run: () => setStage(p, st) })) }
+        { label: 'Status', sub: list.map((st) => ({ label: st, current: stageOf(p, w) === st, run: () => setStage(p, st) })) }
       ]) : go({ view: 'project', id: p.id })));
       onContextMenu(card, () => bookMenu(p));
       if (!touch) {

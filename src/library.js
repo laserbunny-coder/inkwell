@@ -58,8 +58,10 @@ export const formatName = (p) => ({ novel: 'Prose', screenplay: 'Script', lines:
 // one, what its format suggests.
 export const defaultLabel = (type) => ({ novel: 'Novel', screenplay: 'Screenplay', lines: 'Outline', notes: 'Notes' })[type] || 'Piece';
 export const kindName = (p) => p?.fields?.label || defaultLabel(bookType(p));
-// Where a piece is on its way out into the world.
-export const STAGES = ['Idea', 'Written', 'Boarded', 'Generated', 'Edited', 'Posted'];
+// Where a piece is on its way out into the world, named for what's happening
+// to it now (Writing, Generating), so it never reads like a tab (Write). The
+// tabs are rooms with tools; a piece's status is how far it has got.
+export const STAGES = ['New idea', 'Writing', 'Boarding', 'Generating', 'Editing', 'Posted'];
 // Different work goes through different stages. Each kind of piece starts
 // with the set that fits it (a script: AI video; prose: Book); a project can
 // pick another set for its scripts, prose or outlines, a piece can pick its
@@ -74,12 +76,21 @@ export const TOOLS = [
   { id: 'days', label: 'Shoot days' }
 ];
 const VIDEO = ['shots', 'board', 'kit', 'days'];
+// The names before statuses were worded as what's happening, so pieces
+// marked then keep their place (Boarded reads as Boarding).
+const LEGACY = [
+  ['Idea', 'Written', 'Boarded', 'Generated', 'Edited', 'Posted'],
+  ['Idea', 'Written', 'Prepped', 'Shot', 'Edited', 'Released'],
+  ['Idea', 'Outlined', 'Drafted', 'Revised', 'Edited', 'Published'],
+  ['Idea', 'Written', 'Workshopped', 'Rehearsed', 'Performed'],
+  ['Idea', 'Drafted', 'Polished', 'Out']
+];
 export const STAGE_SETS = [
   { id: 'ai', name: 'AI video', about: 'Generated video, like the reels', stages: STAGES, tools: VIDEO },
-  { id: 'live', name: 'Live action', about: 'Video you shoot with a camera', stages: ['Idea', 'Written', 'Prepped', 'Shot', 'Edited', 'Released'], tools: VIDEO, more: true },
-  { id: 'book', name: 'Book', about: 'A novel, each book in a series', stages: ['Idea', 'Outlined', 'Drafted', 'Revised', 'Edited', 'Published'], tools: [] },
-  { id: 'stage', name: 'Stage', about: 'A musical, a play', stages: ['Idea', 'Written', 'Workshopped', 'Rehearsed', 'Performed'], tools: [], more: true },
-  { id: 'short', name: 'Short writing', about: 'Gags, poems, posts, songs', stages: ['Idea', 'Drafted', 'Polished', 'Out'], tools: [] }
+  { id: 'live', name: 'Live action', about: 'Video you shoot with a camera', stages: ['New idea', 'Writing', 'Prepping', 'Shooting', 'Editing', 'Released'], tools: VIDEO, more: true },
+  { id: 'book', name: 'Book', about: 'A novel, each book in a series', stages: ['New idea', 'Outlining', 'Drafting', 'Revising', 'Editing', 'Published'], tools: [] },
+  { id: 'stage', name: 'Stage', about: 'A musical, a play', stages: ['New idea', 'Writing', 'Workshopping', 'Rehearsing', 'Performed'], tools: [], more: true },
+  { id: 'short', name: 'Short writing', about: 'Gags, poems, posts, songs', stages: ['New idea', 'Drafting', 'Polishing', 'Out'], tools: [] }
 ];
 // Workflows you saved as your own: stages and tools to start the next
 // project from. They're entries (kind 'workflow'), so every device has them.
@@ -125,10 +136,20 @@ export function stageOf(p, world) {
   const at = p?.fields?.stage;
   if (!at) return list[0];
   if (list.includes(at)) return at;
-  const from = allSets().map((x) => x.stages).find((l) => l.includes(at));
+  const from = [...allSets().map((x) => x.stages), ...LEGACY].find((l) => l.includes(at));
   if (!from) return list[0];
   const i = from.indexOf(at) === from.length - 1 ? list.length - 1 : Math.min(list.length - 2, Math.round((from.indexOf(at) / (from.length - 1)) * (list.length - 1)));
   return list[Math.max(0, i)];
+}
+// What the one button on a piece says to move it on: "Start boarding", and
+// at the end "Mark as posted". A name you gave that isn't an -ing word reads
+// "Move to …".
+export function nextLabel(list, at) {
+  const i = list.indexOf(at);
+  if (i < 0 || i >= list.length - 1) return null;
+  const to = list[i + 1];
+  if (i + 1 === list.length - 1) return `Mark as ${to.toLowerCase()}`;
+  return /ing$/i.test(to.split(' ')[0]) ? `Start ${to.charAt(0).toLowerCase()}${to.slice(1)}` : `Move to ${to}`;
 }
 // Out in the world: the last stage of its set. Ready: the one before.
 export const isOut = (p, world) => { const l = stagesOf(p, world); return stageOf(p, world) === l[l.length - 1]; };
