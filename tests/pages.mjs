@@ -124,14 +124,44 @@ try {
     await go(page, { view: 'world', id: 'wd_nb' });
     await page.waitForSelector('#wh-next li button');
     assert.equal(await page.locator('#wh-logline').innerText(), 'A family bakery raises a troupe of hopeless ninjas.');
-    const bar = await page.locator('#wh-stagebar .wh-stage:not([hidden])').allInnerTexts();
-    assert.deepEqual(bar, ['Written 1', 'Posted 1']);
+    // The status board sits on the overview, worded as what is happening.
+    await page.waitForSelector('#wh-board .sb-card');
+    const cols = await page.locator('#wh-board .sb-col').evaluateAll((els) => els.filter((c) => c.querySelector('.sb-card')).map((c) => `${c.dataset.stage} ${c.querySelectorAll('.sb-card').length}`));
+    assert.deepEqual(cols, ['Writing 1', 'Posted 1']);
+    assert.ok(await page.locator('#wh-stagebar').isHidden());
     const next = await page.locator('#wh-next').innerText();
     assert.match(next, /Gather\s*3 things in to file/);
     assert.match(next, /Shoot day Sat, Jan 16 · Reel 2: Breakfast/);
     assert.match(next, /Board Reel 2: Breakfast/);
     assert.match(await page.locator('#wh-recent').innerText(), /Reel 1: The Audition/);
     assert.ok(await page.locator('#wh-board-toggle').count() === 0);
+  });
+
+  await check('one button moves a piece on to its next status, on the board and on the piece; Undo takes it back', async () => {
+    await page.waitForSelector('#wh-board .sb-card[data-id="pr_reel2"] .sb-next');
+    assert.equal(await page.locator('.sb-card[data-id="pr_reel2"] .sb-next').innerText(), 'Start boarding');
+    // The last status has nowhere to go.
+    assert.equal(await page.locator('.sb-card[data-id="pr_reel1"] .sb-next').count(), 0);
+    await shot(page, 'status-board');
+    await page.locator('.sb-card[data-id="pr_reel2"] .sb-next').click();
+    await page.waitForSelector('.sb-col[data-stage="Boarding"] .sb-card[data-id="pr_reel2"]');
+    assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Boarding');
+    assert.match(await page.locator('.toast').innerText(), /Reel 2: Breakfast: Boarding/);
+    await page.locator('.toast button', { hasText: 'Undo' }).click();
+    await page.waitForSelector('.sb-col[data-stage="Writing"] .sb-card[data-id="pr_reel2"]');
+    assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Written');
+    await go(page, { view: 'project', id: 'pr_reel2' });
+    await page.waitForSelector('html[data-view="project"] #ph-next:not([hidden])');
+    assert.equal(await page.locator('#ph-stage').inputValue(), 'Writing');
+    assert.equal(await page.locator('#ph-next').innerText(), 'Start boarding');
+    await shot(page, 'status-piece');
+    await page.locator('#ph-next').click();
+    await page.waitForFunction(() => document.querySelector('#ph-stage').value === 'Boarding');
+    assert.equal(await page.locator('#ph-next').innerText(), 'Start generating');
+    await page.locator('.toast button', { hasText: 'Undo' }).click();
+    await page.waitForFunction(() => document.querySelector('#ph-stage').value === 'Writing');
+    await go(page, { view: 'world', id: 'wd_nb' });
+    await page.waitForSelector('#wh-board .sb-card');
   });
 
   await check('the tabs sit in the top strip: Overview, then Gather to Deliver, faint on a page you look at', async () => {
@@ -277,13 +307,15 @@ try {
 
   // ---------- Make, Deliver, Revise at the size of the world ----------
 
-  await check('Make for the world: the stage board, the kit and every shoot day', async () => {
+  await check('Make for the world: tools only, the kit and every shoot day (the status board lives on Overview)', async () => {
     await page.keyboard.press('Alt+Digit5');
-    await page.waitForSelector('#st-board .sb-card');
-    assert.equal(await page.locator('.sb-col[data-stage="Posted"] .sb-card').count(), 1);
-    await shot(page, 'pages-make-board');
-    await page.locator('.st-chips .chip[data-sub="kit"]').click();
+    await page.waitForSelector('.st-chips .chip[data-sub="kit"]');
+    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['kit', 'days']);
+    assert.equal(await page.locator('#st-board').count(), 0);
+    // Make opens on the kit.
+    await page.waitForSelector('.st-chips .chip[data-sub="kit"].on');
     await page.waitForSelector('.st-kit-el');
+    await shot(page, 'pages-make-tools');
     assert.match(await page.locator('.st-body').innerText(), /Characters · 2[\s\S]*Kenji[\s\S]*Nine, red headband/i);
     await page.locator('.st-chips .chip[data-sub="days"]').click();
     await page.waitForSelector('.st-days li');
@@ -419,7 +451,7 @@ try {
     const w = (await all(page)).find((r) => r.kind === 'world' && r.title === 'Kitchen remodel');
     assert.equal(w.fields.life, true);
     assert.deepEqual(await tabs(page), ['overview*', 'gather', 'notes']);
-    assert.ok(await page.locator('#wh-stagebar').isHidden());
+    assert.ok(await page.locator('#wh-status').isHidden());
     assert.ok(await page.locator('#wh-task-box').isVisible());
     await shot(page, 'pages-life');
     await page.keyboard.press('Alt+Digit2');

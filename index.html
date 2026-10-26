@@ -118,7 +118,7 @@
         <button type="button" class="pill" id="ph-continue">Continue writing</button>
         <span id="ph-more"></span>
       </div>
-      <div class="ph-meta"><input id="ph-label" class="ph-label" list="piece-labels" aria-label="What this is (Novel, Gag, Episode…)" autocomplete="off" spellcheck="false"> · <label>Written as <select id="ph-kind" aria-label="How it's written"></select></label> · <label>Stage <select id="ph-stage" aria-label="Stage"></select></label> · <span id="ph-stats"></span> · <span id="ph-world"></span></div>
+      <div class="ph-meta"><input id="ph-label" class="ph-label" list="piece-labels" aria-label="What this is (Novel, Gag, Episode…)" autocomplete="off" spellcheck="false"> · <label>Written as <select id="ph-kind" aria-label="How it's written"></select></label> · <label>Status <select id="ph-stage" aria-label="Status"></select></label> <button type="button" class="ghost-btn ph-next" id="ph-next" hidden></button> · <span id="ph-stats"></span> · <span id="ph-world"></span></div>
       <datalist id="piece-labels"></datalist>
       <div class="ph-grid">
         <section>
@@ -148,6 +148,10 @@
       <div class="ph-meta"><span id="wh-kind"></span><span id="wh-stats"></span> · <label>Area <select id="wh-area"></select></label></div>
       <p id="wh-logline" class="wh-logline" spellcheck="true"></p>
       <div id="wh-stagebar" class="wh-stagebar" hidden></div>
+      <div id="wh-status" hidden>
+        <div class="ph-row"><span class="panel-label">Where everything is</span><button type="button" class="ghost-btn" id="wh-workflow">Workflow…</button></div>
+        <div id="wh-board" class="stage-board"></div>
+      </div>
       <div class="ph-grid">
         <section>
           <div id="wh-pieces-box">
@@ -168,7 +172,6 @@
           <ul id="wh-recent" class="loose-list wh-recent"></ul>
         </section>
       </div>
-      <div id="wh-board" class="stage-board" hidden></div>
     </div>
   </main>
 

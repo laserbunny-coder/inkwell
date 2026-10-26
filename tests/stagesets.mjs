@@ -68,15 +68,13 @@ async function check(name, fn) {
 }
 const SHOTS = process.env.SHOTS;
 const shot = async (p, name) => { if (SHOTS) { await p.evaluate(() => document.querySelector('.toast')?.remove()); await sleep(250); await p.screenshot({ path: `${SHOTS}/${name}.png` }); } };
-const board = (p) => p.evaluate(() => [...document.querySelectorAll('#st-board .sb-set, #st-board')].filter((x) => x.matches('.sb-set') || !x.querySelector('.sb-set')).map((set) => ({
+const board = (p) => p.evaluate(() => [...document.querySelectorAll('#wh-board .sb-set, #wh-board')].filter((x) => x.matches('.sb-set') || !x.querySelector('.sb-set')).map((set) => ({
   name: set.querySelector(':scope > .panel-label')?.textContent || '',
   cols: [...set.querySelectorAll('.sb-col')].map((c) => `${c.dataset.stage}:${c.querySelectorAll('.sb-card').length}`)
 })));
 const openMake = async (p) => {
   await go(p, { view: 'world', id: 'wd_nb' });
-  await sleep(500);
-  await p.keyboard.press('Alt+Digit5');
-  await p.waitForSelector('#st-board .sb-card');
+  await p.waitForSelector('#wh-board .sb-card');
   await sleep(300);
 };
 const pieceSet = async (p, name) => {
@@ -92,7 +90,7 @@ const pieceSet = async (p, name) => {
   await sleep(400);
 };
 const openStages = async (p) => {
-  await p.locator('.st-board-tools button', { hasText: 'Workflow' }).click();
+  await p.locator('#wh-workflow').click();
   await p.waitForSelector('.stage-edit');
 };
 
@@ -110,9 +108,9 @@ try {
     const b = await board(page);
     assert.equal(b.length, 2);
     assert.equal(b[0].name, 'AI video');
-    assert.deepEqual(b[0].cols, ['Idea:0', 'Written:0', 'Boarded:1', 'Generated:0', 'Edited:0', 'Posted:1']);
+    assert.deepEqual(b[0].cols, ['New idea:0', 'Writing:0', 'Boarding:1', 'Generating:0', 'Editing:0', 'Posted:1']);
     assert.equal(b[1].name, 'Book');
-    assert.deepEqual(b[1].cols, ['Idea:0', 'Outlined:0', 'Drafted:1', 'Revised:0', 'Edited:0', 'Published:0']);
+    assert.deepEqual(b[1].cols, ['New idea:0', 'Outlining:0', 'Drafting:1', 'Revising:0', 'Editing:0', 'Published:0']);
     assert.ok(await page.locator('.sb-set').first().locator('.sb-col.out[data-stage="Posted"]').count());
     await shot(page, 'stagesets-board');
   });
@@ -127,53 +125,53 @@ try {
     await page.locator('.stage-edit .pill.primary').click();
     await sleep(600);
     const w = await get(page, 'wd_nb');
-    assert.deepEqual(w.fields.stageLists.ai, ['Idea', 'Written', 'Storyboarded', 'Generated', 'Edited', 'Posted']);
+    assert.deepEqual(w.fields.stageLists.ai, ['New idea', 'Writing', 'Storyboarded', 'Generating', 'Editing', 'Posted']);
     assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Storyboarded');
     assert.equal((await get(page, 'pr_reel1')).fields.stage, 'Posted');
-    assert.deepEqual((await board(page))[0].cols.slice(0, 3), ['Idea:0', 'Written:0', 'Storyboarded:1']);
+    assert.deepEqual((await board(page))[0].cols.slice(0, 3), ['New idea:0', 'Writing:0', 'Storyboarded:1']);
   });
 
   await check('removing the stage a piece is on warns first, moves it back, and Undo puts it all back', async () => {
     await openStages(page);
     await page.locator('.se-row').nth(2).locator('.se-del').click();
-    assert.match(await page.locator('.se-moves').innerText(), /Reel 2: Breakfast is on Storyboarded; it will move to Written\./);
+    assert.match(await page.locator('.se-moves').innerText(), /Reel 2: Breakfast is on Storyboarded; it will move to Writing\./);
     await page.locator('.stage-edit .pill.primary').click();
     await sleep(600);
-    assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Written');
-    assert.deepEqual((await get(page, 'wd_nb')).fields.stageLists.ai, ['Idea', 'Written', 'Generated', 'Edited', 'Posted']);
+    assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Writing');
+    assert.deepEqual((await get(page, 'wd_nb')).fields.stageLists.ai, ['New idea', 'Writing', 'Generating', 'Editing', 'Posted']);
     await page.locator('.toast button', { hasText: 'Undo' }).click();
     await sleep(600);
     assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Storyboarded');
-    assert.deepEqual((await get(page, 'wd_nb')).fields.stageLists.ai, ['Idea', 'Written', 'Storyboarded', 'Generated', 'Edited', 'Posted']);
+    assert.deepEqual((await get(page, 'wd_nb')).fields.stageLists.ai, ['New idea', 'Writing', 'Storyboarded', 'Generating', 'Editing', 'Posted']);
   });
 
   await check('adding a stage puts it before the last one; Back to the usual stages undoes the names', async () => {
     await openStages(page);
     await page.locator('.se-add').click();
     const names = await page.locator('.se-name').evaluateAll((els) => els.map((e) => e.value));
-    assert.deepEqual(names, ['Idea', 'Written', 'Storyboarded', 'Generated', 'Edited', 'New step', 'Posted']);
+    assert.deepEqual(names, ['New idea', 'Writing', 'Storyboarded', 'Generating', 'Editing', 'New step', 'Posted']);
     await page.locator('.se-reset', { hasText: 'Back to the usual AI video' }).click();
     const back = await page.locator('.se-name').evaluateAll((els) => els.map((e) => e.value));
-    assert.deepEqual(back, ['Idea', 'Written', 'Boarded', 'Generated', 'Edited', 'Posted']);
+    assert.deepEqual(back, ['New idea', 'Writing', 'Boarding', 'Generating', 'Editing', 'Posted']);
     await page.locator('.stage-edit .pill.primary').click();
     await sleep(600);
     assert.equal((await get(page, 'wd_nb')).fields.stageLists, undefined);
-    assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Boarded');
+    assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Boarding');
   });
 
-  await check('a project can send its scripts through Live action; a piece keeps its point (Boarded becomes Prepped)', async () => {
+  await check('a project can send its scripts through Live action; a piece keeps its point (Boarding becomes Prepping)', async () => {
     await openStages(page);
     await page.selectOption('.se-use select[data-type="screenplay"]', 'live');
     assert.equal(await page.locator('.se-tabs .chip.on').getAttribute('data-set'), 'live');
     await page.locator('.stage-edit .pill.primary').click();
     await sleep(600);
     assert.equal((await get(page, 'wd_nb')).fields.stageFor.screenplay, 'live');
-    assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Prepped');
+    assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Prepping');
     assert.equal((await get(page, 'pr_reel1')).fields.stage, 'Released');
     await page.locator('.toast button', { hasText: 'Undo' }).click();
     await sleep(600);
     assert.equal((await get(page, 'wd_nb')).fields.stageFor, undefined);
-    assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Boarded');
+    assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Boarding');
     assert.equal((await get(page, 'pr_reel1')).fields.stage, 'Posted');
   });
 
@@ -192,12 +190,12 @@ try {
     await pieceSet(page, 'Live action');
     const p = await get(page, 'pr_reel2');
     assert.equal(p.fields.stageSet, 'live');
-    assert.equal(p.fields.stage, 'Prepped');
-    assert.equal(await page.locator('#ph-stage').inputValue(), 'Prepped');
+    assert.equal(p.fields.stage, 'Prepping');
+    assert.equal(await page.locator('#ph-stage').inputValue(), 'Prepping');
     await openMake(page);
     const b = await board(page);
     assert.deepEqual(b.map((x) => x.name), ['AI video', 'Live action', 'Book']);
-    assert.equal(b[1].cols[2], 'Prepped:1');
+    assert.equal(b[1].cols[2], 'Prepping:1');
   });
 
   await check('a live-action piece starts its shots as Live action; one can be marked generated, with Undo', async () => {
@@ -219,7 +217,7 @@ try {
     await pieceSet(page, 'AI video');
     const p = await get(page, 'pr_reel2');
     assert.equal(p.fields.stageSet, undefined);
-    assert.equal(p.fields.stage, 'Boarded');
+    assert.equal(p.fields.stage, 'Boarding');
     await go(page, { view: 'production', id: 'pr_reel2', tab: 'shots' });
     await sleep(600);
     await page.waitForSelector('.pd-shot[data-shot="sh_2"][data-made="gen"]');
@@ -283,41 +281,40 @@ try {
   });
 
   await check('a world with nothing to film has no Shoot days in Make; one with scripts does', async () => {
-    await go(page, { view: 'stage', id: 'wd_poems', page: 'make', sub: 'board' });
-    await page.waitForSelector('#st-board .sb-card');
+    await go(page, { view: 'world', id: 'wd_poems' });
+    await page.waitForSelector('#wh-board .sb-card');
+    assert.deepEqual((await board(page))[0].cols, ['New idea:1', 'Drafting:0', 'Polishing:0', 'Out:0']);
+    await go(page, { view: 'stage', id: 'wd_poems', page: 'make' });
     await page.waitForSelector('.st-chips .chip');
-    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['board', 'kit']);
-    assert.deepEqual((await board(page))[0].cols, ['Idea:1', 'Drafted:0', 'Polished:0', 'Out:0']);
-    await go(page, { view: 'stage', id: 'wd_nb', page: 'make', sub: 'board' });
-    // The old world's board can still be up for a moment; wait for this one's tabs.
-    await page.waitForFunction(() => document.querySelectorAll('.st-chips .chip').length === 3).catch(() => {});
-    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['board', 'kit', 'days']);
+    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['kit']);
+    await go(page, { view: 'stage', id: 'wd_nb', page: 'make' });
+    // The old world's tabs can still be up for a moment; wait for this one's.
+    await page.waitForFunction(() => document.querySelectorAll('.st-chips .chip').length === 2).catch(() => {});
+    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['kit', 'days']);
   });
 
   await check('a step moves with Alt + Left; a tool turned off leaves Make; Undo brings both back', async () => {
-    await go(page, { view: 'stage', id: 'wd_nb', page: 'make', sub: 'board' });
-    await page.waitForSelector('#st-board .sb-card');
+    await openMake(page);
     await openStages(page);
     await page.locator('.se-tabs .chip[data-set="ai"]').click();
     await page.locator('.se-name').nth(2).focus();
     await page.keyboard.press('Alt+ArrowLeft');
-    assert.deepEqual(await page.locator('.se-name').evaluateAll((els) => els.map((e) => e.value)), ['Idea', 'Boarded', 'Written', 'Generated', 'Edited', 'Posted']);
+    assert.deepEqual(await page.locator('.se-name').evaluateAll((els) => els.map((e) => e.value)), ['New idea', 'Boarding', 'Writing', 'Generating', 'Editing', 'Posted']);
     // Focus follows the step, so it can keep moving.
-    assert.equal(await page.evaluate(() => document.activeElement.value), 'Boarded');
+    assert.equal(await page.evaluate(() => document.activeElement.value), 'Boarding');
     await page.locator('.se-toolchips .chip[data-tool="days"]').click();
     assert.equal(await page.locator('.se-toolchips .chip[data-tool="days"]').getAttribute('aria-pressed'), 'false');
     await shot(page, 'workflow-edit');
     await page.locator('.stage-edit .pill.primary').click();
     await sleep(600);
     const w = await get(page, 'wd_nb');
-    assert.deepEqual(w.fields.stageLists.ai, ['Idea', 'Boarded', 'Written', 'Generated', 'Edited', 'Posted']);
+    assert.deepEqual(w.fields.stageLists.ai, ['New idea', 'Boarding', 'Writing', 'Generating', 'Editing', 'Posted']);
     assert.deepEqual(w.fields.toolLists.ai, ['shots', 'board', 'kit']);
     await go(page, { view: 'production', id: 'pr_reel1', tab: 'shots' });
     await page.waitForSelector('.prod-view .gv-levels .chip[data-tab="shots"]');
     assert.deepEqual(await page.locator('.prod-view .gv-levels .chip').evaluateAll((els) => els.map((e) => e.dataset.tab)), ['shots', 'board', 'kit']);
     await shot(page, 'workflow-make-tools');
-    await go(page, { view: 'stage', id: 'wd_nb', page: 'make', sub: 'board' });
-    await page.waitForSelector('#st-board .sb-card');
+    await openMake(page);
     await openStages(page);
     await page.locator('.se-tabs .chip[data-set="ai"]').click();
     await page.locator('.se-reset').click();
@@ -339,7 +336,7 @@ try {
     const own = (await all(page)).find((r) => r.kind === 'workflow');
     assert.ok(own, 'the workflow is saved');
     assert.equal(own.title, 'Reels with a live shoot');
-    assert.deepEqual({ base: own.fields.base, stages: own.fields.stages, tools: own.fields.tools }, { base: 'ai', stages: ['Idea', 'Written', 'Boarded', 'Generated', 'Edited', 'Live shoot', 'Posted'], tools: ['shots', 'board', 'kit', 'days'] });
+    assert.deepEqual({ base: own.fields.base, stages: own.fields.stages, tools: own.fields.tools }, { base: 'ai', stages: ['New idea', 'Writing', 'Boarding', 'Generating', 'Editing', 'Live shoot', 'Posted'], tools: ['shots', 'board', 'kit', 'days'] });
     assert.equal(await page.locator('.se-tabs .chip.on').getAttribute('data-set'), own.id);
     assert.equal(await page.locator('.se-use select[data-type="screenplay"]').inputValue(), own.id);
     await shot(page, 'workflow-own');
@@ -362,7 +359,7 @@ try {
     await page.waitForSelector('#lib-new', { state: 'visible' });
     await page.waitForSelector('#lib-new-how .se-tabs .chip.on');
     assert.equal(await page.locator('#lib-new-how .se-tabs .chip.on').getAttribute('data-set'), 'ai');
-    assert.match(await page.locator('#lib-new-how .se-preview').innerText(), /Idea › Written › Boarded › Generated › Edited › Posted[\s\S]*Make: Shots, Storyboard, Kit, Shoot days/);
+    assert.match(await page.locator('#lib-new-how .se-preview').innerText(), /New idea › Writing › Boarding › Generating › Editing › Posted[\s\S]*Make: Shots, Storyboard, Kit, Shoot days/);
     await shot(page, 'workflow-new-preview');
     // A book series starts as Book; a life project has no workflow.
     await page.locator('.lib-shape[data-shape="series"]').click();
@@ -383,7 +380,7 @@ try {
     await sleep(800);
     const w = (await all(page)).find((r) => r.kind === 'world' && r.title === 'Bakery Nights');
     assert.equal(w.fields.shape, 'show');
-    assert.deepEqual(w.fields.stageLists, { ai: ['Idea', 'Scripted', 'Boarded', 'Generated', 'Edited', 'Posted'] });
+    assert.deepEqual(w.fields.stageLists, { ai: ['New idea', 'Scripted', 'Boarding', 'Generating', 'Editing', 'Posted'] });
     assert.deepEqual(w.fields.toolLists, { ai: ['shots', 'board', 'days'] });
     assert.equal(w.fields.stageFor, undefined);
   });
