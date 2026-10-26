@@ -71,6 +71,8 @@ button { cursor: pointer; }
 .tb-group:first-child { padding-left: 0; border-left: 0; }
 .tb-btn { border: 0; background: transparent; color: var(--muted); padding: 5px 9px; border-radius: 7px; white-space: nowrap; }
 .tb-btn:hover, .tb-btn:focus-visible { color: var(--ink); background: var(--tint); }
+/* The buttons never move; the place you're in is the one lit up. */
+.tb-btn[aria-current="page"] { color: var(--ink); background: var(--tint); box-shadow: inset 0 -2px 0 var(--accent); }
 .tb-btn.mic { background: var(--accent); color: var(--bg); font-weight: 600; padding: 5px 14px; border-radius: 99px; }
 .tb-btn.mic:hover, .tb-btn.mic:focus-visible { background: var(--accent); color: var(--bg); filter: brightness(1.1); }
 .tb-back { flex: none; height: 26px; padding: 0 9px; border: 0; border-radius: 7px; background: var(--tint); color: var(--muted); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
@@ -234,10 +236,8 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 /* Views: the manuscript (default), the notebook, the library and a book's home */
 .notebook, .library, .project-home, .world-home, .tags-home, .grid-view, .prod-view, .compare-view, .stage-view { display: none; }
 :root[data-view] .page { display: none; }
-:root[data-view] #notes-toggle, :root[data-view] .when-write { display: none; }
+:root[data-view] .when-write { display: none; }
 :root[data-view="notebook"] .notebook, :root[data-view="library"] .library, :root[data-view="project"] .project-home, :root[data-view="world"] .world-home, :root[data-view="tags"] .tags-home, :root[data-view="grid"] .grid-view, :root[data-view="production"] .prod-view, :root[data-view="deliver"] .prod-view, :root[data-view="compare"] .compare-view, :root[data-view="stage"] .stage-view, :root[data-view="drawer"] .stage-view { display: flex; }
-:root[data-view="library"] #view-toggle, :root[data-view="project"] #view-toggle, :root[data-view="world"] #view-toggle, :root[data-view="tags"] #view-toggle { display: inline; }
-:root[data-view="library"] #library-toggle { display: none; }
 
 .notebook { justify-content: center; padding: 72px 32px 40vh; }
 .nb-sheet { width: 100%; max-width: var(--page-width, 660px); }

@@ -1322,6 +1322,9 @@ async function drawCrumb() {
   refreshWords();
   await renderStrip();
   const isToday = lastPlace?.view === 'notebook' && lastPlace.pageId === dayId(isoToday());
+  // The top bar's buttons stay put; the one for where you are is lit.
+  const here = { 'view-toggle': inNotebook() && !!notebook.page && notebook.page.kind === 'day', 'library-toggle': view() === 'library', 'drawer-toggle': view() === 'drawer' };
+  for (const [id, on] of Object.entries(here)) { const b = document.getElementById(id); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
   nav.here(lastPlace, isToday ? ['Today'] : parts.map((p) => p.textContent.replace(/\s*▾\s*$/, '').trim()).filter(Boolean));
 }
 
@@ -2829,13 +2832,17 @@ async function openPage(row, id) {
 }
 
 // Typing on a page you look at tucks the tabs away until the mouse moves.
+let altTimer = 0;
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Alt') { body.classList.add('alt-held'); return; }
+  // The tab numbers show only when Alt is held on its own for a moment, so
+  // Alt + Left (Back) or Alt + C never flashes them.
+  if (e.key === 'Alt') { if (!e.repeat) { clearTimeout(altTimer); altTimer = setTimeout(() => body.classList.add('alt-held'), 400); } return; }
+  if (e.altKey && !/^[0-9]$/.test(e.key)) { clearTimeout(altTimer); body.classList.remove('alt-held'); }
   const t = e.target;
   if (!e.altKey && !e.ctrlKey && !e.metaKey && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName)) && !t.closest('.palette, .topbar')) body.classList.add('typing');
 }, true);
-document.addEventListener('keyup', (e) => { if (e.key === 'Alt') body.classList.remove('alt-held'); });
-window.addEventListener('blur', () => body.classList.remove('alt-held'));
+document.addEventListener('keyup', (e) => { if (e.key === 'Alt') { clearTimeout(altTimer); body.classList.remove('alt-held'); } });
+window.addEventListener('blur', () => { clearTimeout(altTimer); body.classList.remove('alt-held'); });
 let lastMove = null;
 document.addEventListener('mousemove', (e) => {
   if (!body.classList.contains('typing')) return;
