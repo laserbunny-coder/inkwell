@@ -103,7 +103,7 @@ try {
     await p.mouse.move(640, 40, { steps: 4 });
     await p.waitForFunction(() => document.body.classList.contains('show-top'));
     await sleep(300);
-    assert.deepEqual(await p.locator('.tb-tools button').allInnerTexts(), ['Mic', 'Today', 'Library', 'Drawer', 'Go', 'Notes', 'Focus', 'Aa', 'Ctrl+K']);
+    assert.deepEqual(await p.locator('.tb-tools button').allInnerTexts(), ['Mic', 'Today', 'Drawer', 'Library', 'Go', 'Notes', 'Focus', 'Aa', 'Ctrl+K']);
     await p.locator('#go-toggle').click();
     await p.waitForSelector('.go-panel', { state: 'visible' });
     await p.keyboard.press('Escape');
