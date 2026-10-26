@@ -3,7 +3,7 @@ import { entry, newId, tagsIn, outline } from './model.js';
 import { GAP, bySort } from './order.js';
 import {
   worldOf, piecesIn, worldTree, worldStats, dailyMentions, stats, hasManuscript, bookType, kindName,
-  STAGES, stageOf, ago, newPage, pagesIn
+  STAGES, stageOf, isOut, isReady, ago, newPage, pagesIn
 } from './library.js';
 import { worldPromises } from './grid.js';
 import { elementsIn, ELEMENT_TYPES, typeOf, shootDays } from './production.js';
@@ -701,7 +701,7 @@ export class StagePage {
     const sug = this.suggest.get(`tl:${w.id}`) || [];
     const tl = make('ol', 'st-timeline');
     for (const ev of events) {
-      const li = make('li', 'st-ev' + (stageOf(byId.get(ev.fields?.piece)) === 'Posted' ? ' canon' : ''));
+      const li = make('li', 'st-ev' + (byId.get(ev.fields?.piece) && isOut(byId.get(ev.fields.piece), this.owner) ? ' canon' : ''));
       li.dataset.id = ev.id;
       li.append(make('div', 'st-when', ev.fields?.when || ''), make('div', 'st-what', ev.title || ''));
       const pc = byId.get(ev.fields?.piece);
@@ -783,7 +783,7 @@ export class StagePage {
     btn.textContent = 'Claude is reading…';
     try {
       const texts = [];
-      for (const p of pieces.filter(hasManuscript).slice(0, 12)) texts.push({ id: p.id, title: p.title || 'Untitled', stage: stageOf(p), text: await pieceText(p, 6000) });
+      for (const p of pieces.filter(hasManuscript).slice(0, 12)) texts.push({ id: p.id, title: p.title || 'Untitled', stage: stageOf(p, this.owner), text: await pieceText(p, 6000) });
       const out = await this.hooks.askServer({ mode: 'pages', task: 'timeline', world: this.owner.title || '', pieces: texts, events: events.map((e) => ({ id: e.id, what: e.title || '', when: e.fields?.when || '' })) });
       this.suggest.set(`tl:${this.owner.id}`, (out?.events || []).filter((e) => e.what));
       if (!(out?.events || []).length) this.hooks.toast('Claude found nothing new for the timeline');
@@ -1066,7 +1066,7 @@ export class StagePage {
       const s = writable && hasManuscript(p) ? await stats(p) : null;
       const open = make('button', 'loose-title', p.title || 'Untitled');
       open.addEventListener('click', () => (writable ? this.hooks.openBook(p.id) : this.hooks.go({ view: 'project', id: p.id })));
-      li.append(open, make('span', 'piece-kind', kindName(p)), make('span', 'when', s ? plural(s.words, 'word') : ''), make('span', 'stage', stageOf(p)));
+      li.append(open, make('span', 'piece-kind', kindName(p)), make('span', 'when', s ? plural(s.words, 'word') : ''), make('span', 'stage', stageOf(p, this.owner)));
       ul.append(li);
     }
     const head = make('div', 'ph-row');
@@ -1122,13 +1122,13 @@ export class StagePage {
     }
     // The world: comments across its pieces, and continuity against canon.
     const pieces = (await worldTree(this.owner.id)).pieces.map(({ row }) => row);
-    const posted = pieces.filter((p) => stageOf(p) === 'Posted');
+    const posted = pieces.filter((p) => isOut(p, this.owner));
     const box = make('section', 'st-continuity');
     const head = make('div', 'ph-row');
     head.append(make('span', 'panel-label', 'Continuity'));
     box.append(head);
     box.append(make('p', 'hint', posted.length ? `Posted is canon: ${posted.map((p) => p.title).join(', ')}. Claude can check a piece against it and the bible.` : 'Once pieces are posted they’re canon, and Claude can check new pieces against them and the bible.'));
-    const unposted = pieces.filter((p) => stageOf(p) !== 'Posted' && hasManuscript(p));
+    const unposted = pieces.filter((p) => !isOut(p, this.owner) && hasManuscript(p));
     if (this.hooks.canAsk() && unposted.length) {
       const pick = make('select', 'st-select');
       pick.setAttribute('aria-label', 'Piece to check');
@@ -1198,11 +1198,17 @@ export class StagePage {
     const w = this.owner;
     if (sub === 'board') {
       const { pieces } = await worldStats(w);
+      const tools = make('div', 'st-tools st-board-tools');
+      const edit = make('button', 'ghost-btn', 'Stages…');
+      edit.title = 'Which stages scripts, prose and outlines go through here, and your own names for them';
+      edit.addEventListener('click', () => this.hooks.editStages(w));
+      tools.append(edit);
+      body.append(tools);
       const board = make('div', 'stage-board st-board');
       board.id = 'st-board';
       body.append(board);
       if (pieces.length) this.hooks.board(board, w, pieces);
-      else body.append(make('p', 'hint', 'Every piece by stage, from idea to posted. Make a piece and it shows here.'));
+      else body.append(make('p', 'hint', 'Every piece by stage, from idea to out in the world. Make a piece and it shows here.'));
     }
     if (sub === 'kit') await this.drawKit(body);
     if (sub === 'days') await this.drawDays(body);
@@ -1257,7 +1263,7 @@ export class StagePage {
       const li = make('li', (d.fields?.date || '') < today ? 'past' : '');
       const b = make('button');
       const date = d.fields?.date ? new Date(`${d.fields.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'No date yet';
-      b.append(make('span', 'from', `${date}${d.fields?.call ? ` · call ${d.fields.call}` : ''}`), make('span', 'line', `${p.title || 'Untitled'}${d.fields?.place ? ` · ${d.fields.place}` : ''}`));
+      b.append(make('span', 'from', `${date}${d.fields?.call ? ` · call ${d.fields.call}` : ''}`), make('span', 'line', `${d.fields?.type === 'voice' ? 'Voices: ' : ''}${p.title || 'Untitled'}${d.fields?.place ? ` · ${d.fields.place}` : ''}`));
       b.addEventListener('click', () => this.hooks.go({ view: 'production', id: p.id, day: d.id }));
       li.append(b);
       ul.append(li);
@@ -1270,8 +1276,8 @@ export class StagePage {
 
   async drawDeliverWorld(body) {
     const pieces = (await worldTree(this.owner.id)).pieces.map(({ row }) => row);
-    const posted = pieces.filter((p) => stageOf(p) === 'Posted');
-    const ready = pieces.filter((p) => stageOf(p) === 'Edited');
+    const posted = pieces.filter((p) => isOut(p, this.owner));
+    const ready = pieces.filter((p) => isReady(p, this.owner));
     const list = (label, rows, empty) => {
       body.append(make('div', 'panel-label ph-gap', label));
       if (!rows.length) { body.append(make('p', 'hint', empty)); return; }
@@ -1296,7 +1302,7 @@ export class StagePage {
       body.append(ul);
     };
     list('Ready to post', ready, 'Pieces at Edited show here, ready for captions and posting.');
-    list('Posted', posted, 'Nothing posted yet. Posted pieces are canon: what continuity is checked against.');
+    list('Out in the world', posted, 'Nothing out yet. Pieces at their last stage (posted, released, published) are canon: what continuity is checked against.');
   }
 
   // ---------- Notes: a life project's pages ----------

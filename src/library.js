@@ -60,7 +60,46 @@ export const defaultLabel = (type) => ({ novel: 'Novel', screenplay: 'Screenplay
 export const kindName = (p) => p?.fields?.label || defaultLabel(bookType(p));
 // Where a piece is on its way out into the world.
 export const STAGES = ['Idea', 'Written', 'Boarded', 'Generated', 'Edited', 'Posted'];
-export const stageOf = (p) => p?.fields?.stage || 'Idea';
+// Different work goes through different stages. Each kind of piece starts
+// with the set that fits it (a script: AI video; prose: Book); a project can
+// pick another set for its scripts, prose or outlines, a piece can pick its
+// own, and a project can rename, add, remove and reorder a set's stages. The
+// last stage always means out in the world: canon, posted, published.
+export const STAGE_SETS = [
+  { id: 'ai', name: 'AI video', about: 'Generated video, like the reels', stages: STAGES },
+  { id: 'live', name: 'Live action', about: 'Video you shoot with a camera', stages: ['Idea', 'Written', 'Prepped', 'Shot', 'Edited', 'Released'] },
+  { id: 'book', name: 'Book', about: 'A novel, each book in a series', stages: ['Idea', 'Outlined', 'Drafted', 'Revised', 'Edited', 'Published'] },
+  { id: 'stage', name: 'Stage', about: 'A musical, a play', stages: ['Idea', 'Written', 'Workshopped', 'Rehearsed', 'Performed'] },
+  { id: 'short', name: 'Short writing', about: 'Gags, poems, posts, songs', stages: ['Idea', 'Drafted', 'Polished', 'Out'] }
+];
+export const setById = (id) => STAGE_SETS.find((x) => x.id === id) || STAGE_SETS[0];
+const SET_FOR_TYPE = { screenplay: 'ai', novel: 'book' };
+// An outline or a page of notes is usually a step toward the project's real
+// work (a season outlined before its episodes), so it goes the way the
+// project does: a book series like a book, a single piece of writing as
+// short writing, anything else like the reels.
+const usualFor = (type, world) => SET_FOR_TYPE[type] || (world?.fields?.shape === 'series' ? 'book' : world?.fields?.shape === 'one' ? 'short' : 'ai');
+export const TYPE_NAMES = { screenplay: 'Scripts', novel: 'Prose', lines: 'Outlines' };
+// The set a piece goes through, in its world.
+export const stageSetOf = (p, world) => setById(p?.fields?.stageSet || world?.fields?.stageFor?.[bookType(p)] || usualFor(bookType(p), world));
+// A set's stages in this world (yours, if you've edited them).
+export const stagesIn = (set, world) => world?.fields?.stageLists?.[set.id] || set.stages;
+export const stagesOf = (p, world) => stagesIn(stageSetOf(p, world), world);
+// Where a piece is. A stage its set doesn't have (a novel marked Boarded
+// before sets, or a stage since removed) reads as the one at the same point.
+export function stageOf(p, world) {
+  const list = stagesOf(p, world);
+  const at = p?.fields?.stage;
+  if (!at) return list[0];
+  if (list.includes(at)) return at;
+  const from = STAGE_SETS.map((x) => x.stages).find((l) => l.includes(at));
+  if (!from) return list[0];
+  const i = from.indexOf(at) === from.length - 1 ? list.length - 1 : Math.min(list.length - 2, Math.round((from.indexOf(at) / (from.length - 1)) * (list.length - 1)));
+  return list[Math.max(0, i)];
+}
+// Out in the world: the last stage of its set. Ready: the one before.
+export const isOut = (p, world) => { const l = stagesOf(p, world); return stageOf(p, world) === l[l.length - 1]; };
+export const isReady = (p, world) => { const l = stagesOf(p, world); return l.length > 2 && stageOf(p, world) === l[l.length - 2]; };
 // What a project is, said at New and changed any time from its ⋯ menu. A
 // shape names the levels inside it, so a Show talks in Seasons and Episodes
 // and a Book series in Books; changing it never moves or renames anything,

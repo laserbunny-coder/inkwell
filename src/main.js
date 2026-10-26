@@ -13,6 +13,7 @@ import { getMeta, setMeta, putEntries, children, getEntry, snapshots, byKind, on
 import { trash, restore, trashed, deleteForever, contents } from './trash.js';
 import { searchIndex, searchChanged } from './search.js';
 import { keep, versionsOf, tidyHistory, blocks as docBlocks, compare, deletedFrom, bringBack } from './history.js';
+import { editStages } from './stageedit.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, askPiece, askScript, showCopy, toast, closeMenu } from './menu.js';
 import { Sync } from './sync.js';
 import { ensureSeed, outline, entry, wordCount, noteTypes, newId as newIdLocal } from './model.js';
@@ -49,7 +50,7 @@ import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
-import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf } from './library.js';
+import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, STAGE_SETS, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -1535,6 +1536,7 @@ async function moveArea(area, parentId) {
 // A piece's menu.
 async function bookMenu(book) {
   const b = await getEntry(book.id);
+  const world = await worldOf(b);
   const writable = hasManuscript(b) || bookType(b) === 'lines';
   const script = bookType(b) === 'screenplay';
   return [
@@ -1543,7 +1545,8 @@ async function bookMenu(book) {
     { label: 'Rename…', run: () => rename(b) },
     { label: 'What it is (Gag, Episode…)…', run: () => setLabel(b) },
     { label: 'Written as', sub: KINDS.map(([id, label]) => ({ label, current: bookType(b) === id, run: () => setKind(b, id) })) },
-    { label: 'Stage', sub: STAGES.map((st) => ({ label: st, current: stageOf(b) === st, run: () => setStage(b, st) })) },
+    { label: 'Stage', sub: stagesOf(b, world).map((st) => ({ label: st, current: stageOf(b, world) === st, run: () => setStage(b, st) })) },
+    { label: `Stages: ${stageSetOf(b, world).name}`, sub: STAGE_SETS.map((set) => ({ label: `${set.name}: ${set.about.toLowerCase()}`, current: stageSetOf(b, world).id === set.id, run: () => setPieceStages(b, set.id) })) },
     ...(script ? [{ label: b.fields?.numbered ? 'Scene numbers: turn off' : 'Number the scenes (for production)…', run: () => toggleNumbering(b) }] : []),
     ...(hasManuscript(b) ? [{ label: 'Production (shots, kit, shoot days)', run: () => go({ view: 'production', id: b.id }) }] : []),
     ...(hasManuscript(b) ? [{ label: 'Revise', sub: [
@@ -1571,6 +1574,7 @@ async function worldMenu(world) {
     { label: 'New piece…', run: () => addPiece(w.id) },
     { label: 'New page in its bible', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(w.id); } },
     { label: 'Move to area', sub: (await areaOptions(all)).map(([id, label]) => ({ label: label.trim(), current: w.area_id === id, run: () => moveBookToArea(w, id) })) },
+    ...(!isLife(w) ? [{ label: 'Stages…', run: () => openStages(w) }] : []),
     { label: 'Shape', sub: [
       ...SHAPES.map((sh) => ({ label: `${sh.name}: ${sh.about.toLowerCase()}`, current: shapeOf(w, top.length).id === sh.id, run: () => setShape(w, sh.id) })),
       ...(shapeOf(w, top.length).levels.length ? ['sep', { label: `Rename levels (${levelsOf(w, shapeOf(w, top.length)).map((l) => l.label).join(' › ')})…`, run: () => renameLevels(w) }] : [])
@@ -1640,6 +1644,33 @@ async function renameLevels(world) {
   await putEntries([{ ...w, fields, updated_at: Date.now() }]);
   await refreshViews();
   toast(`New pieces in ${w.title || 'it'} start as ${levelsOf({ fields }, shape).map((l) => l.label + 's').join(', then ')}`);
+}
+
+// The stages a project's pieces go through, and its names for them.
+async function openStages(world) {
+  const w = await getEntry(world.id);
+  const pieces = (await worldTree(w.id)).pieces.map(({ row }) => row);
+  const rows = await editStages(w, pieces);
+  if (!rows) return;
+  const before = [w, ...pieces.filter((p) => rows.some((r) => r.id === p.id))];
+  await putEntries(rows);
+  await refreshViews();
+  const moved = rows.length - 1;
+  toast(`Stages saved${moved ? `; ${plural(moved, 'piece')} moved with them` : ''}`, { label: 'Undo', run: async () => { await putEntries(before.map((r) => ({ ...r, updated_at: Date.now() }))); await refreshViews(); } });
+}
+
+// One piece through a different set of stages (a live-action short in a Show of AI reels).
+async function setPieceStages(piece, setId) {
+  const b = await getEntry(piece.id);
+  const world = await worldOf(b);
+  const fields = { ...b.fields };
+  const usual = stageSetOf({ fields: { type: bookType(b) } }, world).id;
+  const at = stageOf({ ...b, fields: { ...b.fields, stageSet: setId } }, world);
+  if (setId === usual) delete fields.stageSet; else fields.stageSet = setId;
+  if (b.fields?.stage) fields.stage = at;
+  await putEntries([{ ...b, fields, updated_at: Date.now() }]);
+  await refreshViews();
+  toast(`${b.title || 'It'} goes through ${setById(setId).name} stages now: ${stagesIn(setById(setId), world).join(', ')}`);
 }
 
 // A life project: Overview, Gather and Notes only, and never shared. Nothing
@@ -2080,16 +2111,16 @@ async function renderProject() {
     renderRail();
   };
   label.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); label.blur(); } };
+  const world = await worldOf(b);
   const stageSel = $('#ph-stage');
-  stageSel.replaceChildren(...STAGES.map((st) => Object.assign(make('option', '', st), { value: st })));
-  stageSel.value = stageOf(b);
+  stageSel.replaceChildren(...stagesOf(b, world).map((st) => Object.assign(make('option', '', st), { value: st })));
+  stageSel.value = stageOf(b, world);
   stageSel.onchange = () => setStage(b, stageSel.value);
   $('#ph-stats').textContent = bookType(b) === 'screenplay'
     ? `${s.words.toLocaleString()} words`
     : novel
     ? `${s.words.toLocaleString()} words · ${s.chapters.length} chapter${s.chapters.length === 1 ? '' : 's'}`
     : `${s.pages} page${s.pages === 1 ? '' : 's'}${s.words ? ` · ${s.words.toLocaleString()} words in its manuscript` : ''}`;
-  const world = await worldOf(b);
   const inWorld = $('#ph-world');
   inWorld.replaceChildren();
   if (world) {
@@ -2135,7 +2166,7 @@ async function renderProject() {
   }
 
   const inside = await piecesIn(b.id);
-  $('#ph-pieces').replaceChildren(...inside.map((x) => pieceRow(x, 0)));
+  $('#ph-pieces').replaceChildren(...inside.map((x) => pieceRow(x, 0, world)));
   $('#ph-new-piece').onclick = () => addPiece(b.id);
   const nextIn = await nextLevel(b);
   $('#ph-new-piece').textContent = `+ ${nextIn ? nextIn.label : 'Piece'}`;
@@ -2167,15 +2198,15 @@ async function renderProject() {
 }
 
 // One piece in a list: its name, what it is and its stage.
-function pieceRow(p, depth) {
+function pieceRow(p, depth, world) {
   const li = make('li');
   li.style.setProperty('--depth', depth);
   const open = make('button', 'loose-title', p.title || 'Untitled');
   open.addEventListener('click', () => go({ view: 'project', id: p.id }));
   onContextMenu(open, () => bookMenu(p));
-  const stage = make('button', 'stage', stageOf(p));
-  stage.title = 'Stage';
-  stage.addEventListener('click', (e) => popMenu(stage, STAGES.map((st) => ({ label: st, current: stageOf(p) === st, run: () => setStage(p, st) }))));
+  const stage = make('button', 'stage', stageOf(p, world));
+  stage.title = `Stage (${stageSetOf(p, world).name})`;
+  stage.addEventListener('click', () => popMenu(stage, stagesOf(p, world).map((st) => ({ label: st, current: stageOf(p, world) === st, run: () => setStage(p, st) }))));
   li.append(open, make('span', 'piece-kind', kindName(p)), stage, menuButton(() => bookMenu(p), `More for ${p.title || 'this piece'}`));
   return li;
 }
@@ -2235,8 +2266,10 @@ async function renderWorld() {
   // Where every piece is, idea to posted: click to see the board in Make.
   const bar = $('#wh-stagebar');
   bar.hidden = life || !s.pieces.length;
-  bar.replaceChildren(...STAGES.map((st, i) => {
-    const n = s.pieces.filter(({ row }) => stageOf(row) === st).length;
+  // Each set's stages in turn (a Universe can mix AI video and Book).
+  const barSets = [...new Set(s.pieces.map(({ row }) => stageSetOf(row, w).id))].map(setById);
+  bar.replaceChildren(...barSets.flatMap((set) => stagesIn(set, w).map((st, i, list) => ({ set, st, i: Math.round((i / Math.max(1, list.length - 1)) * 5) }))).map(({ set, st, i }) => {
+    const n = s.pieces.filter(({ row }) => stageSetOf(row, w).id === set.id && stageOf(row, w) === st).length;
     const b = make('button', 'wh-stage', n ? `${st} ${n}` : '');
     b.style.flexGrow = String(n);
     b.dataset.stage = st;
@@ -2248,7 +2281,7 @@ async function renderWorld() {
   }));
 
   $('#wh-pieces-box').hidden = life && !s.pieces.length;
-  $('#wh-pieces').replaceChildren(...s.pieces.map(({ row, depth }) => pieceRow(row, depth)));
+  $('#wh-pieces').replaceChildren(...s.pieces.map(({ row, depth }) => pieceRow(row, depth, w)));
   $('#wh-pieces-empty').hidden = s.pieces.length > 0;
   $('#wh-new-piece').onclick = () => addPiece(w.id);
   const nextHere = await nextLevel(w);
@@ -2281,9 +2314,9 @@ async function renderWorld() {
     for (const { row } of s.pieces) for (const d of (await children(row.id)).filter((r) => r.kind === 'shootday' && (r.fields?.date || '') >= isoToday())) days.push({ d, p: row });
     days.sort((a, b) => a.d.fields.date.localeCompare(b.d.fields.date));
     if (days[0]) { const { d, p } = days[0]; next.push({ from: 'Make', text: `Shoot day ${new Date(`${d.fields.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${p.title || 'Untitled'}`, run: () => go({ view: 'production', id: p.id, day: d.id }) }); }
-    const written = s.pieces.filter(({ row }) => stageOf(row) === 'Written' && bookType(row) === 'screenplay').map(({ row }) => row);
+    const written = s.pieces.filter(({ row }) => stageSetOf(row, w).id === 'ai' && stageOf(row, w) === stagesOf(row, w)[1] && bookType(row) === 'screenplay').map(({ row }) => row);
     if (written[0]) next.push({ from: 'Make', text: `Board ${written[0].title || 'Untitled'}${written.length > 1 ? ` and ${plural(written.length - 1, 'other')}` : ''}`, run: () => go({ view: 'production', id: written[0].id }) });
-    const edited = s.pieces.filter(({ row }) => stageOf(row) === 'Edited').map(({ row }) => row);
+    const edited = s.pieces.filter(({ row }) => isReady(row, w)).map(({ row }) => row);
     if (edited[0]) next.push({ from: 'Deliver', text: `Post ${edited[0].title || 'Untitled'}`, run: () => go({ view: 'deliver', id: edited[0].id, tab: 'post' }) });
   }
   $('#wh-next').replaceChildren(...next.map((n) => {
@@ -2824,6 +2857,7 @@ const stagePage = new StagePage($('#stage-view'), {
   changed: (rows) => changedHere(rows),
   remember: (place) => remember(place),
   board: (el, w, pieces) => renderBoard(w, pieces, el),
+  editStages: (w) => openStages(w),
   revise: (action, piece, note) => revisePiece(action, piece, note),
   newPage: async (parentId) => { await go({ view: 'notebook' }); await notebook.newPage(parentId); },
   newPiece: (parentId) => addPiece(parentId)
@@ -2844,10 +2878,14 @@ window.__today = todayPanel;
 
 function renderBoard(w, pieces, el = $('#wh-board')) {
   const touch = matchMedia('(hover: none)').matches;
-  const cols = STAGES.map((stage) => {
-    const col = make('section', 'sb-col');
+  // One row of columns for each set of stages in the world (a Universe can
+  // have reels on AI video and a novel on Book); one set needs no label.
+  const sets = [...new Set(pieces.map(({ row }) => stageSetOf(row, w).id))].map(setById);
+  if (!sets.length) sets.push(setById(w?.fields?.stageFor?.screenplay || 'ai'));
+  const rowFor = (set) => stagesIn(set, w).map((stage, i, list) => {
+    const col = make('section', 'sb-col' + (i === list.length - 1 ? ' out' : ''));
     col.dataset.stage = stage;
-    const mine = pieces.filter(({ row }) => stageOf(row) === stage);
+    const mine = pieces.filter(({ row }) => stageSetOf(row, w).id === set.id && stageOf(row, w) === stage);
     const head = make('div', 'sb-head');
     head.append(make('span', '', stage), make('span', 'sb-n', mine.length ? String(mine.length) : ''));
     col.append(head);
@@ -2857,7 +2895,7 @@ function renderBoard(w, pieces, el = $('#wh-board')) {
       card.append(make('span', 'sb-title', p.title || 'Untitled'), make('span', 'sb-kind', kindName(p)));
       card.addEventListener('click', () => (touch ? popMenu(card, [
         { label: 'Open', run: () => go({ view: 'project', id: p.id }) },
-        { label: 'Stage', sub: STAGES.map((st) => ({ label: st, current: stageOf(p) === st, run: () => setStage(p, st) })) }
+        { label: 'Stage', sub: list.map((st) => ({ label: st, current: stageOf(p, w) === st, run: () => setStage(p, st) })) }
       ]) : go({ view: 'project', id: p.id })));
       onContextMenu(card, () => bookMenu(p));
       if (!touch) {
@@ -2876,12 +2914,22 @@ function renderBoard(w, pieces, el = $('#wh-board')) {
         if (!id) return;
         e.preventDefault();
         const p = pieces.find(({ row }) => row.id === id)?.row;
-        if (p && stageOf(p) !== stage) await setStage(p, stage);
+        // A piece only moves along its own set's stages.
+        if (p && stageSetOf(p, w).id === set.id && stageOf(p, w) !== stage) await setStage(p, stage);
       });
     }
     return col;
   });
-  el.replaceChildren(...cols);
+  el.classList.toggle('sb-sets', sets.length > 1);
+  if (sets.length === 1) { el.dataset.set = sets[0].id; el.replaceChildren(...rowFor(sets[0])); return; }
+  el.replaceChildren(...sets.map((set) => {
+    const box = make('div', 'sb-set');
+    box.dataset.set = set.id;
+    const row = make('div', 'stage-board sb-row');
+    row.replaceChildren(...rowFor(set));
+    box.append(make('div', 'panel-label', set.name), row);
+    return box;
+  }));
 }
 
 // ---------- panels revealed by edges ----------
