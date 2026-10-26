@@ -79,9 +79,12 @@ const openMake = async (p) => {
 };
 const pieceSet = async (p, name) => {
   await go(p, { view: 'project', id: 'pr_reel2' });
-  await p.waitForSelector('#ph-more .more-btn');
+  await p.waitForSelector('html[data-view="project"] #ph-more .more-btn');
   await sleep(400);
-  await p.locator('#ph-more .more-btn').click();
+  // Clicked from the page itself: on the test machines Playwright's scroll
+  // into view could wait on this button for the whole timeout.
+  await p.evaluate(() => document.querySelector('#ph-more .more-btn').click());
+  await p.waitForSelector('.pop-menu');
   await pick(p, 'Stages:');
   await pick(p, name);
   await sleep(400);
@@ -174,6 +177,17 @@ try {
   });
 
   await check('one piece can go through another set, from its menu', async () => {
+    // The piece page holds still once drawn (nothing redraws it over and over).
+    await go(page, { view: 'project', id: 'pr_reel2' });
+    await page.waitForSelector('html[data-view="project"] #ph-more .more-btn');
+    await sleep(500);
+    const redraws = await page.evaluate(() => new Promise((res) => {
+      let n = 0;
+      const o = new MutationObserver(() => { n += 1; });
+      o.observe(document.querySelector('#ph-more'), { childList: true });
+      setTimeout(() => { o.disconnect(); res(n); }, 1500);
+    }));
+    assert.equal(redraws, 0, `the piece page redrew ${redraws} times while idle`);
     await pieceSet(page, 'Live action');
     const p = await get(page, 'pr_reel2');
     assert.equal(p.fields.stageSet, 'live');
