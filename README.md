@@ -1,166 +1,222 @@
 # Inkwell
 
-A quiet, warm writing app for novels and screenplays, with a notebook and research vault built in, on a phone and a computer.
+One quiet place to catch ideas, build worlds, write them, and take them all the way to something finished: a novel, a screenplay, a season of AI-generated reels, a song. On the computer and on an Android phone, offline first, synced between them.
 
-- Write with nothing on screen but your words. The outline, notes and menus appear only when you reach for them.
-- Keep notes in the margin, lined up beside the paragraph they're about.
-- Write screenplays that format themselves as you type.
-- Keep one daily page for plans, ideas and research, and link any line to a chapter or page.
-- Keep every story as a world: a bible of pages that nest, and pieces of any size inside it (a novel, a film, a season of episodes, a single gag), each with your own label and a stage.
-- Every line and paragraph remembers who wrote it, you or Claude.
-- Give a script stable scene numbers (3A, A1) once it heads into production.
-- Let Claude read your writing and add to it from any chat, through Inkwell's own connector.
-- See how many words you wrote each day, week or month.
-- Install it on your phone. It works offline and syncs with your computer.
+Inkwell started as a calm editor for novels and screenplays. It's now the whole road from a spark to a finished piece:
+
+- **Catch** anything: one voice button that lands where you are, a daily page, links and pictures shared from any app, and a Drawer for ideas with no home yet.
+- **Build worlds**: every project is a world with a bible (characters, places, props, songs) and pieces of any size inside it, shaped as one piece, a book series, a show with seasons and episodes, or a collection.
+- **Work through it in order**: each project has the same seven tabs, Overview, Gather, Shape, Write, Revise, Make and Deliver, so you always know where a thing goes next.
+- **Write** with nothing on screen but your words, or talk a scene out on a walk and have Claude turn it into paragraphs or screenplay format.
+- **Structure** the story in a plot grid, track promises until they pay off, and move every piece along a stage board.
+- **Make it**: shots with codes that never change, prompts and renders, a storyboard, the production kit, shoot days and call sheets.
+- **Deliver it**: captions and links for each platform, files, and read-and-comment links for readers.
+
+Claude helps when you ask and stays quiet while you write.
 
 Live at https://laserbunny-coder.github.io/inkwell/
 
 ## A look around
 
-These screenshots use made-up sample data. They're shown in dark mode, and there's a light mode too.
+Every screenshot below uses made-up sample data built around **The Ninja Bunch**, an anime mockumentary musical told in reels first, plus one novel. They're in dark mode; there's a light mode too. Shortcuts are written for Windows.
 
-**Writing.** Just the page. Notes sit in the margin beside the paragraph they belong to (Ctrl + 2 shows or hides them). Links to research pages show in orange.
+### Start here: four things
 
-![The manuscript with margin notes](docs/screenshots/desktop-manuscript-notes.webp)
+You only need four things to use Inkwell. Everything else is there when you reach for it.
 
-**Focus.** Ctrl + . hides everything but the text.
+| | Computer | Phone |
+|---|---|---|
+| **Today**, your daily page | `Ctrl + J` | Today in the bottom bar |
+| **Talk**, one voice button | `Alt + C` (again to keep it) | the mic in the bottom bar, or long-press the Inkwell icon |
+| **Every command** | `Ctrl + K` | ⋯ in the bottom bar |
+| **A project's tabs** | `Alt + 0` to `Alt + 6` | the tabs along the top |
 
-![Focus mode: only the text](docs/screenshots/desktop-focus.webp)
+### Catch it
 
-**The outline** slides in from the left edge: areas, books, acts, chapters, scenes and pages. Ctrl + 1 keeps it open. The small dots beside the text mark paragraphs that have notes.
+**Today's page** (`Ctrl + J`) is one page a day for anything: plans, ideas, research, links to pieces and pages, and #tags. A voice capture lands with a play button, the time, and a small chip naming the mode Claude wrote it up in (here, Idea). "Note to self" became its own line, and the words you really said are always kept.
 
-![The outline sidebar](docs/screenshots/desktop-outline.webp)
+![Today's page with a voice capture written up as an idea](docs/screenshots/desktop-today.webp)
 
-**Today's page** (Ctrl + J). One page a day for anything, with links to chapters and pages and #tags. Earlier days scroll underneath.
+**One voice button.** `Alt + C` (or the mic on the phone) records and lands where you are: on today's page, into the draft at the cursor, or on the page you're looking at, with a link line on today either way. The record screen says where it will go, with "Today instead" if you change your mind. Said out loud, "scratch that", "start again", "new paragraph" and "next scene" are carried out.
 
-![Today's page in the notebook](docs/screenshots/desktop-today.webp)
+![The record screen, saying the recording goes into the script](docs/screenshots/desktop-record.webp)
 
-**The Library** (Ctrl + Shift + O) holds every world, sorted into areas you make yourself.
+Voice modes (Idea, Journal, Scene, Text message, Email, or your own) are shared with **Scribe**, the dictation keyboard, so a mode made in either app shows in both. Tap a chip to see the same words in another mode, or word for word.
+
+**Share into Inkwell** from Chrome, Instagram, Pinterest or any Android app. The link or picture lands on today with a snapshot (title, picture, a short summary) so it stays useful if the page goes away.
+
+**The Drawer** holds ideas with no home yet. Tag a line `#drawer`, or choose "Into the drawer" in the day review. It never nags. When a world wants one, pull it in: it's linked there and stays in the drawer for anything else it could feed.
+
+![The Drawer](docs/screenshots/desktop-drawer.webp)
+
+**Day review.** At 9 pm Daybook nudges you to review the day. Claude writes a few sentences on how it went, then offers a card per thread: Add to Daybook, Keep thinking, Split or Let go. Nothing goes to Daybook until you tap.
+
+### Every project is a world
+
+**The Library** (`Ctrl + Shift + O`) holds every world, sorted into areas you make yourself (Writing › Novels › Working). "New" asks what you're making: one piece, a book series, a show, a collection, or a life project like a kitchen remodel, and you can change it any time.
 
 ![The Library](docs/screenshots/desktop-library.webp)
 
-**A world** holds its pieces, each with a label you choose (Short film, Season, Reel, Gag…) and a stage from Idea to Posted, and its bible: pages for characters, places and research, nested as deep as you like.
+**Overview** (`Alt + 0`) is a world's home: its logline, pieces by stage, and what to do next (things to file, promises not paid off, the next shoot day). The Ninja Bunch is a Show, so it talks in seasons and episodes, alongside its reels, gags and songs. Each piece has its own label and stage.
 
-![A world's home page](docs/screenshots/desktop-world.webp)
+![The Ninja Bunch's Overview](docs/screenshots/desktop-overview.webp)
 
-**A piece's home** shows its chapters, how it's written (prose, script or outline), its stage and every line from your daily pages that mentions it.
+### The seven tabs
 
-![A piece's home page](docs/screenshots/desktop-book.webp)
+Every project has the same tabs across the top, hidden while you type. Hold `Alt` to see their numbers.
 
-**Screenplays** are formatted as you type: scene headings, action, characters, dialogue. Scene numbers appear only once you choose "Number the scenes".
+**Gather** (`Alt + 1`) is everything that came in about this world and isn't filed yet: lines from your daily pages, shares, voice captures, and drawer ideas that might fit. "File into…" puts each one where it belongs (a character's page, a piece), and "Go through" takes them one at a time.
 
-![A screenplay](docs/screenshots/desktop-screenplay.webp)
+![Gather](docs/screenshots/desktop-gather.webp)
 
-**One menu for everything.** Ctrl + K opens every command, grouped so it stays short.
+**Shape** (`Alt + 2`) is the canon: the bible (pages inside pages, as deep as you like), arcs, timeline, relationships and promises. A piece gets an optional Develop page.
+
+![Shape: the bible](docs/screenshots/desktop-shape.webp)
+
+**Promises** list every ◇ promise the story makes, in this piece or any later one in the world, and where it pays off. One not paid off yet keeps a small dot.
+
+![Shape: promises and payoffs](docs/screenshots/desktop-promises.webp)
+
+**Write** (`Alt + 3`) lists the pieces to write in and opens them. Screenplays format themselves as you type (scene headings, action, characters, dialogue). Above the scene headings, a script can have its own levels: `# ` an act, `## ` a sequence, `### ` a named scene, each with a one-line summary only you see. Scene numbers appear only once you choose "Number the scenes (for production)", and never change after that (a scene added between 3 and 4 is 3A).
+
+![Reel 2: Breakfast, with sections, summaries and scene numbers](docs/screenshots/desktop-script.webp)
+
+Prose is just the page. Notes sit in the margin beside the paragraph they belong to (`Ctrl + 2` shows or hides them; `Alt + N` adds one).
+
+![A novel chapter with notes in the margin](docs/screenshots/desktop-manuscript-notes.webp)
+
+**Focus** (`Ctrl + .`) hides everything but the text: no tabs, no sections, no summaries, no tags.
+
+![Focus mode](docs/screenshots/desktop-focus.webp)
+
+**Walk and talk.** In a draft, the voice button writes what you said as paragraphs, one per beat (screenplay format in a script), at the cursor. Each paragraph keeps your exact words as its other version (`Alt + Down` flips), notes to self go in the margin, and a plain audio file works the same way ("Draft from a recording file…"). Typewriter mode keeps the line you're on still.
+
+**Plot grid** (`Ctrl + Shift + G`) shows the story as a table, Rowling-style. Rows are the real acts, sequences, scenes, chapters or episodes; columns are threads (Kenji's courage, Grandpa's secret, Save the bakery) shared by every piece in the world. Cells are the same notes as in the margin. Drag a row to move that part of the manuscript, or drag a note to another cell.
+
+![The plot grid for Reel 2](docs/screenshots/desktop-grid.webp)
+
+**Revise** (`Alt + 4`) has continuity (posted pieces are canon, and Claude can check a piece against them and the bible) and readers' comments. While revising:
+
+- **Fresh eyes** (`Ctrl + Shift + Y`) shows the draft as a reader would see it.
+- **New draft from this one** (`Ctrl + K`) keeps a copy and lets you carry on; **Compare** (`Ctrl + Shift + X`) shows two drafts side by side.
+- **Claude's notes** gives margin notes and a fix list when you ask, and "Talk this chapter over with Claude" opens a conversation about it.
+- **Print** (`Ctrl + P`) gives clean pages to print or save as PDF.
+
+**Make** (`Alt + 5`) is production. The stage board shows every piece from Idea to Posted; drag a card to move it on.
+
+![Make: the stage board](docs/screenshots/desktop-stage-board.webp)
+
+Inside a piece, **Production** (`Ctrl + Shift + S`) turns the script into what's needed to generate or shoot it. Each scene shows the bible elements it uses (found in its words), its production notes and its shots. Shot codes like `NB-R02-S01-01` never change, so file names and Resolve clips keep pointing at the right shot. Each shot has still and video prompts and its renders; the star marks the one that worked, and earlier prompts are never lost. "Download kit" zips a shot's prompts and reference pictures for PixAI, Seedance or ComfyUI.
+
+![Shots for Reel 2, one opened to show its prompts and starred render](docs/screenshots/desktop-shots.webp)
+
+The **storyboard** shows every shot in order with its starred still. "Play" runs them as a rough animatic.
+
+![The storyboard](docs/screenshots/desktop-storyboard.webp)
+
+**Kit** is the world's bible pages that are elements (characters, locations, props, wardrobe), each with reference pictures, a locked look and the few words that go into every prompt. **Shoot days** turn into a one-page call sheet (who's needed, locations, props, notes) to print, or send to Daybook on that day at call time.
+
+![A shoot day and its call sheet](docs/screenshots/desktop-shoot-day.webp)
+
+**Deliver** (`Alt + 6`) has files, share links and posting: a caption and the post's link for YouTube, Instagram, Facebook, TikTok and X (Claude drafts captions when asked), plus "Dialogue for subtitles (.srt)" and "Shot list for Resolve (.csv)". **Share a link to read and comment** gives readers a clean reading page; their comments show up in your margin and you can reply.
+
+![Deliver: posting](docs/screenshots/desktop-posting.webp)
+
+### Getting around
+
+On a computer, a faint line at the top left says where you are and offers "‹ last place". `Ctrl + O` opens the **Go panel**: search anything, jump back to your last five places, go up the path, pick one of this project's tabs, or open Today, the Drawer, the Library or Tags. `Ctrl + O` then `Enter` flips back to where you just were.
+
+![The Go panel](docs/screenshots/desktop-go.webp)
+
+`Ctrl + K` opens one menu for every command, grouped so it stays short.
 
 ![The command menu](docs/screenshots/desktop-command-menu.webp)
 
-**Progress** (Ctrl + Shift + P). Words written per day, week or month, for each book and for your notes.
+**Tags** lists every #tag with how often and how recently it's used. Claude can sort them into groups and point out ones that look like the same thing; "Go through a tag" takes you through everything tagged, one at a time.
 
-![The Progress panel](docs/screenshots/desktop-progress.webp)
+![Tags](docs/screenshots/desktop-tags.webp)
 
-**Light mode**, if you prefer it. Ctrl + Shift + L switches.
+### On an Android phone
 
-![The manuscript in light mode](docs/screenshots/desktop-manuscript-light.webp)
-
-### On a phone
-
-Inkwell installs to the home screen and syncs with the computer.
+Inkwell installs to the home screen from Chrome and syncs with the computer. The bottom bar is always there (it hides while you type): **‹ Back**, named for where it goes; the place you're in, which opens the **Go sheet**; **Today**; the **mic**; and **⋯** for every command.
 
 <p>
-  <img src="docs/screenshots/phone-manuscript.webp" width="240" alt="Writing on a phone">
-  <img src="docs/screenshots/phone-today.webp" width="240" alt="Today's page on a phone">
-  <img src="docs/screenshots/phone-library.webp" width="240" alt="The Library on a phone">
+  <img src="docs/screenshots/phone-today.webp" width="240" alt="Today's page on a phone, with the bottom bar">
+  <img src="docs/screenshots/phone-go.webp" width="240" alt="The Go sheet on a phone">
+  <img src="docs/screenshots/phone-record.webp" width="240" alt="Recording on a phone">
 </p>
 <p>
-  <img src="docs/screenshots/phone-world.webp" width="240" alt="A world on a phone">
-  <img src="docs/screenshots/phone-screenplay.webp" width="240" alt="A screenplay on a phone">
-  <img src="docs/screenshots/phone-command-menu.webp" width="240" alt="The command menu on a phone">
+  <img src="docs/screenshots/phone-overview.webp" width="240" alt="The Ninja Bunch on a phone">
+  <img src="docs/screenshots/phone-script.webp" width="240" alt="A script on a phone">
+  <img src="docs/screenshots/phone-storyboard.webp" width="240" alt="The storyboard on a phone">
+</p>
+<p>
+  <img src="docs/screenshots/phone-grid.webp" width="240" alt="The plot grid on a phone">
 </p>
 
-To retake these after the app changes, run `node docs/screenshots/capture.mjs`. It fills a fresh local copy of the app with the sample data (sync off, so no real account is touched) and saves new screenshots.
+### Light mode
 
-## Using it
+`Ctrl + Shift + L` switches between dark and light.
 
-Shortcuts are written for Windows. On a Mac, use ⌘ for Ctrl and ⌥ for Alt (and ⌘ + Shift + N for a note).
+![A novel chapter in light mode](docs/screenshots/desktop-manuscript-light.webp)
 
-When you write, the screen shows only your text. Everything else is a hover or a keystroke away:
+## Claude, when you ask
 
-- Touch the **left edge** for the outline (acts, chapters, scenes). `Ctrl + 1` keeps it open. Double-click a name to rename it.
-- Touch the **top edge** for the title, word count and save status.
-- `Ctrl + K` opens one menu for every command.
-- `Ctrl + 2` shows notes beside the text, each lined up with its paragraph. `Alt + N` adds a note to the paragraph you're in.
-- `Ctrl + Shift + Enter` adds a scene break inside a chapter.
-- `Ctrl + Shift + H` opens earlier versions of the chapter. A version is kept every time you pause typing.
-- `Ctrl + Shift + L` switches light and dark.
+- **Voice** write-ups in your modes, a `#tag` and links to anything you named, and spoken edits carried out.
+- **Structure**: fill a thread's grid cells from the draft, and point out promises not paid off.
+- **Production**: find the elements in every scene, suggest shots, write prompts from the scene, the elements' looks and the show's style rules, and draft captions.
+- **Revision**: notes and a fix list, talking a chapter over, and continuity checks against canon.
+- **The connector.** "Connect Claude to Inkwell" in `Ctrl + K` makes a private address to add in Claude (Settings, then Connectors, then Add custom connector). Claude can then read and search your worlds, pages and daily pages from any chat and add to them, always marked as Claude's. It never changes or deletes anything you wrote.
 
-### Worlds and pieces
+Every line, paragraph and page records who wrote it, you or Claude.
 
-Every project is a world. A world has a bible (pages that can hold pages, like Characters › Del) and pieces. A piece can be any size and can hold other pieces, so a Season holds its Episodes. Each piece is written as prose, a script or an outline, and carries a label you type yourself (earlier labels are offered) and a stage: Idea, Written, Boarded, Generated, Edited or Posted. "+ Piece" on a world's home adds one; the piece's `···` menu changes how it's written, its stage or where it lives. Nothing is ever deleted by changing these.
+## Still landing
 
-### Story structure
+These are being built right now and aren't in the screenshots yet:
 
-- **Sections in a script.** Above the INT./EXT. scene headings, a script has your own writing levels, as deep as you like: `# ` then space starts an act, `## ` a sequence inside it, `### ` a named scene. In a section's name, `Tab` goes a level deeper and `Shift + Tab` back up; `Down` reaches its one-line summary, which only you see. The sidebar nests them; a read-through leaves them out, and so does a screenplay printed from the Fountain export. `Ctrl + K`, "Name the section levels" renames Act, Sequence, Scene for one script; "Show or hide section summaries" hides the summaries.
-- **Plot grid.** `Ctrl + Shift + G` (or "Plot grid" on a piece's or world's home) shows the story as a table, like Rowling's: rows are its acts, chapters or scenes (a script's acts, sequences, scenes or scene headings; a season's episodes; a world's pieces), switched with the chips at the top. Columns are threads (a character's journey, a mystery, a romance), shared by every piece in the world; "+ Thread" adds one, its name's menu renames, tags, hides or deletes it, and dragging a column's name reorders them. A cell is notes: click an empty cell and type. They're the same notes as in the margin while you write (a margin note's second menu gives it a thread), and lines in the text with the thread's `#tag` show faintly too. The summary column is each row's own summary. Drag a row by its handle to move that chapter, scene or section in the manuscript; drag a note's dot to another cell. On a phone, tap a row's name to move it up or down, and a note's dot to move it. A faint hatch shows where a thread goes quiet between appearances. `Ctrl + Shift + G` again goes back to the text.
-- **Promises and payoffs.** A note's dot marks it as a ◇ promise, → progress or ◆ payoff. A promise with no payoff later in the story (in this piece or any later one in the world) keeps a small dot; the world's home lists every promise and where it's paid off. Only when asked: "Fill in from the draft, with Claude" on a thread writes its notes from the text into empty cells, and "Ask Claude: any promises not paid off?" in the grid's `···` lists what Claude noticed.
-- **Stage board.** "Board" next to a world's pieces shows every piece by stage, Idea to Posted; drag a card to move it on (on a phone, tap it).
-- **Bring in a script.** `Ctrl + K`, "Bring in a script": pick a `.fountain` file (WriterDuet and Final Draft export it) or paste the text, including Fountain kept as bullets in Workflowy or Tana. It becomes a script in the world you're in, or another, with its sections nested and summaries kept; `[[notes]]` come in as margin notes.
+- **Stage sets per kind of piece.** Ready-made, editable stages for a Book, AI video, Live action, Stage and Short writing, each ending with "out in the world". Also, per shot, whether it was Generated, Generated from reference, or Live action; per scene, whether its voices are recorded, generated or both; and voice sessions next to shoot days in Make.
+- **The mic first on the rows above the phone keyboard**, so you can talk without closing the keyboard.
+- **Meeting notes** from a recording: speakers, a summary, decisions and tasks sent to Daybook.
 
-### Scene numbers
+## Shortcuts
 
-Scripts have no numbers while you draft. When a script is heading into production, choose "Number the scenes (for production)" from `Ctrl + K` or the piece's `···` menu. Each scene heading gets a number that never changes after that: a scene added between 3 and 4 becomes 3A, one before scene 1 becomes A1. "Show or hide scene numbers" in `Ctrl + K` hides them on screen, and focus mode hides them too. Turning numbering off only hides them; they come back as they were. Fountain export writes them as `#3A#`, and Fountain import reads them back.
+All of them are also in `Ctrl + /`.
 
-### Production
-
-`Ctrl + Shift + S` (or "Production" on a piece's home, or its `···` menu) turns a script or draft into what's needed to generate or shoot it. `Ctrl + Shift + S` again goes back to the text. Five tabs:
-
-- **Shots.** Every scene (each scene heading in a script) with the elements it uses, its production notes (margin notes in the Production or AI production category) and its shots. Elements are found in the scene's words (a character by the name over their lines too); tap a chip to open it or take it out of the scene, `+` to add one. "+ Shot" adds a shot: what happens and the framing, and `▸` opens its still and video prompts and its renders. Shot codes such as `NB-E01-S03A-04` (the show's code, the piece's code, the scene number, the shot number) never change once given, so file names and Resolve clips keep pointing at the right shot; a shot added between 1 and 2 is 1A. Number the scenes first for the scene part. Renders come in with `+`, dropped on a shot, or dropped anywhere on the page when their file name carries a shot code. Each render keeps the prompts that made it; the star marks the one that worked (a still and a take per shot), and "Earlier prompts" brings any earlier wording back. "Download kit" makes a `.zip` of a shot's prompts and the reference pictures of everything in it, for PixAI, Seedance or any tool on the web. A scene rewritten after its shots were planned says "Changed since shots" until you mark them as matching. Only when asked, Claude finds the elements in every scene (and says what the kit is missing), suggests shots for a scene, and writes the prompts from the scene, the elements' looks and the show's style rules, learning from prompts whose renders were starred; the ones it replaces stay under Earlier prompts.
-- **Storyboard.** Every shot in order, showing its starred still; "Play" runs them two seconds each as a rough animatic.
-- **Kit.** The world's bible pages that are elements (characters, locations, props, wardrobe), each with reference pictures, a locked look (a LoRA or reference pack) and a few words on how it looks that go into every prompt; the show's style rules sit at the top. "Use a bible page…" makes any page an element.
-- **Shoot days.** A date, call and wrap times, where, and the scenes, turned into a one-page call sheet (who's needed, locations, props, wardrobe, notes) to print or save as PDF; "Send to Daybook" puts it on that day at call time.
-- **Posting.** A caption and the post's link for YouTube, Instagram, Facebook, TikTok and X; Claude drafts captions when asked. "Dialogue for subtitles (.srt)" gives Resolve the right words and names in order to time there.
-
-The `···` menu also has "Shot list for Resolve (.csv)" and switches to hide elements, production notes, summaries or scenes with no shots.
-
-### Who wrote what
-
-Every line, paragraph and page records who first wrote it and who last changed it: you, or Claude (a Claude rewrite you keep, or anything Claude adds through the connector). Entries from before this was recorded count as yours.
-
-### Claude connector
-
-"Connect Claude to Inkwell" in `Ctrl + K` (signed in) makes a private address. In Claude, go to Settings, then Connectors, then Add custom connector, and paste it. Claude can then read your worlds, pieces, pages and daily pages from any chat, search them, and add lines, paragraphs, pages, worlds and pieces, all marked as Claude's. It never changes or deletes anything you wrote. Making a new address turns the old one off, and "Turn off Claude's access" in the same place removes it. The connector runs on the shared Supabase project (the `inkwell-mcp` function in the Daybook repo).
-
-### Capture
-
-- **Voice.** Long-press the Inkwell icon on Android and tap Capture. On a computer, `Alt + C` starts recording and `Alt + C` again keeps it (or `Ctrl + K`, "Capture an idea by voice"). One big button records; "Use a recording file instead" takes one from the phone's recorder app or the computer. The recording lands on today's page with a play button. When there's a connection Claude writes it up in the mode that fits (Idea, Journal, Scene, Text message, Email, or your own), and a small chip after the time says which. Tap the chip for the same words in another mode, word for word, or to copy the version showing; every version made is kept, with your edits. Said out loud, "scratch that", "start again", "new paragraph" and "next scene" are carried out, and "note to self…" asides go on their own line. Claude also adds one `#tag` and links to any film, show or book you named. Words you typed on the line meanwhile are never touched.
-- **Modes** are the same ones Scribe uses, kept on your account, so a mode made in either app shows in both. Change them from `Ctrl + K`, "Your voice modes", or "Change your modes…" on a chip: rename, say what a mode does, pick which Claude writes it, add, delete.
-- **Walk and talk.** In a chapter, `Alt + V` (or `/talk`, or Talk on the phone's writing bar) records into the draft. Claude writes what you said as paragraphs, a paragraph per beat (screenplay format in a script), where the caret was; each paragraph keeps what you really said as its other version (`Alt + Down` to flip), notes to self go in the margin, and the caret ends up after it all. Today's page keeps the recording, linked to the chapter. "Draft from a recording file…" does the same from a file. Claude never says anything while you write.
-- **Typewriter mode** (Aa panel, or `Ctrl + K`) keeps the line you're on just above the middle of the screen and moves the page under it.
-- Writing out needs the `OPENAI_API_KEY` secret in the Daybook repo; recordings over 10 minutes go to Deepgram when `DEEPGRAM_API_KEY` is there too. Until then recordings are kept and wait.
-- **Share.** Share from Chrome, Instagram, Pinterest or any Android app, then pick Inkwell. The page, link or picture lands on today's page with an empty line under it for what it sparked. Links get a snapshot (title, picture, a one- or two-sentence summary) so they stay useful if the page goes away. The picture starts folded to a small arrow before the title; tap the arrow to open or fold one, or turn on "Pictures on shared links" under Aa, Show, to open them all.
-- **Watch and read lists.** On any page, `Ctrl + K`, "Make this page a watch list" (or read list). Type titles one per line, and once you move on Claude links each to its page, leaving your words and tags as you typed them.
-- **Send to Daybook.** `Ctrl + K`, "Send this line to Daybook" puts the line in Daybook's Inbox as a task (without its #tags), with an "Open in Inkwell" link back to the line. Sending again updates the same task.
-- **Day review.** At 9 pm (Pacific) Daybook gets a note, "Your day review", if today's page has something on it and hasn't been reviewed. Its link (`?review=<date>`) opens the day, and Claude writes three or four sentences on how it went, then a card for each thread: **Add to Daybook** (change the words and area, then send; it links back to the line), **Keep thinking** (goes on the "Still thinking about" page, with a link to the day, and comes back in later reviews as "Still on your mind?"), **Split** (a ramble into its parts) or **Let go**. Nothing goes to Daybook until you tap. Any day page: `Ctrl + K`, "Review the day". The review stays folded at the bottom of the day; hide it under Show, "Day review on day pages".
-
-### Tags
-
-The Tags page (the **Tags** button in the Library, **All tags…** on the left edge, or `Ctrl + K`, "Tags") lists every #tag with how many things carry it and when it was last used, sorted by most used, recently used or A to Z.
-
-- **Groups.** "Sort into groups with Claude" puts your tags into families (Film references, Music…). Drag a tag to another group, rename a group by clicking its name, add one with **+ Group**. Asked again, Claude leaves your groups alone and only places new tags.
-- **Tidy up.** Claude points out tags that look like the same thing (#stunt and #stunts): **Merge** or **Not the same**. Open any tag and use **Rename or merge…** to rename it everywhere; typing a tag that already exists merges into it.
-- **Go through a tag.** One thing at a time, with its picture, link and what's under it. A notes box under each takes what you got from it (each line becomes a line under the item). **Done** checks it off (skipped next time unless you untick "Skip ones marked done"), **Keep, next** moves on, **Untag** takes the tag off just that one. Keys: `Alt + Right arrow` next, `Alt + Left arrow` back, `Ctrl + Enter` done.
+| Keys | What it does |
+|---|---|
+| `Ctrl + J` | Today's page (again goes back) |
+| `Ctrl + Shift + J` | The Today panel beside what you're doing |
+| `Alt + C` | Record; again to keep it (lands where you are) |
+| `Ctrl + K` | Every command |
+| `Ctrl + O` | Go panel (`Enter` flips back) |
+| `Ctrl + Shift + O` | Library |
+| `Alt + 0` to `Alt + 6` | Overview, Gather, Shape, Write, Revise, Make, Deliver |
+| `Ctrl + .` | Focus |
+| `Ctrl + 1` | Keep the outline open |
+| `Ctrl + 2` | Notes beside the text |
+| `Alt + N` | Add a note to this paragraph |
+| `Ctrl + Shift + G` | Plot grid |
+| `Ctrl + Shift + S` | Production |
+| `Ctrl + Shift + Y` | Fresh eyes |
+| `Ctrl + Shift + X` | Compare drafts |
+| `Ctrl + P` | Print |
+| `Ctrl + Shift + H` | Earlier versions of this chapter or page |
+| `Ctrl + Shift + E` | Alternates for a word or paragraph; `Alt + Down` / `Alt + Up` flip between them |
+| `Ctrl + Shift + P` | Words written per day, week or month |
+| `Ctrl + Shift + F` | Search everything |
+| `/` | Insert the time, a date, a link… |
+| `Ctrl + ;` / `Ctrl + Shift + ;` | Today's date / the time |
+| `[[` | Link to a page, day or chapter |
+| `Ctrl + Shift + L` | Light or dark |
+| `Alt + ]` / `Alt + [` | Wider / narrower page |
 
 ## How it's built
 
 - [Tiptap](https://tiptap.dev) (on ProseMirror) is the editor. Plain JavaScript, built with [Vite](https://vite.dev).
-- **Everything is an entry.** Worlds, pieces, acts, chapters, every paragraph, scene breaks, pages, lines and notes are all rows of one shape (`src/model.js`) with a stable id, tags (`#words` in the text) and room for links and typed fields, so anything can link to anything. A world is `kind: 'world'`; a piece is `kind: 'project'` whose parent is a world or another piece, with `fields.type` (how it's written), `fields.label` and `fields.stage`. Bible pages sit under the world. `fields.by` and `fields.edited_by` record authors (the account id, `'me'` before sign-in, or `'claude'`), and a numbered scene heading keeps its number in `fields.code`. Production (`src/production.js`, `src/prodview.js`): an element is a bible page with `fields.element` {type, snippet, look, also, refs}; a scene's breakdown is `kind: 'breakdown'` (id `bd-<scene id>`, its added and taken-out elements and the scene's fingerprint when shots were planned); a shot is `kind: 'shot'` under its scene heading with `fields.n` (its never-changing number), prompts, `tries` (each set of prompts with the renders it made) and `star`; a shoot day is `kind: 'shootday'` under the piece.
-- **Books from before worlds** are brought up to date on first open after sync (`ensureWorlds` in `src/library.js`): each gets a world of the same name (id `wd-<book id>`, so every device makes the same one) and its pages move into the world's bible; a notes collection becomes a world itself. Nothing is deleted, and it's safe to run again.
-- **Saving never loses text** (`src/chapter.js`). Each change is written at once to a local write-ahead copy, then only the changed paragraphs are saved to the browser's database (IndexedDB). If the tab dies mid-save, the write-ahead copy is picked up on the next open.
-- **Past versions** live in their own store so they never slow down the draft.
-- It installs to the home screen and works offline (`public/sw.js`).
-- Export any chapter or the whole book as Markdown from `Ctrl + K`.
-
-- Cloud sync between devices (Supabase, shared with Daybook) keeps the phone and the computer in step.
+- **Everything is an entry.** Worlds, pieces, acts, chapters, every paragraph, pages, lines, notes, threads, shots and shoot days are rows of one shape (`src/model.js`) with a stable id, tags and room for links and typed fields, so anything can link to anything. A world is `kind: 'world'` (its shape in `fields.shape`); a piece is `kind: 'project'` under a world or another piece, with `fields.type` (prose, script or outline), `fields.label` and `fields.stage`. `fields.by` and `fields.edited_by` record who wrote it.
+- **Local first.** Each change is written at once to a write-ahead copy, then only the changed paragraphs go to the browser's database (IndexedDB), so a dying tab never loses text. It installs to the home screen and works offline (`public/sw.js`).
+- **Sync** between devices runs on Supabase, shared with Daybook (the `writing_entries` table and the `inkwell` and `inkwell-mcp` functions live in the Daybook repo). Pictures and recordings go to a private storage bucket. A nightly backup goes to a private repo.
+- Main parts: the daily page and pages (`src/notebook.js`, `src/outline.js`), capture and voice (`src/capture.js`, `src/voice.js`), the workflow tabs and Drawer (`src/pages.js`, `src/stages.js`), plot grid (`src/grid.js`), production (`src/production.js`, `src/prodview.js`), revision (`src/drafts.js`, `src/compare.js`, `src/review.js`), sharing (`src/sharelink.js`, `read.html`), getting around (`src/nav.js`).
 
 ## Run it
 
@@ -169,14 +225,6 @@ npm install
 npm run dev
 ```
 
-`npm test` builds the app and runs the browser checks in `tests/run.mjs`.
+`npm test` builds the app and runs the browser checks in `tests/`, split over three machines on GitHub. Every push to `main` is tested and published to GitHub Pages by `.github/workflows/deploy.yml`.
 
-Every push to `main` is tested and published to GitHub Pages by `.github/workflows/deploy.yml`.
-
-## Notebook
-
-Ctrl + J switches between the manuscript and today's page. Every day has a page, and you can make named pages too. Pages are nested lines: Tab nests, Shift+Tab lifts. Type `[[` to link a page, day or chapter (or make a new page), and `#tag` to tag a line. Each page lists the lines that link to it, and the shelves (left edge) list pages, recent days and tags. Every line is its own entry, so it syncs, links and can be found like a manuscript paragraph.
-
-## Library
-
-Everything lives in the Library (Ctrl + O jumps to anything by name; the left edge shows the whole tree). Areas can nest as deep as you like, e.g. Writing › Novels › Working. Each area holds worlds. A new world starts with an Idea page. A world's home shows its pieces, its bible and the lines from daily pages that link to it. Pages that aren't in a world yet are listed as loose pages until you move them. The daily page scrolls back through earlier days, and the app reopens wherever you last were.
+To retake the screenshots after the app changes, run `node docs/screenshots/capture.mjs`. It fills a fresh local copy of the app with the Ninja Bunch sample data (sync goes to a stand-in, so no real account is touched) and saves new dark-mode screenshots: desktop at 2000px wide, phone at 780px. `ONLY=desktop-grid,phone-go` retakes just those.
