@@ -84,7 +84,7 @@ try {
     assert.deepEqual(await page.locator('.lib-shape b').allInnerTexts(), ['One piece', 'Book series', 'Show', 'Collection', 'Universe', 'Life project']);
     assert.equal(await page.locator('.lib-shape[aria-checked="true"]').getAttribute('data-shape'), 'one');
     assert.ok(await page.locator('#lib-new-type-box').isVisible());
-    assert.match(await page.locator('#lib-new').innerText(), /change this any time/);
+    assert.match(await page.locator('#lib-new').innerText(), /change the shape or the workflow any time/);
     await page.locator('.lib-shape[data-shape="show"]').click();
     assert.ok(await page.locator('#lib-new-type-box').isHidden());
     assert.match(await page.locator('#lib-new-levels').innerText(), /Season 1 and Episode 1/);
