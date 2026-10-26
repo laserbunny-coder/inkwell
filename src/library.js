@@ -61,6 +61,68 @@ export const kindName = (p) => p?.fields?.label || defaultLabel(bookType(p));
 // Where a piece is on its way out into the world.
 export const STAGES = ['Idea', 'Written', 'Boarded', 'Generated', 'Edited', 'Posted'];
 export const stageOf = (p) => p?.fields?.stage || 'Idea';
+// What a project is, said at New and changed any time from its ⋯ menu. A
+// shape names the levels inside it, so a Show talks in Seasons and Episodes
+// and a Book series in Books; changing it never moves or renames anything,
+// it only changes what new pieces start as. A piece labelled with a shape's
+// name (a Show inside a Universe) gives its own pieces that shape's levels.
+export const SHAPES = [
+  { id: 'one', name: 'One piece', about: 'A novel, a screenplay, a short', levels: [] },
+  { id: 'series', name: 'Book series', about: 'Books, then chapters', levels: [{ label: 'Book', type: 'novel' }] },
+  { id: 'show', name: 'Show', about: 'Seasons, episodes, scenes', levels: [{ label: 'Season', type: 'lines' }, { label: 'Episode', type: 'screenplay' }] },
+  { id: 'collection', name: 'Collection', about: 'Reels, gags, shorts, poems', levels: [{ label: 'Short', type: 'screenplay' }] },
+  { id: 'universe', name: 'Universe', about: 'Several of these sharing one bible', levels: [] },
+  { id: 'life', name: 'Life project', about: 'A remodel, research, the business', levels: [] }
+];
+const shapeById = (id) => SHAPES.find((x) => x.id === id);
+// A shape's levels with any names you gave them for this project (Batch ›
+// Reel instead of Season › Episode).
+export function levelsOf(world, shape) {
+  const names = world?.fields?.levelNames || [];
+  return shape.levels.map((l, i) => (names[i] ? { ...l, label: names[i] } : l));
+}
+// A world from before shapes reads as one piece, or a collection once it holds more.
+export function shapeOf(world, topPieces = 0) {
+  if (world?.fields?.life === true) return shapeById('life');
+  return shapeById(world?.fields?.shape) || shapeById(topPieces > 1 ? 'collection' : 'one');
+}
+// What a new piece right inside `parent` (the world or a piece) starts as,
+// and its next number: { label, type, n } or null when nothing's suggested.
+export async function nextLevel(parent) {
+  let level = null;
+  if (parent?.kind === 'world') level = levelsOf(parent, shapeOf(parent, (await piecesIn(parent.id)).length))[0] || null;
+  else if (parent) {
+    const label = kindName(parent);
+    const world = await worldOf(parent);
+    const own = shapeById(world?.fields?.shape);
+    const named = SHAPES.find((x) => x.name === label);
+    if (named) level = named.levels[0] || null;
+    else for (const levels of [own && levelsOf(world, own), ...SHAPES.map((x) => x.levels)].filter(Boolean)) {
+      const i = levels.findIndex((l) => l.label === label);
+      if (i >= 0) { level = levels[i + 1] || null; break; }
+    }
+  }
+  if (!level) return null;
+  const n = (await piecesIn(parent.id)).filter((p) => kindName(p) === level.label).length + 1;
+  return { ...level, n };
+}
+
+// A new project in the shape you picked. One piece starts as that piece (or
+// just pages); a Book series with Book 1; a Show with Season 1 and its first
+// Episode; a Collection, a Universe and a Life project start empty.
+export async function newShaped(shape, title, areaId, type = 'novel') {
+  const world = shape === 'one' && type !== 'world' ? await worldOf(await newBook(type, title, areaId)) : await newWorld(title, areaId);
+  const fresh = await getEntry(world.id);
+  const fields = { ...fresh.fields, shape: shape === 'life' ? 'one' : shape, ...(shape === 'life' ? { life: true } : {}) };
+  await putEntries([{ ...fresh, fields, updated_at: Date.now() }]);
+  if (shape === 'series') await newPiece(world.id, 'novel', 'Book 1', null, 'Book');
+  if (shape === 'show') {
+    const season = await newPiece(world.id, 'lines', 'Season 1', null, 'Season');
+    await newPiece(season.id, 'screenplay', 'Episode 1', null, 'Episode');
+  }
+  return getEntry(world.id);
+}
+
 export const areaColor = (a) => a?.fields?.color || '#A39A8B';
 
 export async function newArea(title, parentId = null) {

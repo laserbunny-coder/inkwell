@@ -411,8 +411,8 @@ try {
     await sleep(400);
     await page.evaluate(() => document.querySelector('[data-cmd="new-book"], #lib-new-btn')?.click());
     await page.evaluate(() => { document.querySelector('#lib-new').hidden = false; });
+    await page.locator('.lib-shape[data-shape="life"]').click();
     await page.fill('#lib-new-title', 'Kitchen remodel');
-    await page.selectOption('#lib-new-type', 'life');
     await page.locator('#lib-new .pill').click();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'world');
     await sleep(500);
