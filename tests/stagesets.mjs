@@ -121,7 +121,6 @@ try {
     assert.equal(await page.locator('.se-use select[data-type="novel"]').inputValue(), 'book');
     assert.match(await page.locator('.se-row').last().innerText(), /out in the world/);
     await page.locator('.se-name').nth(2).fill('Storyboarded');
-    await page.locator('.se-name').nth(2).dispatchEvent('change');
     await shot(page, 'stagesets-edit');
     await page.locator('.stage-edit .pill.primary').click();
     await sleep(600);

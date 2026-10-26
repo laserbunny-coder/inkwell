@@ -87,8 +87,9 @@ export function editStages(world, pieces) {
         const name = make('input', 'ask-input se-name');
         name.value = r.name;
         name.setAttribute('aria-label', `Stage ${i + 1}`);
+        // No redraw on change: it fires as the input loses focus, and redrawing
+        // then would swallow the click (on Save, say) that took the focus.
         name.addEventListener('input', () => { r.name = name.value; });
-        name.addEventListener('change', () => draw());
         const up = make('button', 'ghost-btn', '↑');
         up.setAttribute('aria-label', `Move ${r.name} earlier`);
         up.disabled = i === 0;
