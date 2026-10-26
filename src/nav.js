@@ -5,8 +5,8 @@
 // Back to the last place (named, so you know where it goes), the place you're
 // in, Today, the mic and the menu. Tapping the place opens the Go sheet: the
 // last few places, the path up, this piece's or world's pages, and the desk.
-// On a computer a faint line at the top names the place, with the last place
-// beside it, and Ctrl + O opens the same panel (Enter flips straight back).
+// On a computer the top bar names the place, with the last place as its first
+// button, and Ctrl + O opens the same panel (Enter flips straight back).
 
 const RECENT = 'recentPlaces';
 const KEEP = 8;
@@ -65,13 +65,9 @@ export class Nav {
     handle.addEventListener('click', () => document.body.classList.add('bar-peek'));
     document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.placebar, .pb-handle, .go-panel')) document.body.classList.remove('bar-peek'); });
 
-    // The computer's line at the top.
-    const line = make('div', 'placeline');
-    this.lineBack = make('button', 'pl-back');
+    // The computer's back button, at the start of the top bar.
+    this.lineBack = document.getElementById('tb-back');
     this.lineBack.addEventListener('click', () => this.jumpBack());
-    this.linePlace = make('button', 'pl-place');
-    this.linePlace.addEventListener('click', () => this.toggle());
-    line.append(this.lineBack, this.linePlace);
 
     // The Go sheet (a panel on a computer).
     this.backdrop = make('div', 'go-backdrop');
@@ -84,9 +80,8 @@ export class Nav {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.close(); }
     });
 
-    document.body.append(line, bar, handle, this.backdrop, this.panel);
+    document.body.append(bar, handle, this.backdrop, this.panel);
     this.bar = bar;
-    this.line = line;
     // While the panel is open, only it takes the caret: a page that finishes
     // opening a moment later doesn't pull your typing back into its text.
     document.addEventListener('focusin', (e) => {
@@ -142,9 +137,6 @@ export class Nav {
     }
     this.place.replaceChildren(make('span', 'pb-name', this.context ? `${this.name} · ${this.context}` : this.name || 'Inkwell'), make('span', 'pb-up', '▴'));
     this.place.setAttribute('aria-label', `${this.name}. Go somewhere else`);
-    const path = make('span', 'pl-path', this.context ? `${this.context} › ${this.name}` : this.name);
-    this.linePlace.replaceChildren(path, make('span', 'keys', this.hooks.keyLabel('⌘O')));
-    this.linePlace.title = 'Go somewhere else';
   }
 
   jumpBack() {

@@ -2993,9 +2993,30 @@ const hovers = () => Date.now() > edgesQuietUntil && !matchMedia('(hover: none)'
 $('.edge-left').addEventListener('mouseenter', () => { if (hovers()) body.classList.add('show-outline'); });
 $('.edge-left').addEventListener('click', () => body.classList.add('show-outline'));
 $('.outline').addEventListener('mouseleave', () => body.classList.remove('show-outline'));
-$('.edge-top').addEventListener('mouseenter', () => { if (hovers()) body.classList.add('show-top'); });
+// The top bar comes down as the mouse nears the top of the page, and also when
+// it overshoots into the window's own title bar. It goes away once the mouse
+// is well below it, not the moment it slips off an edge.
+// A short pause first, so reaching for something near the top of the page
+// (and clicking it) doesn't pull the bar down over it.
+const TOP_ZONE = 48;
+let topByMouse = false;
+let topTimer = 0;
+let mouseY = Infinity;
+const showTop = () => { clearTimeout(topTimer); body.classList.add('show-top'); topByMouse = true; };
+const topAllowed = () => !body.classList.contains('show-outline') && !document.querySelector('.go-panel:not([hidden]), .palette:not([hidden])');
+document.addEventListener('mousemove', (e) => {
+  mouseY = e.clientY;
+  if (!hovers() || e.buttons) { clearTimeout(topTimer); topTimer = 0; return; }
+  const open = body.classList.contains('show-top');
+  if (!open && e.clientY <= TOP_ZONE && e.clientX > 18 && topAllowed()) {
+    if (!topTimer) topTimer = setTimeout(() => { topTimer = 0; if (mouseY <= TOP_ZONE && topAllowed()) showTop(); }, 150);
+  } else if (open && topByMouse && e.clientY > $('.topbar').getBoundingClientRect().bottom + 24) { body.classList.remove('show-top'); topByMouse = false; }
+});
+document.addEventListener('mousedown', () => { clearTimeout(topTimer); topTimer = 0; }, true);
+document.documentElement.addEventListener('mouseleave', (e) => { if (e.clientY <= 0 && hovers()) showTop(); });
 $('.edge-top').addEventListener('click', () => body.classList.add('show-top'));
-$('.topbar').addEventListener('mouseleave', () => body.classList.remove('show-top'));
+// The pages you look at start below the bar, however tall it is.
+new ResizeObserver(() => root.style.setProperty('--topbar-h', `${$('.topbar').offsetHeight}px`)).observe($('.topbar'));
 // On a touch screen there's no mouse to leave the bar, so a tap anywhere else tucks it away.
 document.addEventListener('pointerdown', (e) => {
   if (e.pointerType !== 'mouse' && !e.target.closest('.topbar, .edge-top')) body.classList.remove('show-top');
@@ -4167,7 +4188,7 @@ onVoiceChip(async (lineId, chip) => {
 
 // Your modes, the same ones Scribe uses: rename one, change what it does or
 // which Claude writes it, add one, or delete one.
-async function openModes(anchor = $('.corner [data-cmd="palette"]')) {
+async function openModes(anchor = $('#palette-toggle')) {
   if (!canAskServer()) { toast('Your modes live on your account; sign in and get online to change them'); return; }
   let modes;
   try { modes = await fetchModes(askServer); } catch { toast('Couldn’t reach your modes. Try again.'); return; }
