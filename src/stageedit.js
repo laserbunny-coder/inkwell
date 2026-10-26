@@ -97,11 +97,11 @@ function stepsAndTools(st, redraw, hooks) {
     });
     const name = make('input', 'se-name');
     name.value = r.name;
-    name.size = Math.max(4, r.name.length + 1);
+    name.style.width = `${Math.max(4, r.name.length + 1)}ch`;
     name.setAttribute('aria-label', `Step ${i + 1}`);
     // No redraw on change: it fires as the input loses focus, and redrawing
     // then would swallow the click (on Save, say) that took the focus.
-    name.addEventListener('input', () => { r.name = name.value; name.size = Math.max(4, name.value.length + 1); });
+    name.addEventListener('input', () => { r.name = name.value; name.style.width = `${Math.max(4, name.value.length + 1)}ch`; });
     name.addEventListener('keydown', (e) => {
       if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); moveTo(i, i + (e.key === 'ArrowLeft' ? -1 : 1)); }
       if (e.key === 'Enter') e.preventDefault();

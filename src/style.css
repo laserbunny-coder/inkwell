@@ -1566,7 +1566,7 @@ body.looking .placeline, body.show-top .placeline, body.alt-held .placeline, :ro
 body.pin-outline .placeline { left: 318px; }
 
 /* Stages dialog */
-.ask.stage-edit { width: min(520px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }
+.ask.stage-edit { width: min(640px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }
 .se-uses { display: grid; gap: 8px; margin-bottom: 14px; }
 .se-use { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); }
 .se-use select { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 6px 8px; font: inherit; }
