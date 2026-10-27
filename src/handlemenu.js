@@ -40,6 +40,17 @@ export function openHandleMenu({ anchor, at, build, onClose, editor }) {
   el.setAttribute('role', 'menu');
   // Taps on the sheet leave the keyboard (and the caret) where they are.
   if (sheet) el.addEventListener('pointerdown', (e) => e.preventDefault());
+  // The menu often appears right under the finger that opened it, and that
+  // same touch then ends as a click on whatever item is there now (it used to
+  // check lines off). So an item only answers a press that began on it after
+  // the menu was up; keyboard presses (Enter, Space) always count.
+  let pressed = null;
+  el.addEventListener('pointerdown', (e) => { pressed = e.target.closest('button'); }, true);
+  const tap = (b, fn) => b.addEventListener('click', (e) => {
+    const ok = e.detail === 0 || pressed === b;
+    pressed = null;
+    if (ok) fn();
+  });
   open = { el, onClose, anchor };
 
   const choose = (run, stay) => {
@@ -63,7 +74,7 @@ export function openHandleMenu({ anchor, at, build, onClose, editor }) {
             const b = make('button', c.current ? 'hm-chip current' : 'hm-chip', c.label);
             b.setAttribute('role', 'menuitemradio');
             b.setAttribute('aria-checked', c.current ? 'true' : 'false');
-            b.addEventListener('click', () => choose(c.run, false));
+            tap(b, () => choose(c.run, false));
             row.append(b);
           }
           el.append(row);
@@ -75,7 +86,7 @@ export function openHandleMenu({ anchor, at, build, onClose, editor }) {
         b.disabled = !!it.off;
         b.setAttribute('role', 'menuitem');
         b.append(make('span', '', it.label), make('span', 'keys', keyLabel(it.keys || '') || ''));
-        b.addEventListener('click', () => choose(it.run, it.stay));
+        tap(b, () => choose(it.run, it.stay));
         if (sheet && it.half) {
           if (!pair || pair.dataset.key !== it.half || pair.children.length === 2) { pair = make('div', 'pair'); pair.dataset.key = it.half; el.append(pair); }
           pair.append(b);
