@@ -240,6 +240,33 @@ try {
     assert.equal(await pieceCount(page), 0);
   });
 
+  await check('with the screen off, the recording pauses, says so when you’re back, and leaves that stretch out', async () => {
+    const before = (await lines(page)).filter((l) => l.fields?.capture === 'voice').length;
+    await page.keyboard.press('Control+K');
+    await page.keyboard.type('Capture an idea');
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('.capture:not([hidden])');
+    await page.click('.cap-big');
+    await page.waitForSelector('.capture[data-state="recording"]');
+    await page.evaluate(() => { const mm = window.matchMedia; window.matchMedia = (q) => q === '(hover: none)' ? { matches: true } : mm(q); window.__mm = mm; });
+    await sleep(2000);
+    const screen = (off) => page.evaluate((off) => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => off }); document.dispatchEvent(new Event('visibilitychange')); }, off);
+    await screen(true);
+    await sleep(5000);
+    await screen(false);
+    assert.match(await page.locator('.cap-hint').innerText(), /screen was off for [56] seconds.*Listening again/);
+    await sleep(1500);
+    assert.match(await page.locator('.cap-time').innerText(), /^0:0[3-4]$/, 'the clock leaves out the screen-off time');
+    await page.click('.cap-big');
+    await page.waitForSelector('.capture', { state: 'hidden', timeout: 8000 });
+    await page.waitForFunction(() => /screen was off for/.test(document.querySelector('.toast')?.textContent || ''), null, { timeout: 5000 });
+    const voice = (await lines(page)).filter((l) => l.fields?.capture === 'voice').sort((a, b) => a.created_at < b.created_at ? -1 : 1);
+    assert.equal(voice.length, before + 1);
+    const ms = voice.at(-1).content[0].attrs.duration;
+    assert.ok(ms > 2500 && ms < 5000, `kept length ${ms}`);
+    await page.evaluate(() => { delete document.hidden; window.matchMedia = window.__mm; });
+  });
+
   await check('“Start recording as soon as Capture opens” starts it with no tap', async () => {
     await page.keyboard.press('Control+K');
     await page.keyboard.type('Capture an idea');

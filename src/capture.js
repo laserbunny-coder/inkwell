@@ -243,7 +243,7 @@ export class CaptureScreen {
 
   render(state, note = '') {
     this.el.dataset.state = state;
-    const label = { ready: 'Tap to talk', starting: 'Starting…', recording: 'Tap when you’re done', saving: 'Keeping it…', error: note }[state];
+    const label = { ready: 'Tap to talk', starting: 'Starting…', recording: phone() ? 'Tap when you’re done. Keep the screen on while you talk.' : 'Tap when you’re done', saving: 'Keeping it…', error: note }[state];
     this.hint.textContent = label;
     this.big.setAttribute('aria-label', state === 'recording' ? 'Done. Keep this idea' : 'Start talking');
     if (state !== 'recording') this.time.textContent = '';
@@ -266,7 +266,7 @@ export class CaptureScreen {
     const type = recorderType();
     const mr = new MediaRecorder(stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 32000 });
     const started = new Date();
-    const rec = this.rec = { mr, stream, started, at: performance.now(), type: mr.mimeType || type || 'audio/webm', parts: [], i: 0, into: this.into };
+    const rec = this.rec = { mr, stream, started, at: performance.now(), t0: Date.now(), type: mr.mimeType || type || 'audio/webm', parts: [], i: 0, into: this.into };
     mr.addEventListener('dataavailable', (e) => {
       if (!e.data?.size || rec.dropped) return;
       rec.parts.push(e.data);
@@ -277,10 +277,34 @@ export class CaptureScreen {
     // If the phone takes the microphone away (a call, another app, the
     // screen going off), what was said up to then is kept, not left hanging.
     rec.stopped.then(() => { if (this.rec === rec && !rec.finishing && !rec.dropped) this.finish({ cutOff: true }); });
+    // A phone won't let a web page hear once the screen goes off: the mic
+    // goes quiet until it's back on. So the recording pauses for that stretch
+    // (silence only makes the write-out invent words) and says so on return.
+    rec.away = 0;
+    const away = () => {
+      if (rec.awayAt != null || this.rec !== rec) return;
+      rec.awayAt = Date.now();
+      try { if (mr.state === 'recording') mr.pause(); } catch { /* still keeps what it has */ }
+    };
+    const back = async () => {
+      if (rec.awayAt == null || this.rec !== rec || rec.finishing) return;
+      const gone = Date.now() - rec.awayAt;
+      rec.away += gone;
+      rec.awayAt = null;
+      try { if (mr.state === 'paused') mr.resume(); } catch { /* finish keeps what there is */ }
+      if (gone >= 2000) this.hint.textContent = `The screen was off for ${spoken(gone)}, so that part isn’t in the recording. Listening again.`;
+      if (!this.lock || this.lock.released) { try { this.lock = await navigator.wakeLock?.request('screen'); } catch { this.lock = null; } }
+    };
+    // (A computer keeps hearing in another tab, so only a phone pauses on hide.)
+    rec.onShow = () => (document.hidden ? phone() && away() : back());
+    document.addEventListener('visibilitychange', rec.onShow);
+    const track = stream.getAudioTracks()[0];
+    track?.addEventListener('mute', away);
+    track?.addEventListener('unmute', () => { if (!document.hidden) back(); });
     mr.start(1000);
     this.starting = false;
     this.render('recording');
-    this.tick = setInterval(() => { this.time.textContent = lengthLabel(performance.now() - rec.at) || '0:00'; }, 250);
+    this.tick = setInterval(() => { if (rec.awayAt == null) this.time.textContent = lengthLabel(heard(rec)) || '0:00'; }, 250);
     this.time.textContent = '0:00';
     this.meter(stream);
     // Keep the screen on while recording (a phone on the dashboard).
@@ -315,6 +339,7 @@ export class CaptureScreen {
     this.lock?.release().catch(() => {});
     this.lock = null;
     this.level.style.setProperty('--lvl', 0);
+    if (this.rec) document.removeEventListener('visibilitychange', this.rec.onShow);
     this.rec?.stream.getTracks().forEach((t) => t.stop());
   }
 
@@ -326,7 +351,8 @@ export class CaptureScreen {
     await stopRecorder(rec);
     this.stopDevices();
     this.rec = null;
-    const duration = performance.now() - rec.at;
+    if (rec.awayAt != null) { rec.away += Date.now() - rec.awayAt; rec.awayAt = null; }
+    const duration = heard(rec);
     const blob = new Blob(rec.parts, { type: rec.type });
     if (!blob.size) { this.render('error', 'Nothing was recorded. Tap to try again.'); return; }
     // Every step has a time limit, so this screen can't get stuck; a save
@@ -343,7 +369,8 @@ export class CaptureScreen {
     await within(4000, clearPieces()).catch((e) => console.warn(e));
     this.close();
     await this.onSaved(saved);
-    if (cutOff) this.toast('The phone stopped the microphone; what you said up to then is kept');
+    if (rec.away >= 5000) this.toast(`The screen was off for ${spoken(rec.away)}. Phones don’t let Inkwell hear then, so keep the screen on, or use Scribe for long talks with it off.`);
+    else if (cutOff) this.toast('The phone stopped the microphone; what you said up to then is kept');
   }
 
   // A recording made somewhere else (the phone's recorder app, a file on the
@@ -401,6 +428,16 @@ function lengthOf(file) {
     setTimeout(() => done(0), 5000);
     a.src = url;
   });
+}
+const phone = () => window.matchMedia?.('(hover: none)').matches;
+// How long the recording could actually hear (time with the screen off left out).
+const heard = (rec) => Math.max(0, Date.now() - rec.t0 - rec.away - (rec.awayAt != null ? Date.now() - rec.awayAt : 0));
+// "40 seconds", "1 minute", "10 minutes", for the screen-off notes.
+function spoken(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} seconds`;
+  const m = Math.round(s / 60);
+  return m === 1 ? '1 minute' : `${m} minutes`;
 }
 const within = (ms, promise) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Took too long')), ms))]);
 
