@@ -35,6 +35,12 @@ try {
   await sleep(300);
 
   const cdp = await ctx.newCDPSession(ph);
+  // What the page heard during a tap, to explain a failure.
+  await ph.evaluate(() => {
+    for (const t of ['pointerdown', 'pointerup', 'pointercancel', 'click']) {
+      document.addEventListener(t, (e) => window.__pe?.push(`${t}:${e.pointerType || ''}:${e.target.className?.baseVal ?? e.target.className}:${e.detail ?? ''}`), true);
+    }
+  });
   const menu = ph.locator('.handle-menu.as-sheet');
   const handle = ph.locator('#outline-editor li.here > .line-gutter .bullet');
   const done = () => ph.evaluate(() => [...document.querySelectorAll('#outline-editor li[data-done] > p')].map((p) => p.textContent));
@@ -53,13 +59,14 @@ try {
     const x0 = b.x + b.width / 2, y0 = b.y + b.height / 2;
     const clear = await ph.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('li.here > .line-gutter .bullet'), [x0, y0]);
     if (!clear) return false;
+    await ph.evaluate(() => { window.__pe = []; });
     // A real thumb rests a moment before lifting; the menu is up by then.
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: y0 }] });
     await sleep(120);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await sleep(400);
     if (!(await menu.isVisible())) {
-      const state = await ph.evaluate(() => ({ root: document.documentElement.className, here: document.querySelector('#outline-editor li.here > p')?.textContent, active: document.activeElement?.className, zoomed: !!document.querySelector('.notebook.zoomed'), done: document.querySelectorAll('#outline-editor li[data-done]').length, view: document.documentElement.dataset.view }));
+      const state = await ph.evaluate(() => ({ root: document.documentElement.className, here: document.querySelector('#outline-editor li.here > p')?.textContent, active: document.activeElement?.className, zoomed: !!document.querySelector('.notebook.zoomed'), done: document.querySelectorAll('#outline-editor li[data-done]').length, view: document.documentElement.dataset.view, events: window.__pe }));
       throw new Error(`no sheet after tapping the handle at ${Math.round(y0)}px: ${JSON.stringify(state)}`);
     }
     return true;
