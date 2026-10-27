@@ -38,8 +38,10 @@ try {
   const menu = ph.locator('.handle-menu.as-sheet');
   const handle = ph.locator('#outline-editor li.here > .line-gutter .bullet');
   const done = () => ph.evaluate(() => [...document.querySelectorAll('#outline-editor li[data-done] > p')].map((p) => p.textContent));
-  // Puts the line you're on at each height on the screen, then taps its handle
-  // the way a finger does (down, up, then the browser's click).
+  // Puts the line you're on at a height on the screen, then taps its handle
+  // the way a finger does (down, a moment, up, then the browser's click).
+  // Returns false when the handle can't sit there (the page can't scroll that
+  // far, or a bar covers that spot), so that height is skipped.
   const tapHandleAt = async (y) => {
     await ph.evaluate((y) => {
       const p = document.querySelector('#outline-editor li.here > p');
@@ -47,30 +49,40 @@ try {
     }, y);
     await sleep(150);
     await handle.waitFor({ state: 'visible' });
-    // A real thumb rests a moment before lifting; the menu is up by then.
     const b = await handle.boundingBox();
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: b.x + b.width / 2, y: b.y + b.height / 2 }] });
+    const x0 = b.x + b.width / 2, y0 = b.y + b.height / 2;
+    const clear = await ph.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('li.here > .line-gutter .bullet'), [x0, y0]);
+    if (!clear) return false;
+    // A real thumb rests a moment before lifting; the menu is up by then.
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: y0 }] });
     await sleep(120);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    await menu.waitFor({ state: 'visible' });
     await sleep(400);
+    if (!(await menu.isVisible())) {
+      const state = await ph.evaluate(() => ({ root: document.documentElement.className, here: document.querySelector('#outline-editor li.here > p')?.textContent, active: document.activeElement?.className, zoomed: !!document.querySelector('.notebook.zoomed'), done: document.querySelectorAll('#outline-editor li[data-done]').length, view: document.documentElement.dataset.view }));
+      throw new Error(`no sheet after tapping the handle at ${Math.round(y0)}px: ${JSON.stringify(state)}`);
+    }
+    return true;
   };
 
   await check('the tap that opens the sheet presses nothing in it', async () => {
     // Every height the line can sit at, down to the row above the keyboard.
     const floor = await ph.evaluate(() => document.querySelector('.outline-bar').getBoundingClientRect().top);
+    let tried = 0;
     for (let y = 120; y < floor - 30; y += 30) {
-      await tapHandleAt(y);
+      if (!(await tapHandleAt(y))) continue;
+      tried += 1;
       assert.deepEqual(await done(), [], `line checked off by the opening tap (line at ${y}px)`);
       assert.equal(await ph.locator('.notebook.zoomed').count(), 0, `zoomed in by the opening tap (line at ${y}px)`);
       assert.equal(await menu.isVisible(), true, `sheet still open (line at ${y}px)`);
       await ph.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
       await ph.waitForSelector('.handle-menu', { state: 'detached' });
     }
+    assert.ok(tried >= 10, `only ${tried} heights could be tried`);
   });
 
   await check('a second tap on Mark done still checks the line off', async () => {
-    await tapHandleAt(500);
+    assert.equal(await tapHandleAt(500), true);
     await menu.locator('.item', { hasText: 'Mark done' }).tap();
     await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li[data-done] > p')].some((p) => p.textContent === 'Buy rope'));
     assert.equal(await ph.locator('.handle-menu').count(), 0, 'sheet closes');
