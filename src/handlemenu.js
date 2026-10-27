@@ -47,7 +47,8 @@ export function openHandleMenu({ anchor, at, build, onClose, editor }) {
   let pressed = null;
   el.addEventListener('pointerdown', (e) => { pressed = e.target.closest('button'); }, true);
   const tap = (b, fn) => b.addEventListener('click', (e) => {
-    const ok = e.detail === 0 || pressed === b;
+    // A key press has no pointer type (a touch's click can also read detail 0).
+    const ok = pressed === b || (!e.pointerType && e.detail === 0);
     pressed = null;
     if (ok) fn();
   });
