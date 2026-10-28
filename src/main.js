@@ -39,7 +39,7 @@ import { Nav } from './nav.js';
 import { StagePage, intoDrawer, gatherItems } from './stages.js';
 import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, RAW } from './voice.js';
-import { takeShares, snapshotPending } from './share.js';
+import { takeShares, snapshotPending, tidyShareBlanks } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
 import { sendToDaybook, sendPending, queueTask } from './daybook.js';
 import { DayReview, getReview } from './review.js';
@@ -4073,7 +4073,7 @@ async function openAsked() {
   openEntry(row.id);
 }
 // Things shared into Inkwell from other apps land on today's page, with the
-// caret on the empty line under the last one, for what it sparked.
+// caret at the end of the last one (Enter starts a line under it).
 let landing = null;
 function landShares() {
   landing ||= landSharesNow().finally(() => { landing = null; });
@@ -4085,7 +4085,7 @@ async function landSharesNow() {
   await Promise.all([store.close(editor.state.doc), notebook.close()]);
   await applyRemote(added.flatMap((a) => a.rows));
   const last = added.at(-1);
-  await go({ view: 'notebook', pageId: last.line.parent_id, line: last.spark.id });
+  await go({ view: 'notebook', pageId: last.line.parent_id, line: last.line.id });
   toast(added.length === 1 ? 'Kept on today’s page' : `${added.length} things kept on today’s page`);
   writeOut();
 }
@@ -4351,6 +4351,7 @@ async function start() {
   if (asked.get('open')) { asking = asked.get('open'); await openAsked(); }
   // Shared from another app (or shared earlier and not yet placed).
   await landShares();
+  tidyShareBlanks().then((rows) => rows.length && applyRemote(rows)).catch((e) => console.error(e));
   sync.start();
   conflicts.count();
   // Scribe sent here to connect.

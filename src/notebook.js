@@ -556,7 +556,9 @@ export class Notebook {
     const { $from } = ed.state.selection;
     let anchor = null;
     for (let d = $from.depth; d > 0; d--) {
-      if ($from.node(d).type.name === 'listItem') { anchor = { eid: $from.node(d).attrs.eid, offset: $from.parentOffset }; break; }
+      // A caret at the end of a line stays at its end (a tag or a name Claude
+      // adds to a shared link mustn't land after it).
+      if ($from.node(d).type.name === 'listItem') { anchor = { eid: $from.node(d).attrs.eid, offset: $from.parentOffset === $from.parent.content.size ? Infinity : $from.parentOffset }; break; }
     }
     const focused = ed.isFocused;
     ed.commands.setContent(doc, { emitUpdate: false });

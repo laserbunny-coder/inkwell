@@ -103,17 +103,27 @@ try {
   await page.waitForSelector('#editor .ProseMirror');
   await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 }).catch(async () => { await page.reload(); await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 }); });
 
-  await check('a page shared from Chrome lands on today’s page as a link, with the caret on an empty line under it', async () => {
+  await check('a page shared from Chrome lands on today’s page as a link, with the caret at its end and no empty line under it', async () => {
     await share({ title: 'The Ninja Bunch fan wiki', text: '', url: 'https://example.com/ninjas' });
     await page.waitForFunction(() => /Ninja Bunch fan wiki/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''), null, { timeout: 8000 });
     assert.ok(!page.url().includes('share'), 'address cleaned up');
     assert.match(await page.locator('#nb-kind').innerText(), /Today/i);
     const a = page.locator('#outline-editor a[href="https://example.com/ninjas"]');
     assert.equal(await a.innerText(), 'The Ninja Bunch fan wiki');
+    await sleep(300);
+    let all = await lines(page);
+    let top = all.find((l) => l.fields?.url === 'https://example.com/ninjas');
+    assert.ok(!all.some((l) => l.parent_id === top.id && !l.text), 'no empty line under the link');
+    assert.equal(await page.evaluate(() => { const { $from } = window.__outline.state.selection; return $from.parentOffset === $from.parent.content.size && /fan wiki/.test($from.parent.textContent); }), true, 'caret at the end of the link');
+    // Enter, then Tab, writes under it whether or not the summary has come yet.
+    await page.keyboard.press('Enter');
+    await sleep(150);
+    await page.keyboard.press('Tab');
+    await sleep(150);
     await page.keyboard.type('Use the wiki’s fight list for episode 3');
     await sleep(900);
-    const all = await lines(page);
-    const top = all.find((l) => l.fields?.url === 'https://example.com/ninjas');
+    all = await lines(page);
+    top = all.find((l) => l.fields?.url === 'https://example.com/ninjas');
     const spark = all.find((l) => l.parent_id === top.id && /fight list/.test(l.text));
     assert.ok(spark, 'what it sparked is written under it');
   });
@@ -129,6 +139,29 @@ try {
     const kids = all.filter((l) => l.parent_id === top.id).sort((a, b) => a.sort - b.sort);
     assert.match(kids[0].text, /fight list/, 'your line first');
     assert.equal(kids[1].fields.by, 'claude');
+  });
+
+  await check('an empty line left under an older share is tidied away once; lines with words stay', async () => {
+    let all = await lines(page);
+    const top = all.find((l) => l.fields?.url === 'https://example.com/ninjas');
+    await page.evaluate((parent) => new Promise((res) => {
+      const r = indexedDB.open('writing');
+      r.onsuccess = () => {
+        const t = r.result.transaction(['entries', 'meta'], 'readwrite');
+        t.objectStore('entries').put({ id: 'li_oldblank', kind: 'line', parent_id: parent, sort: 1, text: '', content: null, tags: [], links: [], fields: { done: false }, deleted: false, created_at: 1, updated_at: 1 });
+        t.objectStore('meta').delete('shareBlanksTidied');
+        t.oncomplete = () => res();
+      };
+    }), top.id);
+    await page.reload();
+    await page.waitForSelector('#outline-editor .ProseMirror');
+    await page.waitForFunction(() => new Promise((res) => {
+      const r = indexedDB.open('writing');
+      r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').get('li_oldblank'); q.onsuccess = () => res(!!q.result?.deleted); };
+    }), null, { timeout: 8000 });
+    all = await lines(page);
+    assert.ok(all.some((l) => l.parent_id === top.id && /fight list/.test(l.text)), 'your line stays');
+    assert.ok(!(await page.locator('#outline-editor').innerText()).includes('\n\n\n'));
   });
 
   await check('an Instagram link in the shared text gets the post’s title and picture from its snapshot', async () => {
