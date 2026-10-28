@@ -1,4 +1,4 @@
-import { putEntries, getEntry, children, getMeta, setMeta, topTags, CLAUDE } from './db.js';
+import { putEntries, getEntry, children, getMeta, setMeta, topTags, eachEntry, CLAUDE } from './db.js';
 import { withTag } from './capture.js';
 import { entry, tagsIn } from './model.js';
 import { GAP } from './order.js';
@@ -64,8 +64,8 @@ const textOf = (content) => (content || []).map((n) => (n.type === 'text' ? n.te
 const blankFields = { done: false, gather: null, gathered: null, mirror: null };
 
 // Puts one share on today's page: the picture(s), the link under its name and
-// any words that came with it, then an empty line under it to write on.
-// Returns { line, spark, rows }.
+// any words that came with it. Claude's summary lands right under it later.
+// Returns { line, rows }.
 export async function addShare(share, day = today()) {
   const { link, name, words } = readShare(share);
   const files = [];
@@ -89,11 +89,10 @@ export async function addShare(share, day = today()) {
   const sort = kids.length ? Math.max(...kids.map((k) => k.sort || 0)) + GAP : GAP;
   const text = textOf(content);
   const line = entry('line', { parent_id: dayId, sort, text, content, tags: tagsIn(text), fields: { ...blankFields, capture: 'share', ...(link ? { url: link } : {}) } });
-  const spark = entry('line', { parent_id: line.id, sort: GAP, fields: { ...blankFields } });
-  rows.push(line, ...files, spark);
+  rows.push(line, ...files);
   await putEntries([...rows.filter((r) => !files.includes(r))]);
   if (link) await queue({ line: line.id, url: link, named: namesPage(share.title, link), picture: files.some((f) => /^image\//.test(f.fields.type)), wrote: text, at: Date.now() });
-  return { line, spark, rows };
+  return { line, rows };
 }
 
 // Everything shared since the app last looked, oldest first.
@@ -109,6 +108,26 @@ export async function takeShares() {
     await inbox.done(s.at);
   }
   return out;
+}
+
+// Shares used to come with an empty line under them to write on, which sat
+// between the link and its summary. Once per device, empty ones are taken away.
+export async function tidyShareBlanks() {
+  if (await getMeta('shareBlanksTidied')) return [];
+  const shares = [];
+  await eachEntry((r) => { if (r.kind === 'line' && !r.deleted && r.fields?.capture === 'share') shares.push(r.id); });
+  const rows = [];
+  const now = Date.now();
+  for (const id of shares) {
+    for (const kid of await children(id)) {
+      if (kid.kind !== 'line' || kid.deleted || (kid.text || '').trim() || (kid.content || []).length) continue;
+      if ((await children(kid.id)).some((g) => !g.deleted)) continue;
+      rows.push({ ...kid, deleted: true, updated_at: now });
+    }
+  }
+  if (rows.length) await putEntries(rows);
+  await setMeta('shareBlanksTidied', now);
+  return rows;
 }
 
 // ---------- snapshots of shared links ----------
