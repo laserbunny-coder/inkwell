@@ -380,7 +380,7 @@ function lineMenu(eid) {
     title: `Line${under ? ` · ${lines(under)} under it` : ''}`,
     sections: [
       [
-        // On a phone the handle covers the line's fold arrow, so Fold comes first there.
+        // On a phone, Fold leads the menu.
         ...(touch.matches ? [fold, zoom] : [zoom, fold]),
         { label: node.attrs.done ? 'Not done' : 'Mark done', keys: '⌘↵', run: on(() => { toggleDone(ed); ed.commands.focus(); }) }
       ],

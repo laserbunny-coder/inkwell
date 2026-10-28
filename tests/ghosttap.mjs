@@ -95,6 +95,45 @@ try {
     assert.equal(await ph.locator('.handle-menu').count(), 0, 'sheet closes');
   });
 
+  // A line with lines folded inside shows the arrow on every line, the one
+  // you're on too, with its handle just beside it (not in its place).
+  await check('the line you are on keeps its fold arrow, with the handle beside it', async () => {
+    // Puts the caret at the end of a line (by its text) and, if asked, tucks it under the line above.
+    const at = (text, indent) => ph.evaluate(([text, indent]) => {
+      const ed = window.__notebook.editor;
+      let pos = -1;
+      ed.state.doc.descendants((n, p) => { if (pos < 0 && n.type.name === 'paragraph' && n.textContent === text) pos = p; });
+      ed.commands.setTextSelection(pos + 1 + text.length);
+      if (indent) ed.commands.sinkListItem('listItem');
+    }, [text, indent]);
+    await at('Line 3', true);
+    await at('Line 2');
+    await ph.waitForSelector('#outline-editor li.here.has-kids');
+    await ph.evaluate(() => window.scrollBy(0, document.querySelector('#outline-editor li.here > p').getBoundingClientRect().top - 300));
+    await sleep(200);
+    // Taps where a thumb would, at the middle of what's on screen.
+    const touch = async (sel) => { const b = await ph.locator(sel).boundingBox(); await ph.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2); };
+    const fold = '#outline-editor li.here > .line-gutter .fold';
+    const grip = '#outline-editor li.here > .line-gutter .bullet';
+    await touch(fold);
+    await ph.waitForSelector('#outline-editor li.here.folded');
+    assert.equal(await ph.locator(fold).isVisible(), true, 'arrow shows');
+    assert.equal(await ph.locator(grip).isVisible(), true, 'handle shows');
+    const [a, h] = [await ph.locator(fold).boundingBox(), await ph.locator(grip).boundingBox()];
+    assert.ok(h.x + h.width / 2 < a.x + a.width / 2 - 10, `handle sits left of the arrow (${JSON.stringify({ a, h })})`);
+    const hit = (b) => ph.evaluate(([x, y]) => document.elementFromPoint(x, y)?.className, [b.x + b.width / 2, b.y + b.height / 2]);
+    assert.equal(await hit(a), 'fold', 'the middle of the arrow is the arrow');
+    assert.equal(await hit(h), 'bullet', 'the middle of the handle is the handle');
+    const colour = (sel) => ph.locator(sel).evaluate((g) => getComputedStyle(g).color);
+    assert.equal(await colour(`${grip} .grip`), await ph.locator('#outline-editor li:not(.folded) > .line-gutter .grip').first().evaluate((g) => getComputedStyle(g).color), 'the handle keeps its usual colour');
+    await touch(grip);
+    await menu.waitFor({ state: 'visible' });
+    await ph.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await ph.waitForSelector('.handle-menu', { state: 'detached' });
+    await touch(fold);
+    await ph.waitForFunction(() => !document.querySelector('#outline-editor li.folded'));
+  });
+
   await check('no page errors', async () => { assert.deepEqual(errors, []); });
   await ctx.close();
 } finally {

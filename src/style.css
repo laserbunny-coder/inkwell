@@ -581,14 +581,13 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
   :root:not(.hide-handle):not(.focus) #outline-editor li.menu-open > .line-gutter .bullet { background: var(--tint); }
   :root:not(.hide-handle):not(.focus) #outline-editor .bullet:hover .grip { color: var(--ink); }
 }
-/* On a phone, the line you're on shows its handle (tap for the menu) in the dot's spot. There's no room
-   for its fold arrow too, so Fold leads its menu, and a folded line's handle takes the accent colour. */
+/* On a phone, the line you're on shows its handle (tap for the menu) in the dot's spot. The fold arrow
+   means "lines inside" on every line, this one too, so when it has one the handle steps left beside it. */
 @media (hover: none) {
   :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .bullet { display: block; }
   :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .bullet .grip { opacity: .6; }
   :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .bullet::after { opacity: 0; }
-  :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .fold { display: none; }
-  :root:not(.hide-handle):not(.focus) #outline-editor li.here.folded > .line-gutter .bullet .grip { color: var(--accent); opacity: 1; }
+  :root.hide-bullets:not(.hide-handle):not(.focus) #outline-editor li.here.has-kids > .line-gutter .bullet { right: 1.4em; width: .7em; }
 }
 @media (max-width: 700px) { .page { padding-left: 36px; } }
 
