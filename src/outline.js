@@ -1,5 +1,7 @@
 import { Node, Extension, InputRule, mergeAttributes } from '@tiptap/core';
 import Document from '@tiptap/extension-document';
+import { ListItem } from '@tiptap/extension-list';
+import { Fragment, Slice } from '@tiptap/pm/model';
 import { Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { children, getEntry, putEntries, snapshots } from './db.js';
@@ -13,6 +15,64 @@ import { placeSorts, bySort } from './order.js';
 // tagged and found later.
 
 export const OutlineDoc = Document.extend({ content: 'bulletList' });
+
+// A line holds its words and, under them, its own lines; nothing else. (A
+// second paragraph inside a line wasn't saved, so words put there were lost.)
+export const OutlineItem = ListItem.extend({ content: 'paragraph bulletList?' });
+
+// Pages saved before that rule may hold a line with extra paragraphs (from a
+// Backspace or a paste); each becomes a line of its own just after it.
+export function oneParagraphPerLine(doc) {
+  const fixList = (list) => ({
+    ...list,
+    content: (list.content || []).flatMap((li) => {
+      if (li.type !== 'listItem') return [li];
+      const paras = (li.content || []).filter((c) => c.type === 'paragraph');
+      const lists = (li.content || []).filter((c) => c.type === 'bulletList').map(fixList);
+      const kids = lists.length > 1 ? [{ type: 'bulletList', content: lists.flatMap((l) => l.content || []) }] : lists;
+      const [first, ...extra] = paras.length ? paras : [{ type: 'paragraph' }];
+      const extras = extra.map((p) => ({ type: 'listItem', attrs: { eid: null }, content: [p] }));
+      return [{ ...li, content: [first, ...kids] }, ...extras];
+    })
+  });
+  return { ...doc, content: (doc.content || []).map((n) => (n.type === 'bulletList' ? fixList(n) : n)) };
+}
+
+// Pasting several lines of plain text makes them lines, nested by their
+// indent (tabs or spaces), with any "- ", "* " or "• " in front taken off and
+// "[x] " marking a line done, as Workflowy and Tana copy them.
+export function linesFromText(text, schema) {
+  const raw = text.replace(/\r\n?/g, '\n').split('\n').filter((l) => l.trim());
+  if (raw.length < 2) return null;
+  const width = (l) => l.match(/^[\t ]*/)[0].replace(/\t/g, '    ').length;
+  const widths = [...new Set(raw.map(width))].sort((a, b) => a - b);
+  const rows = raw.map((l) => {
+    let t = l.trim().replace(/^([-*•‣◦]|\d+[.)])\s+/, '');
+    let done = false;
+    const box = t.match(/^\[([ xX])\]\s+/);
+    if (box) { done = box[1] !== ' '; t = t.slice(box[0].length); }
+    return { level: widths.indexOf(width(l)), text: t, done };
+  });
+  // A line can only be one step deeper than the line above it.
+  for (let i = 0; i < rows.length; i++) rows[i].level = Math.min(rows[i].level, i ? rows[i - 1].level + 1 : 0);
+  let i = 0;
+  const build = (level) => {
+    const items = [];
+    while (i < rows.length && rows[i].level === level) {
+      const r = rows[i++];
+      const content = [schema.nodes.paragraph.create(null, r.text ? schema.text(r.text) : null)];
+      if (i < rows.length && rows[i].level > level) content.push(build(level + 1));
+      items.push(schema.nodes.listItem.create({ done: r.done }, content));
+    }
+    return schema.nodes.bulletList.create(null, items);
+  };
+  const list = build(0);
+  // Open at both ends, so the first line joins the words before the caret and
+  // the words after the caret follow the last line.
+  let depth = 3;
+  for (let last = list.lastChild; kidsOf(last); last = kidsOf(last).lastChild) depth += 2;
+  return new Slice(Fragment.from(list), 3, depth);
+}
 
 // Stable ids on every line, at any depth.
 export const LineIds = Extension.create({
@@ -28,6 +88,7 @@ export const LineIds = Extension.create({
         },
         done: {
           default: false,
+          keepOnSplit: false,
           parseHTML: (el) => el.hasAttribute('data-done'),
           renderHTML: (a) => (a.done ? { 'data-done': '' } : {})
         },
@@ -307,21 +368,65 @@ const GRIP = '<svg class="grip" width="10" height="16" viewBox="0 0 10 16" aria-
 const handleShown = () => !['hide-handle', 'focus'].some((c) => document.documentElement.classList.contains(c));
 const lineMenu = (view, anchor, eid, at) => view.dom.dispatchEvent(new CustomEvent('line-menu', { detail: { eid, anchor, at } }));
 
-// Moves the line you're on (with everything under it) past its neighbour, up or down.
-export function moveLine(editor, dir) {
-  const { state } = editor;
-  const { $head, head } = state.selection;
+// Moves the line you're on (with everything under it) past its neighbour, up
+// or down. At the top or bottom of its group it carries on into the group
+// next door (as Workflowy does), but never out of a zoom.
+export function canMoveLine(state, dir, at) { return !!moveTarget(state, dir, at); }
+
+function moveTarget(state, dir, at = state.selection.head) {
+  const $head = state.doc.resolve(at);
   let d = $head.depth;
   while (d > 0 && $head.node(d).type.name !== 'listItem') d--;
-  if (!d) return false;
+  if (!d) return null;
   const li = $head.node(d);
   const list = $head.node(d - 1);
   const index = $head.index(d - 1);
   const liPos = $head.before(d);
+  const zoom = foldKey.getState(state)?.zoom;
+  if (li.attrs.eid === zoom) return null;
   const other = list.maybeChild(index + dir);
-  if (!other) return false;
-  const to = dir < 0 ? liPos - other.nodeSize : liPos + other.nodeSize;
-  const tr = state.tr.delete(liPos, liPos + li.nodeSize).insert(to, li);
+  if (other) return { li, liPos, to: dir < 0 ? liPos - other.nodeSize : liPos + other.nodeSize };
+  if (d < 3) return null;
+  const parent = $head.node(d - 2);
+  if (parent.attrs.eid === zoom) return null;
+  const outer = $head.node(d - 3);
+  const next = outer.maybeChild($head.index(d - 3) + dir);
+  if (!next) return null;
+  const parentPos = $head.before(d - 2);
+  const nextPos = dir < 0 ? parentPos - next.nodeSize : parentPos + parent.nodeSize;
+  return { li, liPos, into: { node: next, pos: nextPos } };
+}
+
+export function moveLine(editor, dir) {
+  const { state } = editor;
+  const m = moveTarget(state, dir);
+  if (!m) return false;
+  const { li, liPos } = m;
+  const head = state.selection.head;
+  const tr = state.tr;
+  let to;
+  if (m.into) {
+    // Into the neighbouring group: last under it going up, first going down.
+    const { node, pos } = m.into;
+    const kids = kidsOf(node);
+    const list = state.doc.resolve(liPos).parent;
+    if (list.childCount === 1) tr.delete(state.doc.resolve(liPos).before(), state.doc.resolve(liPos).after());
+    else tr.delete(liPos, liPos + li.nodeSize);
+    const p = tr.mapping.map(pos);
+    if (!kids) {
+      const at = p + node.nodeSize - 1;
+      tr.insert(at, state.schema.nodes.bulletList.create(null, li));
+      to = at + 1;
+    } else {
+      const kidsPos = p + node.nodeSize - 1 - kids.nodeSize;
+      to = dir < 0 ? kidsPos + kids.nodeSize - 1 : kidsPos + 1;
+      tr.insert(to, li);
+    }
+    if (foldKey.getState(state)?.folded.has(node.attrs.eid)) tr.setMeta(foldKey, { fold: node.attrs.eid, on: false });
+  } else {
+    to = m.to;
+    tr.delete(liPos, liPos + li.nodeSize).insert(to, li);
+  }
   tr.setSelection(TextSelection.create(tr.doc, to + (head - liPos)));
   editor.view.dispatch(tr.scrollIntoView());
   return true;
@@ -394,6 +499,215 @@ export function toggleDone(editor) {
   return true;
 }
 
+// Workflowy-style editing. The page is read as the lines you can see: a
+// folded line's lines and anything outside a zoom don't count, so keys never
+// reach into a fold or out of the zoom.
+function shownLines(state) {
+  const st = foldKey.getState(state) || { folded: new Set(), zoom: null };
+  const out = [];
+  const walk = (list, base, inZoom) => {
+    list.forEach((li, offset) => {
+      const pos = base + offset;
+      const root = st.zoom && li.attrs.eid === st.zoom;
+      const seen = inZoom || root;
+      if (seen) out.push({ node: li, pos });
+      const kids = kidsOf(li);
+      if (!kids) return;
+      if (seen && !root && st.folded.has(li.attrs.eid)) return;
+      walk(kids, pos + li.nodeSize - 1 - kids.nodeSize + 1, seen);
+    });
+  };
+  state.doc.forEach((list, offset) => walk(list, offset + 1, !st.zoom));
+  return { lines: out, zoom: st.zoom };
+}
+
+// The line the caret's words are in (not a line that merely contains it).
+function lineHere($pos) {
+  if ($pos.parent.type.name !== 'paragraph' || $pos.depth < 2) return null;
+  const li = $pos.node($pos.depth - 1);
+  if (li.type.name !== 'listItem' || li.firstChild !== $pos.parent) return null;
+  return { node: li, pos: $pos.before($pos.depth - 1) };
+}
+
+const textEnd = (line) => line.pos + 1 + line.node.firstChild.nodeSize - 1;
+
+// Takes a line out of the page; an emptied list goes with it.
+export function removeLine(tr, pos) {
+  const $p = tr.doc.resolve(pos);
+  const li = tr.doc.nodeAt(pos);
+  if ($p.parent.childCount === 1 && $p.depth > 1) return tr.delete($p.before(), $p.after());
+  return tr.delete(pos, pos + li.nodeSize);
+}
+
+// Splits a line with lines under it at the caret (see Enter).
+function splitAround(state, tr, dispatch, liPos) {
+  const { from, to } = state.selection;
+  const li = state.doc.nodeAt(liPos);
+  const para = li.firstChild;
+  const end = liPos + 1 + para.nodeSize - 1;
+  if (from < liPos + 2 || to > end) return false;
+  const st = foldKey.getState(state);
+  const rest = state.doc.slice(to, end).content;
+  tr.delete(from, end);
+  const fresh = state.schema.nodes.listItem.create(null, state.schema.nodes.paragraph.create(null, rest));
+  const now = tr.doc.nodeAt(liPos);
+  let at;
+  if (st?.folded.has(li.attrs.eid)) at = liPos + now.nodeSize;
+  else at = liPos + now.nodeSize - 1 - kidsOf(now).nodeSize + 1;
+  tr.insert(at, fresh);
+  if (dispatch) tr.setSelection(TextSelection.create(tr.doc, at + 2)).scrollIntoView();
+  return true;
+}
+
+// Backspace at the start of a line (or Delete at the end of the one above):
+// its words join the end of the line you can see above it. An empty line just
+// goes. A line with lines under it only joins a line that has none of its
+// own, and its lines come along; otherwise nothing happens, as in Workflowy.
+function joinUp(state, tr, dispatch, linePos) {
+  const { lines, zoom } = shownLines(state);
+  const i = lines.findIndex((l) => l.pos === linePos);
+  if (i <= 0) return true;
+  const line = lines[i];
+  const above = lines[i - 1];
+  if (line.node.attrs.eid === zoom) return true;
+  const kids = kidsOf(line.node);
+  const empty = !line.node.firstChild.content.size;
+  const join = textEnd(above);
+  const caret = (at) => { if (dispatch) tr.setSelection(TextSelection.create(tr.doc, at)).scrollIntoView(); };
+  if (empty && !kids) {
+    removeLine(tr, linePos);
+    caret(join);
+    return true;
+  }
+  // Words can't flow into the zoomed-in line, a mirror's original, or out of a gathering line.
+  if (above.node.attrs.eid === zoom) return true;
+  if (!empty && (line.node.attrs.mirror || above.node.attrs.mirror || line.node.attrs.gather)) return true;
+  if (kids) {
+    const $l = state.doc.resolve(linePos);
+    const sibling = $l.index() > 0 && $l.parent.child($l.index() - 1) === above.node;
+    if (!sibling || kidsOf(above.node)) return true;
+    const st = foldKey.getState(state);
+    tr.delete(linePos, linePos + line.node.nodeSize);
+    tr.insert(above.pos + above.node.nodeSize - 1, kids);
+    tr.insert(join, line.node.firstChild.content);
+    if (st?.folded.has(line.node.attrs.eid)) tr.setMeta(foldKey, { fold: above.node.attrs.eid, on: true });
+    caret(join);
+    return true;
+  }
+  removeLine(tr, linePos);
+  tr.insert(join, line.node.firstChild.content);
+  caret(join);
+  return true;
+}
+
+export const OutlineKeys = Extension.create({
+  name: 'outlineKeys',
+  // Ahead of the list's own keys.
+  priority: 200,
+  addKeyboardShortcuts() {
+    const ed = () => this.editor;
+    return {
+      Backspace: () => {
+        const { empty, $from } = ed().state.selection;
+        const line = lineHere($from);
+        if (!empty || !line || $from.parentOffset !== 0) return false;
+        return ed().commands.command(({ tr, state, dispatch }) => joinUp(state, tr, dispatch, line.pos));
+      },
+      Delete: () => {
+        const { empty, $from } = ed().state.selection;
+        const line = lineHere($from);
+        if (!empty || !line || $from.parentOffset !== $from.parent.content.size) return false;
+        return ed().commands.command(({ tr, state, dispatch }) => {
+          const { lines } = shownLines(state);
+          const i = lines.findIndex((l) => l.pos === line.pos);
+          if (i < 0 || i === lines.length - 1) return true;
+          return joinUp(state, tr, dispatch, lines[i + 1].pos);
+        });
+      },
+      Tab: () => indentLines(ed()),
+      'Shift-Tab': () => outdentLines(ed()),
+      'Mod-Shift-ArrowUp': () => moveLine(ed(), -1),
+      'Mod-Shift-ArrowDown': () => moveLine(ed(), 1),
+      'Mod-Shift-Backspace': () => deleteLine(ed())
+    };
+  },
+  addProseMirrorPlugins() {
+    return [new Plugin({
+      key: new PluginKey('outlinePaste'),
+      props: { clipboardTextParser: (text, _$at, plain, view) => linesFromText(text, view.state.schema) }
+    })];
+  }
+});
+
+// The lines picked: the line the selection starts in and its later siblings
+// down to the one the selection ends in.
+function pickedLines(state) {
+  const { $from, $to } = state.selection;
+  let d = $from.depth;
+  while (d > 0 && $from.node(d).type.name !== 'listItem') d--;
+  if (!d) return null;
+  const list = $from.node(d - 1);
+  const first = $from.index(d - 1);
+  let last = first;
+  if ($to.depth >= d && $to.node(d - 1) === list && $to.before(d - 1) === $from.before(d - 1)) last = $to.index(d - 1);
+  return { d, list, listPos: $from.before(d - 1), first, last, pos: $from.before(d) };
+}
+
+// Tab: the lines go under the line above them (which opens, if folded).
+export function indentLines(editor) {
+  const p = pickedLines(editor.state);
+  if (!p) return false;
+  const zoom = foldKey.getState(editor.state)?.zoom;
+  if (p.first === 0 || p.list.child(p.first).attrs.eid === zoom) return true;
+  return editor.chain().sinkListItem('listItem').scrollIntoView().run();
+}
+
+// Shift+Tab: the lines step out to just after the line they were under; the
+// lines below them stay where they were (Workflowy), rather than moving under them.
+export function outdentLines(editor) {
+  const { state } = editor;
+  const p = pickedLines(state);
+  if (!p || p.d < 3) return true;
+  const parent = state.doc.resolve(p.listPos).parent;
+  const parentPos = state.doc.resolve(p.listPos).before();
+  if (parent.attrs.eid === foldKey.getState(state)?.zoom) return true;
+  let from = p.pos;
+  let to = from;
+  for (let i = p.first; i <= p.last; i++) to += p.list.child(i).nodeSize;
+  const moving = state.doc.slice(from, to).content;
+  const { anchor, head } = state.selection;
+  const tr = state.tr;
+  if (p.first === 0 && p.last === p.list.childCount - 1) tr.delete(p.listPos, p.listPos + p.list.nodeSize);
+  else tr.delete(from, to);
+  const at = tr.mapping.map(parentPos + parent.nodeSize, -1);
+  tr.insert(at, moving);
+  tr.setSelection(TextSelection.create(tr.doc, at + (anchor - from), at + (head - from)));
+  editor.view.dispatch(tr.scrollIntoView());
+  return true;
+}
+
+// Ctrl+Shift+Backspace: the line goes, with everything under it.
+export function deleteLine(editor) {
+  const { state } = editor;
+  const line = lineHere(state.selection.$from);
+  if (!line || line.node.attrs.eid === foldKey.getState(state)?.zoom) return true;
+  const { lines } = shownLines(state);
+  const i = lines.findIndex((l) => l.pos === line.pos);
+  const tr = state.tr;
+  const $l = state.doc.resolve(line.pos);
+  if ($l.depth === 1 && $l.parent.childCount === 1) {
+    tr.replaceWith(line.pos, line.pos + line.node.nodeSize, state.schema.nodes.listItem.create(null, state.schema.nodes.paragraph.create()));
+    tr.setSelection(TextSelection.create(tr.doc, line.pos + 2));
+  } else {
+    removeLine(tr, line.pos);
+    const above = lines[i - 1];
+    if (above && above.pos < line.pos) tr.setSelection(TextSelection.create(tr.doc, textEnd(above)));
+    else tr.setSelection(Selection.near(tr.doc.resolve(Math.min(line.pos + 2, tr.doc.content.size)), 1));
+  }
+  editor.view.dispatch(tr.scrollIntoView());
+  return true;
+}
+
 export const OutlineFold = Extension.create({
   name: 'outlineFold',
   addOptions() { return { onZoom: () => {} }; },
@@ -448,6 +762,13 @@ export const OutlineFold = Extension.create({
           const tr = this.editor.state.tr.insert($at.before($at.depth - 1), schema.nodes.listItem.create(null, schema.nodes.paragraph.create()));
           this.editor.view.dispatch(tr.scrollIntoView());
           return true;
+        }
+        // Enter in a line with lines under it: whatever follows the caret
+        // (nothing, at the end) becomes a new line where you'd see it: right
+        // after the whole group if it's folded, or as the first line under it
+        // if it's open. The line keeps its lines, its fold and its id.
+        if (li && kidsOf(li) && li.attrs.eid !== st?.zoom && $at.parent.type.name === 'paragraph' && $at.node($at.depth - 1) === li) {
+          return this.editor.commands.command(({ tr, state, dispatch }) => splitAround(state, tr, dispatch, $at.before($at.depth - 1)));
         }
         if (!st?.zoom || !li || li.attrs.eid !== st.zoom) return false;
         const { $from } = this.editor.state.selection;
@@ -646,7 +967,7 @@ export class OutlineStore {
     await this.loadSources(rows);
     try {
       const wal = JSON.parse(localStorage.getItem(WAL(pageId)) || 'null');
-      if (wal) { this.shown = new Map(); return { doc: withSources(wal.doc, this.sources, this.shown), recovered: true }; }
+      if (wal) { this.shown = new Map(); return { doc: withSources(oneParagraphPerLine(wal.doc), this.sources, this.shown), recovered: true }; }
     } catch { /* fall through */ }
     return { doc: toOutlineDoc(pageId, rows, this.sources), recovered: false };
   }
