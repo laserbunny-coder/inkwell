@@ -28,7 +28,7 @@ import { MAX_BYTES, SPACE, spaceUsed, unsentFiles } from './files.js';
 import { vaultZip, vaultFiles, pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain, fromOutline, looksLikeOutline, SceneCodes, NUMBER_SCENES, assignCodes, codeOrder } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
-import { moveLine, toggleDone, foldKey } from './outline.js';
+import { moveLine, canMoveLine, indentLines, outdentLines, removeLine, toggleDone, foldKey } from './outline.js';
 import { SlashMenu, setSlashItems } from './slash.js';
 import { openHandleMenu } from './handlemenu.js';
 import { openPicker } from './picker.js';
@@ -332,8 +332,8 @@ tapBar(outlineBar, 'button[data-do]', (b) => {
   else if (act === 'redo') ed.chain().focus().redo().run();
   else if (act === 'done') toggleDone(ed);
   else if (act === 'move') setTimeout(moveLinePicker, 120); // after the tap's click, so it doesn't land on the menu
-  else if (act === 'indent') ed.chain().focus().sinkListItem('listItem').scrollIntoView().run();
-  else if (act === 'outdent') ed.chain().focus().liftListItem('listItem').scrollIntoView().run();
+  else if (act === 'indent') { ed.commands.focus(); indentLines(ed); }
+  else if (act === 'outdent') { ed.commands.focus(); outdentLines(ed); }
   else if (act === 'up' || act === 'down') moveLine(ed, act === 'up' ? -1 : 1);
   else if (act === 'tag') typeHere(ed, '#');
   else if (act === 'insert') typeHere(ed, '/');
@@ -363,7 +363,6 @@ function lineMenu(eid) {
   node.descendants((n) => { if (n.type.name === 'listItem') under++; });
   const folded = !!kids && foldKey.getState(ed.state)?.folded.has(eid);
   const index = $pos.index();
-  const siblings = $pos.parent.childCount;
   const nested = $pos.depth > 1;
   const lines = (n) => `${n} line${n === 1 ? '' : 's'}`;
   // Line actions work on the line the caret is in, so put it there first.
@@ -385,10 +384,10 @@ function lineMenu(eid) {
         { label: node.attrs.done ? 'Not done' : 'Mark done', keys: '⌘↵', run: on(() => { toggleDone(ed); ed.commands.focus(); }) }
       ],
       [
-        { label: 'Outdent', keys: '⇧Tab', stay: true, half: 'indent', off: !nested, run: on(() => ed.chain().focus().liftListItem('listItem').scrollIntoView().run()) },
-        { label: 'Indent', keys: 'Tab', stay: true, half: 'indent', off: index === 0, run: on(() => ed.chain().focus().sinkListItem('listItem').scrollIntoView().run()) },
-        { label: 'Move up', keys: 'Alt+⇧↑', stay: true, half: 'move', off: index === 0, run: on(() => moveLine(ed, -1)) },
-        { label: 'Move down', keys: 'Alt+⇧↓', stay: true, half: 'move', off: index >= siblings - 1, run: on(() => moveLine(ed, 1)) },
+        { label: 'Outdent', keys: '⇧Tab', stay: true, half: 'indent', off: !nested, run: on(() => { ed.commands.focus(); outdentLines(ed); }) },
+        { label: 'Indent', keys: 'Tab', stay: true, half: 'indent', off: index === 0, run: on(() => { ed.commands.focus(); indentLines(ed); }) },
+        { label: 'Move up', keys: 'Alt+⇧↑', stay: true, half: 'move', off: !canMoveLine(ed.state, -1, pos + 2), run: on(() => moveLine(ed, -1)) },
+        { label: 'Move down', keys: 'Alt+⇧↓', stay: true, half: 'move', off: !canMoveLine(ed.state, 1, pos + 2), run: on(() => moveLine(ed, 1)) },
         { label: 'Move to…', run: () => setTimeout(() => sendSelectionPicker([eid]), 120) }
       ],
       [{ label: under ? `Delete line and the ${lines(under)} under it` : 'Delete line', danger: true, run: () => {
@@ -397,7 +396,7 @@ function lineMenu(eid) {
         const tr = ed.state.tr;
         // The page always keeps at least one line.
         if (now.$pos.depth === 1 && now.$pos.parent.childCount === 1) tr.replaceWith(now.pos, now.pos + now.node.nodeSize, ed.schema.nodes.listItem.create(null, ed.schema.nodes.paragraph.create()));
-        else tr.delete(now.pos, now.pos + now.node.nodeSize);
+        else removeLine(tr, now.pos);
         ed.view.dispatch(tr);
         ed.commands.focus();
         toast(under ? `Deleted a line and the ${lines(under)} under it` : 'Line deleted', { label: 'Undo', run: () => ed.chain().focus().undo().run() });
