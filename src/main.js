@@ -43,13 +43,14 @@ import { takeShares, snapshotPending, tidyShareBlanks } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
 import { sendToDaybook, sendPending, queueTask } from './daybook.js';
 import { DayReview, getReview } from './review.js';
-import { TagsPage } from './tags.js';
+import { TagsPage, tagIndex, statsOf } from './tags.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { pieceDoc, pageDoc, startDraft, draftHolding } from './drafts.js';
 import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
+import { openBringIn } from './bringin.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, nextLabel, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, dropOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
 
@@ -3612,6 +3613,7 @@ const commands = [
   { group: 'page', label: 'Name the section levels (Act, Sequence, Scene…)', keys: '', run: nameSectionLevels, when: () => writing() && isScript() },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
   { group: 'view', label: 'What Claude knows: its one-line note on this, and weekly summaries', keys: '', words: ['about', 'summary', 'second brain', 'memory', 'digest', 'weekly'], run: () => showClaudeKnows() },
+  { group: 'new', label: 'Bring in old notes (from Thymer, Tana, Workflowy, OneNote)…', keys: '', words: ['import', 'paste', 'opml', 'markdown', 'migrate', 'old apps'], run: () => bringInOld() },
   { group: 'sync', label: 'Connect Scribe, the dictation keyboard…', keys: '', run: () => connectScribe() },
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
   ...Object.entries(LISTS).map(([list, name]) => ({ group: 'page', label: `Make this page a ${name.toLowerCase()} (Claude links each title)`, keys: '', run: () => makeList(list), when: () => inNotebook() && notebook.page?.kind === 'page' && listOf(notebook.page) !== list })),
@@ -3722,6 +3724,18 @@ async function knowsThing() {
   if (currentBookId()) return currentBook();
   if (state.worldId && view() === 'world') return currentWorld();
   return null;
+}
+// Bring in old notes: a section pasted or dropped from another app becomes a page.
+async function bringInOld() {
+  const base = location.origin + location.pathname;
+  await openBringIn({
+    ask: askServer, canAsk: canAskServer, toast, base,
+    open: (row) => openEntry(row.id),
+    applied: async (rows) => { if (rows.length) await applyRemote(rows); await refreshViews(); },
+    sendTasks: () => sendPending({ send: sendTask, canSend: canSendTask }),
+    relink: (from, to) => (window.__relink ? window.__relink(from, to) : sync.backend?.relinkTasks ? sync.backend.relinkTasks(from, to) : Promise.reject(new Error('offline'))),
+    tags: async () => statsOf(await tagIndex()).sort((a, b) => b.count - a.count).map((t) => t.tag)
+  });
 }
 const showClaudeKnows = async (thing) => openClaudeKnows(thing === undefined ? await knowsThing() : thing, { toast });
 const menuSpot = () => ({ left: Math.max(8, window.innerWidth / 2 - 130), top: 110 });

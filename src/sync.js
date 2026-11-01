@@ -93,6 +93,15 @@ function supabaseBackend() {
       const again = await sb.from('items').update({ title, notes, link, deleted: false, ...when }).eq('id', id);
       if (again.error) throw again.error;
     },
+    // Daybook tasks that link to an old note (a Thymer page) open its new home
+    // in Inkwell instead. Matched on the page's own id in the link. Returns how many.
+    async relinkTasks(from, to) {
+      const key = (String(from).match(/[?&]open=([^&#\s]+)/) || [])[1] || String(from).trim();
+      if (!key || key.length < 6) return 0;
+      const { data, error } = await sb.from('items').update({ link: to }).like('link', `%${key.replace(/[%_]/g, '\\$&')}%`).eq('deleted', false).select('id');
+      if (error) throw error;
+      return data?.length || 0;
+    },
     // Daybook's areas (Business, Filmmaking…), for where a task should go.
     async areas() {
       const { data, error } = await sb.from('items').select('id,title,sort').eq('kind', 'area').eq('deleted', false).order('sort');
