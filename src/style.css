@@ -1619,3 +1619,27 @@ button.st-from:hover { color: var(--ink); }
 .ck-digest p { color: var(--ink); font-family: var(--prose); line-height: 1.55; margin: 10px 0 0; font-size: 15px; }
 .ck-threads { margin: 10px 0 4px; padding-left: 18px; color: var(--muted); font-size: 14px; line-height: 1.5; }
 .ck-threads strong { color: var(--ink); font-weight: 500; }
+
+/* Bring in old notes */
+.bi { width: min(620px, 100%); max-height: min(88vh, 900px); overflow-y: auto; }
+.bi.bi-drop { outline: 2px dashed var(--accent); outline-offset: -6px; }
+.bi p.bi-lead { font-size: 14px; margin-bottom: 12px; }
+.bi .ask-file { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.bi .bi-paste { font-size: 13px; font-family: var(--mono, monospace); margin-bottom: 10px; }
+.bi p.bi-sub { font-size: 13px; color: var(--muted); margin: 6px 0; }
+.bi-tree { margin: 0 0 14px; padding: 10px 12px 10px 26px; background: var(--bg); border-radius: 8px; font-size: 14px; line-height: 1.45; max-height: 220px; overflow-y: auto; }
+.bi-tree ul { padding-left: 18px; margin: 0; }
+.bi-field { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 10px; }
+.bi-field > span { font-size: 13px; color: var(--muted); }
+.bi-field .ask-input { margin-bottom: 8px; font-size: 15px; padding: 8px 10px; }
+.bi-field[hidden] { display: none; }
+.bi-todos { margin: 4px 0 8px; }
+.bi-todo { display: flex; gap: 6px; align-items: baseline; font-size: 14px; padding: 2px 0; }
+.bi p.bi-status { font-size: 13px; margin: 6px 0 12px; }
+.bi-done { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.bi-list summary { cursor: pointer; font-size: 14px; color: var(--muted); }
+.bi-list ul { list-style: none; padding: 0; margin: 8px 0 0; }
+.bi-list li { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; padding: 3px 0; font-size: 14px; }
+.bi-list .link-btn { background: none; border: 0; padding: 0; color: var(--ink); font: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.bi-list .bi-undo { margin-left: auto; font-size: 12px; padding: 2px 8px; }
+@media (max-width: 600px) { .bi-field { grid-template-columns: 1fr; gap: 2px; } }
