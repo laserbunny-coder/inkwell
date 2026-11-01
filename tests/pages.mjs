@@ -175,9 +175,9 @@ try {
     await shot(page, 'pages-overview');
   });
 
-  await check('holding Alt shows each tab’s number, and Alt + 1 opens Gather', async () => {
+  await check('holding Alt a moment shows each tab’s number, and Alt + 1 opens Gather', async () => {
     await page.keyboard.down('Alt');
-    await sleep(150);
+    await sleep(600);
     assert.ok(await page.locator('#page-tabs .pt-num').first().isVisible());
     await shot(page, 'pages-alt');
     await page.keyboard.press('Digit1');
@@ -411,7 +411,7 @@ try {
     await page.keyboard.press('Control+.');
     await sleep(300);
     await page.keyboard.down('Alt');
-    await sleep(150);
+    await sleep(600);
     assert.ok(await page.locator('#page-tabs').isHidden(), 'no tabs in focus');
     await page.keyboard.up('Alt');
     await page.keyboard.press('Control+.');

@@ -28,7 +28,7 @@ import { MAX_BYTES, SPACE, spaceUsed, unsentFiles } from './files.js';
 import { vaultZip, vaultFiles, pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain, fromOutline, looksLikeOutline, SceneCodes, NUMBER_SCENES, assignCodes, codeOrder } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
-import { moveLine, toggleDone, foldKey } from './outline.js';
+import { moveLine, canMoveLine, indentLines, outdentLines, removeLine, toggleDone, foldKey } from './outline.js';
 import { SlashMenu, setSlashItems } from './slash.js';
 import { openHandleMenu } from './handlemenu.js';
 import { openPicker } from './picker.js';
@@ -39,7 +39,7 @@ import { Nav } from './nav.js';
 import { StagePage, intoDrawer, gatherItems } from './stages.js';
 import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, RAW } from './voice.js';
-import { takeShares, snapshotPending } from './share.js';
+import { takeShares, snapshotPending, tidyShareBlanks } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
 import { sendToDaybook, sendPending, queueTask } from './daybook.js';
 import { DayReview, getReview } from './review.js';
@@ -332,8 +332,8 @@ tapBar(outlineBar, 'button[data-do]', (b) => {
   else if (act === 'redo') ed.chain().focus().redo().run();
   else if (act === 'done') toggleDone(ed);
   else if (act === 'move') setTimeout(moveLinePicker, 120); // after the tap's click, so it doesn't land on the menu
-  else if (act === 'indent') ed.chain().focus().sinkListItem('listItem').scrollIntoView().run();
-  else if (act === 'outdent') ed.chain().focus().liftListItem('listItem').scrollIntoView().run();
+  else if (act === 'indent') { ed.commands.focus(); indentLines(ed); }
+  else if (act === 'outdent') { ed.commands.focus(); outdentLines(ed); }
   else if (act === 'up' || act === 'down') moveLine(ed, act === 'up' ? -1 : 1);
   else if (act === 'tag') typeHere(ed, '#');
   else if (act === 'insert') typeHere(ed, '/');
@@ -363,7 +363,6 @@ function lineMenu(eid) {
   node.descendants((n) => { if (n.type.name === 'listItem') under++; });
   const folded = !!kids && foldKey.getState(ed.state)?.folded.has(eid);
   const index = $pos.index();
-  const siblings = $pos.parent.childCount;
   const nested = $pos.depth > 1;
   const lines = (n) => `${n} line${n === 1 ? '' : 's'}`;
   // Line actions work on the line the caret is in, so put it there first.
@@ -380,15 +379,15 @@ function lineMenu(eid) {
     title: `Line${under ? ` · ${lines(under)} under it` : ''}`,
     sections: [
       [
-        // On a phone the handle covers the line's fold arrow, so Fold comes first there.
+        // On a phone, Fold leads the menu.
         ...(touch.matches ? [fold, zoom] : [zoom, fold]),
         { label: node.attrs.done ? 'Not done' : 'Mark done', keys: '⌘↵', run: on(() => { toggleDone(ed); ed.commands.focus(); }) }
       ],
       [
-        { label: 'Outdent', keys: '⇧Tab', stay: true, half: 'indent', off: !nested, run: on(() => ed.chain().focus().liftListItem('listItem').scrollIntoView().run()) },
-        { label: 'Indent', keys: 'Tab', stay: true, half: 'indent', off: index === 0, run: on(() => ed.chain().focus().sinkListItem('listItem').scrollIntoView().run()) },
-        { label: 'Move up', keys: 'Alt+⇧↑', stay: true, half: 'move', off: index === 0, run: on(() => moveLine(ed, -1)) },
-        { label: 'Move down', keys: 'Alt+⇧↓', stay: true, half: 'move', off: index >= siblings - 1, run: on(() => moveLine(ed, 1)) },
+        { label: 'Outdent', keys: '⇧Tab', stay: true, half: 'indent', off: !nested, run: on(() => { ed.commands.focus(); outdentLines(ed); }) },
+        { label: 'Indent', keys: 'Tab', stay: true, half: 'indent', off: index === 0, run: on(() => { ed.commands.focus(); indentLines(ed); }) },
+        { label: 'Move up', keys: 'Alt+⇧↑', stay: true, half: 'move', off: !canMoveLine(ed.state, -1, pos + 2), run: on(() => moveLine(ed, -1)) },
+        { label: 'Move down', keys: 'Alt+⇧↓', stay: true, half: 'move', off: !canMoveLine(ed.state, 1, pos + 2), run: on(() => moveLine(ed, 1)) },
         { label: 'Move to…', run: () => setTimeout(() => sendSelectionPicker([eid]), 120) }
       ],
       [{ label: under ? `Delete line and the ${lines(under)} under it` : 'Delete line', danger: true, run: () => {
@@ -397,7 +396,7 @@ function lineMenu(eid) {
         const tr = ed.state.tr;
         // The page always keeps at least one line.
         if (now.$pos.depth === 1 && now.$pos.parent.childCount === 1) tr.replaceWith(now.pos, now.pos + now.node.nodeSize, ed.schema.nodes.listItem.create(null, ed.schema.nodes.paragraph.create()));
-        else tr.delete(now.pos, now.pos + now.node.nodeSize);
+        else removeLine(tr, now.pos);
         ed.view.dispatch(tr);
         ed.commands.focus();
         toast(under ? `Deleted a line and the ${lines(under)} under it` : 'Line deleted', { label: 'Undo', run: () => ed.chain().focus().undo().run() });
@@ -1322,6 +1321,9 @@ async function drawCrumb() {
   refreshWords();
   await renderStrip();
   const isToday = lastPlace?.view === 'notebook' && lastPlace.pageId === dayId(isoToday());
+  // The top bar's buttons stay put; the one for where you are is lit.
+  const here = { 'view-toggle': inNotebook() && !!notebook.page && notebook.page.kind === 'day', 'library-toggle': view() === 'library', 'drawer-toggle': view() === 'drawer' };
+  for (const [id, on] of Object.entries(here)) { const b = document.getElementById(id); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
   nav.here(lastPlace, isToday ? ['Today'] : parts.map((p) => p.textContent.replace(/\s*▾\s*$/, '').trim()).filter(Boolean));
 }
 
@@ -2882,13 +2884,17 @@ async function openPage(row, id) {
 }
 
 // Typing on a page you look at tucks the tabs away until the mouse moves.
+let altTimer = 0;
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Alt') { body.classList.add('alt-held'); return; }
+  // The tab numbers show only when Alt is held on its own for a moment, so
+  // Alt + Left (Back) or Alt + C never flashes them.
+  if (e.key === 'Alt') { if (!e.repeat) { clearTimeout(altTimer); altTimer = setTimeout(() => body.classList.add('alt-held'), 400); } return; }
+  if (e.altKey && !/^[0-9]$/.test(e.key)) { clearTimeout(altTimer); body.classList.remove('alt-held'); }
   const t = e.target;
   if (!e.altKey && !e.ctrlKey && !e.metaKey && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName)) && !t.closest('.palette, .topbar')) body.classList.add('typing');
 }, true);
-document.addEventListener('keyup', (e) => { if (e.key === 'Alt') body.classList.remove('alt-held'); });
-window.addEventListener('blur', () => body.classList.remove('alt-held'));
+document.addEventListener('keyup', (e) => { if (e.key === 'Alt') { clearTimeout(altTimer); body.classList.remove('alt-held'); } });
+window.addEventListener('blur', () => { clearTimeout(altTimer); body.classList.remove('alt-held'); });
 let lastMove = null;
 document.addEventListener('mousemove', (e) => {
   if (!body.classList.contains('typing')) return;
@@ -4120,7 +4126,7 @@ async function openAsked() {
   openEntry(row.id);
 }
 // Things shared into Inkwell from other apps land on today's page, with the
-// caret on the empty line under the last one, for what it sparked.
+// caret at the end of the last one (Enter starts a line under it).
 let landing = null;
 function landShares() {
   landing ||= landSharesNow().finally(() => { landing = null; });
@@ -4132,7 +4138,7 @@ async function landSharesNow() {
   await Promise.all([store.close(editor.state.doc), notebook.close()]);
   await applyRemote(added.flatMap((a) => a.rows));
   const last = added.at(-1);
-  await go({ view: 'notebook', pageId: last.line.parent_id, line: last.spark.id });
+  await go({ view: 'notebook', pageId: last.line.parent_id, line: last.line.id });
   toast(added.length === 1 ? 'Kept on today’s page' : `${added.length} things kept on today’s page`);
   writeOut();
 }
@@ -4398,6 +4404,7 @@ async function start() {
   if (asked.get('open')) { asking = asked.get('open'); await openAsked(); }
   // Shared from another app (or shared earlier and not yet placed).
   await landShares();
+  tidyShareBlanks().then((rows) => rows.length && applyRemote(rows)).catch((e) => console.error(e));
   sync.start();
   conflicts.count();
   // Scribe sent here to connect.
