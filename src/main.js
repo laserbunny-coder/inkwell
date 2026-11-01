@@ -49,6 +49,7 @@ import { pieceDoc, pageDoc, startDraft, draftHolding } from './drafts.js';
 import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
+import { openClaudeKnows } from './claudeknows.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, nextLabel, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, dropOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
 
@@ -1571,6 +1572,7 @@ async function bookMenu(book) {
     ...(hasManuscript(b) ? [{ label: 'Share a link to read and comment…', run: () => openShare(b) }] : []),
     { label: 'New piece inside (an episode in a season…)', run: () => addPiece(b.id) },
     { label: 'New page in it', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(b.id); } },
+    { label: 'What Claude knows about this piece…', run: () => showClaudeKnows(b) },
     { label: 'Move to', sub: (await homesFor(b)).map((h) => ({ label: h.label, current: b.parent_id === h.id, run: () => movePiece(b, h.id) })) },
     'sep',
     { label: 'Move to Trash…', danger: true, run: () => toTrash(b) }
@@ -1585,6 +1587,7 @@ async function worldMenu(world) {
     ...(view() !== 'world' || state.worldId !== w.id ? [{ label: 'Open', run: () => go({ view: 'world', id: w.id }) }] : []),
     { label: 'Rename…', run: () => rename(w) },
     { label: 'New piece…', run: () => addPiece(w.id) },
+    { label: 'What Claude knows about this world…', run: () => showClaudeKnows(w) },
     { label: 'New page in its bible', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(w.id); } },
     { label: 'Move to area', sub: (await areaOptions(all)).map(([id, label]) => ({ label: label.trim(), current: w.area_id === id, run: () => moveBookToArea(w, id) })) },
     ...(!isLife(w) ? [{ label: 'Workflow…', run: () => openStages(w) }] : []),
@@ -1786,6 +1789,7 @@ async function pageMenu(page) {
     { label: 'New page inside', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(p.id); } },
     { label: 'History…', run: async () => { await go({ view: 'notebook', pageId: p.id }); await openHistory(); } },
     { label: 'Share a link to read and comment…', run: () => openShare(p) },
+    { label: 'What Claude knows about this page…', run: () => showClaudeKnows(p) },
     { label: 'Move to', sub: [{ label: 'Loose pages (no world)', current: !p.parent_id, run: () => movePage(p, null) }, ...(await homesFor(p)).map((h) => ({ label: h.label, current: p.parent_id === h.id, run: () => movePage(p, h.id) }))] },
     'sep',
     { label: 'Move to Trash', danger: true, run: () => toTrash(p) }
@@ -3607,6 +3611,7 @@ const commands = [
   { group: 'revise', label: 'Share a link to read and comment…', keys: '', words: ['share', 'feedback', 'reader', 'link'], run: () => openShare(), when: () => !!currentBookId() || (inNotebook() && notebook.page?.kind === 'page') },
   { group: 'page', label: 'Name the section levels (Act, Sequence, Scene…)', keys: '', run: nameSectionLevels, when: () => writing() && isScript() },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
+  { group: 'view', label: 'What Claude knows: its one-line note on this, and weekly summaries', keys: '', words: ['about', 'summary', 'second brain', 'memory', 'digest', 'weekly'], run: () => showClaudeKnows() },
   { group: 'sync', label: 'Connect Scribe, the dictation keyboard…', keys: '', run: () => connectScribe() },
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
   ...Object.entries(LISTS).map(([list, name]) => ({ group: 'page', label: `Make this page a ${name.toLowerCase()} (Claude links each title)`, keys: '', run: () => makeList(list), when: () => inNotebook() && notebook.page?.kind === 'page' && listOf(notebook.page) !== list })),
@@ -3711,6 +3716,14 @@ function currentBookId() {
 }
 const currentBook = () => getEntry(currentBookId());
 const currentWorld = () => getEntry(state.worldId);
+// The page, piece or world you're in, for What Claude knows (null on a day page or the Library).
+async function knowsThing() {
+  if (inNotebook() && notebook.page?.kind === 'page') return notebook.page;
+  if (currentBookId()) return currentBook();
+  if (state.worldId && view() === 'world') return currentWorld();
+  return null;
+}
+const showClaudeKnows = async (thing) => openClaudeKnows(thing === undefined ? await knowsThing() : thing, { toast });
 const menuSpot = () => ({ left: Math.max(8, window.innerWidth / 2 - 130), top: 110 });
 
 async function showTrash() {

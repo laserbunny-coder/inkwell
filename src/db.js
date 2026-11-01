@@ -105,7 +105,8 @@ export async function getEntry(id) {
 export async function children(parentId, { withTrash = false } = {}) {
   const db = await open();
   const rows = await result(db.transaction('entries').objectStore('entries').index('parent_id').getAll(parentId));
-  return rows.filter((r) => !r.deleted && (withTrash || !isTrashed(r))).sort(bySort);
+  // Claude's one-line abouts sit inside what they describe but are never shown there (see claudeknows.js).
+  return rows.filter((r) => !r.deleted && r.kind !== 'about' && (withTrash || !isTrashed(r))).sort(bySort);
 }
 
 export async function linkedFrom(id) {

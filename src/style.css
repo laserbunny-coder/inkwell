@@ -1602,3 +1602,20 @@ button.st-from:hover { color: var(--ink); }
 .pd-sheet-kind { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
 .pd-state { display: flex; align-items: center; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 @media (max-width: 700px) { .pd-state { justify-content: flex-start; } }
+
+/* What Claude knows: Claude's one-line notes and weekly summaries, out of sight unless opened. */
+.ck { width: min(560px, 100%); max-height: min(80vh, 760px); overflow-y: auto; }
+.ck-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ck-close { font-size: 15px; padding: 4px 8px; }
+.ck p.ck-lead { margin-bottom: 18px; font-size: 14px; }
+.ck h3 { font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.ck h4 { font-size: 13px; font-weight: 500; color: var(--muted); margin: 14px 0 6px; }
+.ck-about { margin-bottom: 22px; }
+.ck-input { resize: vertical; min-height: 52px; margin-bottom: 6px; font-family: var(--prose); line-height: 1.45; }
+.ck p.ck-note { font-size: 13px; margin: 0 0 10px; }
+.ck-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ck-digest { border-top: 1px solid var(--line); padding: 8px 0; }
+.ck-digest summary { cursor: pointer; font-family: var(--prose); font-size: 16px; color: var(--ink); }
+.ck-digest p { color: var(--ink); font-family: var(--prose); line-height: 1.55; margin: 10px 0 0; font-size: 15px; }
+.ck-threads { margin: 10px 0 4px; padding-left: 18px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.ck-threads strong { color: var(--ink); font-weight: 500; }
