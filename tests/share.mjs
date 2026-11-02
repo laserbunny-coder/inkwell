@@ -161,7 +161,8 @@ try {
     }), null, { timeout: 8000 });
     all = await lines(page);
     assert.ok(all.some((l) => l.parent_id === top.id && /fight list/.test(l.text)), 'your line stays');
-    assert.ok(!(await page.locator('#outline-editor').innerText()).includes('\n\n\n'));
+    // The row is gone before the page redraws, so wait for the redraw rather than reading it at once.
+    await page.waitForFunction(() => !(document.querySelector('#outline-editor')?.innerText || '').includes('\n\n\n'), null, { timeout: 5000 });
   });
 
   await check('an Instagram link in the shared text gets the post’s title and picture from its snapshot', async () => {
