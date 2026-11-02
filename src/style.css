@@ -1548,8 +1548,10 @@ button.st-from:hover { color: var(--ink); }
   .topbar .tb-do { order: 1; flex: 1 1 auto; min-width: 0; }
   .topbar .tb-where { order: 2; flex: none; }
   .topbar .tb-where .spacer, .topbar #words, .topbar #status.quiet { display: none; }
-  /* Out on the desk there are no pages to show, so the top stays empty unless sync needs you. */
-  .topbar:not(.has-tabs):not(:has(#sync:not([hidden]), #versions:not([hidden]))) { display: none; }
+  /* Out on the desk there are no pages to show, so the top stays empty unless sync needs you
+     (signed out, offline, or changes waiting a day); "Synced" stays quiet like "Saved". */
+  .topbar #sync:is([data-state="synced"], [data-state="syncing"]):not([data-stale]) { display: none; }
+  .topbar:not(.has-tabs):not(:has(#versions:not([hidden]), #sync:not([hidden]):not([data-state="synced"]):not([data-state="syncing"]), #sync[data-stale])) { display: none; }
   /* The left edge is where Android's back swipe lives; the outline opens from the Go sheet instead. */
   .edge-left { display: none; }
   .placebar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; align-items: center; gap: 4px; padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); background: var(--panel); border-top: 1px solid var(--line); font-family: var(--ui); }

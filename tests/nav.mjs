@@ -192,7 +192,13 @@ try {
     await ph.waitForFunction(() => document.documentElement.dataset.view === 'library');
     await settle(ph);
     for (const sel of ['#crumb', '#palette-toggle', '[data-cmd="page"]', '#page-tabs']) assert.equal(await ph.locator(`.topbar ${sel}`).isVisible(), false, `${sel} shows at the top`);
+    // Sync that's fine stays quiet; sync that needs you brings the strip back.
+    const syncAs = (state) => ph.evaluate((st) => { const el = document.querySelector('#sync'); el.hidden = false; el.dataset.state = st; delete el.dataset.stale; el.textContent = st; }, state);
+    await syncAs('synced');
     assert.equal(await ph.locator('.topbar').isVisible(), false, 'the desk has no top strip on a phone');
+    await syncAs('signed-out');
+    assert.equal(await ph.locator('.topbar #sync').isVisible(), true, 'signed out shows at the top');
+    await syncAs('synced');
     await ph.locator('.pb-today').tap();
     await ph.waitForSelector('.notebook', { state: 'visible' });
   });
