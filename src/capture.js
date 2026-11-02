@@ -121,6 +121,39 @@ async function unqueue(lineId) { await setMeta('captureQueue', (await waiting())
 
 export async function pendingCaptures() { return waiting(); }
 
+// A recording on a line that hasn't been written up yet: its file, if it has one.
+const fileOn = (line) => (line?.content || []).find((n) => n.type === 'file' && /^audio\//.test(n.attrs?.type || ''))?.attrs || null;
+// Only the time and #idea on it: nothing written up, nothing typed by hand.
+const bare = (line) => /^\s*\d{1,2}:\d{2}\s?[ap]m\s+#idea\s*$/i.test(line?.text || '');
+
+// Writes out a recording again (Ctrl + K on its line). Returns false when
+// the line has no recording on it.
+export async function writeOutAgain(lineId) {
+  const line = await getEntry(lineId);
+  const file = fileOn(line);
+  if (!line || line.deleted || !file?.id || line.fields?.capture !== 'voice') return false;
+  await putEntries([{ ...line, fields: { ...line.fields, heard: null } }]);
+  await queue({ line: line.id, file: file.id, wrote: line.text, duration: Math.round(file.duration || 0), at: Date.now(), ...(line.fields?.into ? { into: line.fields.into } : {}) });
+  return true;
+}
+
+// Voice captures on the last week's day pages that came back with no words
+// (before Inkwell said so) and so were never written up get one more go.
+// Ones that came back blank since are marked (fields.heard) and left alone,
+// and one made in the last half hour is left to the device that made it.
+export async function requeueBlank(days = 7, now = Date.now()) {
+  const queued = new Set((await waiting()).map((q) => q.line));
+  let added = 0;
+  for (let i = 0; i < days; i++) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    for (const line of await children(`day-${dayOf(d)}`)) {
+      if (line.kind !== 'line' || line.fields?.capture !== 'voice' || line.fields?.voice || line.fields?.heard || line.fields?.into || queued.has(line.id) || !bare(line) || !(now - Number(line.created_at) > 30 * 60 * 1000)) continue;
+      if (await writeOutAgain(line.id)) added++;
+    }
+  }
+  return added;
+}
+
 let busy = null;
 let retry = null;
 
@@ -139,6 +172,9 @@ export function writeOutPending({ ask, canAsk, onRows, draft = null }) {
     for (const it of items) {
       const kept = await localFile(it.file);
       if (kept && !kept.uploaded) continue; // still going up; next time
+      // Already written up (on another device, say): nothing to do.
+      const now = await getEntry(it.line);
+      if (!now || now.deleted || now.fields?.voice) { await unqueue(it.line); setFileNote(it.file, ''); continue; }
       setFileNote(it.file, it.into ? 'writing it into the draft…' : 'writing out…');
       let answer;
       try {
@@ -148,6 +184,15 @@ export function writeOutPending({ ask, canAsk, onRows, draft = null }) {
         setFileNote(it.file, e.code === 'no-transcriber' ? 'waiting for writing-out to be set up' : 'waiting to be written out');
         if (e.code === 'no-transcriber') break;
         console.warn('capture write-out failed, will retry', e);
+        continue;
+      }
+      // No words came back: keep the recording, say so on it, and remember,
+      // so it isn't dropped without a word (Ctrl + K tries it again).
+      if (!String(answer?.raw || '').trim()) {
+        const line = await getEntry(it.line);
+        await unqueue(it.line);
+        setFileNote(it.file, 'no words heard');
+        if (line && !line.deleted) { const row = { ...line, fields: { ...line.fields, heard: 'nothing' } }; await putEntries([row]); await onRows([row]); }
         continue;
       }
       const rows = it.into && draft ? await draft.deliver(it, answer || {}) : await placeVoice(it, answer || {}, { withTag });
