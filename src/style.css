@@ -1356,16 +1356,18 @@ body.looking:not(.typing) .topbar { transform: none; opacity: .55; transition: t
 body.looking .topbar:hover, body.looking .topbar:focus-within, body.show-top .topbar, body.alt-held .topbar { transform: none; opacity: 1; }
 :root.focus body.looking:not(.show-top):not(.alt-held) .topbar { transform: translateY(-100%); }
 @media (max-width: 700px) {
-  .page-tabs { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; margin: 0 -8px; padding: 0 8px; }
+  .page-tabs { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; margin: 0 -4px; padding: 0; }
   .page-tabs:not([hidden]) + .spacer { display: none; }
   .page-tabs::-webkit-scrollbar { display: none; }
-  .pt-tab { padding: 6px 10px; }
-  .page-tabs[data-scope] .pt-tab[data-page="overview"] { margin-right: 4px; }
+  .pt-tab { padding: 6px 5px; flex: 1 1 auto; }
+  .page-tabs[data-scope] .pt-tab[data-page="overview"] { margin-right: 0; }
+  .page-tabs { gap: 0; }
+  .pt-tab { font-size: 12.5px; }
   body.looking:not(.typing) .topbar { opacity: 1; }
-  .topbar { padding: 8px 16px; }
+  .topbar { padding: 8px 10px; }
   .topbar.has-tabs .crumb { flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
   .topbar.has-tabs .crumb::-webkit-scrollbar { display: none; }
-  body.looking:not(.typing) :is(.library, .project-home, .world-home, .tags-home, .grid-view, .prod-view, .stage-view, .compare-view) { padding-top: 112px; }
+  body.looking:not(.typing) :is(.library, .project-home, .world-home, .tags-home, .grid-view, .prod-view, .stage-view, .compare-view) { padding-top: max(28px, calc(var(--topbar-h, 48px) + 24px)); }
 }
 /* On a computer the faint bar stays on the pages you look at, so they start below it. */
 @media (min-width: 701px) {
@@ -1540,8 +1542,17 @@ button.st-from:hover { color: var(--ink); }
 
 @media (hover: none) {
   /* The phone has its own bar for getting around and the mic. */
-  .tb-back, .tb-mic, .tb-places, #notes-toggle, #focus-toggle { display: none !important; }
-  .tb-view { padding-left: 0; border-left: 0; }
+  /* The phone has its own bar for getting around and the mic. Where you are
+     and the menu live down there, so the top keeps only this place's pages. */
+  .tb-back, .tb-mic, .tb-places, .tb-view, #palette-toggle, .topbar .crumb { display: none !important; }
+  .topbar { flex-direction: row; align-items: center; gap: 12px; }
+  .topbar .tb-do { order: 1; flex: 1 1 auto; min-width: 0; }
+  .topbar .tb-where { order: 2; flex: none; }
+  .topbar .tb-where .spacer, .topbar #words, .topbar #status.quiet { display: none; }
+  /* Out on the desk there are no pages to show, so the top stays empty unless sync needs you
+     (signed out, offline, or changes waiting a day); "Synced" stays quiet like "Saved". */
+  .topbar #sync:is([data-state="synced"], [data-state="syncing"]):not([data-stale]) { display: none; }
+  .topbar:not(.has-tabs):not(:has(#versions:not([hidden]), #sync:not([hidden]):not([data-state="synced"]):not([data-state="syncing"]), #sync[data-stale])) { display: none; }
   /* The left edge is where Android's back swipe lives; the outline opens from the Go sheet instead. */
   .edge-left { display: none; }
   .placebar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; align-items: center; gap: 4px; padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); background: var(--panel); border-top: 1px solid var(--line); font-family: var(--ui); }

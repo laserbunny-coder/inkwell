@@ -63,6 +63,7 @@
           <button type="button" class="tb-btn" data-cmd="today" id="view-toggle" title="Today’s page (⌘J)">Today</button>
           <button type="button" class="tb-btn" data-cmd="drawer" id="drawer-toggle" title="The Drawer: ideas with no home yet">Drawer</button>
           <button type="button" class="tb-btn" data-cmd="library" id="library-toggle" title="Library (⌘⇧O)">Library</button>
+          <button type="button" class="tb-btn" data-cmd="tags" id="tags-toggle" title="Tags: every #tag, grouped">Tags</button>
           <button type="button" class="tb-btn" data-cmd="go" id="go-toggle" title="Go: the last place, this piece’s pages, the desk (⌘O)">Go</button>
         </span>
         <span class="tb-group tb-view">
@@ -76,10 +77,6 @@
   </header>
 
   <nav class="outline" aria-label="Library">
-    <div class="rail-top">
-      <button type="button" class="tree-top" data-cmd="library">Library <span class="keys">⌘⇧O</span></button>
-      <button type="button" class="tree-top" data-cmd="today">Today <span class="keys">⌘J</span></button>
-    </div>
     <div id="outline-tree"></div>
     <div class="outline-actions">
       <button type="button" class="ghost-btn when-write" data-cmd="new-chapter">+ Chapter</button>

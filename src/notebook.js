@@ -272,7 +272,9 @@ export class Notebook {
     title.textContent = this.page ? titleOf(this.page) : '';
     title.contentEditable = this.isDay ? 'false' : 'true';
     $('#nb-prev').hidden = $('#nb-next').hidden = !this.isDay;
-    $('#nb-today').hidden = this.isDay && this.page.title === isoDate();
+    // Today is one button away everywhere; here it only means "back to today" from another day.
+    $('#nb-today').hidden = !this.isDay || this.page.title === isoDate();
+    $('.nb-date').hidden = !this.isDay;
     $('#nb-kind').textContent = this.isDay ? (this.page.title === isoDate() ? 'Today' : 'Daily page') : this.page?.kind === 'project' ? (this.page.fields?.label || 'Outline') : 'Page';
   }
 

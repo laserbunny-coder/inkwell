@@ -86,6 +86,8 @@ const view = () => root.dataset.view || 'write';
 const inNotebook = () => view() === 'notebook';
 
 const statusEl = $('#status');
+// "Saved" is the quiet, normal state: the phone shows the status only when it says something else.
+new MutationObserver(() => statusEl.classList.toggle('quiet', statusEl.textContent === 'Saved')).observe(statusEl, { childList: true, characterData: true, subtree: true });
 const store = new ChapterStore((s) => {
   statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved';
   statusEl.classList.toggle('error', s === 'error');
@@ -1098,8 +1100,6 @@ async function drawRail() {
 
   const tree = $('#outline-tree');
   const out = [];
-  $('.rail-top [data-cmd="library"]').classList.toggle('current', view() === 'library');
-  $('.rail-top [data-cmd="today"]').classList.toggle('current', inNotebook() && notebook.page?.id === dayId(isoToday()) );
 
   const manuscript = async (b, pad) => {
     const acts = b.id === state.project?.id ? state.acts : await outline(b.id);
@@ -1325,7 +1325,7 @@ async function drawCrumb() {
   await renderStrip();
   const isToday = lastPlace?.view === 'notebook' && lastPlace.pageId === dayId(isoToday());
   // The top bar's buttons stay put; the one for where you are is lit.
-  const here = { 'view-toggle': inNotebook() && !!notebook.page && notebook.page.kind === 'day', 'library-toggle': view() === 'library', 'drawer-toggle': view() === 'drawer' };
+  const here = { 'view-toggle': inNotebook() && !!notebook.page && notebook.page.kind === 'day', 'library-toggle': view() === 'library', 'drawer-toggle': view() === 'drawer', 'tags-toggle': view() === 'tags' };
   for (const [id, on] of Object.entries(here)) { const b = document.getElementById(id); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
   nav.here(lastPlace, isToday ? ['Today'] : parts.map((p) => p.textContent.replace(/\s*▾\s*$/, '').trim()).filter(Boolean));
 }
