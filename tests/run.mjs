@@ -1044,7 +1044,7 @@ try {
     assert.equal(await p.locator('.stats-bars rect').count(), 14);
     // Each world shows its total, with its pieces tucked under it; the total can be hidden.
     const worldRow = p.locator('.stats-list li.world').first();
-    assert.match(await worldRow.innerText(), /World[\s\S]*words? so far/);
+    assert.match(await worldRow.innerText(), /World[\s\S]*(words?|pages?) so far/);
     assert.ok(await p.locator('.stats-list li.in-world').count() >= 1);
     await p.locator('.stats-worlds').click();
     await p.waitForFunction(() => !document.querySelector('.stats-list li.world') && document.querySelector('.stats-worlds').textContent === 'Show world totals');
