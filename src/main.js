@@ -37,7 +37,7 @@ import { ProductionView } from './prodview.js';
 import { PageStrip, TodayPanel, isLife } from './pages.js';
 import { Nav } from './nav.js';
 import { StagePage, intoDrawer, gatherItems } from './stages.js';
-import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
+import { CaptureScreen, writeOutPending, recoverRecording, writeOutAgain, requeueBlank } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, RAW } from './voice.js';
 import { takeShares, snapshotPending, tidyShareBlanks } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
@@ -678,7 +678,7 @@ const sync = new Sync({
     syncEl.dataset.state = s;
     delete syncEl.dataset.stale;
     document.body.dataset.sync = s;
-    if (s === 'synced') { conflicts.count(); checkSpace().catch(() => {}); writeOut(); openAsked(); reviewAsked(); }
+    if (s === 'synced') { conflicts.count(); checkSpace().catch(() => {}); blankOnce().then(writeOut); openAsked(); reviewAsked(); }
     if (s !== 'syncing') checkUnsent().catch(() => {});
   },
   onRemote: applyRemote
@@ -3622,6 +3622,7 @@ const commands = [
   { group: 'new', label: 'Make meeting notes from a recording (summary, decisions, tasks, who said what)…', keys: '', run: () => setTimeout(makeMeeting, 120) },
   { group: 'tidy', label: 'Send this meeting to Acro HQ (summary and tasks, for you and Nate)', keys: '', run: () => setTimeout(meetingToAcro, 120), when: () => inNotebook() && !!notebook.page?.fields?.meeting && canAskServer() },
   { group: 'tidy', label: 'Fix a speaker’s name in this meeting…', keys: '', run: () => setTimeout(fixSpeaker, 120), when: () => inNotebook() && !!notebook.page?.fields?.meeting },
+  { group: 'tidy', label: 'Write out this recording again', keys: '', words: ['transcribe', 'voice', 'retry', 'audio'], run: writeLineOutAgain, when: () => inNotebook() && !!notebook.currentLine() && canAskServer() },
   { group: 'tidy', label: 'Send this line to Daybook (a task in its Inbox, linked back here)', keys: '', run: sendLineToDaybook, when: () => inNotebook() && !!notebook.currentLine() },
   { group: 'page', label: 'Stop Claude linking titles on this page', keys: '', run: () => makeList(null), when: () => inNotebook() && !!listOf(notebook.page) },
   { group: 'tidy', label: 'This page: rename, move to a world or trash…', keys: '', run: async () => popMenu(null, await pageMenu(notebook.page), menuSpot()), when: () => inNotebook() && notebook.page?.kind === 'page' },
@@ -4129,6 +4130,20 @@ window.addEventListener('pagehide', () => { store.close(editor.state.doc); noteb
 const askServer = (body) => (window.__claude ? window.__claude(body) : sync.invoke('inkwell', body));
 const canAskServer = () => !!window.__claude || (!!sync.user && navigator.onLine && !!sync.backend?.invoke);
 // Until writing-out is set up, the recording's chip says so; nothing else nags.
+// Once a session, after the first sync: recordings from the last week that
+// came back with no words (and so were never written up) get another go.
+let blankChecked = null;
+function blankOnce() {
+  blankChecked ||= requeueBlank().catch((e) => { console.warn(e); return 0; });
+  return blankChecked;
+}
+// Ctrl + K on a recording's line: write it out again.
+async function writeLineOutAgain() {
+  const id = notebook.currentLine();
+  if (!id || !(await writeOutAgain(id))) { toast('Put the cursor on a line with a recording on it.'); return; }
+  toast('Writing it out again…');
+  writeOut();
+}
 function writeOut() {
   const opts = { ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows) };
   return Promise.all([writeOutPending({ ...opts, draft: { context: draftContext, deliver: deliverDraft } }), snapshotPending(opts), meetingPending({ ...opts, ...meetingOpts }), sendPending({ send: sendTask, canSend: canSendTask })]);
