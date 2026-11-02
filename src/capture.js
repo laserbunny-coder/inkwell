@@ -132,7 +132,7 @@ export async function writeOutAgain(lineId) {
   const line = await getEntry(lineId);
   const file = fileOn(line);
   if (!line || line.deleted || !file?.id || line.fields?.capture !== 'voice') return false;
-  await putEntries([{ ...line, fields: { ...line.fields, heard: null } }]);
+  await putEntries([{ ...line, fields: { ...line.fields, heard: null, heard_by: null, tried: null } }]);
   await queue({ line: line.id, file: file.id, wrote: line.text, duration: Math.round(file.duration || 0), at: Date.now(), ...(line.fields?.into ? { into: line.fields.into } : {}) });
   return true;
 }
@@ -192,7 +192,7 @@ export function writeOutPending({ ask, canAsk, onRows, draft = null }) {
         const line = await getEntry(it.line);
         await unqueue(it.line);
         setFileNote(it.file, 'no words heard');
-        if (line && !line.deleted) { const row = { ...line, fields: { ...line.fields, heard: 'nothing' } }; await putEntries([row]); await onRows([row]); }
+        if (line && !line.deleted) { const row = { ...line, fields: { ...line.fields, heard: 'nothing', ...(answer?.heard_by ? { heard_by: answer.heard_by, tried: answer.tried || [] } : {}) } }; await putEntries([row]); await onRows([row]); }
         continue;
       }
       const rows = it.into && draft ? await draft.deliver(it, answer || {}) : await placeVoice(it, answer || {}, { withTag });

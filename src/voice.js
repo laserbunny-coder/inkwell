@@ -102,7 +102,8 @@ function readShowing(line, kids) {
   const content = host?.content || [];
   const at = content.findIndex((n) => n.type === 'voice');
   const first = textOf(content.slice(at + 1)).replace(TAILTAGS, '').trim();
-  const blocks = first ? [{ text: first, el: 'paragraph', new_scene: false }] : [];
+  // With a title, the line holds the title and every paragraph is under it.
+  const blocks = first && !v.title ? [{ text: first, el: 'paragraph', new_scene: false }] : [];
   const mine = kids.filter((k) => !k.deleted && isVoiceKid(k.id, line.id) && k.id !== hostId).sort(bySort);
   let scene = false;
   const notes = [];
@@ -115,6 +116,17 @@ function readShowing(line, kids) {
   return { blocks, notes };
 }
 
+// The title as it reads on the line now (you may have changed it).
+function titleShowing(line, kids) {
+  const v = line.fields.voice;
+  if (!v.title) return '';
+  const hostId = v.host || line.id;
+  const host = hostId === line.id ? line : kids.find((k) => k.id === hostId);
+  const content = host?.content || [];
+  const at = content.findIndex((n) => n.type === 'voice');
+  return textOf(content.slice(at + 1)).replace(TAILTAGS, '').trim() || v.title;
+}
+
 // Writes `version` onto the capture's line and the lines under it, in place
 // of what was showing. Returns the rows to save.
 function showVersion(line, kids, mode, name, version) {
@@ -122,7 +134,10 @@ function showVersion(line, kids, mode, name, version) {
   const v = line.fields.voice;
   const hostId = v.host || line.id;
   const rows = [];
-  const [first, ...rest] = version.blocks.length ? version.blocks : [{ text: '', el: 'paragraph', new_scene: false }];
+  // A titled capture: the title on the line, every paragraph under it.
+  // Otherwise the first paragraph is on the line and the rest under it.
+  const titled = !!v.title;
+  const [first, ...rest] = titled ? [{ text: v.title }, ...version.blocks] : version.blocks.length ? version.blocks : [{ text: '', el: 'paragraph', new_scene: false }];
   const chip = { type: 'voice', attrs: { mode, name } };
   const kid = (id, text, sort, by) => {
     const prev = kids.find((k) => k.id === id);
@@ -162,7 +177,7 @@ function showVersion(line, kids, mode, name, version) {
   });
   version.notes.forEach((note, k) => {
     const id = `${line.id}-n${String(k + 1).padStart(2, '0')}`;
-    const row = kid(id, `${NOTE}${note.text}`, 4 * Math.max(0, note.after) + 1, by);
+    const row = kid(id, `${NOTE}${note.text}`, 4 * (Math.max(0, note.after) + (titled ? 1 : 0)) + 1, by);
     rows.push({ ...row, fields: { ...row.fields, aside: true } });
     keep.add(id);
   });
@@ -183,7 +198,10 @@ export async function placeVoice(it, answer, { withTag = (row) => row } = {}) {
   const mode = written ? answer.mode : RAW;
   const name = await modeName(mode);
   const edited = line.text !== it.wrote;
-  const voice = { raw, mode, tag: 'idea', host: edited ? `${line.id}-v0` : line.id, v: { [RAW]: rawVersion(raw), ...(written ? { [mode]: written } : {}) } };
+  const title = String(answer.title || '').trim();
+  // Which speech service wrote it out, and what it tried (shown in the chip's menu).
+  const heard = answer.heard_by ? { by: answer.heard_by, tried: Array.isArray(answer.tried) ? answer.tried : [] } : {};
+  const voice = { raw, mode, tag: 'idea', host: edited ? `${line.id}-v0` : line.id, ...(title ? { title } : {}), ...heard, v: { [RAW]: rawVersion(raw), ...(written ? { [mode]: written } : {}) } };
   let start = { ...line, fields: { ...line.fields, voice } };
   if (!edited) {
     // The recording and its time stay; the chip goes after them.
@@ -221,7 +239,8 @@ export async function switchVoice(lineId, mode, ask) {
     if (!out?.blocks?.length) throw new Error(out?.warning || 'Claude couldn’t write it up that way this time.');
     version = { blocks: out.blocks, notes: out.notes || [] };
   }
-  const rows = showVersion({ ...line, fields: { ...line.fields, voice: { ...v, v: versions } } }, kids, mode, await modeName(mode), version);
+  const title = titleShowing(line, kids);
+  const rows = showVersion({ ...line, fields: { ...line.fields, voice: { ...v, ...(title ? { title } : {}), v: versions } } }, kids, mode, await modeName(mode), version);
   await putEntries(rows);
   return rows;
 }
@@ -235,7 +254,7 @@ export async function voiceText(lineId) {
 export async function voiceInfo(lineId) {
   const line = await getEntry(lineId);
   const v = line?.fields?.voice;
-  return v ? { mode: v.mode, made: Object.keys(v.v || {}) } : null;
+  return v ? { mode: v.mode, made: Object.keys(v.v || {}), by: v.by || null, tried: v.tried || [] } : null;
 }
 
 // ---------- talking into a draft ----------
