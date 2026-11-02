@@ -706,6 +706,11 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .stats-list .name small { color: var(--muted); font-size: 12px; }
 .stats-list .period { text-align: right; }
 .stats-list .total { grid-column: 2; text-align: right; color: var(--muted); font-size: 12px; }
+.stats-list li.world .name { font-weight: 600; }
+.stats-list li.world .name small { font-weight: 400; }
+.stats-list li.in-world button { padding-left: 22px; }
+.stats-worlds { display: block; margin: 10px 0 0 auto; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12px; padding: 4px 6px; cursor: pointer; }
+.stats-worlds:hover { color: var(--ink); }
 .stats-foot { color: var(--muted); font-size: 12px; margin: 12px 0 0; }
 
 /* Dragging a line by its dot */

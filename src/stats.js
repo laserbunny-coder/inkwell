@@ -46,6 +46,16 @@ function tally(items) {
     for (const id of seen) bookCache.set(id, book);
     return book;
   };
+  // The world a piece belongs to (pieces can sit inside pieces: a season holds its episodes).
+  const worldOf = (book) => {
+    let p = live.get(book.parent_id);
+    for (let i = 0; p && i < 60; i++) {
+      if (p.kind === 'world') return p;
+      p = live.get(p.parent_id);
+    }
+    return null;
+  };
+  const worlds = {};
   const books = {};
   const info = {};
   let notes = 0;
@@ -59,14 +69,18 @@ function tally(items) {
       books[book.id] ||= { w: 0, l: 0 };
       books[book.id].w += r.w;
       books[book.id].l += l;
-      info[book.id] = { title: book.title || 'Untitled', type };
+      if (!info[book.id]) {
+        const world = worldOf(book);
+        info[book.id] = { title: book.title || 'Untitled', type, world: world?.id || null };
+        if (world) worlds[world.id] = { title: world.title || 'Untitled world' };
+      }
       pieces.push({ scope: book.id, day: r.day, w: r.w, l });
     } else if (r.kind === 'line' || r.kind === 'note') {
       notes += r.w;
       pieces.push({ scope: 'notes', day: r.day, w: r.w, l: 0 });
     }
   }
-  return { books, notes, info, pieces };
+  return { books, notes, info, worlds, pieces };
 }
 
 const totalsBefore = (pieces, day) => {
@@ -170,7 +184,17 @@ export function progress(rows, { unit = 'day', count = 14, now = Date.now() } = 
   });
   const totals = { all: { w: m.notes, l: 0 }, notes: { w: m.notes, l: 0 } };
   for (const [id, b] of Object.entries(m.books)) { totals[id] = b; totals.all.w += b.w; totals.all.l += b.l; }
-  return { series, totals, info: m.info, estimatedBefore: firstDay || today, periods: list };
+  // Each world: what all its pieces come to, over time and so far.
+  for (const id of Object.keys(m.worlds)) {
+    series[id] = list.map((p) => ({ ...p, w: 0, l: 0 }));
+    totals[id] = { w: 0, l: 0 };
+  }
+  for (const [id, b] of Object.entries(m.info)) {
+    if (!b.world) continue;
+    series[b.world].forEach((v, i) => { v.w += series[id][i].w; v.l += series[id][i].l; });
+    totals[b.world].w += totals[id].w; totals[b.world].l += totals[id].l;
+  }
+  return { series, totals, info: m.info, worlds: m.worlds, estimatedBefore: firstDay || today, periods: list };
 }
 
 export const pagesOf = (lines) => lines / LINES_PER_PAGE;
@@ -200,10 +224,17 @@ export class StatsPanel {
     this.onClose = onClose;
     this.unit = localStorage.getItem('statsUnit') || 'day';
     this.scope = 'all';
+    el.querySelector('.stats-worlds')?.addEventListener('click', () => {
+      try { localStorage.setItem('statsWorlds', this.byWorld ? 'off' : 'on'); } catch {}
+      this.render();
+    });
     el.querySelectorAll('[data-unit]').forEach((b) => b.addEventListener('click', () => { this.unit = b.dataset.unit; localStorage.setItem('statsUnit', this.unit); this.render(); }));
   }
 
   get isOpen() { return !this.el.hidden; }
+
+  // World totals show unless switched off (the switch sits under the list).
+  get byWorld() { try { return localStorage.getItem('statsWorlds') !== 'off'; } catch { return true; } }
 
   async open() {
     this.el.hidden = false;
@@ -218,9 +249,21 @@ export class StatsPanel {
     const rows = await allEntries();
     const data = progress(rows, { unit: this.unit, count: COUNTS[this.unit] });
     this.el.querySelectorAll('[data-unit]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.unit === this.unit)));
+    const byTitle = (a, b) => a[1].title.localeCompare(b[1].title);
+    const piece = ([id, b], under) => ({ id, name: b.title, kind: b.type === 'screenplay' ? 'Screenplay' : 'Novel', script: b.type === 'screenplay', under });
+    const books = Object.entries(data.info).sort(byTitle);
+    const byWorld = this.byWorld && Object.keys(data.worlds).length > 0;
+    // With world totals on, each world comes first with its pieces tucked under it.
+    const middle = byWorld
+      ? [...Object.entries(data.worlds).sort(byTitle).flatMap(([wid, w]) => [
+          // A world of scripts only reads in pages, like its scripts do.
+          { id: wid, name: w.title, kind: 'World', world: true, script: books.filter(([, b]) => b.world === wid).every(([, b]) => b.type === 'screenplay') },
+          ...books.filter(([, b]) => b.world === wid).map((x) => piece(x, true))
+        ]), ...books.filter(([, b]) => !b.world).map((x) => piece(x, false))]
+      : books.map((x) => piece(x, false));
     const scopes = [
       { id: 'all', name: 'Everything', kind: '' },
-      ...Object.entries(data.info).sort((a, b) => a[1].title.localeCompare(b[1].title)).map(([id, b]) => ({ id, name: b.title, kind: b.type === 'screenplay' ? 'Screenplay' : 'Novel', script: b.type === 'screenplay' })),
+      ...middle,
       { id: 'notes', name: 'Notes', kind: 'Notebook and notes' }
     ];
     if (!scopes.some((s) => s.id === this.scope)) this.scope = 'all';
@@ -278,6 +321,8 @@ export class StatsPanel {
       const b = document.createElement('button');
       b.type = 'button';
       b.setAttribute('aria-pressed', String(x.id === this.scope));
+      if (x.world) li.className = 'world';
+      if (x.under) li.className = 'in-world';
       b.innerHTML = '<span class="name"></span><span class="period"></span><span class="total"></span>';
       b.querySelector('.name').textContent = x.name;
       if (x.kind) { const k = document.createElement('small'); k.textContent = x.kind; b.querySelector('.name').append(k); }
@@ -287,6 +332,12 @@ export class StatsPanel {
       b.addEventListener('click', () => { this.scope = x.id; this.render(); });
       li.append(b);
       list.append(li);
+    }
+    const sw = this.el.querySelector('.stats-worlds');
+    if (sw) {
+      sw.hidden = !Object.keys(data.worlds).length;
+      sw.textContent = this.byWorld ? 'Hide world totals' : 'Show world totals';
+      sw.setAttribute('aria-pressed', String(this.byWorld));
     }
     const foot = this.el.querySelector('.stats-foot');
     const guessed = data.periods[0].from < data.estimatedBefore;
