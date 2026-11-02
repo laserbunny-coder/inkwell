@@ -424,7 +424,10 @@ try {
     await command(page, 'The Drawer');
     await page.waitForFunction(() => document.documentElement.dataset.view === 'drawer');
     await page.waitForSelector('.st-drawer .st-card');
-    assert.deepEqual(await tabs(page), ['today', 'drawer*', 'library', 'tags']);
+    // Out on the desk there are no page tabs: the fixed Drawer button is lit instead.
+    assert.deepEqual(await tabs(page), []);
+    assert.ok(await page.locator('#page-tabs').isHidden());
+    assert.equal(await page.locator('#drawer-toggle').getAttribute('aria-current'), 'page');
     assert.equal(await page.locator('.st-drawer .st-card').count(), 2);
     assert.match(await page.locator('.st-drawer .st-card[data-id="li_d"] .st-went').innerText(), /→ The Ninja Bunch/);
     await shot(page, 'pages-drawer');
@@ -436,10 +439,22 @@ try {
     assert.equal(await page.locator('.st-drawer .st-card').count(), 1);
   });
 
+  await check('one place for each thing: a page that isn’t a day has no Today or calendar of its own', async () => {
+    await go(page, { view: 'notebook', pageId: 'pg_kenji' });
+    await page.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Kenji');
+    assert.ok(await page.locator('#nb-today').isHidden());
+    assert.ok(await page.locator('.nb-date').isHidden());
+    assert.equal(await page.locator('.rail-top').count(), 0);
+    // The right side never changes: the four places, then Go.
+    assert.deepEqual(await page.locator('.tb-places .tb-btn').allInnerTexts(), ['Today', 'Drawer', 'Library', 'Tags', 'Go']);
+    await page.waitForSelector('#page-tabs .pt-tab');
+    assert.deepEqual((await tabs(page))[0], 'overview');
+  });
+
   // ---------- life projects ----------
 
   await check('a life project: Overview, Gather and Notes only, tasks to Daybook, and never shared', async () => {
-    await page.click('#page-tabs .pt-tab[data-page="library"]');
+    await page.evaluate(() => document.querySelector('#library-toggle').click());
     await sleep(400);
     await page.evaluate(() => document.querySelector('[data-cmd="new-book"], #lib-new-btn')?.click());
     await page.evaluate(() => { document.querySelector('#lib-new').hidden = false; });

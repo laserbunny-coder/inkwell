@@ -1325,7 +1325,7 @@ async function drawCrumb() {
   await renderStrip();
   const isToday = lastPlace?.view === 'notebook' && lastPlace.pageId === dayId(isoToday());
   // The top bar's buttons stay put; the one for where you are is lit.
-  const here = { 'view-toggle': inNotebook() && !!notebook.page && notebook.page.kind === 'day', 'library-toggle': view() === 'library', 'drawer-toggle': view() === 'drawer' };
+  const here = { 'view-toggle': inNotebook() && !!notebook.page && notebook.page.kind === 'day', 'library-toggle': view() === 'library', 'drawer-toggle': view() === 'drawer', 'tags-toggle': view() === 'tags' };
   for (const [id, on] of Object.entries(here)) { const b = document.getElementById(id); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
   nav.here(lastPlace, isToday ? ['Today'] : parts.map((p) => p.textContent.replace(/\s*▾\s*$/, '').trim()).filter(Boolean));
 }

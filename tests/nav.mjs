@@ -103,7 +103,7 @@ try {
     await p.mouse.move(640, 40, { steps: 4 });
     await p.waitForFunction(() => document.body.classList.contains('show-top'));
     await sleep(300);
-    assert.deepEqual(await p.locator('.tb-tools button').allInnerTexts(), ['Mic', 'Today', 'Drawer', 'Library', 'Go', 'Notes', 'Focus', 'Aa', 'Ctrl+K']);
+    assert.deepEqual(await p.locator('.tb-tools button').allInnerTexts(), ['Mic', 'Today', 'Drawer', 'Library', 'Tags', 'Go', 'Notes', 'Focus', 'Aa', 'Ctrl+K']);
     await p.locator('#go-toggle').click();
     await p.waitForSelector('.go-panel', { state: 'visible' });
     await p.keyboard.press('Escape');
@@ -182,6 +182,19 @@ try {
     assert.equal(await viewOf(ph), 'notebook');
     const wide = await ph.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     assert.ok(wide <= 0, `page is ${wide}px too wide`);
+  });
+
+  await check('on a phone each thing has one place: no path, Menu or Aa at the top, and no top strip on the desk', async () => {
+    await settle(ph);
+    await ph.locator('.pb-place').tap();
+    await ph.waitForSelector('.go-panel', { state: 'visible' });
+    await ph.locator('.go-desk .go-tab', { hasText: 'Library' }).tap();
+    await ph.waitForFunction(() => document.documentElement.dataset.view === 'library');
+    await settle(ph);
+    for (const sel of ['#crumb', '#palette-toggle', '[data-cmd="page"]', '#page-tabs']) assert.equal(await ph.locator(`.topbar ${sel}`).isVisible(), false, `${sel} shows at the top`);
+    assert.equal(await ph.locator('.topbar').isVisible(), false, 'the desk has no top strip on a phone');
+    await ph.locator('.pb-today').tap();
+    await ph.waitForSelector('.notebook', { state: 'visible' });
   });
 
   await check('in focus the phone bar shrinks to a handle that brings it back', async () => {

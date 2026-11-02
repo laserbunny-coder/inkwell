@@ -36,7 +36,7 @@ export const isLife = (w) => w?.kind === 'world' && w.fields?.life === true;
 
 // The tabs for where you are. ctx: { scope: 'desk' | 'world' | 'piece', life }.
 export function tabsFor(ctx) {
-  // The desk's places (Today, Drawer, Library) have their own fixed buttons,
+  // The desk's places (Today, Drawer, Library, Tags) have their own fixed buttons,
   // so out on the desk the strip stays empty rather than repeat them.
   if (!ctx || ctx.scope === 'desk') return [];
   const pages = ctx.life ? LIFE_PAGES : PAGES;
