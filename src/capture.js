@@ -5,6 +5,7 @@ import { GAP } from './order.js';
 import { addFile, localFile, uploadPending, lengthLabel } from './files.js';
 import { setFileNote } from './filenode.js';
 import { placeVoice } from './voice.js';
+import { speechTerms } from './terms.js';
 
 // Capture: an idea in seconds, asking nothing. Tap, talk, tap Done. The
 // recording is kept on this device first (piece by piece while you talk, so
@@ -142,7 +143,7 @@ export function writeOutPending({ ask, canAsk, onRows, draft = null }) {
       let answer;
       try {
         const where = it.into && draft ? { place: 'draft', ...(await draft.context(it.into)) } : { place: 'day', tags: await topTags(40) };
-        answer = await ask({ mode: 'voice', file: it.file, duration: it.duration || 0, ...where });
+        answer = await ask({ mode: 'voice', file: it.file, duration: it.duration || 0, terms: await speechTerms(it.into?.chapter || it.into?.page || null), ...where });
       } catch (e) {
         setFileNote(it.file, e.code === 'no-transcriber' ? 'waiting for writing-out to be set up' : 'waiting to be written out');
         if (e.code === 'no-transcriber') break;
