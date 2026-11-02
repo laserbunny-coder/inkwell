@@ -10,7 +10,7 @@ Most tools cover one step: a notes app for ideas, a screenwriting app for the sc
 - **Make it.** Shots with codes that never change, still and video prompts written from your bible and style rules, renders with the best take starred, a storyboard you can play, and call sheets for live shoots.
 - **Get it out.** Captions for YouTube, Instagram, Facebook, TikTok and X, subtitles and shot lists for Resolve, and read-and-comment links for collaborators.
 
-Novels and other writing go through the same tabs, with their own stages. Claude helps when you ask and stays quiet while you write.
+Novels and other writing go through the same tabs, each with its own workflow. Claude helps when you ask and stays quiet while you write.
 
 Live at https://laserbunny-coder.github.io/inkwell/
 
@@ -18,7 +18,7 @@ Live at https://laserbunny-coder.github.io/inkwell/
 
 Every screenshot here uses made-up sample data: **The Ninja Bunch**, an anime mockumentary musical told in short reels, about a family bakery that raises a troupe of hopeless ninjas. They're in dark mode; there's a light mode too. Shortcuts are written for Windows.
 
-**1. Say it.** On a walk, tap the mic: "Kenji catches Grandpa on the roof at night, using the rolling pin for real. Scratch that, he sees it by accident. Note to self, ask Dana about the roof set." It lands on today's page, written up as an idea, with the note to self on its own line.
+**1. Say it.** On a walk, tap the mic: "Kenji catches Grandpa on the roof at night, using the rolling pin for real. Scratch that, he sees it by accident. Note to self, ask Dana about the roof set." It lands on today's page, written up as an idea: one line to glance at, with the rest and the note to self folded under it.
 
 ![A voice idea written up on today's page](docs/screenshots/desktop-today.webp)
 
@@ -47,16 +47,16 @@ You only need four things to use Inkwell. Everything else is there when you reac
 | | Computer | Phone |
 |---|---|---|
 | **Today**, your daily page | `Ctrl + J` | Today in the bottom bar |
-| **Talk**, one voice button | `Alt + C` (again to keep it) | the mic in the bottom bar, or long-press the Inkwell icon |
+| **Talk**, one voice button | `Alt + C` (again to keep it), or Mic in the top bar | the mic in the bottom bar, or long-press the Inkwell icon |
 | **Every command** | `Ctrl + K` | ⋯ in the bottom bar |
 | **A project's tabs** | `Alt + 0` to `Alt + 6` | the tabs along the top |
 
 ### Catch it
 
-**Today's page** (`Ctrl + J`) is one page a day for anything: plans, ideas, research, links to pieces and pages, and #tags. A voice capture lands with a play button, the time, and a small chip naming the mode Claude wrote it up in (here, Idea). "Note to self" became its own line, and the words you really said are always kept.
+**Today's page** (`Ctrl + J`) is one page a day for anything: plans, ideas, research, links to pieces and pages, and #tags. A voice capture lands with a play button, the time, and a small chip naming the mode Claude wrote it up in (here, Idea). It shows just its first line, with the rest folded under it; the arrow opens it. The words you really said are always kept. Lines nest and fold like Workflowy: `Tab` and `Shift + Tab` move them in and out, `Enter` on a folded line adds the next one after the whole group, and `Ctrl + Shift + Backspace` deletes a line.
 
 
-**One voice button.** `Alt + C` (or the mic on the phone) records and lands where you are: on today's page, into the draft at the cursor, or on the page you're looking at, with a link line on today either way. The record screen says where it will go, with "Today instead" if you change your mind. Said out loud, "scratch that", "start again", "new paragraph" and "next scene" are carried out.
+**One voice button.** `Alt + C`, the Mic in the top bar, or the mic on the phone records and lands where you are: on today's page, into the draft at the cursor, or on the page you're looking at, with a link line on today either way. The record screen says where it will go, with "Today instead" if you change your mind. Said out loud, "scratch that", "start again", "new paragraph" and "next scene" are carried out, and "note to self…" goes on its own line. On a phone, the recording pauses while the screen is off and tells you so, rather than letting the write-up guess over silence.
 
 ![The record screen, saying the recording goes into the script](docs/screenshots/desktop-record.webp)
 
@@ -68,6 +68,12 @@ Voice modes (Idea, Journal, Scene, Text message, Email, or your own) are yours t
 
 ![The Drawer](docs/screenshots/desktop-drawer.webp)
 
+**Bring in old notes** (`Ctrl + K`) from Thymer, Tana, Workflowy or OneNote: paste a section or drop an exported file (.md, .txt, .opml), and its nesting comes in intact. Claude suggests where it goes, a title, a one-line about and tags, and ticks the old to-dos that still look alive. You change anything before it comes in, and there's Undo.
+
+![Bringing in a section of old notes from Workflowy](docs/screenshots/desktop-bring-in.webp)
+
+**What Claude knows.** Claude keeps a one-line note on each page, piece and world, plus weekly summaries, so it can find things for you. "What Claude knows" in `Ctrl + K` or a ⋯ menu shows them; elsewhere they stay out of sight.
+
 **Day review.** In the evening Inkwell can nudge you to review the day. Claude writes a few sentences on how it went, then offers a card per thread: send it to your task app, Keep thinking, Split or Let go. Nothing is sent until you tap.
 
 ### Every project is a world
@@ -76,7 +82,7 @@ Voice modes (Idea, Journal, Scene, Text message, Email, or your own) are yours t
 
 ![The Library](docs/screenshots/desktop-library.webp)
 
-**Overview** (`Alt + 0`) is a world's home: its logline, pieces by stage, and what to do next (things to file, promises not paid off, the next shoot day). The Ninja Bunch is a Show, so it talks in seasons and episodes, alongside its reels, gags and songs. Each piece has its own label and stage.
+**Overview** (`Alt + 0`) is a world's home: its logline, where everything is, and what to do next (things to file, promises not paid off, the next shoot day). The Ninja Bunch is a Show, so it talks in seasons and episodes, alongside its reels, gags and songs. Each piece has one status that says what's happening to it (New idea, Writing, Boarding, Generating, Editing, Posted), and one button that moves it on, with Undo.
 
 
 ### The seven tabs
@@ -119,13 +125,13 @@ Prose is just the page. Notes sit in the margin beside the paragraph they belong
 - **Claude's notes** gives margin notes and a fix list when you ask, and "Talk this chapter over with Claude" opens a conversation about it.
 - **Print** (`Ctrl + P`) gives clean pages to print or save as PDF.
 
-**Make** (`Alt + 5`) is production. The stage board shows every piece by stage; drag a card to move it on. Each kind of piece goes through its own **stage set**: AI video (Idea, Written, Boarded, Generated, Edited, Posted), Live action (… Prepped, Shot, Edited, Released), Book (… Outlined, Drafted, Revised, Edited, Published), Stage and Short writing. Here the reels are AI video, Reel 3 is shot live on the bakery roof, and the song is short writing. The last stage always means out in the world.
+Each kind of piece goes through its own **workflow**: AI video, Live action (… Prepping, Shooting, Editing, Released), Book (… Outlining, Drafting, Revising, Editing, Published), Stage and Short writing. Here the reels are AI video, Reel 3 is shot live on the bakery roof, and the song is short writing. The last step always means out in the world. "Workflow…" on the Overview picks which workflow scripts, prose and outlines go through, renames, reorders, adds or removes steps, and turns Make's tools on or off. "Save as my own workflow" keeps it for your next project, and New offers it when you start one.
 
-![Make: the stage board, one row per stage set](docs/screenshots/desktop-stage-board.webp)
+![The workflow editor for The Ninja Bunch](docs/screenshots/desktop-workflow.webp)
 
-"Stages…" picks which set scripts, prose and outlines go through in this project, and renames, adds, removes or reorders a set's stages. It says first what will move, and has Undo. One piece can go through another set from its ⋯ menu.
+**Make** (`Alt + 5`) holds the tools for making it: the kit and shoot days for the whole world, and shots and a storyboard in each piece. A book or short writing doesn't get the video tools.
 
-![Stages… for The Ninja Bunch](docs/screenshots/desktop-stage-sets.webp)
+![Make: the kit](docs/screenshots/desktop-kit.webp)
 
 Inside a piece, **Production** (`Ctrl + Shift + S`) turns the script into what's needed to generate or shoot it. Each scene shows the bible elements it uses (found in its words), its production notes and its shots. Shot codes like `NB-R02-S01-01` never change, so file names and Resolve clips keep pointing at the right shot. Each shot has still and video prompts and its renders; the star marks the one that worked, and earlier prompts are never lost. Each shot says how it's made (Generated, From reference, or Live action), and each scene with lines says whether its voices are recorded, generated or both. "Download kit" zips a shot's prompts and reference pictures for PixAI, Seedance or ComfyUI.
 
@@ -143,7 +149,7 @@ The **storyboard** shows every shot in order with its starred still. "Play" runs
 
 ### Getting around
 
-On a computer, a faint line at the top left says where you are and offers "‹ last place". `Ctrl + O` opens the **Go panel**: search anything, jump back to your last five places, go up the path, pick one of this project's tabs, or open Today, the Drawer, the Library or Tags. `Ctrl + O` then `Enter` flips back to where you just were.
+On a computer, one bar at the top comes down when you move the mouse to the top edge, and tucks away while you write. Its top row has Back (`Alt + Left`), where you are, and saved and synced. Its second row has the project's tabs and the tools: Mic, Today, Drawer, Library, Go, Notes, Focus, Aa and `Ctrl + K`. `Ctrl + O` opens the **Go panel**: search anything, jump back to your last five places, go up the path, pick one of this project's tabs, or open Today, the Drawer, the Library or Tags. `Ctrl + O` then `Enter` flips back to where you just were.
 
 ![The Go panel](docs/screenshots/desktop-go.webp)
 
@@ -206,6 +212,7 @@ All of them are also in `Ctrl + /`.
 | `Alt + C` | Record; again to keep it (lands where you are) |
 | `Ctrl + K` | Every command |
 | `Ctrl + O` | Go panel (`Enter` flips back) |
+| `Alt + Left` | Back |
 | `Ctrl + Shift + O` | Library |
 | `Alt + 0` to `Alt + 6` | Overview, Gather, Shape, Write, Revise, Make, Deliver |
 | `Ctrl + .` | Focus |
