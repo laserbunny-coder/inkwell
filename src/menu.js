@@ -28,7 +28,7 @@ export function popMenu(anchor, items, at) {
     }
     for (const it of list) {
       if (it === 'sep') { menu.append(make('div', 'pop-sep')); continue; }
-      if (it.note) { menu.append(make('div', 'pop-note', it.note)); continue; }
+      if (it.note) { menu.append(make('div', 'pop-note' + (it.plain ? ' plain' : ''), it.note)); continue; }
       const b = make('button', 'pop-item' + (it.danger ? ' danger' : '') + (it.current ? ' current' : ''), it.label);
       b.setAttribute('role', 'menuitem');
       if (it.sub) b.append(make('span', 'pop-more', '›'));

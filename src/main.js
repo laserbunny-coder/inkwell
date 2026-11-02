@@ -4351,9 +4351,16 @@ onVoiceChip(async (lineId, chip) => {
     ...modes.map((m) => ({ label: m.name, current: info.mode === m.id, run: use(m.id, m.name) })),
     'sep',
     { label: 'Copy this version', run: async () => { await notebook.close(); const t = await voiceText(lineId); try { await navigator.clipboard.writeText(t); toast('Copied, ready to paste'); } catch { showCopy({ title: 'Copy this version', value: t }); } } },
-    { label: 'Change your modes…', run: () => openModes() }
+    { label: 'Change your modes…', run: () => openModes() },
+    ...(info.by ? ['sep', { note: heardNote(info), plain: true }] : [])
   ]);
 });
+// "Written out by ElevenLabs", or by the backup when ElevenLabs came back blank.
+const SERVICE = { elevenlabs: 'ElevenLabs', openai: 'OpenAI (the backup)' };
+function heardNote({ by, tried }) {
+  const blank = (tried || []).some((t) => /^elevenlabs.*: (no words|failed)/.test(t));
+  return `Written out by ${SERVICE[by] || by}${by === 'openai' && blank ? ', ElevenLabs came back blank' : ''}`;
+}
 
 // Your modes, the same ones Scribe uses: rename one, change what it does or
 // which Claude writes it, add one, or delete one.

@@ -474,6 +474,39 @@ try {
     await other.close();
   });
 
+  await check('a journal gets a short title on the line, all its paragraphs under it, and the chip says who wrote it out', async () => {
+    await page.evaluate(() => { window.__voice = async (b) => (b.use === 'idea'
+      ? { raw: 'Pond walk. Coffee after.', mode: 'idea', blocks: [{ text: 'Premise: a pond walk.', el: 'paragraph', new_scene: false }], notes: [], title: 'Another title it should not use', heard_by: 'elevenlabs', tried: ['elevenlabs: ok'] }
+      : { raw: 'Pond walk. Coffee after.', mode: 'journal', title: 'Pond walk and coffee', heard_by: 'openai', tried: ['elevenlabs: no words', 'elevenlabs without names: no words', 'openai: ok'],
+        blocks: [{ text: 'I walked around the pond this morning.', el: 'paragraph', new_scene: false }, { text: 'Then coffee, and a long think about the week.', el: 'paragraph', new_scene: false }], notes: [{ text: 'Call Nate.', after: 1 }] }); });
+    if (!(await page.locator('.notebook').isVisible())) await page.keyboard.press('Control+J');
+    await page.waitForSelector('.notebook', { state: 'visible' });
+    await sleep(300);
+    await palette('Capture an idea');
+    await record(1300);
+    let line = null;
+    for (let t = 0; t < 100 && !line; t++) {
+      line = (await all(page, 'line')).find((l) => l.fields?.voice?.title === 'Pond walk and coffee');
+      if (!line) await sleep(100);
+    }
+    assert.ok(line, 'written up with its title');
+    assert.match(line.text, /\d{1,2}:\d{2} [ap]m\s+Pond walk and coffee #journal$/, line.text);
+    assert.deepEqual((await kidsOf(line.id)).map((k) => k.text), ['I walked around the pond this morning.', 'Then coffee, and a long think about the week.', 'Note to self: Call Nate.']);
+    assert.equal(line.fields.voice.by, 'openai');
+    await page.waitForFunction((id) => document.querySelector(`#outline-editor li[data-eid="${id}"]`)?.classList.contains('folded'), line.id);
+    // The chip's menu says which service wrote it out.
+    await page.click(`#outline-editor li[data-eid="${line.id}"] .voice-chip`);
+    await page.waitForSelector('.pop-menu .pop-note');
+    assert.equal(await page.locator('.pop-menu .pop-note').innerText(), 'Written out by OpenAI (the backup), ElevenLabs came back blank');
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/desktop-9-heard-by.png` });
+    // Another mode keeps the title; Copy this version leaves it out.
+    await page.locator('.pop-menu .pop-item', { hasText: /^Idea$/ }).click();
+    await page.waitForFunction((id) => /Premise: a pond walk/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || '') || true, line.id);
+    for (let t = 0; t < 50; t++) { const l = (await all(page, 'line')).find((x) => x.id === line.id); if (l.fields.voice.mode === 'idea') { line = l; break; } await sleep(100); }
+    assert.match(line.text, /Pond walk and coffee #idea$/, line.text);
+    assert.deepEqual((await kidsOf(line.id)).map((k) => k.text), ['Premise: a pond walk.']);
+  });
+
   await check('no page errors', async () => { assert.deepEqual(page.errors, []); });
 } finally {
   await browser.close();
