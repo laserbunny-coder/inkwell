@@ -426,6 +426,54 @@ try {
     await phone.close();
   });
 
+  await check('a recording that comes back with no words is kept and said so, and Ctrl + K writes it out again', async () => {
+    await page.evaluate(() => { window.__voice = async () => ({ raw: '', mode: null, blocks: [], notes: [], heard: 'nothing' }); });
+    if (!(await page.locator('.notebook').isVisible())) await page.keyboard.press('Control+J');
+    await page.waitForSelector('.notebook', { state: 'visible' });
+    await sleep(400);
+    const before = (await capLine())?.id;
+    await palette('Capture an idea');
+    await record(1300);
+    let line = null;
+    for (let t = 0; t < 100 && !line; t++) {
+      line = (await all(page, 'line')).find((l) => l.id !== before && l.fields?.capture === 'voice' && l.fields?.heard === 'nothing');
+      if (!line) await sleep(100);
+    }
+    assert.ok(line, 'the line is marked as heard nothing');
+    assert.equal(line.fields.heard, 'nothing');
+    assert.match(line.text, /^\s*\d{1,2}:\d{2} [ap]m #idea$/, 'the line is left as it was');
+    assert.match(await page.locator(`#outline-editor li[data-eid="${line.id}"] .note`).first().innerText(), /no words heard/);
+    // Try again from Ctrl + K, on its line.
+    await page.evaluate(() => { window.__voice = async () => ({ raw: 'Morning by the pond, thinking about the week.', mode: 'journal', blocks: [{ text: 'Morning by the pond, thinking about the week.', el: 'paragraph', new_scene: false }], notes: [] }); });
+    await page.click(`#outline-editor li[data-eid="${line.id}"] p`, { position: { x: 300, y: 8 } });
+    await palette('Write out this recording again');
+    await page.waitForFunction(() => /Morning by the pond/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''), null, { timeout: 10000 });
+    const after = (await all(page, 'line')).find((l) => l.id === line.id);
+    assert.equal(after.fields.voice.mode, 'journal');
+    assert.ok(!after.fields.heard, 'no longer marked as blank');
+  });
+
+  await check('a recording that came back blank before this fix gets another go on the next open', async () => {
+    // As Inkwell used to leave one: the bare line, never written up, not marked.
+    const day = [...table.values()].find((r) => r.kind === 'day' && r.id === `day-${new Date().toLocaleDateString('en-CA')}`);
+    assert.ok(day, 'today’s page is in the cloud');
+    const fileId = 'fi_blankold';
+    table.set(fileId, { id: fileId, kind: 'file', user_id: 'u1', fields: { size: 2000, type: 'audio/webm', duration: 82000 }, deleted: false, created_at: Date.now(), updated_at: new Date((clock += 1000)).toISOString() });
+    table.set('li_blankold', { id: 'li_blankold', kind: 'line', parent_id: day.id, sort: 1e9, user_id: 'u1', text: ' 9:20 am #idea', tags: ['idea'], content: [{ type: 'file', attrs: { id: fileId, name: 'Voice 9:20 am.webm', size: 2000, type: 'audio/webm', duration: 82000 } }, { type: 'text', text: ' 9:20 am #idea' }], fields: { capture: 'voice', said: '9:20 am', done: false }, deleted: false, created_at: new Date(Date.now() - 3 * 3600e3).toISOString(), updated_at: new Date((clock += 1000)).toISOString() });
+    const other = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1280, height: 860 } });
+    await other.exposeFunction('__remote', remote);
+    await other.addInitScript(fake);
+    await other.addInitScript(() => { window.__voice = async (b) => ({ raw: `Heard ${b.file}`, mode: 'journal', blocks: [{ text: 'A quiet morning journal.', el: 'paragraph', new_scene: false }], notes: [] }); });
+    const p = await other.newPage();
+    p.on('pageerror', (e) => page.errors.push(e.message));
+    await p.goto(URL);
+    await p.waitForFunction(() => (window.__asked || []).some((a) => a.mode === 'voice' && a.file === 'fi_blankold'), null, { timeout: 15000 });
+    await p.waitForFunction(() => [...(window.__asked || [])].length && true);
+    const asked = await p.evaluate(() => window.__asked.filter((a) => a.mode === 'voice').map((a) => a.file));
+    assert.deepEqual(asked, ['fi_blankold'], 'only the old blank one: not ones written up, marked, or just made on another device');
+    await other.close();
+  });
+
   await check('no page errors', async () => { assert.deepEqual(page.errors, []); });
 } finally {
   await browser.close();
