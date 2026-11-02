@@ -1,14 +1,15 @@
 import { getEntry, getMany, putEntries, byKind } from './db.js';
 import { tagsIn } from './model.js';
 import { loadStructure, rowsAt } from './grid.js';
-import { bookType, hasManuscript, worldOf } from './library.js';
+import { bookType, hasManuscript, worldOf, stageSetOf, toolsOf, toolsIn } from './library.js';
 import { addFile, fileUrl, fileBlob, isImage } from './files.js';
 import { zip } from './vault.js';
 import { download } from './export.js';
 import {
   ELEMENT_TYPES, typeOf, elementsIn, plainPages, newElement, setElement, namesOf,
   findElements, sceneElements, changeBreakdown, sceneSig, shotCode, newShot, shotStage, SHOT_STAGES,
-  withRenders, withPrompts, isVideo, shotForName, shootDays, newShootDay, dayTask, toCsv, toSrt, speechesIn, PLATFORMS
+  withRenders, withPrompts, isVideo, shotForName, shootDays, newShootDay, dayTask, toCsv, toSrt, speechesIn, PLATFORMS,
+  MADE_BY, madeBy, needsFootage, AUDIO, audioOf, toPlan
 } from './production.js';
 
 // The production view of a piece (Ctrl + Shift + S): its scenes, each with
@@ -49,7 +50,7 @@ const extOf = (name, type) => (/\.([a-z0-9]{1,5})$/i.exec(name || '')?.[1] || (t
 
 export class ProductionView {
   // hooks: open(row), openPage(id), leave(piece), changed(rows), menu,
-  // menuButton, ask, askText, toast, askServer, canAsk, numberScenes(piece),
+  // menuButton, ask, askText, toast, askServer, canAsk, numberScenes(piece), go(place),
   // sendTask(task), base().
   constructor(el, hooks) {
     this.el = el;
@@ -65,7 +66,11 @@ export class ProductionView {
   }
 
   get isOpen() { return !!this.piece && ['production', 'deliver'].includes(document.documentElement.dataset.view); }
-  get tabs() { return this.mode === 'deliver' ? DELIVER_TABS : TABS; }
+  get tabs() {
+    if (this.mode === 'deliver') return DELIVER_TABS;
+    const on = TABS.filter((t) => !this.tools || this.tools.includes(t.id));
+    return on.length ? on : TABS;
+  }
   get tabKey() { return this.mode === 'deliver' ? 'deliverTab' : 'prodTab'; }
   get tab() { const t = pref(this.tabKey, this.tabs[0].id); return this.tabs.some((x) => x.id === t) ? t : this.tabs[0].id; }
 
@@ -107,6 +112,10 @@ export class ProductionView {
       await putEntries([this.world]);
     }
     this.script = bookType(piece) === 'screenplay';
+    // Your own workflow behaves like the set it came from (shots in one made
+    // from Live action start as live action).
+    const set = stageSetOf(piece, this.world);
+    this.set = set.own ? set.base : set.id;
     const st = hasManuscript(piece) ? await loadStructure(piece) : { acts: [], pieces: [] };
     this.items = st.acts.length ? rowsAt(this.script ? 'slug' : 'scene', st, piece) : [];
     this.scenes = this.items.filter((x) => x.type === 'row');
@@ -144,8 +153,15 @@ export class ProductionView {
       s.bd = this.bds.get(s.id) || null;
       s.uses = sceneElements(s.found, s.bd).filter((id) => this.elById.has(id));
       s.shots = this.shotsOf.get(s.id) || [];
+      s.audio = audioOf(s.bd, this.world);
+      s.talk = this.script ? speechesIn(rows).length > 0 : false;
       s.changed = s.shots.length > 0 && !!s.bd?.fields?.sig && s.bd.fields.sig !== s.sig;
     }
+    // The tools on Make come from the workflow; a piece that already has
+    // shots keeps them even if its workflow has none.
+    this.setTools = toolsIn(stageSetOf(piece, this.world), this.world);
+    this.tools = toolsOf(piece, this.world);
+    if (!this.tools.length && (this.scenes.some((s) => s.shots.length) || this.lost.length)) this.tools = TABS.map((t) => t.id);
     // Which renders are videos, for the storyboard's stills.
     const fileIds = new Set();
     for (const sh of shots) for (const t of sh.fields?.tries || []) for (const id of t.files || []) fileIds.add(id);
@@ -173,8 +189,9 @@ export class ProductionView {
     back.title = this.mode === 'deliver' ? 'Back to the text' : 'Back to the text (Ctrl + Shift + S)';
     back.addEventListener('click', () => this.hooks.leave(piece));
     tools.append(back);
-    if (this.mode !== 'deliver') tools.append(this.hooks.menuButton(() => this.moreMenu(), 'More for production'));
+    if (this.mode !== 'deliver' && this.videoTools()) tools.append(this.hooks.menuButton(() => this.moreMenu(), 'More for production'));
     head.append(tools);
+    if (this.mode !== 'deliver' && !this.videoTools()) { this.el.replaceChildren(head, this.notVideo()); return; }
     const sub = make('div', 'gv-sub');
     const tabs = make('div', 'gv-levels');
     tabs.setAttribute('role', 'tablist');
@@ -201,6 +218,47 @@ export class ProductionView {
     if (this.tab === 'share') await this.drawShare(body);
     const panel = this.mode === 'deliver' && this.tab !== 'post' ? null : this.claudePanel();
     this.el.replaceChildren(...[head, sub, panel, body].filter(Boolean));
+  }
+
+  // Shots, storyboards and shoot days are for video. A book, a stage piece
+  // or short writing doesn't get them unless it asks, or already has shots.
+  videoTools() {
+    return this.tools.length > 0;
+  }
+
+  notVideo() {
+    const box = make('div', 'pd-notvideo');
+    const set = stageSetOf(this.piece, this.world);
+    const next = {
+      book: 'A book’s own Make page is on the way: beta readers, edit, cover and formatting, then publish. Until then, Ctrl + P prints a clean copy for readers.',
+      short: 'Short writing goes straight from Polished to Deliver, where you can share it or copy it out.',
+      stage: 'A stage piece’s own Make page (cast, rehearsals, cues) is on the way.'
+    }[set.id] || '';
+    box.append(make('p', 'pd-notvideo-what', (set.tools || []).length
+      ? `The tools on Make are turned off in this project’s workflow. Turn them back on from the project’s ⋯ menu, Workflow….`
+      : `${this.piece.title || 'This piece'} goes through ${set.name} stages, so the video tools (shots, storyboard, shoot days) are put away.`));
+    if (next) box.append(make('p', 'hint', next));
+    const acts = make('div', 'pd-add');
+    const stages = make('button', 'pill', 'Deliver');
+    stages.addEventListener('click', () => this.hooks.go?.({ view: 'deliver', id: this.piece.id }));
+    const show = make('button', 'ghost-btn', 'Use the video tools anyway');
+    show.title = 'For a book trailer, say. Turn them off again from Make’s ⋯ menu.';
+    show.addEventListener('click', () => this.setVideoTools(true));
+    if (this.hooks.go) acts.append(stages);
+    acts.append(show);
+    box.append(acts);
+    return box;
+  }
+
+  async setVideoTools(on) {
+    const fresh = await getEntry(this.piece.id);
+    const fields = { ...fresh.fields };
+    if (on) fields.videoTools = true; else delete fields.videoTools;
+    const row = { ...fresh, fields, updated_at: Date.now() };
+    await putEntries([row]);
+    this.hooks.changed([row]);
+    await this.render();
+    this.hooks.toast(on ? 'Video tools on for this piece' : 'Video tools put away', { label: 'Undo', run: () => this.setVideoTools(!on) });
   }
 
   // ---------- shots ----------
@@ -268,6 +326,12 @@ export class ProductionView {
         { label: 'The shots still match', run: () => this.matched(s) }
       ]));
       head.append(ch);
+    }
+    if (s.talk) {
+      const au = make('button', 'pd-audio', AUDIO.find((a) => a.id === s.audio).label);
+      au.title = 'How this scene’s voices are made';
+      au.addEventListener('click', () => this.hooks.menu(au, this.audioMenu(s)));
+      head.append(au);
     }
     head.append(this.hooks.menuButton(() => this.sceneMenu(s), `More for ${s.title}`));
     box.append(head);
@@ -372,8 +436,65 @@ export class ProductionView {
       this.hooks.canAsk() && { label: 'Find this scene’s elements, with Claude', run: () => this.breakdown([s]) },
       this.hooks.canAsk() && { label: s.shots.length ? 'Suggest more shots, with Claude' : 'Suggest shots, with Claude', run: () => this.suggestShots(s) },
       this.hooks.canAsk() && s.shots.length && { label: 'Write the prompts, with Claude', run: () => this.writePrompts(s) },
+      s.shots.length && { label: 'All its shots are made…', sub: MADE_BY.map((m) => ({ label: m.label, run: () => this.setMade(s.shots, m.id) })) },
+      { label: 'Voices…', sub: this.audioMenu(s) },
       s.changed && { label: 'The shots still match the scene', run: () => this.matched(s) }
     ].filter(Boolean);
+  }
+
+  audioMenu(s) {
+    const own = s.bd?.fields?.audio;
+    const items = AUDIO.map((a) => ({ label: `${a.id === s.audio ? '✓ ' : ''}${a.label}`, run: () => this.setAudio(s, a.id) }));
+    if (own) items.push({ label: 'Same as the rest of the project', run: () => this.setAudio(s, null) });
+    items.push({ label: 'For the whole project…', sub: AUDIO.map((a) => ({ label: `${a.id === audioOf(null, this.world) ? '✓ ' : ''}${a.label}`, run: () => this.setProjectAudio(a.id) })) });
+    return items;
+  }
+
+  async setAudio(s, audio) {
+    const was = s.bd?.fields?.audio ?? null;
+    await changeBreakdown(s.id, { audio, pieceId: this.piece.id });
+    await this.render();
+    this.hooks.toast(audio ? `${s.title}: ${AUDIO.find((a) => a.id === audio).label.toLowerCase()}` : `${s.title} follows the project`, { label: 'Undo', run: async () => { await changeBreakdown(s.id, { audio: was, pieceId: this.piece.id }); await this.render(); } });
+  }
+
+  async setProjectAudio(audio) {
+    if (!this.world) return;
+    const w = await getEntry(this.world.id);
+    const was = w.fields?.production?.audio;
+    const put = async (v) => {
+      const fresh = await getEntry(w.id);
+      const production = { ...(fresh.fields?.production || {}) };
+      if (v) production.audio = v; else delete production.audio;
+      const row = { ...fresh, fields: { ...fresh.fields, production }, updated_at: Date.now() };
+      await putEntries([row]);
+      this.hooks.changed([row]);
+      await this.render();
+    };
+    await put(audio);
+    this.hooks.toast(`Voices in ${w.title || 'this project'}: ${AUDIO.find((a) => a.id === audio).label.toLowerCase()}`, { label: 'Undo', run: () => put(was) });
+  }
+
+  async setMade(shots, made) {
+    const before = shots.map((sh) => [sh.id, sh.fields?.made]);
+    const apply = async (pairs) => {
+      const t = Date.now();
+      const rows = [];
+      for (const [id, m] of pairs) {
+        const fresh = await getEntry(id);
+        if (!fresh) continue;
+        const fields = { ...fresh.fields };
+        // The usual for this kind of piece isn't stored, so a piece that
+        // changes kind takes its shots with it.
+        if (!m || m === madeBy({}, this.set)) delete fields.made; else fields.made = m;
+        rows.push({ ...fresh, fields, updated_at: t });
+      }
+      await putEntries(rows);
+      this.hooks.changed(rows);
+      await this.render();
+    };
+    await apply(shots.map((sh) => [sh.id, made]));
+    const label = MADE_BY.find((m) => m.id === made).label.toLowerCase();
+    this.hooks.toast(shots.length === 1 ? `Shot made: ${label}` : `${plural(shots.length, 'shot')} made: ${label}`, { label: 'Undo', run: () => apply(before) });
   }
 
   // ---------- a shot ----------
@@ -395,7 +516,18 @@ export class ProductionView {
     toggle.setAttribute('aria-label', this.open.has(sh.id) ? 'Hide prompts and renders' : 'Prompts and renders');
     toggle.setAttribute('aria-expanded', String(this.open.has(sh.id)));
     toggle.addEventListener('click', () => { if (this.open.has(sh.id)) this.open.delete(sh.id); else this.open.add(sh.id); this.render(); });
-    row.append(toggle, code, what, framing, dot, this.hooks.menuButton(() => this.shotMenu(sh, s), 'More for this shot'));
+    const made = madeBy(sh, this.set);
+    box.dataset.made = made;
+    // How it's made sits with where it's at, so the row keeps its columns.
+    const state = make('span', 'pd-state');
+    if (made !== 'gen') {
+      const m = make('button', 'pd-made', MADE_BY.find((x) => x.id === made).label);
+      m.title = MADE_BY.find((x) => x.id === made).about;
+      m.addEventListener('click', () => this.hooks.menu(m, this.madeMenu(sh)));
+      state.append(m);
+    }
+    state.append(dot);
+    row.append(toggle, code, what, framing, state, this.hooks.menuButton(() => this.shotMenu(sh, s), 'More for this shot'));
     box.append(row);
     if (this.open.has(sh.id)) box.append(this.shotDetail(sh, s));
     // Renders dropped on a shot go to it.
@@ -544,9 +676,15 @@ export class ProductionView {
       s && i > 0 && { label: 'Move up', run: () => this.nudge(sh, list, i, -1) },
       s && i < list.length - 1 && { label: 'Move down', run: () => this.nudge(sh, list, i, 1) },
       { label: s ? 'Move to another scene…' : 'Move to a scene…', run: () => this.hooks.menu(this.el.querySelector(`[data-shot="${CSS.escape(sh.id)}"] .pd-code`) || this.el, this.scenes.filter((x) => x.id !== s?.id).map((x) => ({ label: `${x.code ? `${x.code} ` : ''}${x.title}`, run: () => this.moveShot(sh, x) }))) },
+      { label: 'Made by…', sub: this.madeMenu(sh) },
       { label: 'Copy the shot code', run: () => this.copy(s ? this.codeOf(sh, s) : '', 'Shot code copied') },
       { label: 'Delete the shot', danger: true, run: () => this.deleteShot(sh) }
     ].filter(Boolean);
+  }
+
+  madeMenu(sh) {
+    const now = madeBy(sh, this.set);
+    return MADE_BY.map((m) => ({ label: `${m.id === now ? '✓ ' : ''}${m.label}`, run: () => this.setMade([sh], m.id) }));
   }
 
   // ---------- writing shots ----------
@@ -1019,22 +1157,62 @@ export class ProductionView {
     if (this.dayId && !days.some((d) => d.id === this.dayId)) this.dayId = null;
     const list = make('div', 'pd-days');
     for (const d of days) {
-      const b = make('button', 'chip' + (d.id === this.dayId ? ' on' : ''), d.fields?.date ? new Date(`${d.fields.date}T12:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : 'No date');
+      const date = d.fields?.date ? new Date(`${d.fields.date}T12:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : 'No date';
+      const b = make('button', 'chip' + (d.id === this.dayId ? ' on' : ''), d.fields?.type === 'voice' ? `Voices · ${date}` : date);
+      if (d.fields?.type === 'voice') b.dataset.type = 'voice';
       b.addEventListener('click', () => { this.dayId = d.id; this.render(); });
       list.append(b);
     }
     const add = make('button', 'chip add', '+ Shoot day');
-    add.addEventListener('click', async () => {
-      const d = await newShootDay(this.piece.id, new Date(Date.now() + 86400000).toISOString().slice(0, 10));
-      this.dayId = d.id;
-      this.hooks.changed([d]);
-      this.render();
-    });
-    list.append(add);
+    add.addEventListener('click', () => this.addDay());
+    const addVoice = make('button', 'chip add', '+ Voice session');
+    addVoice.title = 'A day for recording voices';
+    addVoice.addEventListener('click', () => this.addDay('voice'));
+    list.append(add, addVoice);
     body.append(list);
+    if (!this.dayId) this.drawPlan(body, days);
     const day = days.find((d) => d.id === this.dayId);
     if (!day) { body.append(make('p', 'hint gv-hint', 'A shoot day turns into a one-page call sheet: when and where, the scenes and shots, who’s needed, and the props and wardrobe from the breakdown. It can go to Daybook as a task on that day.')); return; }
     body.append(this.dayForm(day), this.callSheet(day));
+  }
+
+  async addDay(type = null, scenes = []) {
+    const d = await newShootDay(this.piece.id, new Date(Date.now() + 86400000).toISOString().slice(0, 10), { type, scenes });
+    this.dayId = d.id;
+    this.hooks.changed([d]);
+    await this.render();
+    return d;
+  }
+
+  // What still needs a day, so nothing filmed or recorded is forgotten.
+  drawPlan(body, days) {
+    const { shoot, voice } = toPlan(this.scenes, days, this.set);
+    if (!shoot.length && !voice.length) return;
+    const box = make('section', 'pd-plan');
+    box.append(make('h3', 'panel-label', 'To plan'));
+    if (shoot.length) {
+      const n = shoot.reduce((a, x) => a + x.shots.length, 0);
+      box.append(make('p', 'pd-plan-what', `${plural(n, 'shot')} to film, not on a shoot day yet`));
+      const ul = make('ul', 'pd-plan-list');
+      for (const { scene, shots } of shoot) {
+        const li = make('li');
+        li.append(make('strong', '', `${scene.code ? `${scene.code} ` : ''}${scene.title}`));
+        li.append(make('span', 'pd-sheet-sub', ` ${shots.map((sh) => `${this.codeOf(sh, scene)} ${MADE_BY.find((m) => m.id === madeBy(sh, this.set)).label.toLowerCase()}`).join(', ')}`));
+        ul.append(li);
+      }
+      const go = make('button', 'pill', 'Put them on a new shoot day');
+      go.addEventListener('click', () => this.addDay(null, shoot.map((x) => x.scene.id)));
+      box.append(ul, go);
+    }
+    if (voice.length) {
+      box.append(make('p', 'pd-plan-what', `${plural(voice.length, 'scene')} with voices to record, not on a voice session yet`));
+      const ul = make('ul', 'pd-plan-list');
+      for (const s of voice) ul.append(make('li', '', `${s.code ? `${s.code} ` : ''}${s.title}`));
+      const go = make('button', 'pill', 'Put them on a new voice session');
+      go.addEventListener('click', () => this.addDay('voice', voice.map((s) => s.id)));
+      box.append(ul, go);
+    }
+    body.append(box);
   }
 
   dayForm(day) {
@@ -1087,13 +1265,13 @@ export class ProductionView {
       this.render();
       this.hooks.toast(f.date ? `On your Daybook plan for ${new Date(`${f.date}T12:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${f.call ? ` at ${clock(f.call)}` : ''}` : 'Sent to Daybook');
     });
-    const del = make('button', 'ghost-btn', 'Delete the day');
+    const del = make('button', 'ghost-btn', f.type === 'voice' ? 'Delete the session' : 'Delete the day');
     del.addEventListener('click', async () => {
       const fresh = await getEntry(day.id);
       await putEntries([{ ...fresh, deleted: true, updated_at: Date.now() }]);
       this.dayId = null;
       this.render();
-      this.hooks.toast('Shoot day deleted', { label: 'Undo', run: async () => { await putEntries([{ ...fresh, deleted: false, updated_at: Date.now() }]); this.dayId = fresh.id; this.render(); } });
+      this.hooks.toast(f.type === 'voice' ? 'Voice session deleted' : 'Shoot day deleted', { label: 'Undo', run: async () => { await putEntries([{ ...fresh, deleted: false, updated_at: Date.now() }]); this.dayId = fresh.id; this.render(); } });
     });
     acts.append(print, send, del);
     form.append(acts);
@@ -1104,7 +1282,9 @@ export class ProductionView {
   callSheet(day) {
     const f = day.fields || {};
     const sheet = make('article', 'pd-sheet');
+    const voice = f.type === 'voice';
     const scenes = this.scenes.filter((s) => (f.scenes || []).includes(s.id));
+    sheet.append(make('p', 'pd-sheet-kind', voice ? 'Voice session' : 'Call sheet'));
     sheet.append(make('h2', '', `${this.piece.title || 'Untitled'}${this.world && this.world.title !== this.piece.title ? ` · ${this.world.title}` : ''}`));
     const when = [f.date && new Date(`${f.date}T12:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }), f.call && `Call ${clock(f.call)}`, f.wrap && `Wrap ${clock(f.wrap)}`].filter(Boolean).join(' · ');
     sheet.append(make('p', 'pd-sheet-when', when || 'No date yet'));
@@ -1121,9 +1301,22 @@ export class ProductionView {
       const li = make('li');
       li.append(make('strong', '', `${s.code ? `${s.code}  ` : ''}${s.title}`));
       if (s.synopsis) li.append(make('span', 'pd-sheet-sub', ` ${s.synopsis}`));
-      if (s.shots.length) {
+      if (voice) {
+        // The lines to record, in order, with who says them.
+        const lines = speechesIn(s.rows);
+        if (lines.length) {
+          const ul = make('ul', 'pd-sheet-shots');
+          for (const l of lines) ul.append(make('li', '', `${l.who ? `${l.who}: ` : ''}${l.text}`));
+          li.append(ul);
+        }
+      } else if (s.shots.length) {
+        // A generated shot needs nothing from the day, so it isn't listed.
+        const filmed = s.shots.filter((sh) => needsFootage(madeBy(sh, this.set)));
         const ul = make('ul', 'pd-sheet-shots');
-        for (const sh of s.shots) ul.append(make('li', '', `${this.codeOf(sh, s)}  ${sh.text || ''}${sh.fields?.framing ? ` (${sh.fields.framing})` : ''}`));
+        for (const sh of filmed.length ? filmed : s.shots) {
+          const m = madeBy(sh, this.set);
+          ul.append(make('li', '', `${this.codeOf(sh, s)}  ${sh.text || ''}${sh.fields?.framing ? ` (${sh.fields.framing})` : ''}${m === 'ref' ? ' · reference' : ''}`));
+        }
         li.append(ul);
       }
       const notes = this.notesOf.get(s.id) || [];
@@ -1131,10 +1324,12 @@ export class ProductionView {
       return li;
     }));
     section('Who’s needed', uses('character').map((e) => `${e.title}${e.fields.element.snippet ? `: ${e.fields.element.snippet}` : ''}`));
-    section('Locations', uses('location').map((e) => e.title));
-    section('Props', uses('prop').map((e) => e.title));
-    section('Wardrobe', uses('wardrobe').map((e) => `${e.title}${e.fields.element.snippet ? `: ${e.fields.element.snippet}` : ''}`));
-    section('Also', uses('other').map((e) => e.title));
+    if (!voice) {
+      section('Locations', uses('location').map((e) => e.title));
+      section('Props', uses('prop').map((e) => e.title));
+      section('Wardrobe', uses('wardrobe').map((e) => `${e.title}${e.fields.element.snippet ? `: ${e.fields.element.snippet}` : ''}`));
+      section('Also', uses('other').map((e) => e.title));
+    }
     if (f.notes) { sheet.append(make('h3', '', 'Notes')); sheet.append(make('p', '', f.notes)); }
     if (!scenes.length) sheet.append(make('p', 'hint', 'Pick the scenes for this day above.'));
     return sheet;
@@ -1318,7 +1513,9 @@ export class ProductionView {
       { label: hide.has('elements') ? 'Show elements on scenes' : 'Hide elements on scenes', run: () => flip('elements') },
       { label: hide.has('notes') ? 'Show production notes' : 'Hide production notes', run: () => flip('notes') },
       { label: hide.has('summary') ? 'Show scene summaries' : 'Hide scene summaries', run: () => flip('summary') },
-      { label: hide.has('empty') ? 'Show scenes with no shots' : 'Hide scenes with no shots', run: () => flip('empty') }
+      { label: hide.has('empty') ? 'Show scenes with no shots' : 'Hide scenes with no shots', run: () => flip('empty') },
+      this.piece.fields?.videoTools && !this.setTools.length && 'sep',
+      this.piece.fields?.videoTools && !this.setTools.length && { label: 'Put the video tools away', run: () => this.setVideoTools(false) }
     ].filter(Boolean);
   }
 

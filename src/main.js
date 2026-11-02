@@ -13,6 +13,7 @@ import { getMeta, setMeta, putEntries, children, getEntry, snapshots, byKind, on
 import { trash, restore, trashed, deleteForever, contents } from './trash.js';
 import { searchIndex, searchChanged } from './search.js';
 import { keep, versionsOf, tidyHistory, blocks as docBlocks, compare, deletedFrom, bringBack } from './history.js';
+import { editStages, newWorkflow } from './stageedit.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, askPiece, askScript, showCopy, toast, closeMenu } from './menu.js';
 import { Sync } from './sync.js';
 import { ensureSeed, outline, entry, wordCount, noteTypes, newId as newIdLocal } from './model.js';
@@ -27,29 +28,32 @@ import { MAX_BYTES, SPACE, spaceUsed, unsentFiles } from './files.js';
 import { vaultZip, vaultFiles, pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain, fromOutline, looksLikeOutline, SceneCodes, NUMBER_SCENES, assignCodes, codeOrder } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
-import { moveLine, toggleDone, foldKey } from './outline.js';
+import { moveLine, canMoveLine, indentLines, outdentLines, removeLine, toggleDone, foldKey } from './outline.js';
 import { SlashMenu, setSlashItems } from './slash.js';
 import { openHandleMenu } from './handlemenu.js';
 import { openPicker } from './picker.js';
 import { PlotGrid, threadsOf, worldPromises } from './grid.js';
 import { ProductionView } from './prodview.js';
 import { PageStrip, TodayPanel, isLife } from './pages.js';
+import { Nav } from './nav.js';
 import { StagePage, intoDrawer, gatherItems } from './stages.js';
 import { CaptureScreen, writeOutPending, recoverRecording } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, RAW } from './voice.js';
-import { takeShares, snapshotPending } from './share.js';
+import { takeShares, snapshotPending, tidyShareBlanks } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
 import { sendToDaybook, sendPending, queueTask } from './daybook.js';
-import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker, speakersOn, mine } from './meeting.js';
+import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker, speakersOn, mine, sendMeetingToAcro } from './meeting.js';
 import { DayReview, getReview } from './review.js';
-import { TagsPage } from './tags.js';
+import { TagsPage, tagIndex, statsOf } from './tags.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { pieceDoc, pageDoc, startDraft, draftHolding } from './drafts.js';
 import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
+import { openClaudeKnows } from './claudeknows.js';
+import { openBringIn } from './bringin.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
-import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf } from './library.js';
+import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, nextLabel, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, dropOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -182,8 +186,11 @@ const touch = matchMedia('(hover: none)');
 function placeScriptBar() {
   const script = isScript();
   const withAlts = !root.classList.contains('hide-alts') && !root.classList.contains('focus');
-  const show = touch.matches && (script || withAlts) && writing() && editor.isFocused;
+  // The mic is always on it; only Focus with no script leaves just the text.
+  const show = touch.matches && (script || !root.classList.contains('focus')) && writing() && editor.isFocused;
+  const back = show && scriptBar.hidden;
   scriptBar.hidden = !show;
+  if (back) scriptBar.scrollLeft = 0; // a row that comes back starts with the mic in view
   scriptBar.classList.toggle('scripting', script);
   scriptBar.classList.toggle('no-alts', !withAlts);
   body.classList.toggle('script-bar-on', show);
@@ -252,7 +259,7 @@ function tapBar(bar, selector, run) {
 }
 tapBar(scriptBar, 'button[data-el], button[data-alt], button[data-ins], button[data-talk]', (b) => {
   const what = b.dataset.alt;
-  if (b.dataset.talk) talkIntoDraft();
+  if (b.dataset.talk) captureHere({ start: true });
   else if (b.dataset.ins) typeHere(editor, '/');
   else if (what === 'word' || what === 'para') alts.toggle({ scope: what });
   else if (what === 'ask') {
@@ -299,11 +306,15 @@ const notebook = new Notebook({
   }
 });
 
-// On a phone, a row above the keyboard for outlines: indent, move, tag, link, fold, zoom.
+// On a phone, a row above the keyboard for outlines. The first screen holds what
+// gets used all the time (mic, undo, indent, move, tag, link); Done, Move to…,
+// Zoom and + wait at the end of the row.
 const outlineBar = $('.outline-bar');
 function placeOutlineBar() {
   const show = touch.matches && inNotebook() && notebook.editor.isFocused;
+  const back = show && outlineBar.hidden;
   outlineBar.hidden = !show;
+  if (back) outlineBar.scrollLeft = 0; // a row that comes back starts with the mic in view
   body.classList.toggle('outline-bar-on', show);
   if (!show) return;
   const vv = window.visualViewport;
@@ -319,12 +330,13 @@ function placeOutlineBar() {
 tapBar(outlineBar, 'button[data-do]', (b) => {
   const ed = notebook.editor;
   const act = b.dataset.do;
-  if (act === 'undo') ed.chain().focus().undo().run();
+  if (act === 'talk') captureHere({ start: true });
+  else if (act === 'undo') ed.chain().focus().undo().run();
   else if (act === 'redo') ed.chain().focus().redo().run();
   else if (act === 'done') toggleDone(ed);
   else if (act === 'move') setTimeout(moveLinePicker, 120); // after the tap's click, so it doesn't land on the menu
-  else if (act === 'indent') ed.chain().focus().sinkListItem('listItem').scrollIntoView().run();
-  else if (act === 'outdent') ed.chain().focus().liftListItem('listItem').scrollIntoView().run();
+  else if (act === 'indent') { ed.commands.focus(); indentLines(ed); }
+  else if (act === 'outdent') { ed.commands.focus(); outdentLines(ed); }
   else if (act === 'up' || act === 'down') moveLine(ed, act === 'up' ? -1 : 1);
   else if (act === 'tag') typeHere(ed, '#');
   else if (act === 'insert') typeHere(ed, '/');
@@ -354,7 +366,6 @@ function lineMenu(eid) {
   node.descendants((n) => { if (n.type.name === 'listItem') under++; });
   const folded = !!kids && foldKey.getState(ed.state)?.folded.has(eid);
   const index = $pos.index();
-  const siblings = $pos.parent.childCount;
   const nested = $pos.depth > 1;
   const lines = (n) => `${n} line${n === 1 ? '' : 's'}`;
   // Line actions work on the line the caret is in, so put it there first.
@@ -371,15 +382,15 @@ function lineMenu(eid) {
     title: `Line${under ? ` · ${lines(under)} under it` : ''}`,
     sections: [
       [
-        // On a phone the handle covers the line's fold arrow, so Fold comes first there.
+        // On a phone, Fold leads the menu.
         ...(touch.matches ? [fold, zoom] : [zoom, fold]),
         { label: node.attrs.done ? 'Not done' : 'Mark done', keys: '⌘↵', run: on(() => { toggleDone(ed); ed.commands.focus(); }) }
       ],
       [
-        { label: 'Outdent', keys: '⇧Tab', stay: true, half: 'indent', off: !nested, run: on(() => ed.chain().focus().liftListItem('listItem').scrollIntoView().run()) },
-        { label: 'Indent', keys: 'Tab', stay: true, half: 'indent', off: index === 0, run: on(() => ed.chain().focus().sinkListItem('listItem').scrollIntoView().run()) },
-        { label: 'Move up', keys: 'Alt+⇧↑', stay: true, half: 'move', off: index === 0, run: on(() => moveLine(ed, -1)) },
-        { label: 'Move down', keys: 'Alt+⇧↓', stay: true, half: 'move', off: index >= siblings - 1, run: on(() => moveLine(ed, 1)) },
+        { label: 'Outdent', keys: '⇧Tab', stay: true, half: 'indent', off: !nested, run: on(() => { ed.commands.focus(); outdentLines(ed); }) },
+        { label: 'Indent', keys: 'Tab', stay: true, half: 'indent', off: index === 0, run: on(() => { ed.commands.focus(); indentLines(ed); }) },
+        { label: 'Move up', keys: 'Alt+⇧↑', stay: true, half: 'move', off: !canMoveLine(ed.state, -1, pos + 2), run: on(() => moveLine(ed, -1)) },
+        { label: 'Move down', keys: 'Alt+⇧↓', stay: true, half: 'move', off: !canMoveLine(ed.state, 1, pos + 2), run: on(() => moveLine(ed, 1)) },
         { label: 'Move to…', run: () => setTimeout(() => sendSelectionPicker([eid]), 120) }
       ],
       [{ label: under ? `Delete line and the ${lines(under)} under it` : 'Delete line', danger: true, run: () => {
@@ -388,7 +399,7 @@ function lineMenu(eid) {
         const tr = ed.state.tr;
         // The page always keeps at least one line.
         if (now.$pos.depth === 1 && now.$pos.parent.childCount === 1) tr.replaceWith(now.pos, now.pos + now.node.nodeSize, ed.schema.nodes.listItem.create(null, ed.schema.nodes.paragraph.create()));
-        else tr.delete(now.pos, now.pos + now.node.nodeSize);
+        else removeLine(tr, now.pos);
         ed.view.dispatch(tr);
         ed.commands.focus();
         toast(under ? `Deleted a line and the ${lines(under)} under it` : 'Line deleted', { label: 'Undo', run: () => ed.chain().focus().undo().run() });
@@ -466,7 +477,9 @@ const currentEditor = () => (inNotebook() ? notebook.editor : editor);
 // Each place also goes in the browser's history, so Back and Forward (mouse
 // buttons, Alt+← →, ⌘[ ]) step through where you've been.
 let historyMode = 'replace';
+let lastPlace = null; // where you are, for the place bar (named once the crumb is drawn)
 function remember(place) {
+  lastPlace = place;
   try { localStorage.setItem('place', JSON.stringify(place)); } catch { /* full */ }
   if (JSON.stringify(history.state) === JSON.stringify(place)) return;
   if (historyMode === 'push') history.pushState(place, '');
@@ -510,7 +523,6 @@ async function go(place) {
   if (place.view === 'write') delete root.dataset.view;
   else root.dataset.view = place.view;
   body.classList.remove('show-outline');
-  $('#view-toggle').textContent = place.view === 'notebook' ? 'Write' : 'Today';
 
   if (place.view === 'write') {
     editor.commands.focus();
@@ -733,6 +745,7 @@ onLocalWrites((rows) => {
 });
 window.__sync = sync;
 window.__notebook = notebook;
+window.__foldKey = foldKey;
 window.__vaultFiles = vaultFiles;
 syncEl.addEventListener('click', () => { if (syncEl.dataset.state === 'signed-out') sync.signIn(); else sync.soon(0); });
 
@@ -752,6 +765,7 @@ async function dropEmptySeed(keep) {
 
 // Books from before worlds (or from a device still on an older version) become worlds.
 async function migrateWorlds() {
+  setOwnWorkflows(await byKind('workflow'));
   if (await ensureWorlds()) await refreshViews();
 }
 
@@ -759,6 +773,7 @@ async function applyRemote(rows) {
   searchChanged(rows);
   if (view() === 'tags' && tagsPage && rows.some((r) => r.tags?.length || r.id === 'settings-tag-groups')) tagsPage.refresh();
   if (rows.some((r) => r.kind === 'settings')) await notes.reloadTypes();
+  if (rows.some((r) => r.kind === 'workflow')) setOwnWorkflows(await byKind('workflow'));
   if (state.chapterId && rows.some((r) => r.links?.includes(state.chapterId))) renderChapterLinks();
   const structural = rows.some((r) => ['project', 'world', 'act', 'chapter', 'area', 'page', 'draft'].includes(r.kind));
   if (structural) {
@@ -1308,6 +1323,11 @@ async function drawCrumb() {
   parts.forEach((p, i) => { if (i) crumb.append(make('span', 'sep', '›')); crumb.append(p); });
   refreshWords();
   await renderStrip();
+  const isToday = lastPlace?.view === 'notebook' && lastPlace.pageId === dayId(isoToday());
+  // The top bar's buttons stay put; the one for where you are is lit.
+  const here = { 'view-toggle': inNotebook() && !!notebook.page && notebook.page.kind === 'day', 'library-toggle': view() === 'library', 'drawer-toggle': view() === 'drawer' };
+  for (const [id, on] of Object.entries(here)) { const b = document.getElementById(id); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
+  nav.here(lastPlace, isToday ? ['Today'] : parts.map((p) => p.textContent.replace(/\s*▾\s*$/, '').trim()).filter(Boolean));
 }
 
 // ---------- tidying up: rename, move, change kind, the Trash ----------
@@ -1532,6 +1552,7 @@ async function moveArea(area, parentId) {
 // A piece's menu.
 async function bookMenu(book) {
   const b = await getEntry(book.id);
+  const world = await worldOf(b);
   const writable = hasManuscript(b) || bookType(b) === 'lines';
   const script = bookType(b) === 'screenplay';
   return [
@@ -1540,7 +1561,8 @@ async function bookMenu(book) {
     { label: 'Rename…', run: () => rename(b) },
     { label: 'What it is (Gag, Episode…)…', run: () => setLabel(b) },
     { label: 'Written as', sub: KINDS.map(([id, label]) => ({ label, current: bookType(b) === id, run: () => setKind(b, id) })) },
-    { label: 'Stage', sub: STAGES.map((st) => ({ label: st, current: stageOf(b) === st, run: () => setStage(b, st) })) },
+    { label: 'Stage', sub: stagesOf(b, world).map((st) => ({ label: st, current: stageOf(b, world) === st, run: () => setStage(b, st) })) },
+    { label: `Stages: ${stageSetOf(b, world).name}`, sub: allSets().map((set) => ({ label: `${set.name}: ${set.about.toLowerCase()}`, current: stageSetOf(b, world).id === set.id, run: () => setPieceStages(b, set.id) })) },
     ...(script ? [{ label: b.fields?.numbered ? 'Scene numbers: turn off' : 'Number the scenes (for production)…', run: () => toggleNumbering(b) }] : []),
     ...(hasManuscript(b) ? [{ label: 'Production (shots, kit, shoot days)', run: () => go({ view: 'production', id: b.id }) }] : []),
     ...(hasManuscript(b) ? [{ label: 'Revise', sub: [
@@ -1552,6 +1574,7 @@ async function bookMenu(book) {
     ...(hasManuscript(b) ? [{ label: 'Share a link to read and comment…', run: () => openShare(b) }] : []),
     { label: 'New piece inside (an episode in a season…)', run: () => addPiece(b.id) },
     { label: 'New page in it', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(b.id); } },
+    { label: 'What Claude knows about this piece…', run: () => showClaudeKnows(b) },
     { label: 'Move to', sub: (await homesFor(b)).map((h) => ({ label: h.label, current: b.parent_id === h.id, run: () => movePiece(b, h.id) })) },
     'sep',
     { label: 'Move to Trash…', danger: true, run: () => toTrash(b) }
@@ -1561,15 +1584,18 @@ async function bookMenu(book) {
 async function worldMenu(world) {
   const w = await getEntry(world.id);
   const all = await areas();
+  const top = await piecesIn(w.id);
   return [
     ...(view() !== 'world' || state.worldId !== w.id ? [{ label: 'Open', run: () => go({ view: 'world', id: w.id }) }] : []),
     { label: 'Rename…', run: () => rename(w) },
     { label: 'New piece…', run: () => addPiece(w.id) },
+    { label: 'What Claude knows about this world…', run: () => showClaudeKnows(w) },
     { label: 'New page in its bible', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(w.id); } },
     { label: 'Move to area', sub: (await areaOptions(all)).map(([id, label]) => ({ label: label.trim(), current: w.area_id === id, run: () => moveBookToArea(w, id) })) },
-    { label: 'Kind', sub: [
-      { label: 'Creative world (pieces, the six pages)', current: !isLife(w), run: () => setLife(w, false) },
-      { label: 'Life project (Overview, Gather, Notes; never shared)', current: isLife(w), run: () => setLife(w, true) }
+    ...(!isLife(w) ? [{ label: 'Workflow…', run: () => openStages(w) }] : []),
+    { label: 'Shape', sub: [
+      ...SHAPES.map((sh) => ({ label: `${sh.name}: ${sh.about.toLowerCase()}`, current: shapeOf(w, top.length).id === sh.id, run: () => setShape(w, sh.id) })),
+      ...(shapeOf(w, top.length).levels.length ? ['sep', { label: `Rename levels (${levelsOf(w, shapeOf(w, top.length)).map((l) => l.label).join(' › ')})…`, run: () => renameLevels(w) }] : [])
     ] },
     ...(isLife(w) ? [{ label: 'Meeting notes go here', sub: [['business', 'Business meetings'], ['filmmaking', 'Filmmaking meetings'], ['other', 'Other meetings']].map(([k, label]) => ({ label, current: (w.fields?.meetings || []).includes(k), run: () => setMeetings(w, k) })) }] : []),
     ...(view() === 'library' ? [
@@ -1579,6 +1605,150 @@ async function worldMenu(world) {
     'sep',
     { label: 'Move to Trash…', danger: true, run: () => toTrash(w) }
   ];
+}
+
+// What a project is. Nothing moves or gets renamed: the shape only says
+// what new pieces start as (Seasons and Episodes in a Show).
+async function setShape(world, id) {
+  const w = await getEntry(world.id);
+  if (id === 'life') return setLife(w, true);
+  if (isLife(w)) { await setLife(w, false); }
+  const fresh = await getEntry(w.id);
+  const now = { ...fresh, fields: { ...fresh.fields, shape: id }, updated_at: Date.now() };
+  await putEntries([now]);
+  await refreshViews();
+  const sh = SHAPES.find((x) => x.id === id);
+  const levels = levelsOf(now, sh);
+  toast(`Now ${id === 'one' ? 'one piece' : `a ${sh.name.toLowerCase()}`}. Nothing moved${levels.length ? `; new pieces start as ${levels.map((l) => l.label + 's').join(', then ')}` : ''}.`);
+  if (id === 'show') await offerSeason(now, levels);
+}
+
+// A project that became a Show can put what it already has into Season 1,
+// as its Episodes, only if you say so; Undo puts everything back.
+async function offerSeason(world, levels) {
+  const [group, piece] = levels.map((l) => l.label);
+  const loose = (await piecesIn(world.id)).filter((p) => kindName(p) !== group);
+  if (!loose.length) return;
+  const one = loose.length === 1;
+  const ok = await ask({ title: `Put ${one ? `${loose[0].title || 'it'}` : `these ${loose.length} pieces`} into ${group} 1?`, body: `${one ? 'It becomes' : 'They become'} ${one ? `${piece} 1` : `its ${piece.toLowerCase()}s`}, in the same order. Nothing in ${one ? 'it' : 'them'} changes, and you can undo it.`, ok: `Put ${one ? 'it' : 'them'} in`, cancel: 'Leave as is' });
+  if (!ok) return;
+  const before = loose.map((p) => ({ ...p }));
+  const season = await newPiece(world.id, 'lines', `${group} 1`, null, group);
+  const t = Date.now();
+  await putEntries([
+    { ...season, sort: Math.min(...loose.map((p) => p.sort || 0)) - 1, updated_at: t },
+    ...loose.map((p) => ({ ...p, parent_id: season.id, fields: { ...p.fields, ...(p.fields?.label ? {} : { label: piece }) }, updated_at: t }))
+  ]);
+  await refreshViews();
+  toast(`${one ? `${loose[0].title || 'It'} is` : `${loose.length} pieces are`} in ${group} 1 now`, { label: 'Undo', run: async () => {
+    const s = await getEntry(season.id);
+    await putEntries([...before.map((p) => ({ ...p, updated_at: Date.now() })), { ...s, deleted: true, updated_at: Date.now() }]);
+    await refreshViews();
+  } });
+}
+
+// Your own names for a shape's levels in this project. Pieces you already
+// have keep theirs; new ones start with the new names.
+async function renameLevels(world) {
+  const w = await getEntry(world.id);
+  const shape = shapeOf(w, (await piecesIn(w.id)).length);
+  const now = levelsOf(w, shape).map((l) => l.label);
+  const got = await askText({ title: 'Rename levels', body: `What ${shape.levels.length > 1 ? 'they are' : 'it is'} called in ${w.title || 'this project'}, biggest first${shape.levels.length > 1 ? ', with › or a comma between' : ''}. For example ${shape.levels.length > 1 ? 'Batch › Reel' : 'Reel'}. Pieces you already have keep their names.`, value: now.join(' › '), ok: 'Save' });
+  if (got === null || got === undefined) return;
+  const names = got.split(/›|>|,/).map((x) => x.trim()).slice(0, shape.levels.length);
+  const levelNames = shape.levels.map((l, i) => (names[i] && names[i] !== l.label ? names[i] : ''));
+  const fields = { ...w.fields, levelNames };
+  if (!levelNames.some(Boolean)) delete fields.levelNames;
+  await putEntries([{ ...w, fields, updated_at: Date.now() }]);
+  await refreshViews();
+  toast(`New pieces in ${w.title || 'it'} start as ${levelsOf({ fields }, shape).map((l) => l.label + 's').join(', then ')}`);
+}
+
+// The stages a project's pieces go through, and its names for them.
+async function openStages(world) {
+  const w = await getEntry(world.id);
+  const pieces = (await worldTree(w.id)).pieces.map(({ row }) => row);
+  const rows = await editStages(w, pieces, { keepOwn, deleteOwn, usedBy: ownUsedBy });
+  if (!rows) return;
+  const before = [w, ...pieces.filter((p) => rows.some((r) => r.id === p.id))];
+  await putEntries(rows);
+  await refreshViews();
+  const moved = rows.length - 1;
+  toast(`Workflow saved${moved ? `; ${plural(moved, 'piece')} moved with them` : ''}`, { label: 'Undo', run: async () => { await putEntries(before.map((r) => ({ ...r, updated_at: Date.now() }))); await refreshViews(); } });
+}
+
+// A workflow of your own, to start the next project from.
+async function keepOwn(row) {
+  await putEntries([row]);
+  addOwnWorkflow(row);
+  toast(`“${row.title}” is one of your workflows now; pick it under More when you make something new`);
+}
+
+// Which projects, and which of their pieces, go through one of your own workflows.
+async function ownUses(set) {
+  const out = [];
+  for (const w of await worlds()) {
+    const pieces = (await worldTree(w.id)).pieces.map(({ row }) => row).filter((p) => stageSetOf(p, w).id === set.id);
+    if (pieces.length || Object.values(w.fields?.stageFor || {}).includes(set.id)) out.push({ w, pieces });
+  }
+  return out;
+}
+const ownUsedBy = async (set) => (await ownUses(set)).map(({ w }) => w.title || 'Untitled');
+
+// Delete a workflow of your own. Projects that used it go the way it was
+// built from (its base), and each piece moves to the step at the same point;
+// Undo puts the workflow, the projects and the pieces back.
+async function deleteOwn(set) {
+  const row = await getEntry(set.id);
+  if (!row) return false;
+  const t = Date.now();
+  const before = [row];
+  const rows = [{ ...row, deleted: true, updated_at: t }];
+  for (const { w, pieces } of await ownUses(set)) {
+    const fields = { ...w.fields };
+    const stageFor = Object.fromEntries(Object.entries(fields.stageFor || {}).map(([k, v]) => [k, v === set.id ? set.base : v]));
+    const { [set.id]: _s, ...stageLists } = fields.stageLists || {};
+    const { [set.id]: _t, ...toolLists } = fields.toolLists || {};
+    Object.assign(fields, { stageFor, stageLists, toolLists });
+    for (const k of ['stageFor', 'stageLists', 'toolLists']) if (!Object.keys(fields[k]).length) delete fields[k];
+    before.push(w);
+    rows.push({ ...w, fields, updated_at: t });
+    const after = { ...w, fields };
+    for (const p of pieces) {
+      const old = stagesOf(p, w);
+      const i = old.indexOf(stageOf(p, w));
+      const pf = { ...p.fields };
+      if (pf.stageSet === set.id) pf.stageSet = set.base;
+      const now = stagesOf({ ...p, fields: pf }, after);
+      // The last step stays the last (out in the world); the rest keep their point.
+      if (pf.stage) pf.stage = i === old.length - 1 ? now[now.length - 1] : now[Math.min(i, now.length - 2)];
+      before.push(p);
+      rows.push({ ...p, fields: pf, updated_at: t });
+    }
+  }
+  await putEntries(rows);
+  dropOwnWorkflow(set.id);
+  await refreshViews();
+  toast(`Deleted “${set.name}”`, { label: 'Undo', run: async () => {
+    await putEntries(before.map((r) => ({ ...r, updated_at: Date.now() })));
+    addOwnWorkflow(row);
+    await refreshViews();
+  } });
+  return true;
+}
+
+// One piece through a different set of stages (a live-action short in a Show of AI reels).
+async function setPieceStages(piece, setId) {
+  const b = await getEntry(piece.id);
+  const world = await worldOf(b);
+  const fields = { ...b.fields };
+  const usual = stageSetOf({ fields: { type: bookType(b) } }, world).id;
+  const at = stageOf({ ...b, fields: { ...b.fields, stageSet: setId } }, world);
+  if (setId === usual) delete fields.stageSet; else fields.stageSet = setId;
+  if (b.fields?.stage) fields.stage = at;
+  await putEntries([{ ...b, fields, updated_at: Date.now() }]);
+  await refreshViews();
+  toast(`${b.title || 'It'} goes through ${setById(setId).name} stages now: ${stagesIn(setById(setId), world).join(', ')}`);
 }
 
 // A life project: Overview, Gather and Notes only, and never shared. Nothing
@@ -1621,6 +1791,7 @@ async function pageMenu(page) {
     { label: 'New page inside', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(p.id); } },
     { label: 'History…', run: async () => { await go({ view: 'notebook', pageId: p.id }); await openHistory(); } },
     { label: 'Share a link to read and comment…', run: () => openShare(p) },
+    { label: 'What Claude knows about this page…', run: () => showClaudeKnows(p) },
     { label: 'Move to', sub: [{ label: 'Loose pages (no world)', current: !p.parent_id, run: () => movePage(p, null) }, ...(await homesFor(p)).map((h) => ({ label: h.label, current: p.parent_id === h.id, run: () => movePage(p, h.id) }))] },
     'sep',
     { label: 'Move to Trash', danger: true, run: () => toTrash(p) }
@@ -1640,16 +1811,28 @@ async function setLabel(piece) {
 
 async function setStage(piece, stage) {
   const b = await getEntry(piece.id);
+  const was = b.fields?.stage;
   await putEntries([{ ...b, fields: { ...b.fields, stage }, updated_at: Date.now() }]);
   await refreshViews();
+  toast(`${b.title || 'It'}: ${stage}`, { label: 'Undo', run: async () => {
+    const now = await getEntry(b.id);
+    const fields = { ...now.fields, stage: was };
+    if (!was) delete fields.stage;
+    await putEntries([{ ...now, fields, updated_at: Date.now() }]);
+    await refreshViews();
+  } });
 }
 
 // A new piece in a world or inside a piece: its name, what it is, how it's written.
 async function addPiece(parentId) {
   const parent = await getEntry(parentId);
+  const next = await nextLevel(parent);
   const got = await askPiece({
-    title: `New piece in ${nameOf(parent)}`,
+    title: `New ${next ? next.label.toLowerCase() : 'piece'} in ${nameOf(parent)}`,
     labels: await usedLabels(),
+    label: next?.label || '',
+    name: next ? `${next.label} ${next.n}` : '',
+    type: next?.type,
     formats: [['screenplay', 'Script', 'A short, an episode, a film'], ['novel', 'Prose', 'A novel, a story'], ['lines', 'Outline', 'A gag, a season, loose lines']]
   });
   if (!got) return;
@@ -1823,7 +2006,8 @@ async function renderLibrary() {
     const kind = make('span', 'card-kind');
     // A world says what's in it: its one piece, how many pieces, or just pages.
     const top = s.pieces.filter((p) => p.depth === 0).map((p) => p.row);
-    const what = isLife(b) ? 'life project' : top.length === 1 && !s.pieces.slice(1).length ? kindName(top[0]).toLowerCase() : s.pieces.length ? 'world' : 'pages';
+    const shape = shapeOf(b, top.length);
+    const what = shape.id !== 'one' ? shape.name.toLowerCase() : top.length === 1 && !s.pieces.slice(1).length ? kindName(top[0]).toLowerCase() : s.pieces.length ? 'collection' : 'pages';
     kind.append(dot(areaColor(area)), document.createTextNode(`${area?.title || 'No area'} · ${what}`));
     const n = (x, word) => `${x} ${word}${x === 1 ? '' : 's'}`;
     const detail = [
@@ -1863,7 +2047,7 @@ async function renderLibrary() {
     cards.push(wrap);
   }
   const add = make('button', 'card card-new');
-  add.append(make('span', 'plus', '+'), make('span', '', 'New world: a novel, a show, a film, or notes'));
+  add.append(make('span', 'plus', '+'), make('span', '', 'New: a novel, a show, a book series, a life project…'));
   add.addEventListener('click', () => showNewBook('novel'));
   cards.push(add);
   $('#lib-books').replaceChildren(...cards);
@@ -1932,11 +2116,36 @@ async function areaOptions(allAreas) {
   return out;
 }
 
-async function showNewBook(type) {
+// New: what are you making? The shape can change any time from the ⋯ menu.
+let newShape = 'one';
+const newHow = newWorkflow($('#lib-new-how'), { keepOwn, deleteOwn, usedBy: ownUsedBy });
+const pickHow = (force) => newHow.pick(setForNew(newShape, $('#lib-new-type').value), { force });
+$('#lib-new-type').addEventListener('change', () => pickHow());
+function pickShape(id, force) {
+  newShape = id;
+  pickHow(force);
+  $('#lib-new-shapes').querySelectorAll('.lib-shape').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.shape === id)));
+  $('#lib-new-type-box').hidden = id !== 'one';
+  const sh = SHAPES.find((x) => x.id === id);
+  $('#lib-new-levels').textContent = sh.levels.length ? `Starts with ${id === 'show' ? 'Season 1 and Episode 1' : id === 'series' ? 'Book 1' : 'nothing yet'}. New pieces inside are ${sh.levels.map((l) => l.label + 's').join(', then ')}.` : id === 'universe' ? 'Put a Show, a Book series or a Film inside; they all share one bible.' : '';
+}
+$('#lib-new-shapes').replaceChildren(...SHAPES.map((sh) => {
+  const b = make('button', 'lib-shape');
+  b.type = 'button';
+  b.dataset.shape = sh.id;
+  b.setAttribute('role', 'radio');
+  b.append(make('b', '', sh.name), make('span', '', sh.about));
+  b.addEventListener('click', () => { pickShape(sh.id); $('#lib-new-title').focus(); });
+  return b;
+}));
+
+async function showNewBook(type = 'novel', shape = 'one') {
   if (view() !== 'library') await go({ view: 'library' });
   const form = $('#lib-new');
   form.hidden = false;
-  $('#lib-new-type').value = type;
+  $('#lib-new-type').value = type === 'notes' ? 'world' : type;
+  newHow.reset();
+  pickShape(shape, true);
   $('#lib-new-title').value = '';
   $('#lib-new-title').focus();
 }
@@ -1947,19 +2156,26 @@ $('#lib-new').addEventListener('submit', async (e) => {
   if (!title) return;
   const type = $('#lib-new-type').value;
   const area = $('#lib-new-area').value || null;
-  let world = type === 'world' || type === 'life' ? await newWorld(title, area) : await worldOf(await newBook(type, title, area));
+  const how = newHow.value();
+  const world = await newShaped(newShape, title, area, type);
+  if (how) await useWorkflow(world, how);
   $('#lib-new').hidden = true;
-  // A life project (a remodel, research for someone ill) opens on its overview.
-  if (type === 'life') {
-    world = await getEntry(world.id);
-    await putEntries([{ ...world, fields: { ...world.fields, life: true }, updated_at: Date.now() }]);
-    return go({ view: 'world', id: world.id });
-  }
-  // A new world opens on its Idea page, the place to think it through.
-  const idea = (await pagesIn(world.id))[0];
+  // One piece opens on its Idea page, the place to think it through; anything
+  // bigger opens on its overview, to see what's inside.
+  const idea = newShape === 'one' && (await pagesIn(world.id))[0];
   if (idea) await go({ view: 'notebook', pageId: idea.id });
   else await go({ view: 'world', id: world.id });
 });
+// The workflow picked at New: its kind of piece (and outlines, which go the
+// project's way) goes through it, with any steps and tools you customized.
+async function useWorkflow(world, how) {
+  const w = await getEntry(world.id);
+  const stageFor = { ...(w.fields?.stageFor || {}) };
+  for (const t of [typeForSet(how.set), 'lines']) if (stageSetOf({ fields: { type: t } }, w).id !== how.set) stageFor[t] = how.set;
+  const fields = { ...w.fields, stageFor, stageLists: { ...(w.fields?.stageLists || {}), ...how.stageLists }, toolLists: { ...(w.fields?.toolLists || {}), ...how.toolLists } };
+  for (const k of ['stageFor', 'stageLists', 'toolLists']) if (!Object.keys(fields[k]).length) delete fields[k];
+  if (JSON.stringify(fields) !== JSON.stringify(w.fields)) await putEntries([{ ...w, fields, updated_at: Date.now() }]);
+}
 $('#lib-new-cancel').addEventListener('click', () => { $('#lib-new').hidden = true; });
 
 // ---------- a book's home ----------
@@ -1999,16 +2215,22 @@ async function renderProject() {
     renderRail();
   };
   label.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); label.blur(); } };
+  const world = await worldOf(b);
   const stageSel = $('#ph-stage');
-  stageSel.replaceChildren(...STAGES.map((st) => Object.assign(make('option', '', st), { value: st })));
-  stageSel.value = stageOf(b);
+  stageSel.replaceChildren(...stagesOf(b, world).map((st) => Object.assign(make('option', '', st), { value: st })));
+  stageSel.value = stageOf(b, world);
   stageSel.onchange = () => setStage(b, stageSel.value);
+  // The one button that moves it on; the menu beside it goes back or skips.
+  const next = $('#ph-next');
+  const nl = nextLabel(stagesOf(b, world), stageOf(b, world));
+  next.hidden = !nl;
+  next.textContent = nl || '';
+  next.onclick = () => { const l = stagesOf(b, world); setStage(b, l[l.indexOf(stageOf(b, world)) + 1]); };
   $('#ph-stats').textContent = bookType(b) === 'screenplay'
     ? `${s.words.toLocaleString()} words`
     : novel
     ? `${s.words.toLocaleString()} words · ${s.chapters.length} chapter${s.chapters.length === 1 ? '' : 's'}`
     : `${s.pages} page${s.pages === 1 ? '' : 's'}${s.words ? ` · ${s.words.toLocaleString()} words in its manuscript` : ''}`;
-  const world = await worldOf(b);
   const inWorld = $('#ph-world');
   inWorld.replaceChildren();
   if (world) {
@@ -2054,8 +2276,10 @@ async function renderProject() {
   }
 
   const inside = await piecesIn(b.id);
-  $('#ph-pieces').replaceChildren(...inside.map((x) => pieceRow(x, 0)));
+  $('#ph-pieces').replaceChildren(...inside.map((x) => pieceRow(x, 0, world)));
   $('#ph-new-piece').onclick = () => addPiece(b.id);
+  const nextIn = await nextLevel(b);
+  $('#ph-new-piece').textContent = `+ ${nextIn ? nextIn.label : 'Piece'}`;
   const pages = await pagesIn(b.id);
   // Empty sections stay out of the way: just the two ways to add one.
   $('#ph-pieces-head').hidden = !inside.length;
@@ -2084,15 +2308,15 @@ async function renderProject() {
 }
 
 // One piece in a list: its name, what it is and its stage.
-function pieceRow(p, depth) {
+function pieceRow(p, depth, world) {
   const li = make('li');
   li.style.setProperty('--depth', depth);
   const open = make('button', 'loose-title', p.title || 'Untitled');
   open.addEventListener('click', () => go({ view: 'project', id: p.id }));
   onContextMenu(open, () => bookMenu(p));
-  const stage = make('button', 'stage', stageOf(p));
-  stage.title = 'Stage';
-  stage.addEventListener('click', (e) => popMenu(stage, STAGES.map((st) => ({ label: st, current: stageOf(p) === st, run: () => setStage(p, st) }))));
+  const stage = make('button', 'stage', stageOf(p, world));
+  stage.title = `Stage (${stageSetOf(p, world).name})`;
+  stage.addEventListener('click', () => popMenu(stage, stagesOf(p, world).map((st) => ({ label: st, current: stageOf(p, world) === st, run: () => setStage(p, st) }))));
   li.append(open, make('span', 'piece-kind', kindName(p)), stage, menuButton(() => bookMenu(p), `More for ${p.title || 'this piece'}`));
   return li;
 }
@@ -2134,7 +2358,8 @@ async function renderWorld() {
   }
 
   const life = isLife(w);
-  $('#wh-kind').textContent = life ? 'Life project · ' : '';
+  const shape = shapeOf(w, s.pieces.filter((p) => p.depth === 0).length);
+  $('#wh-kind').textContent = shape.id === 'one' ? '' : `${shape.name} · `;
   // What it is, in a sentence: type over it.
   const log = $('#wh-logline');
   log.textContent = w.fields?.logline || '';
@@ -2148,26 +2373,20 @@ async function renderWorld() {
   };
   log.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); log.blur(); } if (e.key === 'Escape') { e.preventDefault(); log.textContent = w.fields?.logline || ''; log.blur(); } };
 
-  // Where every piece is, idea to posted: click to see the board in Make.
-  const bar = $('#wh-stagebar');
-  bar.hidden = life || !s.pieces.length;
-  bar.replaceChildren(...STAGES.map((st, i) => {
-    const n = s.pieces.filter(({ row }) => stageOf(row) === st).length;
-    const b = make('button', 'wh-stage', n ? `${st} ${n}` : '');
-    b.style.flexGrow = String(n);
-    b.dataset.stage = st;
-    b.style.setProperty('--i', i);
-    b.hidden = !n;
-    b.title = `${plural(n, 'piece')} at ${st}: see the stage board`;
-    b.addEventListener('click', () => go({ view: 'stage', id: w.id, page: 'make', sub: 'board' }));
-    return b;
-  }));
+  // Where every piece is, from new idea to out in the world: the status
+  // board lives here on the project's home, and the tabs are just rooms.
+  $('#wh-stagebar').hidden = true;
+  const status = $('#wh-status');
+  status.hidden = life || !s.pieces.length;
+  if (!status.hidden) renderBoard(w, s.pieces);
+  $('#wh-workflow').onclick = () => openStages(w);
 
   $('#wh-pieces-box').hidden = life && !s.pieces.length;
-  $('#wh-pieces').replaceChildren(...s.pieces.map(({ row, depth }) => pieceRow(row, depth)));
+  $('#wh-pieces').replaceChildren(...s.pieces.map(({ row, depth }) => pieceRow(row, depth, w)));
   $('#wh-pieces-empty').hidden = s.pieces.length > 0;
   $('#wh-new-piece').onclick = () => addPiece(w.id);
-  $('#wh-board').hidden = true;
+  const nextHere = await nextLevel(w);
+  $('#wh-new-piece').textContent = `+ ${nextHere ? nextHere.label : 'Piece'}`;
 
   // A life project's tasks go to Daybook, linked back here.
   $('#wh-task-box').hidden = !life;
@@ -2195,9 +2414,9 @@ async function renderWorld() {
     for (const { row } of s.pieces) for (const d of (await children(row.id)).filter((r) => r.kind === 'shootday' && (r.fields?.date || '') >= isoToday())) days.push({ d, p: row });
     days.sort((a, b) => a.d.fields.date.localeCompare(b.d.fields.date));
     if (days[0]) { const { d, p } = days[0]; next.push({ from: 'Make', text: `Shoot day ${new Date(`${d.fields.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${p.title || 'Untitled'}`, run: () => go({ view: 'production', id: p.id, day: d.id }) }); }
-    const written = s.pieces.filter(({ row }) => stageOf(row) === 'Written' && bookType(row) === 'screenplay').map(({ row }) => row);
+    const written = s.pieces.filter(({ row }) => stageSetOf(row, w).id === 'ai' && stageOf(row, w) === stagesOf(row, w)[1] && bookType(row) === 'screenplay').map(({ row }) => row);
     if (written[0]) next.push({ from: 'Make', text: `Board ${written[0].title || 'Untitled'}${written.length > 1 ? ` and ${plural(written.length - 1, 'other')}` : ''}`, run: () => go({ view: 'production', id: written[0].id }) });
-    const edited = s.pieces.filter(({ row }) => stageOf(row) === 'Edited').map(({ row }) => row);
+    const edited = s.pieces.filter(({ row }) => isReady(row, w)).map(({ row }) => row);
     if (edited[0]) next.push({ from: 'Deliver', text: `Post ${edited[0].title || 'Untitled'}`, run: () => go({ view: 'deliver', id: edited[0].id, tab: 'post' }) });
   }
   $('#wh-next').replaceChildren(...next.map((n) => {
@@ -2530,6 +2749,7 @@ async function openShare(target) {
 const production = new ProductionView($('#prod-view'), {
   open: (r) => grid.hooks.open(r),
   openPage: (id) => go({ view: 'notebook', pageId: id }),
+  go: (place) => go(place),
   leave: (piece) => openBook(piece.id),
   changed(rows) { if (rows.some((r) => r && ['project', 'world', 'page'].includes(r.kind))) renderRail(); },
   menu: (anchor, items) => popMenu(anchor, items),
@@ -2593,6 +2813,22 @@ const PAGE_NAMES = { gather: 'Gather', shape: 'Shape', write: 'Write', revise: '
 // Views you look at rather than type in: the tabs sit faintly at the top there.
 const LOOKING = ['library', 'tags', 'world', 'project', 'grid', 'production', 'deliver', 'compare', 'stage', 'drawer'];
 const strip = new PageStrip($('#page-tabs'), { pick: (id) => goPage(id) });
+const nav = new Nav({
+  go: (place) => go(place),
+  goPage: (id) => goPage(id),
+  tabs: () => strip.tabs,
+  active: () => strip.ctx?.active || null,
+  crumb: () => [...document.querySelectorAll('#crumb .crumb-part')],
+  search: (text) => { openPalette('go'); const input = $('#palette-input'); input.value = text; filterPalette(); },
+  capture: () => captureHere({ start: true }),
+  menu: () => openPalette(),
+  outline: () => body.classList.add('show-outline'),
+  isTouch: () => touch.matches,
+  keyLabel,
+  refocus: () => { if (!touch.matches && (writing() || inNotebook())) currentEditor().commands.focus(); }
+});
+// A phone has no keys, so the menu button says what it is.
+if (touch.matches) document.querySelectorAll('[data-cmd="palette"]').forEach((b) => { b.textContent = 'Menu'; });
 
 // Where you are, as a page: on the desk, or in a world or piece, and which of its pages.
 async function pageContext() {
@@ -2602,7 +2838,8 @@ async function pageContext() {
     if (row.kind === 'world') return { scope: 'world', id: row.id, life: isLife(row), active };
     return { scope: 'piece', id: row.id, life: false, active };
   };
-  if (v === 'library' || v === 'tags') return { scope: 'desk', active: 'library' };
+  if (v === 'library') return { scope: 'desk', active: 'library' };
+  if (v === 'tags') return { scope: 'desk', active: 'tags' };
   if (v === 'drawer') return { scope: 'desk', active: 'drawer' };
   if (v === 'notebook') {
     const p = notebook.page;
@@ -2636,6 +2873,7 @@ async function goPage(id) {
   if (id === 'today') return go({ view: 'notebook', pageId: dayId(isoToday()) });
   if (id === 'drawer') return go({ view: 'drawer' });
   if (id === 'library') return go({ view: 'library', area: null });
+  if (id === 'tags') return go({ view: 'tags' });
   const ctx = await pageContext();
   if (!ctx?.id) return;
   return openPage(await getEntry(ctx.id), id);
@@ -2652,13 +2890,17 @@ async function openPage(row, id) {
 }
 
 // Typing on a page you look at tucks the tabs away until the mouse moves.
+let altTimer = 0;
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Alt') { body.classList.add('alt-held'); return; }
+  // The tab numbers show only when Alt is held on its own for a moment, so
+  // Alt + Left (Back) or Alt + C never flashes them.
+  if (e.key === 'Alt') { if (!e.repeat) { clearTimeout(altTimer); altTimer = setTimeout(() => body.classList.add('alt-held'), 400); } return; }
+  if (e.altKey && !/^[0-9]$/.test(e.key)) { clearTimeout(altTimer); body.classList.remove('alt-held'); }
   const t = e.target;
   if (!e.altKey && !e.ctrlKey && !e.metaKey && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName)) && !t.closest('.palette, .topbar')) body.classList.add('typing');
 }, true);
-document.addEventListener('keyup', (e) => { if (e.key === 'Alt') body.classList.remove('alt-held'); });
-window.addEventListener('blur', () => body.classList.remove('alt-held'));
+document.addEventListener('keyup', (e) => { if (e.key === 'Alt') { clearTimeout(altTimer); body.classList.remove('alt-held'); } });
+window.addEventListener('blur', () => { clearTimeout(altTimer); body.classList.remove('alt-held'); });
 let lastMove = null;
 document.addEventListener('mousemove', (e) => {
   if (!body.classList.contains('typing')) return;
@@ -2720,6 +2962,7 @@ const stagePage = new StagePage($('#stage-view'), {
   changed: (rows) => changedHere(rows),
   remember: (place) => remember(place),
   board: (el, w, pieces) => renderBoard(w, pieces, el),
+  editStages: (w) => openStages(w),
   revise: (action, piece, note) => revisePiece(action, piece, note),
   newPage: async (parentId) => { await go({ view: 'notebook' }); await notebook.newPage(parentId); },
   newPiece: (parentId) => addPiece(parentId)
@@ -2739,11 +2982,24 @@ window.__today = todayPanel;
 
 
 function renderBoard(w, pieces, el = $('#wh-board')) {
+  // One button on a card moves it to the next status.
+  const nextBtn = (p, list) => {
+    const label = nextLabel(list, stageOf(p, w));
+    if (!label) return null;
+    const b = make('button', 'sb-next', label);
+    b.type = 'button';
+    b.addEventListener('click', (e) => { e.stopPropagation(); setStage(p, list[list.indexOf(stageOf(p, w)) + 1]); });
+    return b;
+  };
   const touch = matchMedia('(hover: none)').matches;
-  const cols = STAGES.map((stage) => {
-    const col = make('section', 'sb-col');
+  // One row of columns for each set of stages in the world (a Universe can
+  // have reels on AI video and a novel on Book); one set needs no label.
+  const sets = [...new Set(pieces.map(({ row }) => stageSetOf(row, w).id))].map(setById);
+  if (!sets.length) sets.push(setById(w?.fields?.stageFor?.screenplay || 'ai'));
+  const rowFor = (set) => stagesIn(set, w).map((stage, i, list) => {
+    const col = make('section', 'sb-col' + (i === list.length - 1 ? ' out' : ''));
     col.dataset.stage = stage;
-    const mine = pieces.filter(({ row }) => stageOf(row) === stage);
+    const mine = pieces.filter(({ row }) => stageSetOf(row, w).id === set.id && stageOf(row, w) === stage);
     const head = make('div', 'sb-head');
     head.append(make('span', '', stage), make('span', 'sb-n', mine.length ? String(mine.length) : ''));
     col.append(head);
@@ -2751,9 +3007,11 @@ function renderBoard(w, pieces, el = $('#wh-board')) {
       const card = make('button', 'sb-card');
       card.dataset.id = p.id;
       card.append(make('span', 'sb-title', p.title || 'Untitled'), make('span', 'sb-kind', kindName(p)));
+      const nb = nextBtn(p, list);
+      if (nb) card.append(nb);
       card.addEventListener('click', () => (touch ? popMenu(card, [
         { label: 'Open', run: () => go({ view: 'project', id: p.id }) },
-        { label: 'Stage', sub: STAGES.map((st) => ({ label: st, current: stageOf(p) === st, run: () => setStage(p, st) })) }
+        { label: 'Status', sub: list.map((st) => ({ label: st, current: stageOf(p, w) === st, run: () => setStage(p, st) })) }
       ]) : go({ view: 'project', id: p.id })));
       onContextMenu(card, () => bookMenu(p));
       if (!touch) {
@@ -2772,12 +3030,22 @@ function renderBoard(w, pieces, el = $('#wh-board')) {
         if (!id) return;
         e.preventDefault();
         const p = pieces.find(({ row }) => row.id === id)?.row;
-        if (p && stageOf(p) !== stage) await setStage(p, stage);
+        // A piece only moves along its own set's stages.
+        if (p && stageSetOf(p, w).id === set.id && stageOf(p, w) !== stage) await setStage(p, stage);
       });
     }
     return col;
   });
-  el.replaceChildren(...cols);
+  el.classList.toggle('sb-sets', sets.length > 1);
+  if (sets.length === 1) { el.dataset.set = sets[0].id; el.replaceChildren(...rowFor(sets[0])); return; }
+  el.replaceChildren(...sets.map((set) => {
+    const box = make('div', 'sb-set');
+    box.dataset.set = set.id;
+    const row = make('div', 'stage-board sb-row');
+    row.replaceChildren(...rowFor(set));
+    box.append(make('div', 'panel-label', set.name), row);
+    return box;
+  }));
 }
 
 // ---------- panels revealed by edges ----------
@@ -2790,9 +3058,30 @@ const hovers = () => Date.now() > edgesQuietUntil && !matchMedia('(hover: none)'
 $('.edge-left').addEventListener('mouseenter', () => { if (hovers()) body.classList.add('show-outline'); });
 $('.edge-left').addEventListener('click', () => body.classList.add('show-outline'));
 $('.outline').addEventListener('mouseleave', () => body.classList.remove('show-outline'));
-$('.edge-top').addEventListener('mouseenter', () => { if (hovers()) body.classList.add('show-top'); });
+// The top bar comes down as the mouse nears the top of the page, and also when
+// it overshoots into the window's own title bar. It goes away once the mouse
+// is well below it, not the moment it slips off an edge.
+// A short pause first, so reaching for something near the top of the page
+// (and clicking it) doesn't pull the bar down over it.
+const TOP_ZONE = 48;
+let topByMouse = false;
+let topTimer = 0;
+let mouseY = Infinity;
+const showTop = () => { clearTimeout(topTimer); body.classList.add('show-top'); topByMouse = true; };
+const topAllowed = () => !body.classList.contains('show-outline') && !document.querySelector('.go-panel:not([hidden]), .palette:not([hidden])');
+document.addEventListener('mousemove', (e) => {
+  mouseY = e.clientY;
+  if (!hovers() || e.buttons) { clearTimeout(topTimer); topTimer = 0; return; }
+  const open = body.classList.contains('show-top');
+  if (!open && e.clientY <= TOP_ZONE && e.clientX > 18 && topAllowed()) {
+    if (!topTimer) topTimer = setTimeout(() => { topTimer = 0; if (mouseY <= TOP_ZONE && topAllowed()) showTop(); }, 150);
+  } else if (open && topByMouse && e.clientY > $('.topbar').getBoundingClientRect().bottom + 24) { body.classList.remove('show-top'); topByMouse = false; }
+});
+document.addEventListener('mousedown', () => { clearTimeout(topTimer); topTimer = 0; }, true);
+document.documentElement.addEventListener('mouseleave', (e) => { if (e.clientY <= 0 && hovers()) showTop(); });
 $('.edge-top').addEventListener('click', () => body.classList.add('show-top'));
-$('.topbar').addEventListener('mouseleave', () => body.classList.remove('show-top'));
+// The pages you look at start below the bar, however tall it is.
+new ResizeObserver(() => root.style.setProperty('--topbar-h', `${$('.topbar').offsetHeight}px`)).observe($('.topbar'));
 // On a touch screen there's no mouse to leave the bar, so a tap anywhere else tucks it away.
 document.addEventListener('pointerdown', (e) => {
   if (e.pointerType !== 'mouse' && !e.target.closest('.topbar, .edge-top')) body.classList.remove('show-top');
@@ -3217,7 +3506,8 @@ async function exportBook() {
 
 const writing = () => view() === 'write';
 const commands = [
-  { group: 'go', label: 'Go to… a book, chapter or page', keys: `${mod}O`, run: () => openPalette('go') },
+  { group: 'go', label: 'Go: back to the last place, this piece’s pages, the desk', keys: `${mod}O`, words: ['back', 'recent', 'jump', 'switch'], run: () => setTimeout(() => nav.open(), 60) },
+  { group: 'go', label: 'Go to… a book, chapter or page', keys: '', run: () => openPalette('go') },
   { group: 'go', label: 'Search inside all your writing', keys: `${mod}⇧F`, run: () => openPalette('search') },
   { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
   { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
@@ -3228,14 +3518,15 @@ const commands = [
   { group: 'go', label: 'Back to writing', keys: `${mod}J`, run: () => go({ view: 'write' }), when: () => !writing() },
   { group: 'go', label: 'Next chapter (or day)', keys: `${mod}⌥↓`, run: () => step(1), when: () => writing() || inNotebook() },
   { group: 'go', label: 'Previous chapter (or day)', keys: `${mod}⌥↑`, run: () => step(-1), when: () => writing() || inNotebook() },
-  { group: 'new', label: 'Capture an idea by voice', keys: '⌥C', run: () => openCapture() },
-  { group: 'new', label: 'Talk into the draft here (Claude writes it up)', keys: '⌥V', words: ['dictate', 'voice', 'walk', 'speak'], run: () => talkIntoDraft(), when: () => writing() },
-  { group: 'new', label: 'Capture from a recording file…', words: ['audio', 'voice memo', 'upload'], run: () => fromRecordingFile(false) },
-  { group: 'new', label: 'Draft from a recording file…', words: ['audio', 'voice memo', 'upload'], run: () => fromRecordingFile(true), when: () => writing() },
+  { group: 'new', label: 'Capture an idea by voice (it lands where you are)', keys: '⌥C', words: ['dictate', 'voice', 'walk', 'speak', 'talk', 'draft'], run: () => captureHere() },
+  { group: 'new', label: 'Capture from a recording file…', words: ['audio', 'voice memo', 'upload', 'draft'], run: () => fromRecordingFile() },
   { group: 'write', label: 'Your voice modes (shared with Scribe)…', words: ['journal', 'scene', 'idea', 'email', 'mode'], run: () => openModes() },
   { group: 'new', label: 'New novel', keys: '', run: () => showNewBook('novel') },
   { group: 'new', label: 'New screenplay', keys: '', run: () => showNewBook('screenplay') },
   { group: 'new', label: 'New notes collection', keys: '', run: () => showNewBook('notes') },
+  { group: 'new', label: 'New show (seasons, episodes)', keys: '', words: ['series', 'tv', 'reels'], run: () => showNewBook('novel', 'show') },
+  { group: 'new', label: 'New book series', keys: '', run: () => showNewBook('novel', 'series') },
+  { group: 'new', label: 'New project: what are you making?', keys: '', words: ['world', 'universe', 'collection', 'life'], run: () => showNewBook('novel', 'one') },
   { group: 'new', label: 'Bring in a script (Fountain file or pasted text)…', keys: '', run: importFountain },
   { group: 'new', label: 'New page', keys: '', run: newPageHere },
   { group: 'new', label: 'New area', keys: '', run: () => go({ view: 'library' }).then(() => [...document.querySelectorAll('#lib-areas .chip.add')].at(-1)?.click()) },
@@ -3322,11 +3613,14 @@ const commands = [
   { group: 'revise', label: 'Share a link to read and comment…', keys: '', words: ['share', 'feedback', 'reader', 'link'], run: () => openShare(), when: () => !!currentBookId() || (inNotebook() && notebook.page?.kind === 'page') },
   { group: 'page', label: 'Name the section levels (Act, Sequence, Scene…)', keys: '', run: nameSectionLevels, when: () => writing() && isScript() },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
+  { group: 'view', label: 'What Claude knows: its one-line note on this, and weekly summaries', keys: '', words: ['about', 'summary', 'second brain', 'memory', 'digest', 'weekly'], run: () => showClaudeKnows() },
+  { group: 'new', label: 'Bring in old notes (from Thymer, Tana, Workflowy, OneNote)…', keys: '', words: ['import', 'paste', 'opml', 'markdown', 'migrate', 'old apps'], run: () => bringInOld() },
   { group: 'sync', label: 'Connect Scribe, the dictation keyboard…', keys: '', run: () => connectScribe() },
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
   ...Object.entries(LISTS).map(([list, name]) => ({ group: 'page', label: `Make this page a ${name.toLowerCase()} (Claude links each title)`, keys: '', run: () => makeList(list), when: () => inNotebook() && notebook.page?.kind === 'page' && listOf(notebook.page) !== list })),
   { group: 'tidy', label: 'Review the day with Claude (what goes to Daybook, what to keep thinking about)', keys: '', run: () => dayReview.run(), when: () => inNotebook() && notebook.isDay },
   { group: 'new', label: 'Make meeting notes from a recording (summary, decisions, tasks, who said what)…', keys: '', run: () => setTimeout(makeMeeting, 120) },
+  { group: 'tidy', label: 'Send this meeting to Acro HQ (summary and tasks, for you and Nate)', keys: '', run: () => setTimeout(meetingToAcro, 120), when: () => inNotebook() && !!notebook.page?.fields?.meeting && canAskServer() },
   { group: 'tidy', label: 'Fix a speaker’s name in this meeting…', keys: '', run: () => setTimeout(fixSpeaker, 120), when: () => inNotebook() && !!notebook.page?.fields?.meeting },
   { group: 'tidy', label: 'Send this line to Daybook (a task in its Inbox, linked back here)', keys: '', run: sendLineToDaybook, when: () => inNotebook() && !!notebook.currentLine() },
   { group: 'page', label: 'Stop Claude linking titles on this page', keys: '', run: () => makeList(null), when: () => inNotebook() && !!listOf(notebook.page) },
@@ -3386,8 +3680,7 @@ setSlashItems((ed) => {
     { id: 'link', label: 'Link to a page', keys: '[[', words: ['page'], run: (e) => openPicker(e) },
     { id: 'tag', label: 'Tag', keys: '#', run: (e) => e.chain().focus().insertContent('#').run() },
     !outline && { id: 'note', label: 'Note on this paragraph', keys: '⌘⇧N', words: ['comment'], run: () => notes.add() },
-    !outline && { id: 'talk', label: 'Talk into the draft', hint: 'say it; Claude writes it up', keys: '⌥V', words: ['voice', 'dictate', 'speak', 'record'], run: () => setTimeout(talkIntoDraft, 60) },
-    outline && { id: 'talk', label: 'Capture by voice', hint: 'say it; Claude writes it up', keys: '⌥C', words: ['voice', 'dictate', 'speak', 'record'], run: () => setTimeout(() => openCapture(), 60) },
+    { id: 'talk', label: 'Talk', hint: 'say it; Claude writes it up here', keys: '⌥C', words: ['voice', 'dictate', 'speak', 'record', 'capture'], run: () => setTimeout(() => captureHere({ start: true }), 60) },
     { id: 'picture', label: 'Picture or file', words: ['image', 'photo', 'file', 'attach'], run: () => setTimeout(pickFiles, 120) },
     outline && { id: 'done', label: 'Done', hint: 'strike the line through', keys: '⌘↵', words: ['todo', 'check'], run: (e) => toggleDone(e) },
     !outline && !inScript && { id: 'scene', label: 'Scene break', keys: '⌘⇧↵', words: ['break', 'divider'], run: (e) => e.chain().focus().insertSceneBreak().run() },
@@ -3429,6 +3722,26 @@ function currentBookId() {
 }
 const currentBook = () => getEntry(currentBookId());
 const currentWorld = () => getEntry(state.worldId);
+// The page, piece or world you're in, for What Claude knows (null on a day page or the Library).
+async function knowsThing() {
+  if (inNotebook() && notebook.page?.kind === 'page') return notebook.page;
+  if (currentBookId()) return currentBook();
+  if (state.worldId && view() === 'world') return currentWorld();
+  return null;
+}
+// Bring in old notes: a section pasted or dropped from another app becomes a page.
+async function bringInOld() {
+  const base = location.origin + location.pathname;
+  await openBringIn({
+    ask: askServer, canAsk: canAskServer, toast, base,
+    open: (row) => openEntry(row.id),
+    applied: async (rows) => { if (rows.length) await applyRemote(rows); await refreshViews(); },
+    sendTasks: () => sendPending({ send: sendTask, canSend: canSendTask }),
+    relink: (from, to) => (window.__relink ? window.__relink(from, to) : sync.backend?.relinkTasks ? sync.backend.relinkTasks(from, to) : Promise.reject(new Error('offline'))),
+    tags: async () => statsOf(await tagIndex()).sort((a, b) => b.count - a.count).map((t) => t.tag)
+  });
+}
+const showClaudeKnows = async (thing) => openClaudeKnows(thing === undefined ? await knowsThing() : thing, { toast });
 const menuSpot = () => ({ left: Math.max(8, window.innerWidth / 2 - 130), top: 110 });
 
 async function showTrash() {
@@ -3723,7 +4036,7 @@ $('.palette-backdrop').addEventListener('click', () => closePalette());
 function toggleNotes() {
   notes.setVisible(!notes.visible);
 }
-document.addEventListener('notes-visibility', () => { $('#notes-toggle').textContent = notes.visible ? 'Hide notes' : 'Notes'; });
+document.addEventListener('notes-visibility', () => { $('#notes-toggle').setAttribute('aria-pressed', String(notes.visible)); });
 
 const toggleWriteToday = () => go(inNotebook() ? { view: 'write' } : { view: 'notebook', pageId: dayId(isoToday()) });
 
@@ -3746,6 +4059,9 @@ document.addEventListener('click', (e) => {
   if (cmd === 'grid') toggleGrid();
   if (cmd === 'production') toggleProduction();
   if (cmd === 'today') go({ view: 'notebook', pageId: dayId(isoToday()) });
+  if (cmd === 'drawer') go({ view: 'drawer' });
+  if (cmd === 'go') nav.toggle();
+  if (cmd === 'mic') captureHere({ start: true });
   if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
   if (cmd === 'tags') go({ view: 'tags' });
   if (cmd === 'close-tag') { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
@@ -3758,7 +4074,7 @@ document.addEventListener('keydown', (e) => {
   else if (m && e.key === '.') { e.preventDefault(); toggleFocus(); }
   else if (m && e.shiftKey && k === 'f') { e.preventDefault(); openPalette('search'); }
   else if (m && e.shiftKey && k === 'o') { e.preventDefault(); go({ view: 'library', area: null }); }
-  else if (m && k === 'o') { e.preventDefault(); openPalette('go'); }
+  else if (m && k === 'o') { e.preventDefault(); if (!$('.palette').hidden) closePalette(false); nav.toggle(true); }
   else if (m && e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); step(e.key === 'ArrowDown' ? 1 : -1); }
   else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketLeft') { e.preventDefault(); history.back(); }
   else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketRight') { e.preventDefault(); history.forward(); }
@@ -3784,8 +4100,8 @@ document.addEventListener('keydown', (e) => {
   // Alt + 0 to 6: the pages (Overview, then Gather to Deliver).
   else if (e.altKey && !m && !e.shiftKey && /^Digit[0-6]$/.test(e.code) && strip.byNumber(Number(e.code.slice(5)))) { e.preventDefault(); goPage(strip.byNumber(Number(e.code.slice(5)))); }
   // Alt+C: Capture, recording at once; Alt+C again keeps it.
-  else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyV' && (writing() || capture.isOpen)) { e.preventDefault(); if (!capture.isOpen) talkIntoDraft(); else if (capture.rec) capture.finish(); }
-  else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyC') { e.preventDefault(); if (!capture.isOpen) openCapture({ start: true }); else if (capture.rec) capture.finish(); }
+  // Alt + C talks, and lands where you are (Alt + V, the old draft key, does the same).
+  else if (e.altKey && !m && !e.shiftKey && (e.code === 'KeyC' || e.code === 'KeyV')) { e.preventDefault(); if (!capture.isOpen) captureHere({ start: true }); else if (capture.rec) capture.finish(); }
   else if (e.altKey && !m && e.code === 'BracketRight') { e.preventDefault(); setPage(currentWidth() + 40, currentSize()); }
   else if (e.altKey && !m && e.code === 'BracketLeft') { e.preventDefault(); setPage(currentWidth() - 40, currentSize()); }
   else if (e.altKey && !m && e.code === 'Equal') { e.preventDefault(); setPage(currentWidth(), currentSize() + 1); }
@@ -3798,6 +4114,7 @@ document.addEventListener('keydown', (e) => {
     if (!$('.tag-results').hidden) { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
     if (!$('.versions').hidden) conflicts.close();
     if (!$('.shortcuts').hidden) toggleShortcuts();
+    nav.close();
     if (progressPanel.isOpen) progressPanel.close();
     body.classList.remove('show-outline', 'show-top');
   }
@@ -3823,11 +4140,24 @@ const meetingOpts = {
   areas: daybookAreas,
   base: () => location.origin + location.pathname,
   sendPending: () => sendPending({ send: sendTask, canSend: canSendTask }),
-  onDone: (it, notes) => {
-    const sent = notes.tasks.filter((t) => mine(t.owner, meetingOpts.me())).length;
-    toast(`Meeting notes ready: ${notes.title}${sent ? ` (${sent} task${sent === 1 ? '' : 's'} to Daybook)` : ''}`, { label: 'Open', run: () => openEntry(`pg_meet-${it.file}`) });
+  onDone: (it, notes, to) => {
+    const sent = to === 'acro' ? notes.tasks.length : notes.tasks.filter((t) => mine(t.owner, meetingOpts.me())).length;
+    const where = to === 'acro' ? 'Acro HQ' : 'Daybook';
+    toast(`Meeting notes ready: ${notes.title}${sent ? ` (${sent} task${sent === 1 ? '' : 's'} to ${where})` : to === 'acro' ? ' (sent to Acro HQ)' : ''}`, { label: 'Open', run: () => openEntry(`pg_meet-${it.file}`) });
   }
 };
+// Ctrl+K on a meeting page: send it (again) to Acro HQ, as the page stands now.
+async function meetingToAcro() {
+  const pid = notebook.page?.id;
+  await notebook.close();
+  try {
+    const rows = await sendMeetingToAcro(pid, { ask: askServer, base: location.origin + location.pathname });
+    await applyRemote(rows);
+    toast('Sent to Acro HQ');
+  } catch (e) {
+    toast(e.code === 'no-acro' ? 'Sending to Acro HQ isn’t set up yet' : canAskServer() ? 'Couldn’t reach Acro HQ. Try again in a minute' : 'Go online and sign in to send it');
+  }
+}
 // Ctrl+K: the recording on this line becomes a meeting, or pick a recording file.
 async function makeMeeting() {
   const id = inNotebook() ? notebook.currentLine() : null;
@@ -3889,7 +4219,7 @@ async function openAsked() {
   openEntry(row.id);
 }
 // Things shared into Inkwell from other apps land on today's page, with the
-// caret on the empty line under the last one, for what it sparked.
+// caret at the end of the last one (Enter starts a line under it).
 let landing = null;
 function landShares() {
   landing ||= landSharesNow().finally(() => { landing = null; });
@@ -3903,7 +4233,7 @@ async function landSharesNow() {
   await Promise.all([store.close(editor.state.doc), notebook.close()]);
   await applyRemote(added.flatMap((a) => a.rows));
   const last = added.at(-1);
-  await go({ view: 'notebook', pageId: last.line.parent_id, line: last.spark.id });
+  await go({ view: 'notebook', pageId: last.line.parent_id, line: last.line.id });
   toast(added.length === 1 ? 'Kept on today’s page' : `${added.length} things kept on today’s page`);
   writeOut();
 }
@@ -3916,29 +4246,38 @@ async function showCapture({ line, rows }) {
 const capture = new CaptureScreen($('.capture'), {
   onSaved: (saved) => {
     // Aimed at the draft: you stay where you were writing, and the words follow.
-    if (saved.line.fields?.into) { toast('Kept. Claude is writing it into the draft…'); applyRemote(saved.rows).then(() => { if (writing()) editor.commands.focus(); writeOut(); }); return; }
-    toast('Kept on today’s page');
+    if (saved.line.fields?.into?.chapter) { toast('Kept. Claude is writing it into the draft…'); applyRemote(saved.rows).then(() => { if (writing()) editor.commands.focus(); writeOut(); }); return; }
+    toast(saved.line.parent_id?.startsWith('day-') ? 'Kept on today’s page' : 'Kept here, and noted on today’s page');
     showCapture(saved);
   },
   onClose: () => currentEditor().commands.focus(),
   toast
 });
-// ---------- walk and talk: say it, and Claude writes it into the draft ----------
+// ---------- walk and talk: say it, and it lands where you are ----------
 
-// Opens Capture aimed at the chapter you're in, just after the paragraph the caret is on.
-async function talkIntoDraft() {
-  if (!writing() || !state.chapterId) { openCapture(); return; }
-  await openCapture({ start: true, into: await draftSpot() });
+// One voice button, one rule: in a chapter Claude writes it into the draft
+// just after the paragraph the caret is on; on a page it goes on that page,
+// after the line you're on; anywhere else (and on a day) it goes on today.
+// Today's page always gets a line for it, linking to where it went.
+async function captureSpot() {
+  if (writing() && state.chapterId) return draftSpot();
+  const page = inNotebook() && !notebook.isDay ? notebook.page : null;
+  // The title as shown (a page named a moment ago may not be saved yet).
+  if (page && !page.deleted) return { page: page.id, title: $('#nb-title')?.textContent.trim() || titleOf(page), after: notebook.currentLine() };
+  return null;
+}
+async function captureHere(opts = {}) {
+  await openCapture({ ...opts, into: await captureSpot() });
 }
 async function draftSpot() {
   const chapter = await getEntry(state.chapterId);
   const block = editor.state.selection.$from.node(1);
   return { chapter: state.chapterId, title: chapter?.title || 'this chapter', after: block?.attrs.eid || null };
 }
-// Picks a recording file for Capture, or for the draft you're in.
-async function fromRecordingFile(draft) {
+// Picks a recording file for Capture; it lands where you are, like talking.
+async function fromRecordingFile() {
   // The file picker needs this tap, so it opens first and Capture follows.
-  const into = draft && writing() && state.chapterId ? await draftSpot() : null;
+  const into = await captureSpot();
   await openCapture({ start: false, into });
   capture.pick.click();
 }
@@ -4003,7 +4342,7 @@ onVoiceChip(async (lineId, chip) => {
 
 // Your modes, the same ones Scribe uses: rename one, change what it does or
 // which Claude writes it, add one, or delete one.
-async function openModes(anchor = $('.corner [data-cmd="palette"]')) {
+async function openModes(anchor = $('#palette-toggle')) {
   if (!canAskServer()) { toast('Your modes live on your account; sign in and get online to change them'); return; }
   let modes;
   try { modes = await fetchModes(askServer); } catch { toast('Couldn’t reach your modes. Try again.'); return; }
@@ -4160,6 +4499,7 @@ async function start() {
   if (asked.get('open')) { asking = asked.get('open'); await openAsked(); }
   // Shared from another app (or shared earlier and not yet placed).
   await landShares();
+  tidyShareBlanks().then((rows) => rows.length && applyRemote(rows)).catch((e) => console.error(e));
   sync.start();
   conflicts.count();
   // Scribe sent here to connect.

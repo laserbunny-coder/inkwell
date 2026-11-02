@@ -416,7 +416,7 @@ try {
 
   await check('a shoot day: one-page call sheet from the breakdown, sent to Daybook on its day', async () => {
     await laptop.locator('.gv-levels .chip[data-tab="days"]').click();
-    await laptop.locator('.pd-days .chip.add').click();
+    await laptop.locator('.pd-days .chip.add', { hasText: 'Shoot day' }).click();
     await laptop.waitForSelector('.pd-dayform');
     await laptop.locator('.pd-dayform input[aria-label="Date"]').fill('2027-02-03');
     await laptop.locator('.pd-dayform input[aria-label="Date"]').dispatchEvent('change');

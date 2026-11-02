@@ -5,7 +5,7 @@
 export const isMac = /Mac|iPhone|iPad/.test(navigator.userAgentData?.platform || navigator.platform);
 
 // Chrome on Windows keeps Ctrl+Shift+N for a private window, so a note there is Alt+N.
-const SWAPS = [['⌘⇧N', 'Alt+N'], ['⌘', 'Ctrl+'], ['⌥', 'Alt+'], ['⇧', 'Shift+'], ['↵', 'Enter']];
+const SWAPS = [['⌘⇧N', 'Alt+N'], ['⌘', 'Ctrl+'], ['⌥', 'Alt+'], ['⇧', 'Shift+'], ['↵', 'Enter'], ['⌫', 'Backspace']];
 export const keyLabel = (t) => (isMac || !t ? t : SWAPS.reduce((s, [a, b]) => s.replaceAll(a, b), t));
 
 const MARKS = /[⌘⌥⇧]/;

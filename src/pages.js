@@ -27,7 +27,8 @@ export const LIFE_PAGES = [
 export const DESK = [
   { id: 'today', label: 'Today', about: 'Today’s page (Ctrl + J)' },
   { id: 'drawer', label: 'Drawer', about: 'Ideas that don’t belong anywhere yet' },
-  { id: 'library', label: 'Library', about: 'Every world and piece (Ctrl + Shift + O)' }
+  { id: 'library', label: 'Library', about: 'Every world and piece (Ctrl + Shift + O)' },
+  { id: 'tags', label: 'Tags', about: 'Every #tag, grouped' }
 ];
 
 // A world that's for life, not for making something.

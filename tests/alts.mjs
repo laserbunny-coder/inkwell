@@ -196,9 +196,9 @@ try {
     await ph.locator('#editor .ProseMirror').tap();
     await ph.keyboard.type('She walked home.');
     await ph.waitForSelector('.script-bar', { state: 'visible' });
-    // A prose chapter: + (the insert menu) and the alternates buttons, no script ones.
+    // A prose chapter: the mic first, the alternates buttons, + (the insert menu) last; no script ones.
     const shown = () => ph.locator('.script-bar button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => (b.dataset.ins ? 'insert' : b.dataset.talk ? 'talk' : b.dataset.alt || b.dataset.el)));
-    assert.deepEqual(await shown(), ['insert', 'talk', 'word', 'ask', 'para', 'prev', 'next']);
+    assert.deepEqual(await shown(), ['talk', 'word', 'ask', 'para', 'prev', 'next', 'insert']);
     assert.equal(await ph.locator('.script-bar [data-alt="prev"]').evaluate((b) => b.classList.contains('idle')), true);
     // Alternates: the sheet opens for the word at the caret, and the keyboard stays up.
     await ph.evaluate(() => window.__editor.chain().focus().setTextSelection(7).run());
@@ -218,8 +218,16 @@ try {
     await ph.waitForFunction(() => window.__editor.state.doc.textContent === 'She wandered home.');
     await ph.locator('.script-bar [data-alt="prev"]').tap();
     await ph.waitForFunction(() => window.__editor.state.doc.textContent === 'She walked home.');
-    // Turning alternates off hides the row on prose.
+    // Turning alternates off leaves just the mic and + on prose.
     await ph.evaluate(() => { localStorage.setItem('hide', JSON.stringify(['alts'])); });
+    await ph.reload();
+    await ph.waitForSelector('#editor .ProseMirror');
+    await sleep(500);
+    await ph.locator('#editor .ProseMirror').tap();
+    await sleep(300);
+    assert.deepEqual(await shown(), ['talk', 'insert']);
+    // In Focus, prose is just the text: no row at all.
+    await ph.evaluate(() => localStorage.setItem('focus', '1'));
     await ph.reload();
     await ph.waitForSelector('#editor .ProseMirror');
     await sleep(500);

@@ -26,8 +26,12 @@ const MEETING = [
   { s: 1, t: 30, text: 'Let’s think about the sibling price and talk next week.' }
 ];
 const IDEA = [{ s: 0, t: 0, text: 'An idea for the Ninja Bunch: the smallest ninja is the only one who can actually hide, and nobody believes she exists.' }];
+const bodies = [];
+// Acro HQ is off (not set up) until a check switches it on.
+const acro = { on: false, sent: [] };
 function claude(body) {
   asked.push(body.mode);
+  bodies.push(body);
   if (body.mode === 'meeting-writeout') return body.file === 'IDEA' ? { said: IDEA, duration: 12 } : { said: MEETING, duration: 2410 };
   if (body.mode === 'meeting-notes') {
     return {
@@ -39,6 +43,11 @@ function claude(body) {
     };
   }
   if (body.mode === 'voice') return { raw: body.transcript, mode: 'idea', blocks: [{ text: 'Premise: the smallest ninja is the only one who can hide', el: 'paragraph', new_scene: false }], notes: [], tag: 'ninja-bunch', refs: [] };
+  if (body.mode === 'acro-send') {
+    if (!acro.on) return { __error: 'Sending to Acro HQ isn’t set up yet.', code: 'no-acro', status: 503 };
+    acro.sent.push(body);
+    return { sent: body.tasks.length, meeting: true };
+  }
   throw new Error(`unexpected ${body.mode}`);
 }
 
@@ -55,7 +64,9 @@ const fake = () => {
       const r = await new Promise((res) => { const q = indexedDB.open('writing'); q.onsuccess = () => { const g = q.result.transaction('entries').objectStore('entries').get(body.file); g.onsuccess = () => res(g.result); }; });
       if (/idea/i.test(r?.title || '')) body = { ...body, file: 'IDEA' };
     }
-    return window.__server(body);
+    const out = await window.__server(body);
+    if (out?.__error) throw Object.assign(new Error(out.__error), { code: out.code, status: out.status });
+    return out;
   };
   window.__daybook = (task) => window.__toDaybook(task);
   window.__areas = async () => [{ id: 'area-biz', title: 'Business' }, { id: 'area-film', title: 'Filmmaking' }];
@@ -133,6 +144,8 @@ try {
     assert.ok(day, 'today’s line points to it');
     assert.ok(day.content.some((n) => n.type === 'entryRef' && n.attrs.id === meeting.id));
     assert.deepEqual(asked.slice(0, 2), ['meeting-writeout', 'meeting-notes']);
+    const terms = bodies.find((b) => b.mode === 'meeting-writeout').terms;
+    assert.ok(terms.includes('Acro Dance') && terms.includes('Ninja Bunch'), 'the speech service is told the worlds’ names');
   });
 
   await check('the page has the summary, what was decided, the tasks with owners, and who said what', async () => {
@@ -186,6 +199,43 @@ try {
     assert.equal(line.fields.voice.raw, IDEA[0].text, 'the words kept word for word');
     assert.match(line.text, /Premise: the smallest ninja/, 'Claude’s write-up on the line');
     assert.equal(line.fields.voice.mode, 'idea');
+  });
+
+  let second;
+  await check('once Acro HQ is set up, a business meeting and all its tasks go there, not to Daybook', async () => {
+    acro.on = true;
+    const before = sent.length;
+    const had = new Set((await entries(page, 'page')).filter((p) => p.fields?.meeting).map((p) => p.id));
+    await shareRecording('Camp follow-up.m4a');
+    for (let i = 0; i < 60 && !acro.sent.length; i++) await sleep(150);
+    assert.equal(acro.sent.length, 1);
+    second = (await entries(page, 'page')).find((p) => p.fields?.meeting && !had.has(p.id));
+    const b = acro.sent[0];
+    assert.equal(b.meeting.id, `inkwell-${second.id}`);
+    assert.match(b.meeting.summary, /last two weeks of July/);
+    assert.match(b.meeting.summary, /Decided:\n- Camp runs/);
+    assert.match(b.meeting.transcript, /Nate 0:09 {2}Agreed/);
+    assert.deepEqual(b.tasks.map((t) => t.title), ['Send the camp flyer to parents', 'Call the gym about the big room', 'Decide the sibling price']);
+    assert.deepEqual(b.tasks.map((t) => t.assignee), ['Michael', 'Nate', '']);
+    assert.equal(b.tasks[0].due, '2026-10-30');
+    assert.ok(b.tasks.every((t) => /^inkwell-/.test(t.id)));
+    assert.match(b.tasks[2].notes, /^Talk next week\.\nFrom the meeting "Summer camp with Nate"/);
+    assert.match(b.tasks[1].notes, /\?open=/);
+    await sleep(300);
+    assert.equal(sent.length, before, 'nothing to Daybook');
+    const p = (await entries(page, 'page')).find((x) => x.id === second.id);
+    assert.ok(p.fields.meeting.acro, 'the page knows it went');
+    const lines = (await entries(page, 'line')).filter((l) => l.parent_id === `${second.id}-do`);
+    assert.ok(lines.every((l) => l.fields.acro?.id === `inkwell-${l.id}`));
+  });
+
+  await check('Ctrl + K sends a meeting to Acro HQ again, as its page stands', async () => {
+    await page.goto(`${URL}?open=${second.id}`);
+    await page.waitForFunction(() => /Write-out/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''), null, { timeout: 8000 });
+    await command(page, 'Send this meeting to Acro HQ');
+    for (let i = 0; i < 30 && acro.sent.length < 2; i++) await sleep(150);
+    assert.equal(acro.sent.length, 2);
+    assert.deepEqual(acro.sent[1].tasks.map((t) => t.id), acro.sent[0].tasks.map((t) => t.id), 'the same cards, updated');
   });
 
   await check('nothing is left waiting', async () => {

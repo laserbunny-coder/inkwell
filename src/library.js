@@ -58,9 +58,164 @@ export const formatName = (p) => ({ novel: 'Prose', screenplay: 'Script', lines:
 // one, what its format suggests.
 export const defaultLabel = (type) => ({ novel: 'Novel', screenplay: 'Screenplay', lines: 'Outline', notes: 'Notes' })[type] || 'Piece';
 export const kindName = (p) => p?.fields?.label || defaultLabel(bookType(p));
-// Where a piece is on its way out into the world.
-export const STAGES = ['Idea', 'Written', 'Boarded', 'Generated', 'Edited', 'Posted'];
-export const stageOf = (p) => p?.fields?.stage || 'Idea';
+// Where a piece is on its way out into the world, named for what's happening
+// to it now (Writing, Generating), so it never reads like a tab (Write). The
+// tabs are rooms with tools; a piece's status is how far it has got.
+export const STAGES = ['New idea', 'Writing', 'Boarding', 'Generating', 'Editing', 'Posted'];
+// Different work goes through different stages. Each kind of piece starts
+// with the set that fits it (a script: AI video; prose: Book); a project can
+// pick another set for its scripts, prose or outlines, a piece can pick its
+// own, and a project can rename, add, remove and reorder a set's stages. The
+// last stage always means out in the world: canon, posted, published.
+// The tools a workflow puts on Make. Video work gets them all; a book or a
+// poem none (until its own tools come), and any project can turn them on.
+export const TOOLS = [
+  { id: 'shots', label: 'Shots' },
+  { id: 'board', label: 'Storyboard' },
+  { id: 'kit', label: 'Kit' },
+  { id: 'days', label: 'Shoot days' }
+];
+const VIDEO = ['shots', 'board', 'kit', 'days'];
+// The names before statuses were worded as what's happening, so pieces
+// marked then keep their place (Boarded reads as Boarding).
+const LEGACY = [
+  ['Idea', 'Written', 'Boarded', 'Generated', 'Edited', 'Posted'],
+  ['Idea', 'Written', 'Prepped', 'Shot', 'Edited', 'Released'],
+  ['Idea', 'Outlined', 'Drafted', 'Revised', 'Edited', 'Published'],
+  ['Idea', 'Written', 'Workshopped', 'Rehearsed', 'Performed'],
+  ['Idea', 'Drafted', 'Polished', 'Out']
+];
+export const STAGE_SETS = [
+  { id: 'ai', name: 'AI video', about: 'Generated video, like the reels', stages: STAGES, tools: VIDEO },
+  { id: 'live', name: 'Live action', about: 'Video you shoot with a camera', stages: ['New idea', 'Writing', 'Prepping', 'Shooting', 'Editing', 'Released'], tools: VIDEO, more: true },
+  { id: 'book', name: 'Book', about: 'A novel, each book in a series', stages: ['New idea', 'Outlining', 'Drafting', 'Revising', 'Editing', 'Published'], tools: [] },
+  { id: 'stage', name: 'Stage', about: 'A musical, a play', stages: ['New idea', 'Writing', 'Workshopping', 'Rehearsing', 'Performed'], tools: [], more: true },
+  { id: 'short', name: 'Short writing', about: 'Gags, poems, posts, songs', stages: ['New idea', 'Drafting', 'Polishing', 'Out'], tools: [] }
+];
+// Workflows you saved as your own: stages and tools to start the next
+// project from. They're entries (kind 'workflow'), so every device has them.
+let OWN = [];
+const ownSet = (r) => ({ id: r.id, name: r.title || 'My workflow', about: 'Yours', stages: r.fields?.stages?.length >= 2 ? r.fields.stages : STAGES, tools: r.fields?.tools || [], base: r.fields?.base || 'ai', own: true, more: true });
+export function setOwnWorkflows(rows) { OWN = rows.filter((r) => r && !r.deleted && r.kind === 'workflow').map(ownSet); }
+export const addOwnWorkflow = (row) => { OWN = [...OWN.filter((x) => x.id !== row.id), ownSet(row)]; };
+export const dropOwnWorkflow = (id) => { OWN = OWN.filter((x) => x.id !== id); };
+export const allSets = () => [...STAGE_SETS, ...OWN];
+export const setById = (id) => allSets().find((x) => x.id === id) || STAGE_SETS[0];
+// Which set a new project starts with, from what it is and how it's written.
+export function setForNew(shape, type) {
+  if (shape === 'life') return null;
+  if (shape === 'series') return 'book';
+  if (shape === 'one') return type === 'world' ? null : { novel: 'book', screenplay: 'ai', lines: 'short' }[type] || 'book';
+  return 'ai';
+}
+// The kind of piece a set is mostly for, so New can point that kind at it.
+export const typeForSet = (id) => ({ ai: 'screenplay', live: 'screenplay', stage: 'screenplay', book: 'novel', short: 'lines' })[id] || typeForSet(setById(id).base || 'ai');
+const SET_FOR_TYPE = { screenplay: 'ai', novel: 'book' };
+// An outline or a page of notes is usually a step toward the project's real
+// work (a season outlined before its episodes), so it goes the way the
+// project does: a book series like a book, a single piece of writing as
+// short writing, anything else like the reels.
+const usualFor = (type, world) => SET_FOR_TYPE[type] || (world?.fields?.shape === 'series' ? 'book' : world?.fields?.shape === 'one' ? 'short' : 'ai');
+export const TYPE_NAMES = { screenplay: 'Scripts', novel: 'Prose', lines: 'Outlines' };
+// The set a piece goes through, in its world.
+export const stageSetOf = (p, world) => setById(p?.fields?.stageSet || world?.fields?.stageFor?.[bookType(p)] || usualFor(bookType(p), world));
+// A set's stages in this world (yours, if you've edited them).
+export const stagesIn = (set, world) => world?.fields?.stageLists?.[set.id] || set.stages;
+export const stagesOf = (p, world) => stagesIn(stageSetOf(p, world), world);
+// The tools on Make for a set in this world, and for a piece. A piece that
+// asked for the video tools anyway gets them on top.
+export const toolsIn = (set, world) => world?.fields?.toolLists?.[set.id] || set.tools || [];
+export function toolsOf(p, world) {
+  const t = toolsIn(stageSetOf(p, world), world);
+  return p?.fields?.videoTools ? TOOLS.map((x) => x.id).filter((id) => t.includes(id) || VIDEO.includes(id)) : TOOLS.map((x) => x.id).filter((id) => t.includes(id));
+}
+// Where a piece is. A stage its set doesn't have (a novel marked Boarded
+// before sets, or a stage since removed) reads as the one at the same point.
+export function stageOf(p, world) {
+  const list = stagesOf(p, world);
+  const at = p?.fields?.stage;
+  if (!at) return list[0];
+  if (list.includes(at)) return at;
+  const from = [...allSets().map((x) => x.stages), ...LEGACY].find((l) => l.includes(at));
+  if (!from) return list[0];
+  const i = from.indexOf(at) === from.length - 1 ? list.length - 1 : Math.min(list.length - 2, Math.round((from.indexOf(at) / (from.length - 1)) * (list.length - 1)));
+  return list[Math.max(0, i)];
+}
+// What the one button on a piece says to move it on: "Start boarding", and
+// at the end "Mark as posted". A name you gave that isn't an -ing word reads
+// "Move to …".
+export function nextLabel(list, at) {
+  const i = list.indexOf(at);
+  if (i < 0 || i >= list.length - 1) return null;
+  const to = list[i + 1];
+  if (i + 1 === list.length - 1) return `Mark as ${to.toLowerCase()}`;
+  return /ing$/i.test(to.split(' ')[0]) ? `Start ${to.charAt(0).toLowerCase()}${to.slice(1)}` : `Move to ${to}`;
+}
+// Out in the world: the last stage of its set. Ready: the one before.
+export const isOut = (p, world) => { const l = stagesOf(p, world); return stageOf(p, world) === l[l.length - 1]; };
+export const isReady = (p, world) => { const l = stagesOf(p, world); return l.length > 2 && stageOf(p, world) === l[l.length - 2]; };
+// What a project is, said at New and changed any time from its ⋯ menu. A
+// shape names the levels inside it, so a Show talks in Seasons and Episodes
+// and a Book series in Books; changing it never moves or renames anything,
+// it only changes what new pieces start as. A piece labelled with a shape's
+// name (a Show inside a Universe) gives its own pieces that shape's levels.
+export const SHAPES = [
+  { id: 'one', name: 'One piece', about: 'A novel, a screenplay, a short', levels: [] },
+  { id: 'series', name: 'Book series', about: 'Books, then chapters', levels: [{ label: 'Book', type: 'novel' }] },
+  { id: 'show', name: 'Show', about: 'Seasons, episodes, scenes', levels: [{ label: 'Season', type: 'lines' }, { label: 'Episode', type: 'screenplay' }] },
+  { id: 'collection', name: 'Collection', about: 'Reels, gags, shorts, poems', levels: [{ label: 'Short', type: 'screenplay' }] },
+  { id: 'universe', name: 'Universe', about: 'Several of these sharing one bible', levels: [] },
+  { id: 'life', name: 'Life project', about: 'A remodel, research, the business', levels: [] }
+];
+const shapeById = (id) => SHAPES.find((x) => x.id === id);
+// A shape's levels with any names you gave them for this project (Batch ›
+// Reel instead of Season › Episode).
+export function levelsOf(world, shape) {
+  const names = world?.fields?.levelNames || [];
+  return shape.levels.map((l, i) => (names[i] ? { ...l, label: names[i] } : l));
+}
+// A world from before shapes reads as one piece, or a collection once it holds more.
+export function shapeOf(world, topPieces = 0) {
+  if (world?.fields?.life === true) return shapeById('life');
+  return shapeById(world?.fields?.shape) || shapeById(topPieces > 1 ? 'collection' : 'one');
+}
+// What a new piece right inside `parent` (the world or a piece) starts as,
+// and its next number: { label, type, n } or null when nothing's suggested.
+export async function nextLevel(parent) {
+  let level = null;
+  if (parent?.kind === 'world') level = levelsOf(parent, shapeOf(parent, (await piecesIn(parent.id)).length))[0] || null;
+  else if (parent) {
+    const label = kindName(parent);
+    const world = await worldOf(parent);
+    const own = shapeById(world?.fields?.shape);
+    const named = SHAPES.find((x) => x.name === label);
+    if (named) level = named.levels[0] || null;
+    else for (const levels of [own && levelsOf(world, own), ...SHAPES.map((x) => x.levels)].filter(Boolean)) {
+      const i = levels.findIndex((l) => l.label === label);
+      if (i >= 0) { level = levels[i + 1] || null; break; }
+    }
+  }
+  if (!level) return null;
+  const n = (await piecesIn(parent.id)).filter((p) => kindName(p) === level.label).length + 1;
+  return { ...level, n };
+}
+
+// A new project in the shape you picked. One piece starts as that piece (or
+// just pages); a Book series with Book 1; a Show with Season 1 and its first
+// Episode; a Collection, a Universe and a Life project start empty.
+export async function newShaped(shape, title, areaId, type = 'novel') {
+  const world = shape === 'one' && type !== 'world' ? await worldOf(await newBook(type, title, areaId)) : await newWorld(title, areaId);
+  const fresh = await getEntry(world.id);
+  const fields = { ...fresh.fields, shape: shape === 'life' ? 'one' : shape, ...(shape === 'life' ? { life: true } : {}) };
+  await putEntries([{ ...fresh, fields, updated_at: Date.now() }]);
+  if (shape === 'series') await newPiece(world.id, 'novel', 'Book 1', null, 'Book');
+  if (shape === 'show') {
+    const season = await newPiece(world.id, 'lines', 'Season 1', null, 'Season');
+    await newPiece(season.id, 'screenplay', 'Episode 1', null, 'Episode');
+  }
+  return getEntry(world.id);
+}
+
 export const areaColor = (a) => a?.fields?.color || '#A39A8B';
 
 export async function newArea(title, parentId = null) {

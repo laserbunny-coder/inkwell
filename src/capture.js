@@ -1,10 +1,11 @@
 import { putEntries, getEntry, children, getMeta, setMeta, topTags } from './db.js';
-import { refsIn } from './outline.js';
+import { refsIn, foldAway } from './outline.js';
 import { entry, tagsIn } from './model.js';
 import { GAP } from './order.js';
 import { addFile, localFile, uploadPending, lengthLabel } from './files.js';
 import { setFileNote } from './filenode.js';
 import { placeVoice } from './voice.js';
+import { speechTerms } from './terms.js';
 
 // Capture: an idea in seconds, asking nothing. Tap, talk, tap Done. The
 // recording is kept on this device first (piece by piece while you talk, so
@@ -50,15 +51,24 @@ export const canRecord = () => !!navigator.mediaDevices?.getUserMedia && recorde
 
 // Adds a line at the end of today's page (making the day if it's new) and
 // returns the rows written.
-export async function addLine(content, fields, day = today()) {
-  const dayId = `day-${day}`;
+export async function addLine(content, fields, day = today(), { page = null, after = null } = {}) {
   const rows = [];
-  const dayRow = await getEntry(dayId);
-  if (!dayRow || dayRow.deleted) rows.push({ ...(dayRow || entry('day', { id: dayId, title: day })), deleted: false, updated_at: Date.now() });
-  const kids = await children(dayId);
-  const sort = kids.length ? Math.max(...kids.map((k) => k.sort || 0)) + GAP : GAP;
+  // On a page: just after the line you were on (as its next sibling), else at the end.
+  let parent = page;
+  if (!page) {
+    parent = `day-${day}`;
+    const dayRow = await getEntry(parent);
+    if (!dayRow || dayRow.deleted) rows.push({ ...(dayRow || entry('day', { id: parent, title: day })), deleted: false, updated_at: Date.now() });
+  }
+  const at = after ? await getEntry(after) : null;
+  if (at && !at.deleted && at.kind === 'line') parent = at.parent_id;
+  const kids = (await children(parent)).filter((k) => !k.deleted).sort((a, b) => (a.sort || 0) - (b.sort || 0));
+  const i = at ? kids.findIndex((k) => k.id === at.id) : -1;
+  const sort = i >= 0
+    ? (kids[i + 1] ? (kids[i].sort + kids[i + 1].sort) / 2 : kids[i].sort + GAP)
+    : kids.length ? Math.max(...kids.map((k) => k.sort || 0)) + GAP : GAP;
   const text = textOf(content);
-  const line = entry('line', { parent_id: dayId, sort, text, content, tags: tagsIn(text), links: refsIn(content), fields: { done: false, gather: null, gathered: null, mirror: null, ...fields } });
+  const line = entry('line', { parent_id: parent, sort, text, content, tags: tagsIn(text), links: refsIn(content), fields: { done: false, gather: null, gathered: null, mirror: null, ...fields } });
   rows.push(line);
   await putEntries(rows);
   return { line, rows };
@@ -71,9 +81,11 @@ function textOf(content) {
 
 const fileNode = (row) => ({ type: 'file', attrs: { id: row.id, name: row.title, type: row.fields.type, size: row.fields.size, duration: row.fields.duration || 0 } });
 
-// Keeps a finished recording and puts it on today's page. `into` aims it at a
-// chapter ({ chapter, title, after }): the words go there, and the day page
-// keeps the recording with a link to where they went. Returns the rows written.
+// Keeps a finished recording and puts it on today's page. `into` aims it
+// somewhere else: at a chapter ({ chapter, title, after }) the words go into
+// the draft and the day page keeps the recording with a link to where they
+// went; at a page ({ page, title, after }) the recording and its write-up go
+// on that page and the day page gets a line linking to it. Returns the rows written.
 export async function saveRecording(blob, duration, started = new Date(), { into = null, name = '' } = {}) {
   const type = (blob.type || 'audio/webm').split(';')[0];
   const ext = /mp4|m4a|aac/.test(type) ? 'm4a' : type.includes('ogg') ? 'ogg' : type.includes('mpeg') ? 'mp3' : type.includes('wav') ? 'wav' : 'webm';
@@ -82,10 +94,18 @@ export async function saveRecording(blob, duration, started = new Date(), { into
   if (!row) return null;
   // The time it was said goes just after the recording, so the day page reads like a log.
   const said = clock(started);
+  const day = dayOf(started);
+  if (into?.page) { const pg = await getEntry(into.page); if (!pg || pg.deleted) into = null; } // the page is gone: today, like any capture
+  if (into?.page) {
+    const { line, rows } = await addLine([fileNode(row), { type: 'text', text: ` ${said} #idea` }], { capture: 'voice', said }, day, { page: into.page, after: into.after });
+    const log = await addLine([{ type: 'text', text: `${said} said on ` }, { type: 'entryRef', attrs: { id: into.page, title: into.title || 'a page' } }], { capture: 'voice-link', said, on: line.id }, day);
+    await queue({ line: line.id, file: row.id, wrote: line.text, duration: Math.round(duration), at: Date.now() });
+    return { line, rows: [row, ...rows, ...log.rows] };
+  }
   const content = into
     ? [fileNode(row), { type: 'text', text: ` ${said} into ` }, { type: 'entryRef', attrs: { id: into.chapter, title: into.title || 'the draft' } }, { type: 'text', text: ' #draft' }]
     : [fileNode(row), { type: 'text', text: ` ${said} #idea` }];
-  const { line, rows } = await addLine(content, { capture: 'voice', said, ...(into ? { into } : {}) }, dayOf(started));
+  const { line, rows } = await addLine(content, { capture: 'voice', said, ...(into ? { into } : {}) }, day);
   await queue({ line: line.id, file: row.id, wrote: line.text, duration: Math.round(duration), at: Date.now(), ...(into ? { into } : {}) });
   return { line, rows: [row, ...rows] };
 }
@@ -123,7 +143,7 @@ export function writeOutPending({ ask, canAsk, onRows, draft = null }) {
       let answer;
       try {
         const where = it.into && draft ? { place: 'draft', ...(await draft.context(it.into)) } : { place: 'day', tags: await topTags(40) };
-        answer = await ask({ mode: 'voice', file: it.file, duration: it.duration || 0, ...where });
+        answer = await ask({ mode: 'voice', file: it.file, duration: it.duration || 0, terms: await speechTerms(it.into?.chapter || it.into?.page || null), ...where });
       } catch (e) {
         setFileNote(it.file, e.code === 'no-transcriber' ? 'waiting for writing-out to be set up' : 'waiting to be written out');
         if (e.code === 'no-transcriber') break;
@@ -133,7 +153,12 @@ export function writeOutPending({ ask, canAsk, onRows, draft = null }) {
       const rows = it.into && draft ? await draft.deliver(it, answer || {}) : await placeVoice(it, answer || {}, { withTag });
       await unqueue(it.line);
       setFileNote(it.file, '');
-      if (rows.length) onRows(rows);
+      if (rows.length) await onRows(rows);
+      // The write-up shows as its first line; the rest stays folded under it.
+      // (If you'd already written on the line, the write-up itself is under
+      // it, so it stays open.)
+      const host = rows.find((r) => r.id === it.line)?.fields?.voice?.host;
+      if (!(it.into && draft) && host === it.line && rows.some((r) => r.parent_id === it.line && !r.deleted && r.kind === 'line')) foldAway(it.line);
     }
   })().catch((e) => console.error(e)).finally(() => {
     busy = null;
@@ -175,6 +200,13 @@ export class CaptureScreen {
     this.hint = el.querySelector('.cap-hint');
     this.level = el.querySelector('.cap-level');
     this.where = el.querySelector('.cap-into');
+    this.dest = el.querySelector('.cap-dest');
+    // A thought that doesn't belong where you are goes to today instead.
+    el.querySelector('.cap-today').addEventListener('click', () => {
+      this.aim(null);
+      if (this.rec) this.rec.into = null;
+      this.big.focus();
+    });
     this.pick = el.querySelector('.cap-file input');
     this.pick.addEventListener('change', () => { const f = this.pick.files?.[0]; this.pick.value = ''; if (f) this.fromFile(f); });
     this.auto = el.querySelector('.cap-auto input');
@@ -190,12 +222,10 @@ export class CaptureScreen {
 
   get isOpen() { return !this.el.hidden; }
 
-  // `into` aims what's said at a chapter ({ chapter, title, after }).
+  // `into` aims what's said at a chapter ({ chapter, title, after }) or a
+  // page ({ page, title, after }); without it, it goes on today's page.
   async show({ start = autostart(), into = null } = {}) {
-    this.into = into;
-    this.where.hidden = !into;
-    this.where.textContent = into ? `Talking into ${into.title || 'the draft'}` : '';
-    this.el.setAttribute('aria-label', into ? 'Talk into the draft' : 'Capture an idea');
+    this.aim(into);
     this.el.hidden = false;
     document.documentElement.classList.add('capturing');
     this.render('ready');
@@ -203,9 +233,18 @@ export class CaptureScreen {
     if (start) await this.start();
   }
 
+  // Says where what's said will land.
+  aim(into) {
+    this.into = into;
+    this.where.hidden = false;
+    this.where.classList.toggle('today', !into);
+    this.dest.textContent = !into ? 'Onto today’s page' : into.chapter ? `Into ${into.title || 'the draft'}` : `Onto ${into.title || 'this page'}`;
+    this.el.setAttribute('aria-label', into?.chapter ? 'Talk into the draft' : 'Capture an idea');
+  }
+
   render(state, note = '') {
     this.el.dataset.state = state;
-    const label = { ready: 'Tap to talk', starting: 'Starting…', recording: 'Tap when you’re done', saving: 'Keeping it…', error: note }[state];
+    const label = { ready: 'Tap to talk', starting: 'Starting…', recording: phone() ? 'Tap when you’re done. Keep the screen on while you talk.' : 'Tap when you’re done', saving: 'Keeping it…', error: note }[state];
     this.hint.textContent = label;
     this.big.setAttribute('aria-label', state === 'recording' ? 'Done. Keep this idea' : 'Start talking');
     if (state !== 'recording') this.time.textContent = '';
@@ -228,7 +267,7 @@ export class CaptureScreen {
     const type = recorderType();
     const mr = new MediaRecorder(stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 32000 });
     const started = new Date();
-    const rec = this.rec = { mr, stream, started, at: performance.now(), type: mr.mimeType || type || 'audio/webm', parts: [], i: 0, into: this.into };
+    const rec = this.rec = { mr, stream, started, at: performance.now(), t0: Date.now(), type: mr.mimeType || type || 'audio/webm', parts: [], i: 0, into: this.into };
     mr.addEventListener('dataavailable', (e) => {
       if (!e.data?.size || rec.dropped) return;
       rec.parts.push(e.data);
@@ -239,10 +278,34 @@ export class CaptureScreen {
     // If the phone takes the microphone away (a call, another app, the
     // screen going off), what was said up to then is kept, not left hanging.
     rec.stopped.then(() => { if (this.rec === rec && !rec.finishing && !rec.dropped) this.finish({ cutOff: true }); });
+    // A phone won't let a web page hear once the screen goes off: the mic
+    // goes quiet until it's back on. So the recording pauses for that stretch
+    // (silence only makes the write-out invent words) and says so on return.
+    rec.away = 0;
+    const away = () => {
+      if (rec.awayAt != null || this.rec !== rec) return;
+      rec.awayAt = Date.now();
+      try { if (mr.state === 'recording') mr.pause(); } catch { /* still keeps what it has */ }
+    };
+    const back = async () => {
+      if (rec.awayAt == null || this.rec !== rec || rec.finishing) return;
+      const gone = Date.now() - rec.awayAt;
+      rec.away += gone;
+      rec.awayAt = null;
+      try { if (mr.state === 'paused') mr.resume(); } catch { /* finish keeps what there is */ }
+      if (gone >= 2000) this.hint.textContent = `The screen was off for ${spoken(gone)}, so that part isn’t in the recording. Listening again.`;
+      if (!this.lock || this.lock.released) { try { this.lock = await navigator.wakeLock?.request('screen'); } catch { this.lock = null; } }
+    };
+    // (A computer keeps hearing in another tab, so only a phone pauses on hide.)
+    rec.onShow = () => (document.hidden ? phone() && away() : back());
+    document.addEventListener('visibilitychange', rec.onShow);
+    const track = stream.getAudioTracks()[0];
+    track?.addEventListener('mute', away);
+    track?.addEventListener('unmute', () => { if (!document.hidden) back(); });
     mr.start(1000);
     this.starting = false;
     this.render('recording');
-    this.tick = setInterval(() => { this.time.textContent = lengthLabel(performance.now() - rec.at) || '0:00'; }, 250);
+    this.tick = setInterval(() => { if (rec.awayAt == null) this.time.textContent = lengthLabel(heard(rec)) || '0:00'; }, 250);
     this.time.textContent = '0:00';
     this.meter(stream);
     // Keep the screen on while recording (a phone on the dashboard).
@@ -277,6 +340,7 @@ export class CaptureScreen {
     this.lock?.release().catch(() => {});
     this.lock = null;
     this.level.style.setProperty('--lvl', 0);
+    if (this.rec) document.removeEventListener('visibilitychange', this.rec.onShow);
     this.rec?.stream.getTracks().forEach((t) => t.stop());
   }
 
@@ -288,7 +352,8 @@ export class CaptureScreen {
     await stopRecorder(rec);
     this.stopDevices();
     this.rec = null;
-    const duration = performance.now() - rec.at;
+    if (rec.awayAt != null) { rec.away += Date.now() - rec.awayAt; rec.awayAt = null; }
+    const duration = heard(rec);
     const blob = new Blob(rec.parts, { type: rec.type });
     if (!blob.size) { this.render('error', 'Nothing was recorded. Tap to try again.'); return; }
     // Every step has a time limit, so this screen can't get stuck; a save
@@ -305,7 +370,8 @@ export class CaptureScreen {
     await within(4000, clearPieces()).catch((e) => console.warn(e));
     this.close();
     await this.onSaved(saved);
-    if (cutOff) this.toast('The phone stopped the microphone; what you said up to then is kept');
+    if (rec.away >= 5000) this.toast(`The screen was off for ${spoken(rec.away)}. Phones don’t let Inkwell hear then, so keep the screen on, or use Scribe for long talks with it off.`);
+    else if (cutOff) this.toast('The phone stopped the microphone; what you said up to then is kept');
   }
 
   // A recording made somewhere else (the phone's recorder app, a file on the
@@ -363,6 +429,16 @@ function lengthOf(file) {
     setTimeout(() => done(0), 5000);
     a.src = url;
   });
+}
+const phone = () => window.matchMedia?.('(hover: none)').matches;
+// How long the recording could actually hear (time with the screen off left out).
+const heard = (rec) => Math.max(0, Date.now() - rec.t0 - rec.away - (rec.awayAt != null ? Date.now() - rec.awayAt : 0));
+// "40 seconds", "1 minute", "10 minutes", for the screen-off notes.
+function spoken(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} seconds`;
+  const m = Math.round(s / 60);
+  return m === 1 ? '1 minute' : `${m} minutes`;
 }
 const within = (ms, promise) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('Took too long')), ms))]);
 

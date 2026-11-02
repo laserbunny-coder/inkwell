@@ -5,6 +5,7 @@ import { addFile, localFile, uploadPending, isAudio } from './files.js';
 import { setFileNote } from './filenode.js';
 import { withTag } from './capture.js';
 import { placeVoice } from './voice.js';
+import { speechTerms } from './terms.js';
 import { queueTask } from './daybook.js';
 
 // Meetings: a recording of a meeting (Samsung's Voice Recorder shared into
@@ -121,7 +122,7 @@ export async function placeMeeting(it, { said = [], duration = 0, notes = null, 
     };
     section('sum', 'Summary', notes.summary.map((s) => ({ content: plain(s) })), 2 * GAP);
     section('dec', 'Decided', notes.decisions.map((s) => ({ content: plain(s) })), 3 * GAP);
-    section('do', 'To do', notes.tasks.map((t) => ({ content: plain(`${t.title}${t.owner ? ` · ${t.owner}` : ''}${t.due ? ` · by ${shortDay(t.due)}` : ''}`), fields: { owner: t.owner || '', due: t.due || '', task_notes: t.notes || '' } })), 4 * GAP);
+    section('do', 'To do', notes.tasks.map((t) => ({ content: plain(`${t.title}${t.owner ? ` · ${t.owner}` : ''}${t.due ? ` · by ${shortDay(t.due)}` : ''}`), fields: { owner: t.owner || '', due: t.due || '', task_notes: t.notes || '', area: t.area || '', school: t.school || '' } })), 4 * GAP);
   }
   const said0 = `${pid}-said`;
   top.push(lineRow(said0, pid, 5 * GAP, [{ type: 'text', text: 'Write-out', marks: [{ type: 'bold' }] }], {}, kids.get(said0)));
@@ -183,6 +184,50 @@ async function sendTasks(it, notes, { me, areas, base }) {
   return rows;
 }
 
+// ---------- Acro HQ ----------
+
+// A business meeting goes to Acro HQ, Michael and Nate's board, as it stands
+// on its page now (so a task you reworded goes as you wrote it): the meeting
+// with its summary and write-out, and every task, each with who's doing it.
+export async function acroPayload(pageId, base) {
+  const page = await getEntry(pageId);
+  const m = page?.fields?.meeting;
+  if (!m) return null;
+  const kids = (id) => children(id).then((r) => r.filter((x) => !x.deleted).sort((a, b) => a.sort - b.sort));
+  const said = await kids(`${pageId}-said`);
+  const summary = (await kids(`${pageId}-sum`)).map((l) => l.text).join('\n\n');
+  const decided = (await kids(`${pageId}-dec`)).map((l) => `- ${l.text}`).join('\n');
+  const tasks = (await kids(`${pageId}-do`)).filter((l) => (l.text || '').trim()).map((l) => {
+    const title = l.text.split(' · ')[0].trim();
+    const f = l.fields || {};
+    const back = `${base}?open=${encodeURIComponent(l.id)}`;
+    const notes = [f.task_notes, `From the meeting "${page.title}" (${m.day}).`, `Meeting notes in Inkwell: ${back}`].filter(Boolean).join('\n');
+    return { id: `inkwell-${l.id}`, title, assignee: f.owner || '', due: f.due || '', area: f.area || '', school: f.school || '', notes, line: l.id };
+  });
+  return {
+    meeting: { id: `inkwell-${pageId}`, title: page.title, date: m.day, summary: [summary, decided && `Decided:\n${decided}`].filter(Boolean).join('\n\n'), transcript: said.map((l) => l.text).join('\n') },
+    tasks
+  };
+}
+
+// Sends it, and marks the page and each task line as sent. Returns the rows
+// changed, or throws (code 'no-acro' until Acro HQ's address is set up).
+export async function sendMeetingToAcro(pageId, { ask, base }) {
+  const p = await acroPayload(pageId, base);
+  if (!p) return [];
+  await ask({ mode: 'acro-send', meeting: p.meeting, tasks: p.tasks.map(({ line, ...t }) => t) });
+  const now = Date.now();
+  const rows = [];
+  const page = await getEntry(pageId);
+  rows.push({ ...page, fields: { ...page.fields, meeting: { ...page.fields.meeting, acro: now } }, updated_at: now });
+  for (const t of p.tasks) {
+    const line = await getEntry(t.line);
+    if (line) rows.push({ ...line, fields: { ...line.fields, acro: { id: t.id, at: now } }, updated_at: now });
+  }
+  await putEntries(rows);
+  return rows;
+}
+
 // Names from earlier meetings help Claude tell who's who.
 async function knownPeople() { return (await getMeta('meetingPeople')) || []; }
 async function learnPeople(names) {
@@ -210,7 +255,7 @@ export function meetingPending({ ask, canAsk, onRows, me = () => '', areas, base
       if (!said) {
         setFileNote(it.file, 'writing out the meeting…');
         try {
-          ({ said = [], duration = 0 } = (await ask({ mode: 'meeting-writeout', file: it.file })) || {});
+          ({ said = [], duration = 0 } = (await ask({ mode: 'meeting-writeout', file: it.file, terms: await speechTerms() })) || {});
         } catch (e) {
           setFileNote(it.file, e.code === 'no-meeting-transcriber' ? 'waiting for meeting write-outs to be set up' : 'waiting to be written out');
           if (e.code === 'no-meeting-transcriber') break;
@@ -232,26 +277,43 @@ export function meetingPending({ ask, canAsk, onRows, me = () => '', areas, base
         await update(it.line, { said, duration });
         onRows([...await placeMeeting(it, { said, duration }), ...await linkDayLine(it, `Meeting ${isoOf(new Date(it.at))}`)]);
       }
-      setFileNote(it.file, 'writing the notes…');
-      let notes;
-      try {
-        notes = await ask({ mode: 'meeting-notes', said, me: me(), people: await knownPeople(), date: isoOf(new Date(it.at)) });
-      } catch (e) {
-        console.warn('meeting notes failed, will retry', e);
-        setFileNote(it.file, 'notes still to come');
-        continue;
+      let notes = it.notes;
+      if (!notes) {
+        setFileNote(it.file, 'writing the notes…');
+        try {
+          notes = await ask({ mode: 'meeting-notes', said, me: me(), people: await knownPeople(), date: isoOf(new Date(it.at)) });
+        } catch (e) {
+          console.warn('meeting notes failed, will retry', e);
+          setFileNote(it.file, 'notes still to come');
+          continue;
+        }
       }
       const names = {};
       for (const s of notes.speakers || []) names[s.id] = s.name;
-      notes = { title: notes.title || 'Meeting', kind: notes.kind || 'other', summary: notes.summary || [], decisions: notes.decisions || [], tasks: notes.tasks || [] };
-      const rows = [...await placeMeeting(it, { said, duration, notes, names }), ...await linkDayLine(it, notes.title)];
-      rows.push(...await sendTasks(it, notes, { me: me(), areas, base: base() }));
+      notes = { title: notes.title || 'Meeting', kind: notes.kind || 'other', speakers: notes.speakers || [], summary: notes.summary || [], decisions: notes.decisions || [], tasks: notes.tasks || [] };
+      const rows = [];
+      if (!it.notes) {
+        rows.push(...await placeMeeting(it, { said, duration, notes, names }), ...await linkDayLine(it, notes.title));
+        await update(it.line, { notes });
+      }
+      // Business: the meeting and all its tasks to Acro HQ. Anything else, or
+      // until Acro HQ is set up: your own tasks to Daybook, in the meeting's area.
+      let to = 'daybook';
+      if (notes.kind === 'business') {
+        try {
+          rows.push(...await sendMeetingToAcro(pageIdOf(it), { ask, base: base() }));
+          to = 'acro';
+        } catch (e) {
+          if (e.code !== 'no-acro') { console.warn('Acro HQ send failed, will retry', e); setFileNote(it.file, 'waiting to go to Acro HQ'); if (rows.length) onRows(rows); continue; }
+        }
+      }
+      if (to === 'daybook') rows.push(...await sendTasks(it, notes, { me: me(), areas, base: base() }));
       await learnPeople(names);
       await unqueue(it.line);
       setFileNote(it.file, '');
       onRows(rows);
       sendPending?.();
-      onDone?.(it, notes);
+      onDone?.(it, notes, to);
     }
   })().catch((e) => console.error(e)).finally(() => {
     busy = null;

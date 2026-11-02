@@ -44,16 +44,35 @@
   <div class="edge edge-top" aria-hidden="true"></div>
 
   <header class="topbar">
-    <nav class="crumb" id="crumb" aria-label="Where you are"></nav>
-    <nav class="page-tabs" id="page-tabs" aria-label="Pages" hidden></nav>
-    <span class="spacer"></span>
-    <button type="button" class="pill links-pill" id="chapter-links-chip" hidden></button>
-    <button type="button" id="words" data-cmd="stats" title="Progress: words and pages over time"></button>
-    <span id="status" role="status"></span>
-    <button type="button" class="pill" id="versions" hidden title="The same text was changed on two devices"></button>
-    <button type="button" class="pill" id="sync" hidden></button>
-    <button type="button" class="pill" data-cmd="page" aria-label="Page width and text size">Aa</button>
-    <button type="button" class="pill" data-cmd="palette">⌘K</button>
+    <div class="tb-row tb-where">
+      <button type="button" class="tb-back" id="tb-back" hidden></button>
+      <nav class="crumb" id="crumb" aria-label="Where you are"></nav>
+      <span class="spacer"></span>
+      <button type="button" class="pill links-pill" id="chapter-links-chip" hidden></button>
+      <button type="button" id="words" data-cmd="stats" title="Progress: words and pages over time"></button>
+      <span id="status" role="status"></span>
+      <button type="button" class="pill" id="versions" hidden title="The same text was changed on two devices"></button>
+      <button type="button" class="pill" id="sync" hidden></button>
+    </div>
+    <div class="tb-row tb-do">
+      <nav class="page-tabs" id="page-tabs" aria-label="Pages" hidden></nav>
+      <span class="spacer"></span>
+      <div class="tb-tools" role="toolbar" aria-label="Tools">
+        <span class="tb-group tb-mic"><button type="button" class="tb-btn mic" data-cmd="mic" id="mic-toggle" title="Capture by voice; it lands where you are (⌥C)">Mic</button></span>
+        <span class="tb-group tb-places">
+          <button type="button" class="tb-btn" data-cmd="today" id="view-toggle" title="Today’s page (⌘J)">Today</button>
+          <button type="button" class="tb-btn" data-cmd="drawer" id="drawer-toggle" title="The Drawer: ideas with no home yet">Drawer</button>
+          <button type="button" class="tb-btn" data-cmd="library" id="library-toggle" title="Library (⌘⇧O)">Library</button>
+          <button type="button" class="tb-btn" data-cmd="go" id="go-toggle" title="Go: the last place, this piece’s pages, the desk (⌘O)">Go</button>
+        </span>
+        <span class="tb-group tb-view">
+          <button type="button" class="tb-btn" data-cmd="notes" id="notes-toggle" title="Notes beside the text (⌘2)">Notes</button>
+          <button type="button" class="tb-btn" data-cmd="focus" id="focus-toggle" title="Focus: just the text (⌘.)">Focus</button>
+          <button type="button" class="tb-btn" data-cmd="page" aria-label="Page width and text size" title="Page width, text size, what to show">Aa</button>
+        </span>
+        <button type="button" class="pill" data-cmd="palette" id="palette-toggle" title="Everything you can do (⌘K). Shortcuts: ⌘/">⌘K</button>
+      </div>
+    </div>
   </header>
 
   <nav class="outline" aria-label="Library">
@@ -82,11 +101,18 @@
       <div class="lib-bar"><div id="lib-path" class="hint"></div><label class="lib-sort">Sort <select id="lib-sort" aria-label="Sort books"><option value="recent">Recently edited</option><option value="title">Title</option><option value="made">Newest first</option><option value="custom">My order</option></select></label></div>
       <div id="lib-books" class="cards"></div>
       <form id="lib-new" class="lib-new" hidden>
-        <input id="lib-new-title" placeholder="Title" aria-label="Title" autocomplete="off" required>
-        <select id="lib-new-type" aria-label="Starts with"><option value="novel">Novel</option><option value="screenplay">Screenplay</option><option value="lines">Outline (a gag, a short…)</option><option value="world">Pages only (notes, a bible)</option><option value="life">Life project (a remodel, research, the business)</option></select>
-        <select id="lib-new-area" aria-label="Area"></select>
-        <button type="submit" class="pill">Create</button>
-        <button type="button" class="ghost-btn" id="lib-new-cancel">Cancel</button>
+        <h2 class="lib-new-q">What are you making?</h2>
+        <div id="lib-new-shapes" class="lib-shapes" role="radiogroup" aria-label="What are you making?"></div>
+        <div id="lib-new-how" class="lib-new-how-box" hidden></div>
+        <div class="lib-new-row">
+          <input id="lib-new-title" placeholder="Title" aria-label="Title" autocomplete="off" required>
+          <label id="lib-new-type-box" class="lib-new-type">Written as <select id="lib-new-type" aria-label="Written as"><option value="novel">Prose (a novel)</option><option value="screenplay">Script (a screenplay)</option><option value="lines">Outline (a gag, a short…)</option><option value="world">Just pages (notes, a bible)</option></select></label>
+          <select id="lib-new-area" aria-label="Area"></select>
+          <button type="submit" class="pill">Create</button>
+          <button type="button" class="ghost-btn" id="lib-new-cancel">Cancel</button>
+        </div>
+        <p class="hint lib-new-levels" id="lib-new-levels"></p>
+        <p class="hint">You can change the shape or the workflow any time from its ⋯ menu. Nothing moves and nothing is lost.</p>
       </form>
       <section id="lib-loose-box" hidden>
         <div class="panel-label">Loose pages, not in a world yet</div>
@@ -111,7 +137,7 @@
         <button type="button" class="pill" id="ph-continue">Continue writing</button>
         <span id="ph-more"></span>
       </div>
-      <div class="ph-meta"><input id="ph-label" class="ph-label" list="piece-labels" aria-label="What this is (Novel, Gag, Episode…)" autocomplete="off" spellcheck="false"> · <label>Written as <select id="ph-kind" aria-label="How it's written"></select></label> · <label>Stage <select id="ph-stage" aria-label="Stage"></select></label> · <span id="ph-stats"></span> · <span id="ph-world"></span></div>
+      <div class="ph-meta"><input id="ph-label" class="ph-label" list="piece-labels" aria-label="What this is (Novel, Gag, Episode…)" autocomplete="off" spellcheck="false"> · <label>Written as <select id="ph-kind" aria-label="How it's written"></select></label> · <label>Status <select id="ph-stage" aria-label="Status"></select></label> <button type="button" class="ghost-btn ph-next" id="ph-next" hidden></button> · <span id="ph-stats"></span> · <span id="ph-world"></span></div>
       <datalist id="piece-labels"></datalist>
       <div class="ph-grid">
         <section>
@@ -141,6 +167,10 @@
       <div class="ph-meta"><span id="wh-kind"></span><span id="wh-stats"></span> · <label>Area <select id="wh-area"></select></label></div>
       <p id="wh-logline" class="wh-logline" spellcheck="true"></p>
       <div id="wh-stagebar" class="wh-stagebar" hidden></div>
+      <div id="wh-status" hidden>
+        <div class="ph-row"><span class="panel-label">Where everything is</span><button type="button" class="ghost-btn" id="wh-workflow">Workflow…</button></div>
+        <div id="wh-board" class="stage-board"></div>
+      </div>
       <div class="ph-grid">
         <section>
           <div id="wh-pieces-box">
@@ -161,7 +191,6 @@
           <ul id="wh-recent" class="loose-list wh-recent"></ul>
         </section>
       </div>
-      <div id="wh-board" class="stage-board" hidden></div>
     </div>
   </main>
 
@@ -278,7 +307,7 @@
 
   <div class="capture" role="dialog" aria-label="Capture an idea" hidden>
     <button type="button" class="cap-cancel" aria-label="Close without keeping">Cancel</button>
-    <p class="cap-into" hidden></p>
+    <div class="cap-into" hidden><span class="cap-dest"></span><button type="button" class="cap-today">Today instead</button></div>
     <div class="cap-middle">
       <span class="cap-level" aria-hidden="true"></span>
       <button type="button" class="cap-big" aria-label="Start talking"><svg class="cap-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><svg class="cap-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg></button>
@@ -330,18 +359,10 @@
     <div class="hint">Saved on this device only, so your phone and laptop can differ. Alt+[ ] for width, Alt+− = for size.</div>
   </div>
 
-  <div class="corner">
-    <button type="button" class="ghost-btn" data-cmd="page" aria-label="Page width and text size" title="Page width, text size, what to show">Aa</button>
-    <button type="button" class="ghost-btn" data-cmd="notes" id="notes-toggle" title="Notes beside the text (⌘2)">Notes</button>
-    <button type="button" class="ghost-btn" data-cmd="library" id="library-toggle" title="Library (⌘⇧O)">Library</button>
-    <button type="button" class="ghost-btn" data-cmd="view" id="view-toggle" title="Today’s page and back (⌘J)">Today</button>
-    <button type="button" class="ghost-btn" data-cmd="focus" id="focus-toggle" title="Focus: just the text (⌘.)">Focus</button>
-    <button type="button" class="ghost-btn" data-cmd="palette" title="Everything you can do (⌘K). Shortcuts: ⌘/">⌘K</button>
-  </div>
 
   <div class="script-bar" role="toolbar" aria-label="Script elements and alternates" hidden>
-    <button type="button" data-ins="1" aria-label="Insert (time, date, link…)">+</button>
-    <button type="button" data-talk="1" aria-label="Talk into the draft">Talk</button>
+    <button type="button" class="bar-mic" data-talk="1" aria-label="Capture by voice (it lands where you are)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    <span class="bar-gap mic-gap" aria-hidden="true"></span>
     <button type="button" data-el="scene">Scene</button>
     <button type="button" data-el="action">Action</button>
     <button type="button" data-el="character">Character</button>
@@ -355,22 +376,28 @@
     <button type="button" data-alt="para">Paragraph</button>
     <button type="button" data-alt="prev" aria-label="Previous alternate">‹</button>
     <button type="button" data-alt="next" aria-label="Next alternate">›</button>
+    <span class="bar-gap ins-gap" aria-hidden="true"></span>
+    <button type="button" data-ins="1" aria-label="Insert (time, date, link…)">+</button>
   </div>
 
   <div class="script-bar outline-bar" role="toolbar" aria-label="Outline" hidden>
+    <button type="button" class="bar-mic" data-do="talk" aria-label="Capture by voice (it lands where you are)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    <span class="bar-gap" aria-hidden="true"></span>
     <button type="button" data-do="undo" aria-label="Undo">↶</button>
     <button type="button" data-do="redo" aria-label="Redo">↷</button>
     <span class="bar-gap" aria-hidden="true"></span>
-    <button type="button" data-do="insert" aria-label="Insert (time, date, link…)">+</button>
     <button type="button" data-do="outdent" aria-label="Outdent">⇤</button>
     <button type="button" data-do="indent" aria-label="Indent">⇥</button>
     <button type="button" data-do="up" aria-label="Move line up">↑</button>
     <button type="button" data-do="down" aria-label="Move line down">↓</button>
-    <button type="button" data-do="zoom" aria-label="Zoom in">Zoom</button>
+    <span class="bar-gap" aria-hidden="true"></span>
     <button type="button" data-do="tag" aria-label="Tag">#</button>
     <button type="button" data-do="link" aria-label="Link to a page">[[ ]]</button>
+    <span class="bar-gap" aria-hidden="true"></span>
     <button type="button" data-do="done" aria-label="Done">Done</button>
     <button type="button" data-do="move" aria-label="Move to another page">Move to…</button>
+    <button type="button" data-do="zoom" aria-label="Zoom in">Zoom</button>
+    <button type="button" data-do="insert" aria-label="Insert (time, date, link…)">+</button>
   </div>
 
   <div class="stats" role="dialog" aria-label="Progress" hidden>
@@ -388,14 +415,13 @@
     <h3>Getting around</h3>
     <dl>
       <dt>⌘K</dt><dd>Everything you can do</dd>
-      <dt>⌘O</dt><dd>Go to a book, chapter or page</dd>
+      <dt>⌘O</dt><dd>Go: back to the last place (Enter), this piece’s pages, the desk; type to find anything</dd>
       <dt>⌘⇧F</dt><dd>Search inside all your writing</dd>
       <dt>⌘J</dt><dd>Today’s page, and back to writing</dd>
       <dt>⌘⇧J</dt><dd>Today panel: today’s lines beside whatever you’re doing</dd>
       <dt>⌥1 – ⌥6</dt><dd>Pages: Gather, Shape, Write, Revise, Make, Deliver (hold ⌥ to see the numbers)</dd>
       <dt>⌥0</dt><dd>Overview of the world or piece you’re in</dd>
-      <dt>⌥C</dt><dd>Capture by voice (again to keep it, Esc to throw it away)</dd>
-      <dt>⌥V</dt><dd>Talk into the draft where you are (again to keep it)</dd>
+      <dt>⌥C</dt><dd>Talk: it lands where you are, in the draft, on the page or on today (again to keep it, Esc to throw it away)</dd>
       <dt>⌘⇧O</dt><dd>Library</dd>
       <dt>⌘⌥↓ ⌘⌥↑</dt><dd>Next or previous chapter (or day)</dd>
       <dt>⌘[ ⌘]</dt><dd>Back and forward</dd>
@@ -438,7 +464,8 @@
     <h3>Notebook</h3>
     <dl>
       <dt>⌘↑ ⌘↓</dt><dd>Fold or unfold this line</dd>
-      <dt>⌥⇧↑ ⌥⇧↓</dt><dd>Move the line up or down (or drag its dot)</dd>
+      <dt>⌥⇧↑ ⌥⇧↓</dt><dd>Move the line up or down, into the next group at the ends (or drag its dot; ⌘⇧↑ ⌘⇧↓ too)</dd>
+      <dt>⌘⇧⌫</dt><dd>Delete the line and everything under it</dd>
       <dt>⌘↵</dt><dd>Done: strike the line through</dd>
       <dt>Tab ⇧Tab</dt><dd>Indent or outdent</dd>
       <dt>Esc</dt><dd>Zoom back out</dd>

@@ -161,6 +161,9 @@ try {
     await go(laptop, { view: 'write', chapterId: 'ch_p' });
     await laptop.waitForSelector('html.script #editor .scene-break[data-level="3"]');
     await laptop.waitForFunction(() => document.querySelector('#outline-scenes .tree-scene')?.textContent === 'Act One');
+    // The tree is redrawn a moment after the chapter opens; read it once it has settled.
+    await laptop.waitForFunction(() => [...document.querySelectorAll('#outline-scenes .tree-scene')].every((b) => b.isConnected && !Number.isNaN(parseFloat(getComputedStyle(b).paddingLeft))));
+    await sleep(500);
     const tree = await laptop.locator('#outline-scenes .tree-scene').evaluateAll((bs) => bs.map((b) => [b.textContent, b.dataset.level || 'slug', parseFloat(getComputedStyle(b).paddingLeft)]));
     assert.deepEqual(tree.slice(0, 5).map((t) => t[0]), ['Act One', 'The dojo', 'Breakfast fight', 'INT. KITCHEN - MORNING', 'The challenge']);
     assert.ok(tree[1][2] > tree[0][2] && tree[2][2] > tree[1][2], `deeper sections indent: ${JSON.stringify(tree.slice(0, 4))}`);
@@ -460,17 +463,17 @@ try {
     assert.match(items[0], /Paid off in Siege: Takes up the sword again/);
   });
 
-  await check('the stage board (in Make) shows every piece by stage, and dragging a card moves it on', async () => {
-    await go(laptop, { view: 'stage', id: 'wd_monks', page: 'make', sub: 'board' });
-    await laptop.waitForSelector('#st-board .sb-card');
-    const idea = await laptop.locator('.sb-col[data-stage="Idea"] .sb-title').allInnerTexts();
+  await check('the status board (on Overview) shows every piece by status, and dragging a card moves it on', async () => {
+    await go(laptop, { view: 'world', id: 'wd_monks' });
+    await laptop.waitForSelector('#wh-board .sb-card');
+    const idea = await laptop.locator('.sb-col[data-stage="New idea"] .sb-title').allInnerTexts();
     assert.ok(['Monks vs. Zombies', 'Pilot', 'Season One', 'Pilot', 'The Hive', 'Siege'].every((t) => idea.includes(t)), idea.join(', '));
     await shot(laptop, 'stage-board');
-    await laptop.locator('.sb-card[data-id="pr_e1"]').dragTo(laptop.locator('.sb-col[data-stage="Written"]'));
+    await laptop.locator('.sb-card[data-id="pr_e1"]').dragTo(laptop.locator('.sb-col[data-stage="Writing"]'), { targetPosition: { x: 60, y: 30 } });
     await sleep(500);
     await settle(laptop);
-    assert.equal(row('pr_e1').fields.stage, 'Written');
-    await laptop.waitForSelector('.sb-col[data-stage="Written"] .sb-card[data-id="pr_e1"]');
+    assert.equal(row('pr_e1').fields.stage, 'Writing');
+    await laptop.waitForSelector('.sb-col[data-stage="Writing"] .sb-card[data-id="pr_e1"]');
 
   });
 

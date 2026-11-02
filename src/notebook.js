@@ -1,7 +1,7 @@
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { AltMark } from './alts.js';
-import { OutlineDoc, LineIds, EntryRef, TagMarks, GatherBadge, mirrorKey, OutlineFold, foldKey, OutlineStore, descendants } from './outline.js';
+import { OutlineDoc, LineIds, EntryRef, TagMarks, GatherBadge, mirrorKey, OutlineFold, OutlineKeys, OutlineItem, oneParagraphPerLine, foldKey, OutlineStore, descendants } from './outline.js';
 import { getEntry, getMany, linkedFrom, byKind, byTag, putEntries, children, isTrashed } from './db.js';
 import { entry } from './model.js';
 import { bySort } from './order.js';
@@ -114,8 +114,8 @@ export class Notebook {
     this.editor = new Editor({
       element: $('#outline-editor'),
       extensions: [
-        StarterKit.configure({ document: false, codeBlock: false, code: false, horizontalRule: false, heading: false, blockquote: false, trailingNode: false }),
-        OutlineDoc, LineIds, EntryRef.configure({ onPick, onOpen }), TagMarks.configure({ onTag: (t) => this.showTag(t) }), GatherBadge.configure({ onTag: (t) => this.showTag(t), onOpen, origin: (id) => this.origins.get(id) || '' }), AltMark,
+        StarterKit.configure({ document: false, listItem: false, codeBlock: false, code: false, horizontalRule: false, heading: false, blockquote: false, trailingNode: false }),
+        OutlineDoc, OutlineItem, OutlineKeys, LineIds, EntryRef.configure({ onPick, onOpen }), TagMarks.configure({ onTag: (t) => this.showTag(t) }), GatherBadge.configure({ onTag: (t) => this.showTag(t), onOpen, origin: (id) => this.origins.get(id) || '' }), AltMark,
         OutlineFold.configure({ onZoom: (eid) => this.zoomed(eid) }),
         FileEmbed.configure({ onTooBig: (f) => toast(`“${f.name}” is too big to add (the limit is ${Math.round(MAX_BYTES / 1048576)} MB)`) }),
         VoiceChip, SlashMenu
@@ -556,7 +556,9 @@ export class Notebook {
     const { $from } = ed.state.selection;
     let anchor = null;
     for (let d = $from.depth; d > 0; d--) {
-      if ($from.node(d).type.name === 'listItem') { anchor = { eid: $from.node(d).attrs.eid, offset: $from.parentOffset }; break; }
+      // A caret at the end of a line stays at its end (a tag or a name Claude
+      // adds to a shared link mustn't land after it).
+      if ($from.node(d).type.name === 'listItem') { anchor = { eid: $from.node(d).attrs.eid, offset: $from.parentOffset === $from.parent.content.size ? Infinity : $from.parentOffset }; break; }
     }
     const focused = ed.isFocused;
     ed.commands.setContent(doc, { emitUpdate: false });
@@ -583,7 +585,7 @@ export class Notebook {
       }
       return n.content ? { ...n, content: n.content.map(live) } : n;
     };
-    this.editor.commands.setContent(save ? live(json) : json, { emitUpdate: false });
+    this.editor.commands.setContent(oneParagraphPerLine(save ? live(json) : json), { emitUpdate: false });
     this.store.noteShown(this.editor.state.doc, true);
     if (save) this.store.change(this.editor.state.doc);
   }

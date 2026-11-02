@@ -116,7 +116,7 @@ export function sceneElements(found, bd) {
   return [...new Set([...found, ...add])].filter((id) => !drop.has(id));
 }
 
-export async function changeBreakdown(sceneId, { add = [], drop = [], sig, pieceId } = {}) {
+export async function changeBreakdown(sceneId, { add = [], drop = [], sig, audio, pieceId } = {}) {
   const id = breakdownId(sceneId);
   const prev = await getEntry(id);
   const f = prev && !prev.deleted ? prev.fields || {} : {};
@@ -128,7 +128,7 @@ export async function changeBreakdown(sceneId, { add = [], drop = [], sig, piece
     ...(prev || entry('breakdown', { id, parent_id: sceneId })),
     parent_id: sceneId,
     deleted: false,
-    fields: { ...f, add: [...adds], drop: [...drops], ...(sig !== undefined ? { sig } : {}), ...(pieceId ? { piece: pieceId } : {}) },
+    fields: { ...f, add: [...adds], drop: [...drops], ...(sig !== undefined ? { sig } : {}), ...(audio !== undefined ? { audio } : {}), ...(pieceId ? { piece: pieceId } : {}) },
     updated_at: Date.now()
   };
   await putEntries([row]);
@@ -233,14 +233,54 @@ export function shotForName(name, codes) {
   return best?.id || null;
 }
 
+// ---------- how it's made ----------
+
+// How a shot gets made. A generated shot needs nothing from a shoot; one
+// from reference needs footage to generate from (an action move, say); a
+// live-action shot is filmed. Live-action pieces start their shots there.
+export const MADE_BY = [
+  { id: 'gen', label: 'Generated' },
+  { id: 'ref', label: 'From reference', about: 'Generated from footage you shoot' },
+  { id: 'live', label: 'Live action', about: 'Filmed' }
+];
+export const madeBy = (shot, setId) => shot?.fields?.made || (setId === 'live' ? 'live' : 'gen');
+export const needsFootage = (made) => made === 'ref' || made === 'live';
+
+// A scene's voices: recorded in a session, generated, or some of each. The
+// project's choice unless the scene says otherwise.
+export const AUDIO = [
+  { id: 'recorded', label: 'Recorded voices' },
+  { id: 'generated', label: 'Generated voices' },
+  { id: 'both', label: 'Recorded and generated' }
+];
+export const audioOf = (bd, world) => bd?.fields?.audio || world?.fields?.production?.audio || 'recorded';
+export const needsVoices = (audio) => audio === 'recorded' || audio === 'both';
+
+// What still needs a day: scenes with shots to film that aren't on a shoot
+// day, and scenes with voices to record that aren't on a voice session.
+// scenes: [{ id, shots, audio, talk }] where talk says it has lines.
+export function toPlan(scenes, days, setId) {
+  const on = (type) => new Set(days.filter((d) => !d.deleted && (d.fields?.type === 'voice') === (type === 'voice')).flatMap((d) => d.fields?.scenes || []));
+  const shooting = on('shoot');
+  const voicing = on('voice');
+  const shoot = [];
+  const voice = [];
+  for (const s of scenes) {
+    const shots = (s.shots || []).filter((sh) => needsFootage(madeBy(sh, setId)));
+    if (shots.length && !shooting.has(s.id)) shoot.push({ scene: s, shots });
+    if (s.talk && needsVoices(s.audio) && !voicing.has(s.id)) voice.push(s);
+  }
+  return { shoot, voice };
+}
+
 // ---------- shoot days ----------
 
 export async function shootDays(pieceId) {
   return (await children(pieceId)).filter((r) => r.kind === 'shootday').sort((a, b) => String(a.fields?.date || '').localeCompare(String(b.fields?.date || '')) || a.created_at - b.created_at);
 }
 
-export async function newShootDay(pieceId, date) {
-  const row = entry('shootday', { id: newId('sd'), parent_id: pieceId, title: '', fields: { date, call: '', place: '', scenes: [], notes: '' } });
+export async function newShootDay(pieceId, date, { type = null, scenes = [] } = {}) {
+  const row = entry('shootday', { id: newId('sd'), parent_id: pieceId, title: '', fields: { date, call: '', place: '', scenes, notes: '', ...(type === 'voice' ? { type } : {}) } });
   await putEntries([row]);
   return row;
 }
@@ -251,7 +291,7 @@ export function dayTask(day, piece, base) {
   const [h, m] = String(f.call || '').split(':').map(Number);
   return {
     id: `inkwell-${day.id}`,
-    title: `Shoot: ${piece.title || 'Untitled'}${f.place ? ` at ${f.place}` : ''}`,
+    title: `${f.type === 'voice' ? 'Voice session' : 'Shoot'}: ${piece.title || 'Untitled'}${f.place ? ` at ${f.place}` : ''}`,
     notes: f.notes || null,
     link: `${base}?open=${encodeURIComponent(day.id)}`,
     deleted: false,
