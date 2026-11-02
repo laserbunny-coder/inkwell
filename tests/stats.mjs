@@ -68,4 +68,26 @@ const t3 = tally(dayOf(later + DAY), { books: { s1: m2.books.s1 }, notes: m2.not
 p = progress([...grown, tally(today, { books: m2.books, notes: m2.notes }, start), t2, t3], { unit: 'day', count: 1, now: later + DAY });
 assert.equal(p.series.all[0].w, 0);
 
-console.log('ok   progress counts by day, week and month\n\nall passed');
+console.log('ok   progress counts by day, week and month');
+
+// A world's total is every piece in it, however deep (a season holding its episodes), and nothing outside it.
+const inWorld = [...base,
+  row('w1', 'world', null, '', now - 5 * DAY, { title: 'The Ninja Bunch' }),
+  row('e1', 'project', 'w1', '', now - 5 * DAY, { title: 'Pilot', fields: { type: 'screenplay' } }),
+  row('e1a', 'act', 'e1', '', now - 5 * DAY), row('e1c', 'chapter', 'e1a', '', now - 5 * DAY),
+  row('e1x', 'para', 'e1c', 'KENJI bows low', now - DAY),
+  row('se', 'project', 'w1', '', now - 5 * DAY, { title: 'Season 1', fields: { type: 'lines' } }),
+  row('e2', 'project', 'se', '', now - 5 * DAY, { title: 'Episode 2', fields: { type: 'novel' } }),
+  row('e2a', 'act', 'e2', '', now - 5 * DAY), row('e2c', 'chapter', 'e2a', '', now - 5 * DAY),
+  row('e2x', 'para', 'e2c', 'the dojo smells of rice', now)
+];
+const mw = measure(inWorld);
+assert.equal(mw.info.e1.world, 'w1');
+assert.equal(mw.info.e2.world, 'w1', 'an episode inside a season still belongs to the world');
+assert.equal(mw.info.p1.world, null);
+assert.deepEqual(mw.worlds, { w1: { title: 'The Ninja Bunch' } });
+p = progress(inWorld, { unit: 'day', count: 2, now });
+assert.equal(p.totals.w1.w, 3 + 5);
+assert.deepEqual(p.series.w1.map((x) => x.w), [3, 5]);
+assert.equal(p.totals.all.w, 12 + 8, 'worlds are not counted twice in everything');
+console.log('ok   word total for each world\n\nall passed');
