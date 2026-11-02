@@ -36,7 +36,9 @@ export const isLife = (w) => w?.kind === 'world' && w.fields?.life === true;
 
 // The tabs for where you are. ctx: { scope: 'desk' | 'world' | 'piece', life }.
 export function tabsFor(ctx) {
-  if (!ctx || ctx.scope === 'desk') return DESK.map((t) => ({ ...t, n: null }));
+  // The desk's places (Today, Drawer, Library) have their own fixed buttons,
+  // so out on the desk the strip stays empty rather than repeat them.
+  if (!ctx || ctx.scope === 'desk') return [];
   const pages = ctx.life ? LIFE_PAGES : PAGES;
   return [{ id: 'overview', label: 'Overview', about: ctx.scope === 'world' ? 'The whole world at a glance' : 'This piece at a glance', n: 0 }, ...pages.map((t, i) => ({ ...t, n: i + 1 }))];
 }
@@ -64,7 +66,7 @@ export class PageStrip {
     const key = JSON.stringify([ctx?.scope, ctx?.life, ctx?.active]);
     if (key === this.key) return;
     this.key = key;
-    this.el.hidden = !ctx;
+    this.el.hidden = !ctx || !this.tabs.length;
     this.el.dataset.scope = ctx?.scope || '';
     this.el.replaceChildren(...this.tabs.map((t) => {
       const b = make('button', 'pt-tab' + (t.id === ctx?.active ? ' on' : ''), t.label);

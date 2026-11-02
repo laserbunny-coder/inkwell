@@ -86,6 +86,8 @@ const view = () => root.dataset.view || 'write';
 const inNotebook = () => view() === 'notebook';
 
 const statusEl = $('#status');
+// "Saved" is the quiet, normal state: the phone shows the status only when it says something else.
+new MutationObserver(() => statusEl.classList.toggle('quiet', statusEl.textContent === 'Saved')).observe(statusEl, { childList: true, characterData: true, subtree: true });
 const store = new ChapterStore((s) => {
   statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved';
   statusEl.classList.toggle('error', s === 'error');
@@ -1098,8 +1100,6 @@ async function drawRail() {
 
   const tree = $('#outline-tree');
   const out = [];
-  $('.rail-top [data-cmd="library"]').classList.toggle('current', view() === 'library');
-  $('.rail-top [data-cmd="today"]').classList.toggle('current', inNotebook() && notebook.page?.id === dayId(isoToday()) );
 
   const manuscript = async (b, pad) => {
     const acts = b.id === state.project?.id ? state.acts : await outline(b.id);
