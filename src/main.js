@@ -679,7 +679,7 @@ const SYNC_LABELS = { 'signed-out': 'Sign in to sync', syncing: 'Syncing…', sy
 // The starter novel (see start): made once this device has the whole account
 // and it holds nothing yet. Decided once per device.
 async function seedNow() {
-  await ensureSeed();
+  await ensureSeed(sync.user?.id || null);
   await setMeta('seedDecided', true);
 }
 let seeding = null;

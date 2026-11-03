@@ -396,6 +396,51 @@ try {
     await ctx.close();
   });
 
+  await check('two new devices on an empty account at the same moment end up with one starter novel', async () => {
+    // Their own empty cloud; both pull before either has pushed.
+    const cloud = new Map();
+    let tick = Date.parse('2026-11-01T00:00:00Z');
+    let pulls = 0;
+    const own = async (op, arg) => {
+      if (op === 'pull') pulls += 1;
+      // Hold the first pushes until both devices have looked.
+      if (op === 'push') for (let i = 0; i < 100 && pulls < 2; i += 1) await sleep(50);
+      if (op === 'push') { const at = new Date((tick += 1000)).toISOString(); return arg.map((r) => { cloud.set(r.id, { ...r, user_id: 'u1', updated_at: at }); return { id: r.id, updated_at: at }; }); }
+      if (op === 'pull') return [...cloud.values()].filter((r) => r.updated_at > arg.since).sort((x, y) => (x.updated_at < y.updated_at ? -1 : x.updated_at > y.updated_at ? 1 : x.id < y.id ? -1 : 1)).slice(arg.from, arg.from + 500);
+      return null;
+    };
+    const twin = async () => {
+      const ctx = await browser.newContext();
+      await ctx.exposeFunction('__twin', own);
+      await ctx.addInitScript(() => {
+        window.__syncBackend = {
+          user: async () => ({ id: 'u1' }), onAuth() {}, signIn() {}, signOut() {},
+          push: (rows) => window.__twin('push', rows), pull: (since, from) => window.__twin('pull', { since, from }),
+          subscribe() {}, unsubscribe() {}
+        };
+      });
+      const p = await ctx.newPage();
+      p.errors = [];
+      p.on('pageerror', (e) => p.errors.push(e.message));
+      return { p, ctx };
+    };
+    const [one, two] = await Promise.all([twin(), twin()]);
+    await Promise.all([one.p.goto(URL), two.p.goto(URL)]);
+    for (const { p } of [one, two]) await p.waitForSelector('#outline-editor .ProseMirror', { state: 'attached' });
+    for (let i = 0; i < 2; i += 1) for (const { p } of [one, two]) { await p.evaluate(() => window.__sync.run()); await sleep(300); }
+    // One and the same starter, not two that then have to give way to each other.
+    const made = [...cloud.values()].filter((r) => r.kind === 'project');
+    assert.equal(made.length, 1, `cloud has ${made.length} starter books`);
+    assert.equal(made[0].deleted, false);
+    for (const { p } of [one, two]) {
+      const titles = await projectsOn(p);
+      assert.equal(titles.filter((t) => t === 'Untitled novel').length, 2, titles.join(', ')); // its world and its piece
+      assert.deepEqual(p.errors, []);
+    }
+    await one.ctx.close();
+    await two.ctx.close();
+  });
+
   await check('changes that have waited days for the cloud are called out', async () => {
     const ctx = await browser.newContext();
     await ctx.addInitScript(() => {
