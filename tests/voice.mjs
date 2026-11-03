@@ -442,7 +442,11 @@ try {
     assert.ok(line, 'the line is marked as heard nothing');
     assert.equal(line.fields.heard, 'nothing');
     assert.match(line.text, /^\s*\d{1,2}:\d{2} [ap]m #idea$/, 'the line is left as it was');
-    assert.match(await page.locator(`#outline-editor li[data-eid="${line.id}"] .note`).first().innerText(), /no words heard/);
+    assert.match(await page.locator(`#outline-editor li[data-eid="${line.id}"] .file-note`).first().innerText(), /no words heard/);
+    // It reads inside the recording's pill, after its length, not over the line.
+    const [pill, note] = await Promise.all([`.file-embed.audio`, `.file-note`].map((sel) => page.locator(`#outline-editor li[data-eid="${line.id}"] ${sel}`).first().boundingBox()));
+    assert.ok(note.x >= pill.x && note.x + note.width <= pill.x + pill.width + 1 && note.y >= pill.y - 1 && note.y + note.height <= pill.y + pill.height + 1, JSON.stringify({ pill, note }));
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/desktop-8-no-words.png` });
     // Try again from Ctrl + K, on its line.
     await page.evaluate(() => { window.__voice = async () => ({ raw: 'Morning by the pond, thinking about the week.', mode: 'journal', blocks: [{ text: 'Morning by the pond, thinking about the week.', el: 'paragraph', new_scene: false }], notes: [] }); });
     await page.click(`#outline-editor li[data-eid="${line.id}"] p`, { position: { x: 300, y: 8 } });

@@ -831,7 +831,7 @@ body.line-dragging, body.line-dragging * { user-select: none; }
 .file-embed.chip.audio .play::before { content: ''; position: absolute; left: 8px; top: 6px; border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent var(--bg); }
 .file-embed.chip.audio.playing .play::before { left: 7px; top: 7px; width: 3px; height: 8px; border: 0; border-left: 3px solid var(--bg); border-right: 3px solid var(--bg); }
 .file-embed.chip.audio small { font-variant-numeric: tabular-nums; }
-.file-embed.chip.audio .note { margin-left: -6px; }
+.file-embed.chip.audio .file-note { margin-left: -3px; white-space: nowrap; }
 .file-embed.chip.audio .scrub { display: none; }
 .file-embed.chip.audio.open .scrub { display: block; width: min(240px, 42vw); height: 22px; margin: 0; accent-color: var(--accent); cursor: pointer; touch-action: none; }
 

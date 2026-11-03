@@ -171,7 +171,7 @@ export function writeOutPending({ ask, canAsk, onRows, draft = null }) {
     await uploadPending();
     for (const it of items) {
       const kept = await localFile(it.file);
-      if (kept && !kept.uploaded) continue; // still going up; next time
+      if (kept && !kept.uploaded) { setFileNote(it.file, 'waiting to upload'); continue; } // still going up; next time
       // Already written up (on another device, say): nothing to do.
       const now = await getEntry(it.line);
       if (!now || now.deleted || now.fields?.voice) { await unqueue(it.line); setFileNote(it.file, ''); continue; }

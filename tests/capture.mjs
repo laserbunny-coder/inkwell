@@ -120,7 +120,7 @@ try {
   });
 
   await check('with no speech service yet, it says it’s waiting and keeps the recording', async () => {
-    await page.waitForFunction(() => /set up/.test(document.querySelector('#outline-editor .file-embed.audio .note')?.textContent || ''), null, { timeout: 8000 });
+    await page.waitForFunction(() => /set up/.test(document.querySelector('#outline-editor .file-embed.audio .file-note')?.textContent || ''), null, { timeout: 8000 });
     const q = await page.evaluate(() => new Promise((res) => { const r = indexedDB.open('writing'); r.onsuccess = () => { const g = r.result.transaction('meta').objectStore('meta').get('captureQueue'); g.onsuccess = () => res(g.result?.value || []); }; }));
     assert.equal(q.length, 1);
   });
@@ -158,7 +158,7 @@ try {
     const asked = await page.evaluate(() => window.__asked.at(-1));
     assert.ok(Array.isArray(asked.tags), 'your tags are sent so Claude can reuse one');
     assert.equal(cap.content[0].type, 'file', 'the recording stays on the line');
-    assert.equal(await page.locator('#outline-editor .file-embed.audio .note').first().innerText(), '');
+    assert.equal(await page.locator('#outline-editor .file-embed.audio .file-note').first().innerText(), '');
     assert.equal(asked.mode, 'voice');
     assert.equal(asked.place, 'day');
     assert.ok(bucket.has(`u1/${asked.file}`), 'the recording went up before asking');
