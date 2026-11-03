@@ -1038,6 +1038,7 @@ try {
     await p.waitForFunction(() => document.querySelectorAll('.stats-list li').length >= 3);
     const names = await p.locator('.stats-list .name').allInnerTexts();
     assert.match(names[0], /^Everything/);
+    assert.match(names[1], /^Manuscripts/, 'manuscripts only, right under everything');
     assert.ok(names.some((n) => /The Harbour\s+Screenplay/.test(n)), names.join(' | '));
     assert.match(names.at(-1), /^Notes/);
     assert.match(await p.locator('.stats-sub').innerText(), /^Today · Everything/);
