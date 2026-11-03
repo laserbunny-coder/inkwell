@@ -4609,6 +4609,8 @@ async function start() {
   if (place.view !== 'write') delete root.dataset.view;
   await go(place);
   historyMode = 'push';
+  // Opened where it belongs (tests wait for this before moving around).
+  root.dataset.started = '1';
   // A recording cut short (the app closed, the phone died) is kept, not lost.
   const recovered = await recoverRecording().catch((e) => { console.error(e); return null; });
   if (recovered) { toast('A recording that was cut short is kept on today’s page'); await showCapture(recovered); }

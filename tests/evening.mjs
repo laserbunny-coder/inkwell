@@ -46,7 +46,7 @@ try {
   await at('2026-11-03T20:30:00');
   await page.goto(URL);
   await page.waitForSelector('#outline-editor .ProseMirror', { state: 'attached' });
-  await sleep(500);
+  await page.waitForFunction(() => document.documentElement.dataset.started === '1');
   if ((await page.evaluate(() => document.documentElement.dataset.view)) !== 'notebook') await page.keyboard.press('Control+J');
   await page.waitForSelector('main.notebook #outline-editor .ProseMirror', { state: 'visible' });
 
