@@ -44,7 +44,11 @@ const fake = () => {
     signOut() {},
     push: (rows) => window.__remote('push', rows),
     pull: (since, from) => window.__remote('pull', { since, from }),
-    async upload(path, blob, type) { await window.__remote('upload', { path, type, data: await toB64(blob) }); },
+    async upload(path, blob, type) {
+      // A request that never answers, like a phone on a weak signal.
+      if (window.__hangUploads > 0) { window.__hangUploads -= 1; return new Promise(() => {}); }
+      await window.__remote('upload', { path, type, data: await toB64(blob) });
+    },
     async download(path) {
       const f = await window.__remote('download', path);
       if (!f) throw new Error('not found');
@@ -194,6 +198,20 @@ try {
     assert.equal(await p.locator('.toast').count(), 0, 'only warns once at 80%');
     table.delete('fi_big');
     await ctx.close();
+  });
+
+  await check('an upload that stalls is given up on and tried again, with no restart', async () => {
+    const p = await device();
+    await p.evaluate(() => { window.__hangUploads = 1; window.__uploadLimitMs = 1500; window.__uploadRetryMs = 500; });
+    await p.locator('#editor .ProseMirror').click();
+    const before = new Set(bucket.keys());
+    await pastePicture(p, '#editor .ProseMirror');
+    await p.waitForSelector('#editor .file-embed.picture img[src^="blob:"]', { timeout: 5000 });
+    let up = null;
+    for (let i = 0; i < 60 && !up; i++) { up = [...bucket.keys()].find((k) => !before.has(k)); if (!up) await sleep(150); }
+    assert.ok(up, 'the picture went up after the stalled try');
+    assert.equal(await p.evaluate(() => window.__hangUploads), 0, 'the first try did stall');
+    await p.context().close();
   });
 
   await check('no page errors', async () => assert.deepEqual(laptop.errors, []));
