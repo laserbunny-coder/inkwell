@@ -62,7 +62,16 @@ export async function saveNoteTypes(types) {
   await putEntries([{ ...(prev || entry('settings', { id: NOTE_TYPES_ID, title: 'Note categories' })), fields: { types }, deleted: false, updated_at: Date.now() }]);
 }
 
+// Anything of yours here yet? Books, worlds and pages count, in the Trash
+// too; a starter is only for an account with nothing in it.
+export async function hasWriting() {
+  for (const kind of ['project', 'world', 'page', 'day']) if ((await byKind(kind, { withTrash: true })).length) return true;
+  return false;
+}
+
 // First run: one empty project with one act and one chapter to start writing in.
+// With sync, it's made only once the cloud has said the account is empty, so
+// a new device (or a reinstall) never adds a second "Untitled novel".
 export async function ensureSeed() {
   // Books in the Trash count: putting your only book there shouldn't make a new one.
   const projects = await byKind('project', { withTrash: true });

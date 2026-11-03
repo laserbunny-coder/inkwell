@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
+import { withoutSync } from './nosync.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -16,7 +17,7 @@ const URL = `http://localhost:${PORT}/`;
 
 const SCREEN = 800;
 const KEYBOARD = 340;
-const browser = await chromium.launch();
+const browser = withoutSync(await chromium.launch());
 const ctx = await browser.newContext({ viewport: { width: 390, height: SCREEN }, hasTouch: true, isMobile: true });
 // A keyboard 340px tall: what's visible ends above it, as Chrome on Android reports.
 await ctx.addInitScript(([screen, keyboard]) => {

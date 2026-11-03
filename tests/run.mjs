@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
+import { withoutSync } from './nosync.mjs';
 
 const require = createRequire(import.meta.url);
 let chromium;
@@ -15,7 +16,7 @@ const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT
 await sleep(1500);
 const URL = `http://localhost:${PORT}/`;
 
-const browser = await chromium.launch();
+const browser = withoutSync(await chromium.launch());
 const ctx = await browser.newContext();
 const page = await ctx.newPage();
 const errors = [];

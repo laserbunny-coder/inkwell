@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
+import { withoutSync } from './nosync.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -16,7 +17,7 @@ const TIME = /\b\d{1,2}:\d{2} (am|pm)\b/;
 const pad = (n) => String(n).padStart(2, '0');
 const iso = (n = 0) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 
-const browser = await chromium.launch();
+const browser = withoutSync(await chromium.launch());
 const errors = [];
 let failed = 0;
 async function check(name, fn) {
