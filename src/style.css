@@ -1720,3 +1720,7 @@ button.st-from:hover { color: var(--ink); }
 .save-drag-row { display: flex; justify-content: center; margin: 4px 0 18px; }
 .save-drag { cursor: grab; text-decoration: none; padding: 8px 18px; }
 .ask p.save-tip { font-size: 14px; }
+
+/* A new device, signed in, waits a moment for your writing before it opens. */
+html.starting main { visibility: hidden; }
+html.starting body::after { content: 'Getting your writing…'; position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); font: 15px var(--ui, system-ui); pointer-events: none; }
