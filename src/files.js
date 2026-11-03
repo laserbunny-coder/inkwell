@@ -86,26 +86,45 @@ export async function addFile(file, extra = {}) {
 }
 
 // Sends what hasn't gone up yet, one at a time. Failing is fine: it tries
-// again on the next sync.
+// again soon (and on the next sync). An upload that stalls (a phone on a
+// weak signal can leave a request hanging with no answer) is given up after
+// a while, so it can't hold up everything after it until the app restarts.
 let uploading = null;
+let retryTimer = null;
+let retryIn = 10_000;
+// Long enough for a slow connection: a minute, plus 10 s for every 250 KB.
+export const uploadLimit = (bytes) => 60_000 + Math.ceil((bytes || 0) / 256_000) * 10_000;
+const withTimeout = (p, ms) => new Promise((resolve, reject) => {
+  const t = setTimeout(() => reject(Object.assign(new Error('The upload took too long'), { code: 'upload-timeout' })), ms);
+  p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+});
 export function uploadPending() {
   if (!backend?.upload || !userId) return Promise.resolve(0);
   uploading ||= (async () => {
     let sent = 0;
+    let failed = false;
     const rows = await result((await store()).getAll());
     for (const r of rows.filter((x) => !x.uploaded)) {
       try {
-        await backend.upload(pathOf(r.id), r.blob, r.type);
+        await withTimeout(backend.upload(pathOf(r.id), r.blob, r.type), globalThis.__uploadLimitMs ?? uploadLimit(r.blob?.size));
         await keep({ ...r, uploaded: true });
         sent += 1;
       } catch (e) {
         console.warn('file upload failed, will retry', e);
+        failed = true;
         break;
       }
     }
+    clearTimeout(retryTimer);
+    if (failed) { retryTimer = setTimeout(() => uploadPending(), globalThis.__uploadRetryMs ?? retryIn); retryIn = Math.min(retryIn * 2, 120_000); } else retryIn = 10_000;
     return sent;
   })().finally(() => { uploading = null; });
   return uploading;
+}
+// Back online, or back in the app: try at once.
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => { retryIn = 10_000; uploadPending(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) uploadPending(); });
 }
 
 // Files added here that haven't gone up yet: how many, and since when.
