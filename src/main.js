@@ -682,7 +682,7 @@ const SYNC_LABELS = { 'signed-out': 'Sign in to sync', syncing: 'Syncing…', sy
 // The starter novel (see start): made once this device has the whole account
 // and it holds nothing yet. Decided once per device.
 async function seedNow() {
-  await ensureSeed();
+  await ensureSeed(sync.user?.id || null);
   await setMeta('seedDecided', true);
 }
 let seeding = null;
@@ -4613,6 +4613,8 @@ async function start() {
   if (place.view !== 'write') delete root.dataset.view;
   await go(place);
   historyMode = 'push';
+  // Opened where it belongs (tests wait for this before moving around).
+  root.dataset.started = '1';
   // A recording cut short (the app closed, the phone died) is kept, not lost.
   const recovered = await recoverRecording().catch((e) => { console.error(e); return null; });
   if (recovered) { toast('A recording that was cut short is kept on today’s page'); await showCapture(recovered); }
