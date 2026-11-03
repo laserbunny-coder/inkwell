@@ -46,6 +46,8 @@ async function device(options = {}) {
   p.on('pageerror', (e) => p.errors.push(e.message));
   await p.goto(URL);
   await p.waitForFunction(() => document.querySelector('#sync')?.dataset.state === 'synced');
+  // Signed in, a first run waits on the cloud before it opens its place.
+  await p.waitForFunction(() => document.documentElement.dataset.started === '1');
   if ((await p.evaluate(() => document.documentElement.dataset.view)) !== 'notebook') await p.keyboard.press('Control+J');
   await p.waitForSelector('main.notebook #outline-editor .ProseMirror', { state: 'visible' });
   await sleep(300);
