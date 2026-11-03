@@ -10,7 +10,7 @@ import { readdirSync } from 'node:fs';
 const FILES = {
   order: 1, script: 1, stats: 1, run: 81, alts: 11, data: 20, sync: 29, tidy: 39,
   search: 15, history: 24, caret: 8, files: 8, slash: 6, worlds: 17, structure: 33,
-  capture: 21, voice: 21, share: 7, lists: 25, daybook: 12, review: 14, tags: 9,
+  capture: 21, voice: 21, share: 7, lists: 25, daybook: 12, review: 18, tags: 9,
   production: 29, revise: 28, pages: 18, nav: 11, shapes: 16, stagesets: 18, ghosttap: 12, outliner: 20, claudeknows: 15, bringin: 12, tidypass: 25
 };
 

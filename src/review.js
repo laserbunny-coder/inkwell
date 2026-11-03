@@ -1,5 +1,6 @@
-import { putEntries, getEntry, children, getMeta, setMeta, CLAUDE } from './db.js';
-import { entry } from './model.js';
+import { putEntries, getEntry, children, getMeta, setMeta, byKind, CLAUDE } from './db.js';
+import { entry, tagsIn } from './model.js';
+import { tagIndex, statsOf, withoutTag, cleanTag } from './tags.js';
 import { GAP, bySort } from './order.js';
 import { descendants } from './outline.js';
 import { queueTask } from './daybook.js';
@@ -11,6 +12,10 @@ import { intoDrawer, outOfDrawer } from './stages.js';
 // its words and area first), keep thinking about it (it goes on the "Still
 // thinking about" page and comes back in later reviews), split it into its
 // parts, or let it go. Nothing goes to Daybook until you say.
+//
+// Each card can also carry a world or page Claude thinks it's about, and tags
+// that fit: one tap puts the [[link]] or #tag on its lines, and a second tap
+// takes it off again. "Link or tag…" picks one yourself.
 //
 // A review is kept with its day, as an entry of its own (review-<date>) under
 // the day page, so it syncs, and every choice made in it is kept there too.
@@ -57,7 +62,7 @@ export async function makeReview(iso, { ask, areas = [] }) {
   const all = await dayLines(iso);
   if (!all.length) { const e = new Error('There’s nothing on this day to look back over yet.'); e.status = 400; throw e; }
   const answer = lines.length
-    ? await ask({ mode: 'review', day: iso, title: shortDay(iso), lines, mulling: await mullingItems(), areas: areas.map(({ id, title }) => ({ id, title })) })
+    ? await ask({ mode: 'review', day: iso, title: shortDay(iso), lines, mulling: await mullingItems(), areas: areas.map(({ id, title }) => ({ id, title })), places: await linkPlaces(), tags: await usedTags() })
     : { summary: prev?.fields.review.summary || '', threads: [], still: [] };
   const fresh = (answer.threads || []).map((t) => ({ ...t, choice: null, parts: (t.parts || []).map((p) => ({ ...p, choice: null })) }));
   const review = {
@@ -73,6 +78,115 @@ export async function makeReview(iso, { ask, areas = [] }) {
   };
   await putEntries([row]);
   return row;
+}
+
+// ---------- links and tags ----------
+
+const inline = (content) => (content || []).map((n) => (n.type === 'text' ? n.text : n.type === 'entryRef' ? n.attrs?.title || '' : '')).join('');
+const live = (r) => r && !r.deleted && !r.fields?.trashed && !r.fields?.mirror;
+
+// Everywhere a line can link to, for Claude and for "Link or tag…": worlds,
+// pieces and pages, each with the world it's in. Worlds first, then the most
+// recently changed.
+export async function linkPlaces(limit = 300) {
+  const rows = (await Promise.all(['world', 'project', 'page'].map(byKind))).flat().filter(live).filter((r) => r.id !== MULLING);
+  const by = new Map(rows.map((r) => [r.id, r]));
+  const worldOf = (r) => { for (let x = by.get(r.parent_id), i = 0; x && i < 30; x = by.get(x.parent_id), i++) if (x.kind === 'world') return x; return null; };
+  return rows
+    .map((r) => ({ r, w: r.kind === 'world' ? null : worldOf(r) }))
+    .sort((a, b) => (b.r.kind === 'world') - (a.r.kind === 'world') || (b.r.updated_at || 0) - (a.r.updated_at || 0))
+    .slice(0, limit)
+    .map(({ r, w }) => ({ id: r.id, title: (r.title || '').trim() || 'Untitled', kind: r.kind === 'project' ? (r.fields?.label || 'piece').toLowerCase() : r.kind, ...(w ? { in: w.title || '' } : {}) }))
+    .filter((p) => p.title !== 'Untitled');
+}
+
+// The tags in use, most used first.
+export async function usedTags(limit = 120) {
+  return statsOf(await tagIndex()).sort((a, b) => b.count - a.count).slice(0, limit).map((t) => t.tag);
+}
+
+// The lines a link or tag goes on: the card's lines, but not ones sitting
+// under another of its lines (those are already part of it).
+async function headLines(ids) {
+  const out = [];
+  for (const id of ids || []) {
+    const r = await getEntry(id);
+    if (live(r) && !(ids.includes(r.parent_id))) out.push(r);
+  }
+  return out;
+}
+
+export async function addLink(ids, place) {
+  const rows = [];
+  for (const r of await headLines(ids)) {
+    if ((r.links || []).includes(place.id)) continue;
+    const content = [...(r.content || [])];
+    const last = content[content.length - 1];
+    if (last && !(last.type === 'text' && /\s$/.test(last.text))) content.push({ type: 'text', text: ' ' });
+    content.push({ type: 'entryRef', attrs: { id: place.id, title: place.title } });
+    rows.push({ ...r, content, text: inline(content), links: [...new Set([...(r.links || []), place.id])], updated_at: Date.now() });
+  }
+  if (rows.length) await putEntries(rows);
+  return rows;
+}
+
+export async function removeLink(ids, placeId) {
+  const rows = [];
+  for (const r of await headLines(ids)) {
+    if (!(r.content || []).some((n) => n.type === 'entryRef' && n.attrs?.id === placeId)) continue;
+    const content = (r.content || []).filter((n) => !(n.type === 'entryRef' && n.attrs?.id === placeId));
+    const last = content[content.length - 1];
+    if (last?.type === 'text') content[content.length - 1] = { ...last, text: last.text.replace(/\s+$/, '') };
+    const tidy = content.filter((n) => n.type !== 'text' || n.text);
+    rows.push({ ...r, content: tidy, text: inline(tidy), links: (r.links || []).filter((x) => x !== placeId), updated_at: Date.now() });
+  }
+  if (rows.length) await putEntries(rows);
+  return rows;
+}
+
+export async function addTag(ids, tag) {
+  const rows = [];
+  for (const r of await headLines(ids)) {
+    if ((r.tags || []).includes(tag)) continue;
+    const content = [...(r.content || []), { type: 'text', text: ` #${tag}` }];
+    const text = inline(content);
+    rows.push({ ...r, content, text, tags: tagsIn(text), updated_at: Date.now() });
+  }
+  if (rows.length) await putEntries(rows);
+  return rows;
+}
+
+export async function removeTag(ids, tag) {
+  const rows = [];
+  for (const r of await headLines(ids)) {
+    if (!(r.tags || []).includes(tag)) continue;
+    const row = withoutTag(r, tag);
+    // No spaces left dangling at the end where the tag was.
+    const content = [...(row.content || [])];
+    while (content.length && content[content.length - 1].type === 'text' && !content[content.length - 1].text.trim()) content.pop();
+    const last = content[content.length - 1];
+    if (last?.type === 'text') content[content.length - 1] = { ...last, text: last.text.replace(/\s+$/, '') };
+    rows.push({ ...row, content, text: inline(content) });
+  }
+  if (rows.length) await putEntries(rows);
+  return rows;
+}
+
+// Puts a link or tag on a card's lines (or takes it off), and remembers it on
+// the card: what Claude suggested stays offered, and what you added yourself
+// shows beside it.
+export async function toggleMark(iso, path, mark, on) {
+  const review = (await getReview(iso))?.fields.review;
+  const it = review && itemAt(review, path);
+  if (!it) return [];
+  const lines = it.lines || [];
+  const rows = mark.tag
+    ? await (on ? addTag(lines, mark.tag) : removeTag(lines, mark.tag))
+    : await (on ? addLink(lines, mark) : removeLink(lines, mark.id));
+  const marks = (it.marks || []).filter((m) => (mark.tag ? m.tag !== mark.tag : m.id !== mark.id));
+  if (on) marks.push(mark.tag ? { tag: mark.tag } : { id: mark.id, title: mark.title });
+  rows.push(await saveChoice(iso, path, { marks }));
+  return rows.filter(Boolean);
 }
 
 // A card's place in the review: [thread], [thread, part] or ['still', n].
@@ -319,6 +433,7 @@ export class DayReview {
     if (still) c.append(make('div', 'dr-label', 'Still on your mind?'));
     c.append(make('div', 'dr-title', still ? mulled : it.title));
     if (it.choice) {
+      if (!still) c.append(this.marks(path, it, true));
       const done = make('div', 'dr-outcome');
       const area = it.sent?.area_id ? (this.areas || []).find((a) => a.id === it.sent.area_id)?.title : null;
       done.append(make('span', '', it.choice === 'daybook' ? `In Daybook${area ? ` · ${area}` : '’s Inbox'}` : it.choice === 'mull' ? (still ? 'Still thinking about it' : 'On “Still thinking about”') : it.choice === 'drawer' ? 'In the drawer' : 'Let go'));
@@ -343,6 +458,7 @@ export class DayReview {
       }
       c.append(from);
     }
+    if (!still) c.append(this.marks(path, it));
     const acts = make('div', 'dr-actions');
     const choices = still ? ['daybook', 'mull', 'let_go'] : ['daybook', 'mull', 'drawer', ...(it.parts?.length > 1 ? ['split'] : []), 'let_go'];
     for (const ch of choices) {
@@ -354,6 +470,72 @@ export class DayReview {
     }
     c.append(acts);
     return c;
+  }
+
+  // The link and tags Claude suggests, and any you added: a tap puts one on
+  // the card's lines (✓), another takes it off. On a decided card only what's
+  // on shows, with "Link or tag…" to add one later.
+  marks(path, it, quiet = false) {
+    const row = make('div', 'dr-marks');
+    const on = it.marks || [];
+    const isOn = (m) => on.some((x) => (m.tag ? x.tag === m.tag : x.id === m.id));
+    const offered = [...(it.link ? [it.link] : []), ...(it.tags || []).map((tag) => ({ tag }))];
+    for (const m of on) if (!offered.some((o) => (m.tag ? o.tag === m.tag : o.id === m.id))) offered.push(m);
+    const already = this.marked?.get(path.join('.')) || new Set();
+    for (const m of offered) {
+      const yes = isOn(m);
+      if (!yes && already.has(m.tag ? `#${m.tag}` : m.id)) continue;
+      if (quiet && !yes) continue;
+      const b = make('button', `dr-mark${yes ? ' on' : ''}`, `${yes ? '✓ ' : '+ '}${m.tag ? `#${m.tag}` : m.title}`);
+      b.type = 'button';
+      b.title = m.tag ? (yes ? `Take #${m.tag} off` : `Tag it #${m.tag}`) : (yes ? `Take the link to ${m.title} off` : `Link it to ${m.title}`);
+      b.addEventListener('click', () => this.mark(path, m, !yes));
+      row.append(b);
+    }
+    const pick = make('button', 'dr-mark dr-pick', 'Link or tag…');
+    pick.type = 'button';
+    pick.addEventListener('click', () => this.markForm(row, path));
+    row.append(pick);
+    return row;
+  }
+
+  async mark(path, m, on) {
+    const rows = await toggleMark(this.iso, path, m, on);
+    await this.o.onRows(rows);
+    await this.refresh();
+  }
+
+  // "Link or tag…": type to find a world or page; #word adds a tag.
+  async markForm(row, path) {
+    if (row.querySelector('.dr-find')) { row.querySelector('.dr-find input').focus(); return; }
+    const places = await linkPlaces(2000);
+    const f = make('div', 'dr-find');
+    const input = make('input');
+    input.placeholder = 'A world or page, or #tag';
+    input.setAttribute('aria-label', 'Link or tag');
+    const list = make('div', 'dr-found');
+    const pickOne = (m) => { f.remove(); this.mark(path, m, true); };
+    const fill = () => {
+      const q = input.value.trim();
+      const items = [];
+      if (q.startsWith('#') && cleanTag(q)) items.push({ tag: cleanTag(q), label: `Tag it #${cleanTag(q)}` });
+      else if (q) for (const p of places.filter((p) => p.title.toLowerCase().includes(q.toLowerCase())).slice(0, 6)) items.push({ id: p.id, title: p.title, label: p.in ? `${p.title} · ${p.in}` : p.title });
+      list.replaceChildren(...items.map((m, i) => {
+        const b = make('button', `dr-found-one${i === 0 ? ' first' : ''}`, m.label);
+        b.type = 'button';
+        b.addEventListener('click', () => pickOne(m.tag ? { tag: m.tag } : { id: m.id, title: m.title }));
+        return b;
+      }));
+      f.items = items;
+    };
+    input.addEventListener('input', fill);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); f.remove(); }
+      else if (e.key === 'Enter') { e.preventDefault(); const m = f.items?.[0]; if (m) pickOne(m.tag ? { tag: m.tag } : { id: m.id, title: m.title }); }
+    });
+    f.append(input, list);
+    row.after(f);
+    input.focus();
   }
 
   // Before a task goes, its words and area, to change if you like.
@@ -409,6 +591,15 @@ export class DayReview {
       const ids = review.threads.flatMap((t) => [...t.lines, ...(t.parts || []).flatMap((p) => p.lines)]);
       this.lineText = new Map();
       for (const id of ids) { const l = await getEntry(id); if (l) this.lineText.set(id, (l.text || '').replace(/\s+/g, ' ').slice(0, 90)); }
+      // Links and tags the lines already had before the review (so a
+      // suggestion they already carry isn't offered).
+      this.marked = new Map();
+      const note = async (key, it) => {
+        const have = new Set();
+        for (const r of await headLines(it.lines || [])) { (r.links || []).forEach((x) => have.add(x)); (r.tags || []).forEach((t) => have.add(`#${t}`)); }
+        this.marked.set(key, have);
+      };
+      for (const [i, t] of review.threads.entries()) { await note(String(i), t); for (const [j, p] of (t.parts || []).entries()) await note(`${i}.${j}`, p); }
       this.mulled = new Map();
       for (const s of review.still) { const m = await getEntry(s.id); this.mulled.set(s.id, m?.fields?.mull?.words || m?.text || ''); }
       this.areas = await loadAreas(this.o.areas);

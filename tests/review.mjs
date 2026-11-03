@@ -29,11 +29,13 @@ function claude(body) {
     return { summary: 'A short day. You wrote about the bakery again.', threads: [], still: [{ id: body.mulling[0].id, note: 'You came back to it today.' }] };
   }
   const dana = find(/Dana/), bakery = find(/bakery/), ramble = find(/ramble/);
+  const ninja = body.places?.find((p) => p.title === 'The Ninja Bunch');
   return {
     summary: 'You spent the day on The Ninja Bunch: storyboards, a new idea for where the ninjas grew up, and a list of odds and ends.\n\nBy evening you were tired.',
     threads: [
       dana && { title: 'Storyboards with Dana', gist: 'Talk to Dana before Friday.', lines: [dana], suggest: 'daybook', task: { title: 'Call Dana about the storyboards', area_id: 'area-film' }, parts: [] },
-      bakery && { title: 'Ninjas raised by a bakery', gist: 'A backstory idea.', lines: [bakery], suggest: 'mull', task: { title: 'Develop the bakery backstory', area_id: '' }, parts: [] },
+      bakery && { title: 'Ninjas raised by a bakery', gist: 'A backstory idea.', lines: [bakery], suggest: 'mull', task: { title: 'Develop the bakery backstory', area_id: '' }, parts: [],
+        link: ninja ? { id: ninja.id, title: ninja.title } : null, tags: ['backstory', 'idea'] },
       ramble && { title: 'Odds and ends', gist: 'Three separate things.', lines: [ramble], suggest: 'split', task: { title: 'Odds and ends', area_id: '' }, parts: [
         { title: 'Fix the bike', gist: '', lines: [ramble], suggest: 'daybook', task: { title: 'Fix the bike', area_id: 'area-personal' } },
         { title: 'Sea shanty theme song', gist: '', lines: [ramble], suggest: 'mull', task: { title: 'Try a sea shanty theme', area_id: '' } },
@@ -90,6 +92,16 @@ try {
     await page.keyboard.press('Enter');
   }
   await sleep(700);
+  // A world to link to.
+  await page.evaluate(() => new Promise((res) => {
+    const r = indexedDB.open('writing');
+    r.onsuccess = () => {
+      const t = r.result.transaction('entries', 'readwrite');
+      const now = Date.now();
+      t.objectStore('entries').put({ id: 'wd-ninja', kind: 'world', title: 'The Ninja Bunch', parent_id: null, sort: 1, text: '', content: null, tags: [], links: [], fields: {}, area_id: null, deleted: false, created_at: now, updated_at: now });
+      t.oncomplete = res;
+    };
+  }));
 
   await check('Ctrl + K asks Claude to review the day: a summary, then a card for each thread', async () => {
     await command(page, 'Review the day');
@@ -128,6 +140,57 @@ try {
     assert.equal(task.link, `${URL}?open=${line.id}`);
     assert.equal(line.fields.daybook.id, task.id);
     assert.match(await card(page, 'Storyboards with Dana').textContent(), /In Daybook · Personal/);
+  });
+
+  await check('a card offers Claude’s link and tags: one tap puts them on the line, another takes them off', async () => {
+    assert.ok(asked[0].places.some((p) => p.id === 'wd-ninja' && p.kind === 'world'), 'Claude is told the worlds and pages');
+    assert.ok(asked[0].tags.includes('idea'), 'and the tags in use');
+    const c = card(page, 'Ninjas raised by a bakery');
+    const marks = await c.locator('.dr-mark').allTextContents();
+    assert.deepEqual(marks, ['+ The Ninja Bunch', '+ #backstory', 'Link or tag…'], 'a tag the line already has isn’t offered');
+    if (shots) { await c.scrollIntoViewIfNeeded(); await page.evaluate(() => window.scrollBy(0, 160)); await page.screenshot({ path: `${shots}/desktop-review-marks.png` }); }
+    await c.locator('.dr-mark', { hasText: 'The Ninja Bunch' }).click();
+    await c.locator('.dr-mark', { hasText: '#backstory' }).click();
+    await sleep(400);
+    let line = (await all(page)).find((r) => r.kind === 'line' && /bakery/.test(r.text));
+    assert.ok(line.links.includes('wd-ninja'));
+    assert.equal(line.content.find((n) => n.type === 'entryRef')?.attrs.title, 'The Ninja Bunch');
+    assert.ok(line.tags.includes('backstory') && line.tags.includes('idea'));
+    assert.match(line.text, /bakery #idea The Ninja Bunch #backstory$/);
+    assert.deepEqual(await c.locator('.dr-mark.on').allTextContents(), ['✓ The Ninja Bunch', '✓ #backstory']);
+    if (shots) await page.screenshot({ path: `${shots}/desktop-review-marked.png` });
+    assert.match(await page.textContent('#outline-editor'), /bakery #idea The Ninja Bunch #backstory/, 'the open page shows it straight away');
+    await c.locator('.dr-mark', { hasText: '#backstory' }).click();
+    await sleep(400);
+    line = (await all(page)).find((r) => r.kind === 'line' && /bakery/.test(r.text));
+    assert.ok(!line.tags.includes('backstory') && !/backstory/.test(line.text), 'a second tap takes it off');
+    assert.ok(line.links.includes('wd-ninja'), 'the link stays');
+  });
+
+  await check('Link or tag… finds a world or page, and #word adds a tag of your own', async () => {
+    const c = card(page, 'Ninjas raised by a bakery');
+    await c.locator('.dr-pick').click();
+    await page.waitForSelector('.dr-find input:focus');
+    await page.keyboard.type('#Reels');
+    await page.keyboard.press('Enter');
+    await sleep(400);
+    let line = (await all(page)).find((r) => r.kind === 'line' && /bakery/.test(r.text));
+    assert.ok(line.tags.includes('reels'));
+    assert.match(line.text, /The Ninja Bunch #reels$/, 'no extra space where #backstory was');
+    assert.ok((await c.locator('.dr-mark.on').allTextContents()).includes('✓ #reels'));
+    // On the Dana card: find the world by typing part of its name.
+    const d = card(page, 'Storyboards with Dana');
+    await d.locator('.dr-pick').click();
+    await page.waitForSelector('.dr-find input:focus');
+    await page.keyboard.type('ninja');
+    await sleep(200);
+    assert.match(await d.locator('.dr-found-one').first().textContent(), /The Ninja Bunch/);
+    if (shots) await page.screenshot({ path: `${shots}/desktop-review-find.png` });
+    await page.keyboard.press('Enter');
+    await sleep(400);
+    line = (await all(page)).find((r) => r.kind === 'line' && /Call Dana/.test(r.text));
+    assert.ok(line.links.includes('wd-ninja'));
+    assert.match(await d.textContent(), /✓ The Ninja Bunch/, 'shown on a decided card too');
   });
 
   await check('Keep thinking puts it on “Still thinking about”, linked to the line; Undo takes it off', async () => {
@@ -213,6 +276,17 @@ try {
     await sleep(500);
     const mull = (await all(page)).find((r) => r.parent_id === 'pg_mulling' && !r.deleted);
     assert.equal(mull.fields.done, true, 'let go: struck through on the page');
+  });
+
+  await check('the link and tag ideas can be hidden on their own (Show: Link and tag ideas)', async () => {
+    await page.evaluate(() => { localStorage.setItem('hide', JSON.stringify(['marks'])); });
+    await page.reload();
+    await page.waitForSelector('.dr-toggle:not([hidden])', { timeout: 5000 });
+    await page.click('.dr-toggle');
+    await sleep(300);
+    assert.equal(await page.locator('.dr-marks:visible').count(), 0);
+    assert.ok(await page.locator('.dr-card').count() > 0);
+    await page.evaluate(() => localStorage.removeItem('hide'));
   });
 
   await check('the review can be hidden (Show: Day review on day pages)', async () => {

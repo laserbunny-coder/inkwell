@@ -4543,7 +4543,7 @@ async function start() {
     if (sp.get('capture')) openCapture();
     if (/^\d{4}-\d{2}-\d{2}$/.test(sp.get('review') || '')) { reviewing = sp.get('review'); reviewAsked(); }
   });
-  if (asked.has('capture') || asked.has('share') || asked.has('open') || asked.has('review') || asked.has('connect') || asked.has('tidy')) history.replaceState(history.state, '', location.pathname);
+  if (asked.has('capture') || asked.has('share') || asked.has('open') || asked.has('review') || asked.has('connect') || asked.has('tidy') || asked.has('summaries')) history.replaceState(history.state, '', location.pathname);
   if (/^\d{4}-\d{2}-\d{2}$/.test(asked.get('review') || '')) {
     reviewing = asked.get('review');
     // Signed in, wait for this device to catch up first (the review may
@@ -4554,6 +4554,8 @@ async function start() {
   if (asked.get('capture')) openCapture();
   // The Monday note in Daybook links to ?tidy=<Monday>: the pass opens, and fills in as this device catches up.
   if (asked.has('tidy')) showTidy().catch((e) => console.error(e));
+  // The monthly note in Daybook links to ?summaries: What Claude knows, with the weekly and monthly summaries.
+  if (asked.has('summaries')) showClaudeKnows(null).catch((e) => console.error(e));
   if (asked.get('open')) { asking = asked.get('open'); await openAsked(); }
   // Shared from another app (or shared earlier and not yet placed).
   await landShares();
