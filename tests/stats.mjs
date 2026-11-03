@@ -40,6 +40,9 @@ let p = progress(base, { unit: 'day', count: 3, now });
 assert.deepEqual(p.series.p1.map((x) => x.w), [3, 2, 0]);
 assert.deepEqual(p.series.all.map((x) => x.w), [3, 9, 0]);
 assert.equal(p.totals.all.w, 12);
+// Manuscripts leaves the notes out: novels and scripts only.
+assert.equal(p.totals.manuscripts.w, 9);
+assert.deepEqual(p.series.manuscripts.map((x) => x.w), [3, 6, 0]);
 
 // The first tally starts from what was there before today; today's writing is the difference.
 const today = dayOf(now);

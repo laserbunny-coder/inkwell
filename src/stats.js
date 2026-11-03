@@ -172,18 +172,25 @@ export function progress(rows, { unit = 'day', count = 14, now = Date.now() } = 
   const today = dayOf(now);
   const list = periods(unit, count, today);
   const series = {};
-  for (const s of [...scopes, 'all']) series[s] = list.map((p) => ({ ...p, w: 0, l: 0 }));
+  for (const s of [...scopes, 'all', 'manuscripts']) series[s] = list.map((p) => ({ ...p, w: 0, l: 0 }));
   list.forEach((p, i) => {
     for (let day = p.from; day <= p.to && day <= today; day = addDays(day, 1)) {
       for (const s of scopes) {
         const v = onDay(s, day);
         series[s][i].w += v.w; series[s][i].l += v.l;
         series.all[i].w += v.w; series.all[i].l += v.l;
+        // Manuscripts: novels and scripts only, without the notebook and notes.
+        if (s !== 'notes') { series.manuscripts[i].w += v.w; series.manuscripts[i].l += v.l; }
       }
     }
   });
   const totals = { all: { w: m.notes, l: 0 }, notes: { w: m.notes, l: 0 } };
-  for (const [id, b] of Object.entries(m.books)) { totals[id] = b; totals.all.w += b.w; totals.all.l += b.l; }
+  totals.manuscripts = { w: 0, l: 0 };
+  for (const [id, b] of Object.entries(m.books)) {
+    totals[id] = b;
+    totals.all.w += b.w; totals.all.l += b.l;
+    totals.manuscripts.w += b.w; totals.manuscripts.l += b.l;
+  }
   // Each world: what all its pieces come to, over time and so far.
   for (const id of Object.keys(m.worlds)) {
     series[id] = list.map((p) => ({ ...p, w: 0, l: 0 }));
@@ -223,7 +230,8 @@ export class StatsPanel {
     this.el = el;
     this.onClose = onClose;
     this.unit = localStorage.getItem('statsUnit') || 'day';
-    this.scope = 'all';
+    // The row you last charted comes back next time (say, Manuscripts).
+    try { this.scope = localStorage.getItem('statsScope') || 'all'; } catch { this.scope = 'all'; }
     el.querySelector('.stats-worlds')?.addEventListener('click', () => {
       try { localStorage.setItem('statsWorlds', this.byWorld ? 'off' : 'on'); } catch {}
       this.render();
@@ -263,6 +271,7 @@ export class StatsPanel {
       : books.map((x) => piece(x, false));
     const scopes = [
       { id: 'all', name: 'Everything', kind: '' },
+      ...(books.length ? [{ id: 'manuscripts', name: 'Manuscripts', kind: 'Novels and scripts, without notes', script: books.every(([, b]) => b.type === 'screenplay') }] : []),
       ...middle,
       { id: 'notes', name: 'Notes', kind: 'Notebook and notes' }
     ];
@@ -329,7 +338,7 @@ export class StatsPanel {
       b.querySelector('.period').textContent = amount(x, data.series[x.id][n - 1]);
       const tot = data.totals[x.id] || { w: 0, l: 0 };
       b.querySelector('.total').textContent = x.script ? `${fmtPages(tot.l)} so far` : `${fmtWords(tot.w)} so far`;
-      b.addEventListener('click', () => { this.scope = x.id; this.render(); });
+      b.addEventListener('click', () => { this.scope = x.id; try { localStorage.setItem('statsScope', x.id); } catch {} this.render(); });
       li.append(b);
       list.append(li);
     }
