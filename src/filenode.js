@@ -31,7 +31,7 @@ export function resetLinkPics() {
 const notes = new Map();
 export function setFileNote(id, text) {
   if (text) notes.set(id, text); else notes.delete(id);
-  for (const el of document.querySelectorAll(`[data-file="${CSS.escape(id)}"] .note`)) el.textContent = text ? ` · ${text}` : '';
+  for (const el of document.querySelectorAll(`[data-file="${CSS.escape(id)}"] .file-note`)) el.textContent = text ? ` · ${text}` : '';
 }
 
 export const FileEmbed = Node.create({
@@ -117,7 +117,7 @@ export const FileEmbed = Node.create({
         const label = document.createElement('small');
         label.textContent = lengthLabel(a.duration) || 'Recording';
         const note = document.createElement('small');
-        note.className = 'note';
+        note.className = 'file-note';
         note.textContent = notes.has(a.id) ? ` · ${notes.get(a.id)}` : '';
         // Once played, a bar opens beside the button to scrub through it.
         const scrub = document.createElement('input');
