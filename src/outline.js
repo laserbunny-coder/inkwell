@@ -1240,6 +1240,14 @@ export class OutlineStore {
     };
     const edits = [];
     doc.forEach((list) => visit(list, page.id));
+    // A line changed underneath since it was loaded (a snapshot naming a
+    // link, Claude's tag) keeps what was added to it; the words are yours.
+    for (const r of rows) {
+      const was = this.cache.get(r.id);
+      if (!was || r.deleted) continue;
+      const now = await getEntry(r.id);
+      if (now && !now.deleted && (now.updated_at || 0) > (was.updated_at || 0)) r.fields = { ...now.fields, done: r.fields.done, gather: r.fields.gather, gathered: r.fields.gathered, mirror: r.fields.mirror };
+    }
     for (const [id, prev] of this.cache) {
       if (!present.has(id) && !prev.deleted) rows.push({ ...prev, deleted: true, updated_at: now });
     }

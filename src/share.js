@@ -34,7 +34,42 @@ async function takeInbox() {
   return { all, done: (at) => result(db.transaction('shares', 'readwrite').objectStore('shares').delete(at)) };
 }
 
+// Kept for the app the same way the service worker keeps a share: the
+// "Save to Inkwell" bookmark on a computer opens ?save=<address>&title=<name>.
+export async function keepShare({ url = '', title = '', text = '' }) {
+  const db = await openInbox();
+  await result(db.transaction('shares', 'readwrite').objectStore('shares').put({ at: Date.now(), url, title, text, files: [] }));
+}
+
 const URL_RE = /\bhttps?:\/\/[^\s<>"']+/i;
+
+// A line that's nothing but a web address (pasted, or typed and left):
+// returns the address, or null.
+export function bareLink(text) {
+  const t = (text || '').trim().replace(/[).,;!?]+$/, '');
+  if (!t || /\s/.test(t)) return null;
+  const u = /^www\./i.test(t) ? `https://${t}` : t;
+  if (!/^https?:\/\/[^/?#]+\.[^/?#]+/i.test(u)) return null;
+  try { return new URL(u).href; } catch { return null; }
+}
+
+// What a caught link shows until its snapshot names it: the site.
+export function linkLabel(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+}
+
+// A link pasted or typed on a line of its own (on any day or page) gets what
+// a link shared from the phone gets: a snapshot with its real title, picture,
+// a short summary under it and a tag. The line already shows the site's name
+// as a link (see linkcatch.js); this marks it and puts it in the queue.
+export async function catchLink(lineId, url) {
+  const line = await getEntry(lineId);
+  if (!line || line.deleted || line.fields?.url || line.fields?.mirror) return null;
+  const row = { ...line, fields: { ...line.fields, capture: 'share', url }, updated_at: Date.now() };
+  await putEntries([row]);
+  await queue({ line: lineId, url, named: false, picture: false, wrote: line.text, label: line.text, at: Date.now() });
+  return row;
+}
 
 // Shared bits, made sense of: the link, a name for it, and any other words.
 export function readShare({ title = '', text = '', url = '' }) {
@@ -143,7 +178,10 @@ async function queue(item) { await setMeta('snapshotQueue', [...(await waiting()
 async function unqueue(lineId) { await setMeta('snapshotQueue', (await waiting()).filter((q) => q.line !== lineId)); }
 
 let busy = null;
-export function snapshotPending({ ask, canAsk, onRows }) {
+// typing(lineId) says the line is on the page being written on and its last
+// words aren't saved yet: the snapshot waits for a pause, so it can't be
+// written over by the next save.
+export function snapshotPending({ ask, canAsk, onRows, typing = () => false }) {
   busy ||= (async () => {
     const items = await waiting();
     if (!items.length || !canAsk()) return;
@@ -156,6 +194,7 @@ export function snapshotPending({ ask, canAsk, onRows }) {
         if (e.status && e.status < 500 && e.status !== 429) await unqueue(it.line);
         continue;
       }
+      for (let waited = 0; typing(it.line) && waited < 60000; waited += 400) await new Promise((r) => setTimeout(r, 400));
       const rows = await placeSnapshot(it, snap || {});
       await unqueue(it.line);
       if (rows.length) onRows(rows);
@@ -173,9 +212,13 @@ export async function placeSnapshot(it, { title = '', summary = '', site = '', i
   const rows = [];
   const now = Date.now();
   let content = line.content || [];
-  if (line.text === it.wrote) {
-    if (title && !it.named) content = content.map((n) => (n.type === 'text' && n.marks?.some((m) => m.type === 'link') ? { ...n, text: title } : n));
-    if (image?.id && !it.picture) {
+  // A caught link keeps its name in place even once words are written after
+  // it ("x.com love this" becomes "<title> love this").
+  const same = line.text === it.wrote;
+  const named = (n) => n.type === 'text' && n.marks?.some((m) => m.type === 'link' && (!it.label || m.attrs?.href === it.url)) && (same || (it.label && n.text === it.label));
+  if (same || it.label) {
+    if (title && !it.named) content = content.map((n) => (named(n) ? { ...n, text: title } : n));
+    if (image?.id && !it.picture && !content.some((n) => n.type === 'file')) {
       const file = entry('file', { id: image.id, title: image.name || 'Picture', fields: { type: image.type, size: image.size || 0, from: it.url } });
       rows.push(file);
       content = [fileNode(file), { type: 'text', text: ' ' }, ...content];
