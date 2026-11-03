@@ -1695,3 +1695,9 @@ button.st-from:hover { color: var(--ink); }
 .dr-found-one.first, .dr-found-one:hover { color: var(--ink); }
 .hide-marks .dr-marks { display: none; }
 .dr-card.decided .dr-find { order: 4; flex-basis: 100%; }
+/* Save to Inkwell: the bookmark button for a computer's browser. */
+.save-steps { color: var(--muted); line-height: 1.5; margin: 0 0 16px; padding-left: 20px; }
+.save-steps li { margin-bottom: 6px; }
+.save-drag-row { display: flex; justify-content: center; margin: 4px 0 18px; }
+.save-drag { cursor: grab; text-decoration: none; padding: 8px 18px; }
+.ask p.save-tip { font-size: 14px; }

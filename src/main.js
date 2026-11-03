@@ -31,6 +31,7 @@ import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.j
 import { moveLine, canMoveLine, indentLines, outdentLines, removeLine, toggleDone, foldKey } from './outline.js';
 import { SlashMenu, setSlashItems } from './slash.js';
 import { openHandleMenu } from './handlemenu.js';
+import { showSaveButton } from './savebutton.js';
 import { openPicker } from './picker.js';
 import { PlotGrid, threadsOf, worldPromises } from './grid.js';
 import { ProductionView } from './prodview.js';
@@ -39,7 +40,7 @@ import { Nav } from './nav.js';
 import { StagePage, intoDrawer, gatherItems } from './stages.js';
 import { CaptureScreen, writeOutPending, recoverRecording, writeOutAgain, requeueBlank } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, RAW } from './voice.js';
-import { takeShares, snapshotPending, tidyShareBlanks } from './share.js';
+import { takeShares, snapshotPending, tidyShareBlanks, keepShare } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
 import { sendToDaybook, sendPending, queueTask } from './daybook.js';
 import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker, speakersOn, mine, sendMeetingToAcro } from './meeting.js';
@@ -295,6 +296,8 @@ const notebook = new Notebook({
   onChange: () => { clearTimeout(railTimer); railTimer = setTimeout(renderRail, 100); },
   // A mirror edited a paragraph of the chapter that's open behind the notebook.
   onSources: (rows) => { if (rows.some((r) => r.parent_id === state.chapterId)) applyRemoteChapter(); },
+  // A link pasted or typed on a line of its own: its snapshot is asked for now.
+  onLink: () => writeOut(),
   onPlace: (page) => {
     if (!inNotebook()) return;
     remember({ view: 'notebook', pageId: page.id, ...(notebook?.zoom ? { zoom: notebook.zoom } : {}) });
@@ -3617,6 +3620,7 @@ const commands = [
   { group: 'page', label: 'Name the section levels (Act, Sequence, Scene…)', keys: '', run: nameSectionLevels, when: () => writing() && isScript() },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
   { group: 'view', label: 'What Claude knows: its one-line note on this, and weekly summaries', keys: '', words: ['about', 'summary', 'second brain', 'memory', 'digest', 'weekly'], run: () => showClaudeKnows() },
+  { group: 'new', label: 'Save links from your browser (Save to Inkwell button)…', keys: '', words: ['bookmark', 'bookmarklet', 'share', 'save link', 'twitter', 'x', 'web page', 'computer', 'desktop'], run: () => showSaveButton(), when: () => !matchMedia('(pointer: coarse)').matches },
   { group: 'new', label: 'Bring in old notes (from Thymer, Tana, Workflowy, OneNote)…', keys: '', words: ['import', 'paste', 'opml', 'markdown', 'migrate', 'old apps'], run: () => bringInOld() },
   { group: 'sync', label: 'Connect Scribe, the dictation keyboard…', keys: '', run: () => connectScribe() },
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
@@ -4178,7 +4182,7 @@ async function writeLineOutAgain() {
   writeOut();
 }
 function writeOut() {
-  const opts = { ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows) };
+  const opts = { ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows), typing: (id) => notebook.typingOn(id) };
   return Promise.all([writeOutPending({ ...opts, draft: { context: draftContext, deliver: deliverDraft } }), snapshotPending(opts), meetingPending({ ...opts, ...meetingOpts }), sendPending({ send: sendTask, canSend: canSendTask })]);
 }
 // Meetings: your tasks go to Daybook in the meeting's area (Business, Filmmaking).
@@ -4541,9 +4545,12 @@ async function start() {
     if (!params.targetURL || same) return;
     const sp = new URL(params.targetURL).searchParams;
     if (sp.get('capture')) openCapture();
+    if (sp.get('save')) keepShare({ url: sp.get('save'), title: sp.get('title') || '' }).then(landShares).catch((e) => console.error(e));
     if (/^\d{4}-\d{2}-\d{2}$/.test(sp.get('review') || '')) { reviewing = sp.get('review'); reviewAsked(); }
   });
-  if (asked.has('capture') || asked.has('share') || asked.has('open') || asked.has('review') || asked.has('connect') || asked.has('tidy') || asked.has('summaries')) history.replaceState(history.state, '', location.pathname);
+  // The Save to Inkwell bookmark on a computer: the page it was clicked on.
+  if (asked.get('save')) await keepShare({ url: asked.get('save'), title: asked.get('title') || '' }).catch((e) => console.error(e));
+  if (asked.has('capture') || asked.has('save') || asked.has('share') || asked.has('open') || asked.has('review') || asked.has('connect') || asked.has('tidy') || asked.has('summaries')) history.replaceState(history.state, '', location.pathname);
   if (/^\d{4}-\d{2}-\d{2}$/.test(asked.get('review') || '')) {
     reviewing = asked.get('review');
     // Signed in, wait for this device to catch up first (the review may

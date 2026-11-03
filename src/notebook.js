@@ -1,9 +1,11 @@
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { AltMark } from './alts.js';
+import { LinkCatch } from './linkcatch.js';
 import { OutlineDoc, LineIds, EntryRef, TagMarks, GatherBadge, mirrorKey, OutlineFold, OutlineKeys, OutlineItem, oneParagraphPerLine, foldKey, OutlineStore, descendants } from './outline.js';
 import { getEntry, getMany, linkedFrom, byKind, byTag, putEntries, children, isTrashed } from './db.js';
 import { entry } from './model.js';
+import { catchLink } from './share.js';
 import { bySort } from './order.js';
 import { moveEntry } from './move.js';
 import { newPage } from './library.js';
@@ -99,12 +101,13 @@ export function mirrorEid(gatherer, source) {
 const EMPTY = { type: 'doc', content: [{ type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }] }] };
 
 export class Notebook {
-  constructor({ onPick, onOpen, onStatus, onChange, onPlace, onZoom, onSources }) {
+  constructor({ onPick, onOpen, onStatus, onChange, onPlace, onZoom, onSources, onLink }) {
     this.onZoom = onZoom || (() => {});
     this.origins = new Map();
     this.onOpen = onOpen;
     this.onChange = onChange || (() => {});
     this.onPlace = onPlace || (() => {});
+    this.onLink = onLink || (() => {});
     this.store = new OutlineStore((s) => {
       onStatus(s);
       // New pages, days and tags show on the shelves once they're saved.
@@ -118,7 +121,8 @@ export class Notebook {
         OutlineDoc, OutlineItem, OutlineKeys, LineIds, EntryRef.configure({ onPick, onOpen }), TagMarks.configure({ onTag: (t) => this.showTag(t) }), GatherBadge.configure({ onTag: (t) => this.showTag(t), onOpen, origin: (id) => this.origins.get(id) || '' }), AltMark,
         OutlineFold.configure({ onZoom: (eid) => this.zoomed(eid) }),
         FileEmbed.configure({ onTooBig: (f) => toast(`“${f.name}” is too big to add (the limit is ${Math.round(MAX_BYTES / 1048576)} MB)`) }),
-        VoiceChip, SlashMenu
+        VoiceChip, SlashMenu,
+        LinkCatch.configure({ onCatch: (eid, url) => this.caughtLink(eid, url) })
       ],
       content: EMPTY,
       onUpdate: ({ editor }) => this.store.change(editor.state.doc)
@@ -141,6 +145,22 @@ export class Notebook {
     title.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); this.editor.commands.focus('start'); } });
     title.addEventListener('blur', () => this.rename(title.textContent.trim()));
   }
+
+  // A link on a line of its own: once the line is saved, it's marked and
+  // queued for its snapshot (share.js), in the same line of saves so a save
+  // just after can't undo the mark.
+  caughtLink(eid, url) {
+    this.store.flush(this.editor.state.doc);
+    this.store.saving = this.store.saving.then(async () => {
+      const row = await catchLink(eid, url);
+      if (!row) return;
+      this.store.cache.set(row.id, row);
+      this.onLink(row);
+    }).catch((e) => console.error(e));
+  }
+
+  // Words on this page that aren't saved yet, and the line is on it.
+  typingOn(id) { return !!this.page && !this.store.idle && this.store.ids().has(id); }
 
   get isDay() { return this.page?.kind === 'day'; }
 
