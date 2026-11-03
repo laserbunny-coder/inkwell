@@ -39,7 +39,7 @@ import { PageStrip, TodayPanel, isLife, taskHint, personalArea } from './pages.j
 import { Nav } from './nav.js';
 import { StagePage, intoDrawer, gatherItems } from './stages.js';
 import { CaptureScreen, writeOutPending, recoverRecording, writeOutAgain, requeueBlank } from './capture.js';
-import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, RAW } from './voice.js';
+import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, placeScribeWaiting, RAW } from './voice.js';
 import { takeShares, snapshotPending, tidyShareBlanks, keepShare } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
 import { sendToDaybook, sendPending, queueTask } from './daybook.js';
@@ -712,7 +712,7 @@ const sync = new Sync({
     syncEl.dataset.state = s;
     delete syncEl.dataset.stale;
     document.body.dataset.sync = s;
-    if (s === 'synced') { seedIfEmpty(); conflicts.count(); checkSpace().catch(() => {}); blankOnce().then(writeOut); openAsked(); reviewAsked(); }
+    if (s === 'synced') { seedIfEmpty(); conflicts.count(); checkSpace().catch(() => {}); blankOnce().then(writeOut); scribeKept(); openAsked(); reviewAsked(); }
     if (s !== 'syncing') checkUnsent().catch(() => {});
   },
   onRemote: applyRemote
@@ -4242,6 +4242,13 @@ let blankChecked = null;
 function blankOnce() {
   blankChecked ||= requeueBlank().catch((e) => { console.warn(e); return 0; });
   return blankChecked;
+}
+// Recordings Scribe kept here (its mode has "Keep in Inkwell" on) arrive by
+// sync with their words; each sync, any not written up yet are, like a Capture.
+let scribing = null;
+function scribeKept() {
+  scribing ||= placeScribeWaiting().then((rows) => (rows.length ? applyRemote(rows) : null)).catch((e) => console.warn(e)).finally(() => { scribing = null; });
+  return scribing;
 }
 // Ctrl + K on a recording's line: write it out again.
 async function writeLineOutAgain() {

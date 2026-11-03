@@ -147,7 +147,7 @@ export async function requeueBlank(days = 7, now = Date.now()) {
   for (let i = 0; i < days; i++) {
     const d = new Date(); d.setDate(d.getDate() - i);
     for (const line of await children(`day-${dayOf(d)}`)) {
-      if (line.kind !== 'line' || line.fields?.capture !== 'voice' || line.fields?.voice || line.fields?.heard || line.fields?.into || queued.has(line.id) || !bare(line) || !(now - Number(line.created_at) > 30 * 60 * 1000)) continue;
+      if (line.kind !== 'line' || line.fields?.capture !== 'voice' || line.fields?.voice || line.fields?.scribe || line.fields?.heard || line.fields?.into || queued.has(line.id) || !bare(line) || !(now - Number(line.created_at) > 30 * 60 * 1000)) continue;
       if (await writeOutAgain(line.id)) added++;
     }
   }
