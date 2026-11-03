@@ -33,6 +33,12 @@ function filed(n, said, typed, mode, name) {
     fields: { done: false, gather: null, gathered: null, mirror: null, capture: 'voice', said: `9:4${n} pm`, scribe: { raw: said, text: typed, mode, name, app: 'com.google.android.keep', by: 'elevenlabs' } }
   });
 }
+// From the Record tile: the server wrote it up the way Capture would.
+function tile(n) {
+  filed(n, 'Okay so an idea, the smallest ninja hides in the lantern and nobody believes she exists. Note to self check the lantern prop.', '', 'idea', 'Idea');
+  const r = table.get(`li_s${n}`);
+  r.fields.scribe = { ...r.fields.scribe, text: 'The smallest ninja hides in the lantern\n\nNobody believes she exists', title: 'The ninja nobody believes in', blocks: [{ text: 'Premise: the smallest ninja hides in the lantern', el: 'paragraph', new_scene: false }, { text: 'Nobody believes she exists', el: 'paragraph', new_scene: false }], notes: [{ text: 'Check the lantern prop', after: 1 }] };
+}
 function remote(op, arg) {
   if (op === 'push') {
     const at = stamp();
@@ -76,6 +82,7 @@ async function check(name, fn) {
 try {
   filed(1, 'Um okay so today I walked the dog and um I thought about the opening number. And then the rooftop shot.', 'Today I walked the dog and thought about the opening number.\n\nThen the rooftop shot.\nAnd the lantern.', 'journal', 'Journal');
   filed(2, 'Running late be there at six', 'Running late be there at six', 'text', 'Text message');
+  tile(3);
   await page.goto(URL);
   await page.waitForSelector('#editor .ProseMirror');
 
@@ -101,6 +108,19 @@ try {
     const line = (await entries(page)).find((r) => r.id === 'li_s2');
     assert.equal(line.fields.voice.mode, 'text');
     assert.match(line.text, /Running late be there at six #message$/);
+  });
+
+  await check('one from the Record tile keeps its title, paragraphs and note to self', async () => {
+    await page.waitForFunction(() => new Promise((res) => { const r = indexedDB.open('writing'); r.onsuccess = () => { const g = r.result.transaction('entries').objectStore('entries').get('li_s3'); g.onsuccess = () => res(!!g.result?.fields?.voice); }; }), null, { timeout: 15000 });
+    const all = await entries(page);
+    const line = all.find((r) => r.id === 'li_s3');
+    assert.equal(line.fields.voice.mode, 'idea');
+    assert.equal(line.fields.voice.title, 'The ninja nobody believes in');
+    assert.match(line.text, /The ninja nobody believes in/);
+    const under = all.filter((r) => r.parent_id === 'li_s3' && r.kind === 'line').map((r) => r.text).join(' | ');
+    assert.match(under, /Premise: the smallest ninja/);
+    assert.match(under, /Nobody believes she exists/);
+    assert.match(under, /Check the lantern prop/);
   });
 
   await check('the write-up goes back up, and isn’t made twice', async () => {

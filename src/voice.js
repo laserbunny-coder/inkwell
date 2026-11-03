@@ -231,9 +231,14 @@ export async function placeScribe(lineId) {
   const s = line?.fields?.scribe;
   if (!line || line.deleted || !s || line.fields?.voice || !String(s.raw || '').trim()) return [];
   const text = String(s.text || '').trim();
-  // A paragraph or outline point per line, as Scribe typed it in.
-  const blocks = text.split(/\n+/).map((t) => t.trim()).filter(Boolean).map((t) => ({ text: t, el: 'paragraph', new_scene: false }));
-  return placeVoice({ line: line.id, wrote: line.text }, { raw: s.raw, mode: s.mode, blocks, notes: [], ...(s.by ? { heard_by: s.by } : {}) });
+  // From Scribe's Record tile: written up as a Capture already (paragraphs,
+  // notes to self, a title). From a dictation: a paragraph or outline point
+  // per line, as Scribe typed it in.
+  const blocks = Array.isArray(s.blocks) && s.blocks.length
+    ? s.blocks
+    : text.split(/\n+/).map((t) => t.trim()).filter(Boolean).map((t) => ({ text: t, el: 'paragraph', new_scene: false }));
+  const notes = Array.isArray(s.blocks) && Array.isArray(s.notes) ? s.notes : [];
+  return placeVoice({ line: line.id, wrote: line.text }, { raw: s.raw, mode: s.mode, blocks, notes, ...(s.title ? { title: s.title } : {}), ...(s.by ? { heard_by: s.by } : {}) });
 }
 // Scribe recordings filed on the last week's day pages and not written up yet.
 export async function placeScribeWaiting(days = 7) {
