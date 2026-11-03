@@ -2,7 +2,7 @@ import { Node, Extension, InputRule, mergeAttributes } from '@tiptap/core';
 import Document from '@tiptap/extension-document';
 import { ListItem } from '@tiptap/extension-list';
 import { Fragment, Slice } from '@tiptap/pm/model';
-import { Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state';
+import { EditorState, Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { children, getEntry, putEntries, snapshots } from './db.js';
 import { keep } from './history.js';
@@ -51,7 +51,7 @@ export function linesFromText(text, schema) {
     let done = false;
     const box = t.match(/^\[([ xX])\]\s+/);
     if (box) { done = box[1] !== ' '; t = t.slice(box[0].length); }
-    return { level: widths.indexOf(width(l)), text: t, done };
+    return { level: widths.indexOf(width(l)), text: t, done, box: !!box };
   });
   // A line can only be one step deeper than the line above it.
   for (let i = 0; i < rows.length; i++) rows[i].level = Math.min(rows[i].level, i ? rows[i - 1].level + 1 : 0);
@@ -62,7 +62,7 @@ export function linesFromText(text, schema) {
       const r = rows[i++];
       const content = [schema.nodes.paragraph.create(null, r.text ? schema.text(r.text) : null)];
       if (i < rows.length && rows[i].level > level) content.push(build(level + 1));
-      items.push(schema.nodes.listItem.create({ done: r.done }, content));
+      items.push(schema.nodes.listItem.create({ done: r.done, box: r.box || null }, content));
     }
     return schema.nodes.bulletList.create(null, items);
   };
@@ -72,6 +72,19 @@ export function linesFromText(text, schema) {
   let depth = 3;
   for (let last = list.lastChild; kidsOf(last); last = kidsOf(last).lastChild) depth += 2;
   return new Slice(Fragment.from(list), 3, depth);
+}
+
+// Opens a page or chapter in an editor with an undo history of its own, so
+// Ctrl+Z can't undo the opening itself (which emptied the page, and the empty
+// page was saved) or reach back into the page that was open before.
+export function loadDoc(editor, doc) {
+  editor.commands.setContent(doc, { emitUpdate: false });
+  const s = editor.state;
+  editor.view.updateState(EditorState.create({ doc: s.doc, selection: s.selection, plugins: s.plugins }));
+}
+// Another device's changes shown in the open page: not something to undo.
+export function replaceDoc(editor, doc) {
+  editor.chain().setMeta('addToHistory', false).setContent(doc, { emitUpdate: false }).run();
 }
 
 // Stable ids on every line, at any depth.
@@ -91,6 +104,21 @@ export const LineIds = Extension.create({
           keepOnSplit: false,
           parseHTML: (el) => el.hasAttribute('data-done'),
           renderHTML: (a) => (a.done ? { 'data-done': '' } : {})
+        },
+        // A checklist line: the lines right under it get tick boxes.
+        checklist: {
+          default: false,
+          keepOnSplit: false,
+          parseHTML: (el) => el.hasAttribute('data-checklist'),
+          renderHTML: (a) => (a.checklist ? { 'data-checklist': '' } : {})
+        },
+        // A tick box on this one line (true), or none on a line in a checklist
+        // that's a note rather than a thing to do (false). Enter carries it on.
+        box: {
+          default: null,
+          keepOnSplit: true,
+          parseHTML: (el) => (el.getAttribute('data-box') === '1' ? true : el.getAttribute('data-box') === '0' ? false : null),
+          renderHTML: (a) => (a.box === true ? { 'data-box': '1' } : a.box === false ? { 'data-box': '0' } : {})
         },
         // A line can gather a tag: everything tagged with it lands under it.
         gather: {
@@ -498,6 +526,150 @@ export function toggleDone(editor) {
   editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...li.attrs, done: !li.attrs.done }));
   return true;
 }
+
+// Tick boxes. A line can be a checklist: the lines right under it get boxes
+// (the lines under those stay notes). Any single line can have a box of its
+// own, and a line in a checklist can go without one, to say something about
+// the things around it. Ticking a box is the same as Done (Ctrl+Enter).
+const lineAt = (state) => {
+  const { $head } = state.selection;
+  for (let d = $head.depth; d > 0; d--) if ($head.node(d).type.name === 'listItem') return { node: $head.node(d), pos: $head.before(d), $pos: state.doc.resolve($head.before(d)) };
+  return null;
+};
+// Is the line at `pos` in a checklist (its parent line is one)?
+function inChecklist(doc, pos) {
+  const $pos = doc.resolve(pos);
+  for (let d = $pos.depth; d > 0; d--) if ($pos.node(d).type.name === 'listItem') return !!$pos.node(d).attrs.checklist;
+  return false;
+}
+export const hasBox = (node, inList) => node.attrs.box === true || (node.attrs.box !== false && inList);
+export function lineChecks(state) {
+  const line = lineAt(state);
+  if (!line) return null;
+  const inList = inChecklist(state.doc, line.pos);
+  return { checklist: !!line.node.attrs.checklist, box: hasBox(line.node, inList), inList };
+}
+export function toggleChecklist(editor) {
+  const line = lineAt(editor.state);
+  if (!line) return false;
+  editor.view.dispatch(editor.state.tr.setNodeMarkup(line.pos, undefined, { ...line.node.attrs, checklist: !line.node.attrs.checklist }));
+  return true;
+}
+export function toggleBox(editor) {
+  const line = lineAt(editor.state);
+  if (!line) return false;
+  const inList = inChecklist(editor.state.doc, line.pos);
+  const shown = hasBox(line.node, inList);
+  const box = shown ? (inList ? false : null) : (inList ? null : true);
+  editor.view.dispatch(editor.state.tr.setNodeMarkup(line.pos, undefined, { ...line.node.attrs, box }));
+  return true;
+}
+const boxKey = new PluginKey('lineChecks');
+export const LineChecks = Extension.create({
+  name: 'lineChecks',
+  addInputRules() {
+    // "[] " or "[ ] " at the start of a line gives it a box; "[x] " a ticked one.
+    return [new InputRule({
+      find: /^\[( |x|X)?\]\s$/,
+      handler: ({ state, range, match }) => {
+        const $from = state.doc.resolve(range.from);
+        let d = $from.depth;
+        while (d > 0 && $from.node(d).type.name !== 'listItem') d--;
+        if (!d) return null;
+        const li = $from.node(d);
+        const pos = $from.before(d);
+        const inList = inChecklist(state.doc, pos);
+        const tr = state.tr.delete(range.from, range.to);
+        tr.setNodeMarkup(pos, undefined, { ...li.attrs, box: inList ? null : true, done: /x/i.test(match[1] || '') });
+      }
+    })];
+  },
+  addProseMirrorPlugins() {
+    const tick = (view, eid) => {
+      let at = -1;
+      let li = null;
+      view.state.doc.descendants((n, pos) => {
+        if (at >= 0) return false;
+        if (n.type.name === 'listItem' && n.attrs.eid === eid) { at = pos; li = n; return false; }
+        return true;
+      });
+      if (at < 0) return;
+      view.dispatch(view.state.tr.setNodeMarkup(at, undefined, { ...li.attrs, done: !li.attrs.done }));
+    };
+    return [new Plugin({
+      key: boxKey,
+      props: {
+        decorations(state) {
+          const decos = [];
+          const walk = (list, base, inList) => {
+            list.forEach((li, offset) => {
+              const pos = base + offset;
+              if (li.type.name !== 'listItem') return;
+              const kids = kidsOf(li);
+              if (hasBox(li, inList)) {
+                const done = !!li.attrs.done;
+                decos.push(Decoration.node(pos, pos + li.nodeSize, { class: 'boxed' }));
+                decos.push(Decoration.widget(pos + 1, () => {
+                  const b = document.createElement('button');
+                  b.type = 'button';
+                  b.className = 'line-box';
+                  b.tabIndex = -1;
+                  b.contentEditable = 'false';
+                  b.dataset.eid = li.attrs.eid || '';
+                  b.setAttribute('role', 'checkbox');
+                  b.setAttribute('aria-checked', String(done));
+                  b.setAttribute('aria-label', done ? 'Done; tap to untick' : 'Tick when done');
+                  return b;
+                }, { side: -1, key: `b-${li.attrs.eid}-${done ? 1 : 0}`, ignoreSelection: true }));
+              }
+              if (li.attrs.checklist) {
+                // How many are ticked, faintly after the checklist's own words.
+                let all = 0;
+                let ticked = 0;
+                kids?.forEach((k) => { if (hasBox(k, true)) { all++; if (k.attrs.done) ticked++; } });
+                decos.push(Decoration.node(pos, pos + li.nodeSize, { class: 'checklist' }));
+                if (all) {
+                  const end = pos + 1 + li.firstChild.nodeSize - 1;
+                  decos.push(Decoration.widget(end, () => {
+                    const c = document.createElement('span');
+                    c.className = 'check-count';
+                    c.contentEditable = 'false';
+                    c.textContent = `${ticked}/${all}`;
+                    return c;
+                  }, { side: 1, key: `c-${li.attrs.eid}-${ticked}-${all}`, ignoreSelection: true }));
+                }
+              }
+              if (kids) walk(kids, pos + li.nodeSize - 1 - kids.nodeSize + 1, !!li.attrs.checklist);
+            });
+          };
+          state.doc.forEach((list, offset) => { if (list.type.name === 'bulletList') walk(list, offset + 1, false); });
+          return DecorationSet.create(state.doc, decos);
+        },
+        handleDOMEvents: {
+          // A tap or click on a box ticks it, without moving the caret or
+          // bringing up the keyboard on a phone.
+          pointerdown(view, event) {
+            const b = event.target.closest?.('.line-box');
+            if (!b) return false;
+            event.preventDefault();
+            if (event.button === 0 && b.dataset.eid) tick(view, b.dataset.eid);
+            return true;
+          },
+          mousedown(_view, event) {
+            if (!event.target.closest?.('.line-box')) return false;
+            event.preventDefault();
+            return true;
+          },
+          click(_view, event) {
+            if (!event.target.closest?.('.line-box')) return false;
+            event.preventDefault();
+            return true;
+          }
+        }
+      }
+    })];
+  }
+});
 
 // Workflowy-style editing. The page is read as the lines you can see: a
 // folded line's lines and anything outside a zoom don't count, so keys never
@@ -1047,13 +1219,16 @@ export class OutlineStore {
         const gather = item.attrs.gather || null;
         const gathered = item.attrs.gathered || null;
         const mirror = item.attrs.mirror || null;
+        const checklist = !!item.attrs.checklist;
+        const box = item.attrs.box ?? null;
         const same = prev && !prev.deleted && prev.parent_id === parentId && prev.sort === sort && !!prev.fields?.done === done &&
+          !!prev.fields?.checklist === checklist && (prev.fields?.box ?? null) === box &&
           (prev.fields?.gather || null) === gather && JSON.stringify(prev.fields?.gathered || null) === JSON.stringify(gathered) &&
           (prev.fields?.mirror || null) === mirror && JSON.stringify(prev.content) === JSON.stringify(content);
         if (!same) {
           rows.push({
             ...(prev || { id, created_at: now, type: null, fields: {}, area_id: null, title: '' }),
-            kind: 'line', parent_id: parentId, sort, text, content, fields: { ...(prev?.fields || {}), done, gather, gathered, mirror },
+            kind: 'line', parent_id: parentId, sort, text, content, fields: checkFields({ ...(prev?.fields || {}), done, gather, gathered, mirror }, checklist, box),
             // A mirror keeps a copy of its words (for search and exports) but
             // not its tags, so the line isn't found twice under its #tag.
             tags: mirror ? [] : tagsIn(text), links: refsIn(content), deleted: false, updated_at: now
@@ -1144,6 +1319,14 @@ function withSources(doc, sources, shown) {
   return walk(doc);
 }
 
+// Checklist marks are kept only where set, so other lines' rows don't change.
+function checkFields(fields, checklist, box) {
+  const f = { ...fields };
+  if (checklist) f.checklist = true; else delete f.checklist;
+  if (box === null) delete f.box; else f.box = box;
+  return f;
+}
+
 function toOutlineDoc(pageId, rows, sources = new Map()) {
   const byParent = new Map();
   for (const r of rows) {
@@ -1152,7 +1335,7 @@ function toOutlineDoc(pageId, rows, sources = new Map()) {
   }
   const list = (pid) => {
     const items = (byParent.get(pid) || []).sort(bySort).map((r) => {
-      const v = mirrorView({ eid: r.id, done: !!r.fields?.done, gather: r.fields?.gather || null, gathered: r.fields?.gathered || null, mirror: r.fields?.mirror || null }, r.content, sources);
+      const v = mirrorView({ eid: r.id, done: !!r.fields?.done, gather: r.fields?.gather || null, gathered: r.fields?.gathered || null, mirror: r.fields?.mirror || null, checklist: !!r.fields?.checklist, box: r.fields?.box ?? null }, r.content, sources);
       const content = [{ type: 'paragraph', ...(v.content ? { content: v.content } : {}) }];
       const kids = list(r.id);
       if (kids) content.push(kids);

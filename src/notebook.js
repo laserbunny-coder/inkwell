@@ -2,7 +2,7 @@ import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { AltMark } from './alts.js';
 import { LinkCatch } from './linkcatch.js';
-import { OutlineDoc, LineIds, EntryRef, TagMarks, GatherBadge, mirrorKey, OutlineFold, OutlineKeys, OutlineItem, oneParagraphPerLine, foldKey, OutlineStore, descendants } from './outline.js';
+import { OutlineDoc, LineIds, LineChecks, EntryRef, TagMarks, GatherBadge, mirrorKey, OutlineFold, OutlineKeys, OutlineItem, oneParagraphPerLine, foldKey, OutlineStore, descendants, loadDoc, replaceDoc } from './outline.js';
 import { getEntry, getMany, linkedFrom, byKind, byTag, putEntries, children, isTrashed } from './db.js';
 import { entry } from './model.js';
 import { catchLink } from './share.js';
@@ -118,7 +118,7 @@ export class Notebook {
       element: $('#outline-editor'),
       extensions: [
         StarterKit.configure({ document: false, listItem: false, codeBlock: false, code: false, horizontalRule: false, heading: false, blockquote: false, trailingNode: false }),
-        OutlineDoc, OutlineItem, OutlineKeys, LineIds, EntryRef.configure({ onPick, onOpen }), TagMarks.configure({ onTag: (t) => this.showTag(t) }), GatherBadge.configure({ onTag: (t) => this.showTag(t), onOpen, origin: (id) => this.origins.get(id) || '' }), AltMark,
+        OutlineDoc, OutlineItem, OutlineKeys, LineIds, LineChecks, EntryRef.configure({ onPick, onOpen }), TagMarks.configure({ onTag: (t) => this.showTag(t) }), GatherBadge.configure({ onTag: (t) => this.showTag(t), onOpen, origin: (id) => this.origins.get(id) || '' }), AltMark,
         OutlineFold.configure({ onZoom: (eid) => this.zoomed(eid) }),
         FileEmbed.configure({ onTooBig: (f) => toast(`“${f.name}” is too big to add (the limit is ${Math.round(MAX_BYTES / 1048576)} MB)`) }),
         VoiceChip, SlashMenu,
@@ -257,7 +257,7 @@ export class Notebook {
     if (this.page) await this.store.close(this.editor.state.doc);
     const { doc, recovered } = await this.store.load(id, fallback);
     this.page = this.store.page;
-    this.editor.commands.setContent(doc, { emitUpdate: false });
+    loadDoc(this.editor, doc);
     this.store.noteShown(this.editor.state.doc, !recovered);
     if (recovered) this.store.change(this.editor.state.doc);
     // Caret in place now, not after everything below has loaded: by then you
@@ -583,7 +583,7 @@ export class Notebook {
       if ($from.node(d).type.name === 'listItem') { anchor = { eid: $from.node(d).attrs.eid, offset: $from.parentOffset === $from.parent.content.size ? Infinity : $from.parentOffset }; break; }
     }
     const focused = ed.isFocused;
-    ed.commands.setContent(doc, { emitUpdate: false });
+    replaceDoc(ed, doc);
     this.store.noteShown(ed.state.doc, true);
     if (anchor) {
       ed.state.doc.descendants((node, pos) => {

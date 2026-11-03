@@ -162,7 +162,8 @@ export class Sync {
   constructor({ onStatus, onRemote }) {
     this.onStatus = onStatus;
     this.onRemote = onRemote;
-    this.backend = window.__syncBackend || supabaseBackend();
+    // Tests set window.__syncBackend: a stand-in, or null for a device without sync.
+    this.backend = '__syncBackend' in window ? window.__syncBackend : supabaseBackend();
     this.user = null;
     this.busy = false;
     this.again = false;
@@ -284,5 +285,7 @@ export class Sync {
     }
     if (latest !== since) await setMeta('syncSince', latest);
     if (changed.length) await this.onRemote(changed);
+    // Everything the account has is on this device now.
+    this.pulled = true;
   }
 }

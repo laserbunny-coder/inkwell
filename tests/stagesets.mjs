@@ -9,6 +9,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
+import { withoutSync } from './nosync.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -56,7 +57,7 @@ const get = async (p, id) => (await all(p)).find((r) => r.id === id);
 const go = (p, place) => p.evaluate((pl) => { history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); }, place);
 const pick = async (p, label) => { await p.locator('.pop-menu .pop-item', { hasText: label }).first().click(); await sleep(300); };
 
-const browser = await chromium.launch();
+const browser = withoutSync(await chromium.launch());
 const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1360, height: 900 } });
 const page = await ctx.newPage();
 page.errors = [];

@@ -16,11 +16,15 @@ const clean = (s) => (s || 'Untitled').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-'
 export async function pageMarkdown(page) {
   const lines = await descendants(page.id);
   const depth = new Map([[page.id, -1]]);
+  const lists = new Set();
   const out = [page.kind === 'day' ? `# ${titleOf(page)}` : `# ${page.title || 'Untitled'}`, ''];
   for (const l of lines) {
     const d = (depth.get(l.parent_id) ?? -1) + 1;
     depth.set(l.id, d);
-    out.push(`${'  '.repeat(d)}- ${inline(l.content)}`);
+    if (l.fields?.checklist) lists.add(l.id);
+    // Tick boxes come out as Markdown task lists.
+    const box = l.fields?.box === true || (l.fields?.box !== false && lists.has(l.parent_id));
+    out.push(`${'  '.repeat(d)}- ${box ? (l.fields?.done ? '[x] ' : '[ ] ') : ''}${inline(l.content)}`);
   }
   return out.join('\n').trim() + '\n';
 }

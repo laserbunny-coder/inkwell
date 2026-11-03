@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
+import { withoutSync } from './nosync.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -63,7 +64,7 @@ const command = async (p, name) => {
   await sleep(500);
 };
 
-const browser = await chromium.launch();
+const browser = withoutSync(await chromium.launch());
 const ctx = await browser.newContext({ colorScheme: 'dark' });
 await ctx.exposeFunction('__toClaude', claude);
 await ctx.addInitScript(fake);

@@ -34,6 +34,36 @@ export const DESK = [
 // A world that's for life, not for making something.
 export const isLife = (w) => w?.kind === 'world' && w.fields?.life === true;
 
+// The example in a life project's "A task for Daybook" box, fitted to what the
+// project is about (read from its name and one-line description).
+const TASK_HINTS = [
+  ['christmas|xmas|gifts?|presents?|birthday', 'Order the gifts that need shipping'],
+  ['camp\\w*|hik\\w*|trips?|travel\\w*|vacation|flights?|packing', 'Book the campsite for Friday night'],
+  ['wedding|party|celebration|reunion|events?', 'Send the invitations'],
+  ['move|moving|apartment|lease', 'Get boxes from the hardware store'],
+  ['remodel\\w*|renovat\\w*|kitchen|bath\\w*|house|home|garage|yard|garden|repairs?', 'Call the contractor about the cabinets'],
+  ['car|truck|bikes?|onewheel|scooter', 'Book the tune-up'],
+  ['health|doctor|dentist|fitness|gym|diet|workouts?', 'Make the appointment'],
+  ['tax(es)?|budget|money|finances?|bank|insurance|bills', 'Gather the receipts'],
+  ['ai|tools?|apps?|software', 'Try the tool from that video'],
+  ['craft|writing|tips', 'Try the exercise from that craft talk'],
+  ['research|study|learn\\w*|course|class|reading', 'Read the article you saved'],
+  ['business|clients?|studio|company|marketing|launch', 'Email the client back'],
+  ['kids?|school|family|parents|mom|dad', 'Sign the permission slip']
+].map(([words, hint]) => [new RegExp(`\\b(${words})\\b`), hint]);
+export function taskHint(world) {
+  const words = `${world?.title || ''} ${world?.fields?.logline || ''}`.toLowerCase();
+  for (const [re, hint] of TASK_HINTS) if (re.test(words)) return hint;
+  const name = (world?.title || '').trim();
+  return name ? `The next thing to do for ${name}` : 'The next thing to do';
+}
+
+// Where life projects go: the Personal area (by its starter id, or one named
+// Personal, Life or Home), if there is one.
+export function personalArea(allAreas) {
+  return allAreas.find((a) => a.id === 'area-personal' && !a.deleted) || allAreas.find((a) => /^(personal|life|home)$/i.test((a.title || '').trim()) && !a.deleted) || null;
+}
+
 // The tabs for where you are. ctx: { scope: 'desk' | 'world' | 'piece', life }.
 export function tabsFor(ctx) {
   // The desk's places (Today, Drawer, Library, Tags) have their own fixed buttons,

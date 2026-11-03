@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
+import { withoutSync } from './nosync.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -12,7 +13,7 @@ const PORT = 4187;
 const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
 await sleep(1500);
 
-const browser = await chromium.launch();
+const browser = withoutSync(await chromium.launch());
 const p = await (await browser.newContext({ viewport: { width: 1300, height: 850 } })).newPage();
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));

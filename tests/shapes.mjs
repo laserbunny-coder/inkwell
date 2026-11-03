@@ -9,6 +9,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
+import { withoutSync } from './nosync.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -50,7 +51,7 @@ const go = (p, place) => p.evaluate((pl) => { history.pushState(pl, ''); dispatc
 const pick = async (p, label) => { await p.locator('.pop-menu .pop-item', { hasText: label }).first().click(); await sleep(300); };
 const live = (rows) => rows.filter((r) => !r.deleted && !r.fields?.trashed);
 
-const browser = await chromium.launch();
+const browser = withoutSync(await chromium.launch());
 const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1360, height: 900 } });
 const page = await ctx.newPage();
 page.errors = [];
@@ -254,6 +255,43 @@ try {
     assert.ok(!w.fields.life);
     assert.equal(w.fields.shape, 'show');
     assert.equal(live(await all(page)).filter((r) => r.kind === 'project' && r.parent_id === 'wd_nb').length, 4);
+  });
+
+  await check('a new life project starts in Personal, with a Daybook example that fits it', async () => {
+    await openNew(page);
+    const before = await page.locator('#lib-new-area').inputValue();
+    await page.locator('.lib-shape[data-shape="life"]').click();
+    assert.equal(await page.locator('#lib-new-area').inputValue(), 'area-personal');
+    await page.locator('.lib-shape[data-shape="one"]').click();
+    assert.equal(await page.locator('#lib-new-area').inputValue(), before);
+    await page.locator('.lib-shape[data-shape="life"]').click();
+    await page.fill('#lib-new-title', 'Camping trip 2027');
+    await page.locator('#lib-new .pill').click();
+    await page.waitForFunction(() => document.documentElement.dataset.view === 'world');
+    const w = live(await all(page)).find((r) => r.kind === 'world' && r.title === 'Camping trip 2027');
+    assert.equal(w.area_id, 'area-personal');
+    assert.equal(w.fields.life, true);
+    assert.equal(await page.locator('#wh-task').getAttribute('placeholder'), 'Book the campsite for Friday night');
+    await shot(page, 'life-camping');
+  });
+
+  await check('turning a world into a life project offers to move it to Personal', async () => {
+    await openNew(page);
+    await page.locator('.lib-shape[data-shape="universe"]').click();
+    await page.fill('#lib-new-title', 'Grandpa stories');
+    await page.locator('#lib-new .pill').click();
+    await page.waitForFunction(() => document.documentElement.dataset.view === 'world');
+    const id = live(await all(page)).find((r) => r.kind === 'world' && r.title === 'Grandpa stories').id;
+    const area = (await get(page, id)).area_id;
+    assert.notEqual(area, 'area-personal');
+    await page.locator('#wh-more .more-btn').click();
+    await pick(page, 'Shape');
+    await pick(page, 'Life project:');
+    assert.equal((await get(page, id)).area_id, area, 'nothing moves unasked');
+    assert.equal(await page.locator('#wh-task').getAttribute('placeholder'), 'The next thing to do for Grandpa stories');
+    await page.locator('.toast .toast-action', { hasText: 'Move to Personal' }).click();
+    await sleep(400);
+    assert.equal((await get(page, id)).area_id, 'area-personal');
   });
 
   await check('no page errors', async () => {

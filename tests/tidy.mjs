@@ -41,7 +41,8 @@ const browser = await chromium.launch();
 async function device({ synced = true } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   await ctx.exposeFunction('__remote', remote);
-  if (synced) await ctx.addInitScript(fake);
+  // Not synced: a device without sync (as when the app has no Supabase settings).
+  await ctx.addInitScript(synced ? fake : () => { window.__syncBackend = null; });
   const page = await ctx.newPage();
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));

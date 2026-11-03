@@ -321,6 +321,81 @@ try {
     assert.ok([...table.values()].some((r) => !r.deleted && r.text === 'Book for Leo #gift' && !r.fields?.mirror), 'the original Book line is still there');
   });
 
+
+  // A new device (or a reinstall) makes no starter novel of its own until the
+  // cloud says the account is empty, so it can't end up with a second one.
+  const newcomer = async (signedIn, remoteFn = '__remote') => {
+    const ctx = await browser.newContext();
+    if (remoteFn !== '__remote') await ctx.exposeFunction(remoteFn, (op, arg) => (op === 'push' ? arg.map((r) => ({ id: r.id, updated_at: new Date().toISOString() })) : []));
+    else await ctx.exposeFunction('__remote', remote);
+    await ctx.addInitScript(([on, fn]) => {
+      let tell = null;
+      let user = on ? { id: 'u1' } : null;
+      window.__signIn = () => { user = { id: 'u1' }; tell?.(user); };
+      window.__syncBackend = {
+        user: async () => user, onAuth(f) { tell = f; }, signIn() {}, signOut() {},
+        push: (rows) => window[fn]('push', rows), pull: (since, from) => window[fn]('pull', { since, from }),
+        subscribe() {}, unsubscribe() {}
+      };
+    }, [signedIn, remoteFn]);
+    const p = await ctx.newPage();
+    p.errors = [];
+    p.on('pageerror', (e) => p.errors.push(e.message));
+    await p.goto(URL);
+    return { p, ctx };
+  };
+  const projectsOn = (p) => p.evaluate(() => new Promise((res) => {
+    const r = indexedDB.open('writing');
+    r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').getAll(); q.onsuccess = () => res(q.result.filter((e) => (e.kind === 'project' || e.kind === 'world') && !e.deleted).map((e) => e.title)); };
+  }));
+
+  await check('a fresh device signed out makes no starter novel and opens on today', async () => {
+    const starters = () => [...table.values()].filter((r) => r.kind === 'project' && !r.deleted && r.title === 'Untitled novel').length;
+    const before = starters();
+    const { p, ctx } = await newcomer(false);
+    await p.waitForSelector('main.notebook #outline-editor .ProseMirror', { state: 'visible' });
+    assert.equal(await p.evaluate(() => document.documentElement.dataset.view), 'notebook');
+    assert.deepEqual(await projectsOn(p), []);
+    // Signing in brings the account's own book down, and still no starter.
+    await p.evaluate(() => window.__signIn());
+    await p.waitForFunction(() => document.querySelector('#sync').dataset.state === 'synced');
+    await sleep(800);
+    assert.equal(starters(), before, 'no second starter in the cloud');
+    const local = await projectsOn(p);
+    assert.equal(local.filter((t) => t === 'Untitled novel').length, before * 2, local.join(', '));
+    assert.deepEqual(p.errors, []);
+    await ctx.close();
+  });
+
+  await check('a fresh device signed in to an account with writing never makes a starter', async () => {
+    const worlds = () => [...table.values()].filter((r) => (r.kind === 'world' || r.kind === 'project') && !r.deleted).length;
+    const was = worlds();
+    const { p, ctx } = await newcomer(true);
+    await p.waitForSelector('#editor .ProseMirror', { state: 'visible' });
+    await p.waitForFunction(() => document.querySelector('#sync').dataset.state === 'synced');
+    await sleep(800);
+    assert.equal(worlds(), was, 'nothing new in the cloud');
+    // It opens straight in the account's own book.
+    assert.match(await p.locator('#editor .ProseMirror').innerText(), /laptop/i);
+    assert.deepEqual(p.errors, []);
+    await ctx.close();
+  });
+
+  await check('signing in to an empty account makes the one starter novel then', async () => {
+    const { p, ctx } = await newcomer(false, '__empty');
+    await p.waitForSelector('main.notebook #outline-editor .ProseMirror', { state: 'visible' });
+    assert.deepEqual(await projectsOn(p), []);
+    await p.evaluate(() => window.__signIn());
+    await p.waitForFunction(() => document.querySelector('#sync').dataset.state === 'synced');
+    await p.waitForFunction(() => document.querySelector('#outline-tree')?.textContent.includes('Untitled novel'), null, { timeout: 5000 });
+    const titles = await projectsOn(p);
+    assert.equal(titles.filter((t) => t === 'Untitled novel').length, 2, titles.join(', ')); // its world and its piece
+    // Opened on today, it stays there.
+    assert.equal(await p.evaluate(() => document.documentElement.dataset.view), 'notebook');
+    assert.deepEqual(p.errors, []);
+    await ctx.close();
+  });
+
   await check('changes that have waited days for the cloud are called out', async () => {
     const ctx = await browser.newContext();
     await ctx.addInitScript(() => {
@@ -328,7 +403,7 @@ try {
     });
     const p = await ctx.newPage();
     await p.goto(URL);
-    await p.waitForSelector('#editor .ProseMirror');
+    await p.waitForSelector('#outline-editor .ProseMirror');
     await p.evaluate(() => new Promise((res) => {
       const r = indexedDB.open('writing');
       r.onsuccess = () => {
