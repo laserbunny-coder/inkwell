@@ -4592,6 +4592,8 @@ async function start() {
     if (await hasWriting()) await setMeta('seedDecided', true);
     else if (!sync.available) await seedNow();
     else if (await sync.backend.user?.().catch(() => null)) {
+      // Nothing to type into until it opens on your own writing.
+      root.classList.add('starting');
       syncing = sync.start();
       await Promise.race([syncing, new Promise((r) => setTimeout(r, 6000))]);
       await seedIfEmpty();
@@ -4614,6 +4616,7 @@ async function start() {
   await go(place);
   historyMode = 'push';
   // Opened where it belongs (tests wait for this before moving around).
+  root.classList.remove('starting');
   root.dataset.started = '1';
   // A recording cut short (the app closed, the phone died) is kept, not lost.
   const recovered = await recoverRecording().catch((e) => { console.error(e); return null; });
