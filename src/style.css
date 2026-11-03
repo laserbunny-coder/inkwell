@@ -456,6 +456,12 @@ button.tree-area:hover { color: var(--ink); }
 html.focus .past-days:not(.open) { display: none !important; }
 /* The day review: folded under the day's lines, with a card for each thing to sort. */
 .day-review { margin-top: 40px; }
+/* After 9 pm on today: a quiet card to look back over the day. */
+.evening-card { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: 4px 0 18px; padding: 12px 14px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px; background: var(--tint); font-size: 14px; color: var(--ink); }
+.evening-card[hidden] { display: none; }
+.evening-card .ec-text { flex: 1 1 auto; }
+.evening-card .ec-do { display: flex; gap: 8px; align-items: center; }
+.hide-nudge .evening-card, .hide-review .evening-card, html.focus .evening-card { display: none !important; }
 .dr-start, .dr-toggle { display: block; border: 0; background: transparent; padding: 6px 0; color: var(--faint); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
 .dr-start:hover, .dr-toggle:hover, .dr-toggle:focus-visible { color: var(--muted); }
 .dr-toggle span:first-child::after { content: ''; display: inline-block; width: .45em; height: .45em; margin: 0 .5em .2em .6em; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform .15s; }
@@ -719,6 +725,17 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .line-drop { position: fixed; height: 2px; background: var(--accent); border-radius: 1px; z-index: 70; pointer-events: none; }
 #outline-editor li[data-done] > p { text-decoration: line-through; text-decoration-color: var(--faint); color: var(--muted); }
 #outline-editor li[data-done] > ul { opacity: .55; }
+/* Tick boxes: the lines right under a checklist line, or any line given one. */
+#outline-editor li.boxed > p { padding-left: 1.6em; }
+#outline-editor .line-box { font-size: inherit; position: absolute; left: 0; top: .32em; width: 1.02em; height: 1.02em; padding: 0; margin: 0; border: 1.5px solid var(--muted); border-radius: .24em; background: transparent; cursor: pointer; user-select: none; }
+#outline-editor .line-box::before { content: ''; position: absolute; inset: -.45em; }
+#outline-editor .line-box:hover { border-color: var(--accent); }
+#outline-editor .line-box[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+#outline-editor .line-box[aria-checked="true"]::after { content: ''; position: absolute; left: .3em; top: .08em; width: .26em; height: .52em; border: solid var(--bg); border-width: 0 .13em .13em 0; transform: rotate(45deg); }
+#outline-editor li.boxed[data-done] > p { text-decoration-color: var(--faint); }
+#outline-editor .check-count { margin-left: .6em; font-family: var(--ui, inherit); font-size: .68em; color: var(--faint); font-variant-numeric: tabular-nums; user-select: none; }
+@media (hover: none) { #outline-editor .line-box { width: 1.12em; height: 1.12em; top: .26em; } #outline-editor .line-box::before { inset: -.6em; } }
+html.focus #outline-editor .check-count, .hide-check-count #outline-editor .check-count { display: none; }
 body.line-dragging, body.line-dragging * { user-select: none; }
 /* With the keyboard and a row up, leave room to scroll the last lines above them. */
 .outline-bar-on .notebook, .script-bar-on .sheet { padding-bottom: 60vh; }
@@ -1508,6 +1525,8 @@ button.st-from:hover { color: var(--ink); }
 /* ---------- Getting around: the place bar (phone), the place line (computer), the Go panel ---------- */
 .placebar, .pb-handle { display: none; }
 #notes-toggle[aria-pressed="true"] { color: var(--accent); }
+#notes-toggle:disabled { opacity: .35; cursor: default; background: transparent; }
+#notes-toggle:disabled[aria-pressed="true"] { color: var(--muted); }
 
 .go-backdrop { position: fixed; inset: 0; z-index: 70; background: rgba(20, 18, 15, .4); }
 .go-panel { position: fixed; z-index: 71; left: 50%; top: 12vh; transform: translateX(-50%); width: min(680px, calc(100% - 32px)); max-height: 76vh; overflow-y: auto; box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 60px rgba(0, 0, 0, .25); padding: 16px; display: flex; flex-direction: column; gap: 16px; font-family: var(--ui); outline: none; }

@@ -16,7 +16,7 @@ import { keep, versionsOf, tidyHistory, blocks as docBlocks, compare, deletedFro
 import { editStages, newWorkflow } from './stageedit.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, askPiece, askScript, showCopy, toast, closeMenu } from './menu.js';
 import { Sync } from './sync.js';
-import { ensureSeed, outline, entry, wordCount, noteTypes, newId as newIdLocal } from './model.js';
+import { ensureSeed, hasWriting, outline, entry, wordCount, noteTypes, newId as newIdLocal } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
 import { EntryRef, TagMarks } from './outline.js';
 import { retitleLinks, freshenRefs } from './links.js';
@@ -28,13 +28,13 @@ import { MAX_BYTES, SPACE, spaceUsed, unsentFiles } from './files.js';
 import { vaultZip, vaultFiles, pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain, fromOutline, looksLikeOutline, SceneCodes, NUMBER_SCENES, assignCodes, codeOrder } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
-import { moveLine, canMoveLine, indentLines, outdentLines, removeLine, toggleDone, foldKey } from './outline.js';
+import { moveLine, canMoveLine, indentLines, outdentLines, removeLine, toggleDone, foldKey, toggleChecklist, toggleBox, lineChecks, hasBox, loadDoc, replaceDoc } from './outline.js';
 import { SlashMenu, setSlashItems } from './slash.js';
 import { openHandleMenu } from './handlemenu.js';
 import { openPicker } from './picker.js';
 import { PlotGrid, threadsOf, worldPromises } from './grid.js';
 import { ProductionView } from './prodview.js';
-import { PageStrip, TodayPanel, isLife } from './pages.js';
+import { PageStrip, TodayPanel, isLife, taskHint, personalArea } from './pages.js';
 import { Nav } from './nav.js';
 import { StagePage, intoDrawer, gatherItems } from './stages.js';
 import { CaptureScreen, writeOutPending, recoverRecording, writeOutAgain, requeueBlank } from './capture.js';
@@ -369,6 +369,7 @@ function lineMenu(eid) {
   const folded = !!kids && foldKey.getState(ed.state)?.folded.has(eid);
   const index = $pos.index();
   const nested = $pos.depth > 1;
+  const inChecklist = nested && !!$pos.node($pos.depth - 1).attrs.checklist;
   const lines = (n) => `${n} line${n === 1 ? '' : 's'}`;
   // Line actions work on the line the caret is in, so put it there first.
   const here = () => {
@@ -387,6 +388,10 @@ function lineMenu(eid) {
         // On a phone, Fold leads the menu.
         ...(touch.matches ? [fold, zoom] : [zoom, fold]),
         { label: node.attrs.done ? 'Not done' : 'Mark done', keys: '⌘↵', run: on(() => { toggleDone(ed); ed.commands.focus(); }) }
+      ],
+      [
+        { label: node.attrs.checklist ? 'Not a checklist' : 'Checklist: boxes on the lines under it', run: on(() => { toggleChecklist(ed); ed.commands.focus(); }) },
+        { label: hasBox(node, inChecklist) ? 'No box on this line' : 'Box on this line', run: on(() => { toggleBox(ed); ed.commands.focus(); }) }
       ],
       [
         { label: 'Outdent', keys: '⇧Tab', stay: true, half: 'indent', off: !nested, run: on(() => { ed.commands.focus(); outdentLines(ed); }) },
@@ -525,6 +530,11 @@ async function go(place) {
   if (place.view === 'write') delete root.dataset.view;
   else root.dataset.view = place.view;
   body.classList.remove('show-outline');
+  // Notes beside the text belong to a draft: elsewhere the button stays in its
+  // place, dimmed.
+  const notesBtn = $('#notes-toggle');
+  notesBtn.disabled = place.view !== 'write';
+  notesBtn.title = notesBtn.disabled ? 'Notes beside the text: open a draft to use them' : 'Notes beside the text (⌘2)';
 
   if (place.view === 'write') {
     editor.commands.focus();
@@ -664,6 +674,25 @@ const syncEl = $('#sync');
 const SYNC_LABELS = { 'signed-out': 'Sign in to sync', syncing: 'Syncing…', synced: 'Synced', offline: 'Offline · will sync' };
 // Books become worlds once this device has heard from the cloud (or found it
 // can't), so the change is made on the newest copy of each book.
+// The starter novel (see start): made once this device has the whole account
+// and it holds nothing yet. Decided once per device.
+async function seedNow() {
+  await ensureSeed();
+  await setMeta('seedDecided', true);
+}
+let seeding = null;
+function seedIfEmpty() {
+  seeding = seeding || (async () => {
+    if (await getMeta('seedDecided')) return;
+    if (!sync.pulled) return;
+    if (await hasWriting()) { await setMeta('seedDecided', true); return; }
+    await seedNow();
+    // Opened before there was anything to write in: go to it now.
+    if (view() === 'library' || (view() === 'write' && !state.chapterId)) await go({ view: 'write' });
+    else renderRail();
+  })().catch((e) => console.error(e)).finally(() => { seeding = null; });
+  return seeding;
+}
 let migrated = false;
 function migrateOnce() {
   if (migrated) return;
@@ -678,7 +707,7 @@ const sync = new Sync({
     syncEl.dataset.state = s;
     delete syncEl.dataset.stale;
     document.body.dataset.sync = s;
-    if (s === 'synced') { conflicts.count(); checkSpace().catch(() => {}); blankOnce().then(writeOut); openAsked(); reviewAsked(); }
+    if (s === 'synced') { seedIfEmpty(); conflicts.count(); checkSpace().catch(() => {}); blankOnce().then(writeOut); openAsked(); reviewAsked(); }
     if (s !== 'syncing') checkUnsent().catch(() => {});
   },
   onRemote: applyRemote
@@ -831,7 +860,7 @@ async function applyRemoteChapter(tries = 0) {
   const anchor = caretAfter ? { eid: caretAfter, offset: Infinity } : block ? { eid: block.attrs.eid, offset: $from.parentOffset } : null;
   caretAfter = null;
   const focused = editor.isFocused;
-  editor.commands.setContent(doc, { emitUpdate: false });
+  replaceDoc(editor, doc);
   if (anchor?.eid) {
     editor.state.doc.forEach((node, pos) => {
       if (node.attrs.eid === anchor.eid) {
@@ -859,7 +888,7 @@ async function openChapter(id) {
   root.classList.toggle('numbered', !!book?.fields?.numbered);
   numbering = book?.fields?.numbered ? await numberingAround(book, id) : { before: null, after: null, used: [] };
   requestAnimationFrame(placeScriptBar);
-  editor.commands.setContent(doc, { emitUpdate: false });
+  loadDoc(editor, doc);
   if (recovered) store.change(editor.state.doc);
   else statusEl.textContent = 'Saved';
   freshenRefs(editor);
@@ -1768,7 +1797,19 @@ async function setLife(world, on) {
   if (!on) delete fields.life;
   await putEntries([{ ...w, fields, updated_at: Date.now() }]);
   await refreshViews();
-  toast(on ? `${w.title || 'It'} is a life project now: Overview, Gather and Notes` : `${w.title || 'It'} is a creative world again`);
+  // Life projects belong in Personal: offered, not done, so nothing moves unasked.
+  const home = on && personalArea(await areas());
+  if (on && w.area_id !== home?.id) toast(`${w.title || 'It'} is a life project now: Overview, Gather and Notes`, { label: 'Move to Personal', run: () => toPersonal(w) });
+  else toast(on ? `${w.title || 'It'} is a life project now: Overview, Gather and Notes` : `${w.title || 'It'} is a creative world again`);
+}
+// Into the Personal area, made if there isn't one yet.
+async function personalAreaId() {
+  const home = personalArea(await areas());
+  return home ? home.id : (await newArea('Personal')).id;
+}
+async function toPersonal(world) {
+  await moveBookToArea(world, await personalAreaId());
+  toast(`${world.title || 'It'} is in Personal now`);
 }
 
 // Which meetings land in this life project (the meeting notes put them under it).
@@ -2054,6 +2095,7 @@ async function renderLibrary() {
 
   // Area choices for the new-book form.
   const opts = await areaOptions(allAreas);
+  state.allAreas = allAreas;
   $('#lib-new-area').replaceChildren(...opts.map(([id, label]) => { const o = make('option', '', label); o.value = id; return o; }));
   $('#lib-new-area').value = sel || allAreas[0]?.id || '';
 
@@ -2122,6 +2164,23 @@ const newHow = newWorkflow($('#lib-new-how'), { keepOwn, deleteOwn, usedBy: ownU
 const pickHow = (force) => newHow.pick(setForNew(newShape, $('#lib-new-type').value), { force });
 $('#lib-new-type').addEventListener('change', () => pickHow());
 function pickShape(id, force) {
+  // A life project starts out in Personal (offered as a new area if there
+  // isn't one); picking another shape puts back the area that was chosen.
+  const sel = $('#lib-new-area');
+  if (id === 'life' && newShape !== 'life') {
+    sel.dataset.before = sel.value;
+    const home = personalArea(state.allAreas || []);
+    if (home) sel.value = home.id;
+    else {
+      const o = make('option', '', 'Personal (new area)');
+      o.value = '__personal';
+      sel.append(o);
+      sel.value = '__personal';
+    }
+  } else if (id !== 'life' && newShape === 'life') {
+    sel.querySelector('option[value="__personal"]')?.remove();
+    if (sel.dataset.before !== undefined) sel.value = sel.dataset.before;
+  }
   newShape = id;
   pickHow(force);
   $('#lib-new-shapes').querySelectorAll('.lib-shape').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.shape === id)));
@@ -2145,6 +2204,8 @@ async function showNewBook(type = 'novel', shape = 'one') {
   form.hidden = false;
   $('#lib-new-type').value = type === 'notes' ? 'world' : type;
   newHow.reset();
+  newShape = '';
+  delete $('#lib-new-area').dataset.before;
   pickShape(shape, true);
   $('#lib-new-title').value = '';
   $('#lib-new-title').focus();
@@ -2155,7 +2216,8 @@ $('#lib-new').addEventListener('submit', async (e) => {
   const title = $('#lib-new-title').value.trim();
   if (!title) return;
   const type = $('#lib-new-type').value;
-  const area = $('#lib-new-area').value || null;
+  let area = $('#lib-new-area').value || null;
+  if (area === '__personal') area = await personalAreaId();
   const how = newHow.value();
   const world = await newShaped(newShape, title, area, type);
   if (how) await useWorkflow(world, how);
@@ -2391,6 +2453,7 @@ async function renderWorld() {
   // A life project's tasks go to Daybook, linked back here.
   $('#wh-task-box').hidden = !life;
   const task = $('#wh-task');
+  task.placeholder = taskHint(w);
   task.onkeydown = async (e) => {
     if (e.key !== 'Enter' || !task.value.trim()) return;
     e.preventDefault();
@@ -3569,6 +3632,10 @@ const commands = [
   { group: 'write', label: 'Bring back gathered lines I deleted', keys: '', run: () => notebook.regather(), when: () => inNotebook() && !!notebook.gatherLine() },
   { group: 'write', label: 'Stop gathering on this line', keys: '', run: () => notebook.stopGather(), when: () => inNotebook() && !!notebook.gatherLine() },
   { group: 'write', label: 'Done: strike this line through', keys: `${mod}↵`, run: () => toggleDone(notebook.editor), when: inNotebook },
+  { group: 'write', label: 'Checklist: tick boxes on the lines under this one', keys: '', words: ['todo', 'to-do', 'list', 'checkbox', 'tick'], run: () => toggleChecklist(notebook.editor), when: () => inNotebook() && !lineChecks(notebook.editor.state)?.checklist },
+  { group: 'write', label: 'Not a checklist (take the boxes off the lines under this one)', keys: '', words: ['checklist', 'checkbox'], run: () => toggleChecklist(notebook.editor), when: () => inNotebook() && !!lineChecks(notebook.editor.state)?.checklist },
+  { group: 'write', label: 'Box on this line (tick it when done; or type [ ] at the start)', keys: '', words: ['checkbox', 'todo', 'to-do', 'tick'], run: () => toggleBox(notebook.editor), when: () => inNotebook() && lineChecks(notebook.editor.state) && !lineChecks(notebook.editor.state).box },
+  { group: 'write', label: 'No box on this line (a note, not a thing to do)', keys: '', words: ['checkbox', 'tick'], run: () => toggleBox(notebook.editor), when: () => inNotebook() && !!lineChecks(notebook.editor.state)?.box },
   { group: 'view', label: 'Keyboard shortcuts (all the keys)', keys: `${mod}/`, run: toggleShortcuts },
   { group: 'page', label: 'Page and text settings', keys: '', run: togglePageSettings },
   { group: 'page', label: 'Wider page', keys: 'Alt+]', run: () => setPage(currentWidth() + 40, currentSize()) },
@@ -3684,6 +3751,8 @@ setSlashItems((ed) => {
     { id: 'talk', label: 'Talk', hint: 'say it; Claude writes it up here', keys: '⌥C', words: ['voice', 'dictate', 'speak', 'record', 'capture'], run: () => setTimeout(() => captureHere({ start: true }), 60) },
     { id: 'picture', label: 'Picture or file', words: ['image', 'photo', 'file', 'attach'], run: () => setTimeout(pickFiles, 120) },
     outline && { id: 'done', label: 'Done', hint: 'strike the line through', keys: '⌘↵', words: ['todo', 'check'], run: (e) => toggleDone(e) },
+    outline && { id: 'checklist', label: 'Checklist', hint: 'boxes on the lines under this one', words: ['todo', 'to-do', 'list', 'tick', 'checkbox'], run: (e) => toggleChecklist(e) },
+    outline && { id: 'box', label: 'Box', hint: 'a tick box on this line', keys: '[ ]', words: ['checkbox', 'todo', 'tick'], run: (e) => toggleBox(e) },
     !outline && !inScript && { id: 'scene', label: 'Scene break', keys: '⌘⇧↵', words: ['break', 'divider'], run: (e) => e.chain().focus().insertSceneBreak().run() },
     inScript && { id: 'section', label: 'Section', hint: 'your own heading', words: ['act', 'sequence', 'heading'], run: () => { insertSection(editor.state.selection.$from.before(1)); } },
     ...days
@@ -4046,7 +4115,7 @@ document.addEventListener('click', (e) => {
   if (!b) return;
   const cmd = b.dataset.cmd;
   if (cmd === 'palette') openPalette();
-  if (cmd === 'notes') toggleNotes();
+  if (cmd === 'notes' && writing()) toggleNotes();
   if (cmd === 'page') togglePageSettings();
   if (cmd === 'history') openHistory();
   if (cmd === 'new-chapter') newChapter();
@@ -4413,6 +4482,7 @@ window.addEventListener('online', () => writeOut());
 // The day review: Claude sums up a day's page and sorts what's on it, and you
 // decide each thing (Daybook, keep thinking, split, let go).
 dayReview = new DayReview($('.day-review'), {
+  card: $('.evening-card'),
   ask: askServer,
   canAsk: canAskServer,
   areas: () => (window.__areas ? window.__areas() : sync.user && sync.backend?.areas ? sync.backend.areas() : null),
@@ -4476,13 +4546,27 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) land
 
 async function start() {
   if (localStorage.getItem('font')) setFont(localStorage.getItem('font'));
-  await ensureSeed();
+  // A first run gets a starter novel, but with sync only once the cloud has
+  // said the account is empty. Signed in, wait a moment for that first pull,
+  // so the app opens on your own writing; signed out, it waits for sign-in.
+  let syncing = null;
+  if (!(await getMeta('seedDecided'))) {
+    if (await hasWriting()) await setMeta('seedDecided', true);
+    else if (!sync.available) await seedNow();
+    else if (await sync.backend.user?.().catch(() => null)) {
+      syncing = sync.start();
+      await Promise.race([syncing, new Promise((r) => setTimeout(r, 6000))]);
+      await seedIfEmpty();
+    }
+  }
   await ensureAreas();
   // If sync never answers (no signal, say), books still become worlds.
   setTimeout(migrateOnce, 6000);
   let place = null;
   try { place = JSON.parse(localStorage.getItem('place') || 'null'); } catch { /* ignore */ }
-  if (!place?.view) place = { view: 'write' };
+  // A first run opens in the novel to write in, or on today's page while
+  // there's nothing of yours here yet (signed out, or still catching up).
+  if (!place?.view) place = (await lastChapterAnywhere()) ? { view: 'write' } : { view: 'notebook', pageId: dayId(isoToday()) };
   // A daily page opens to today; anything else opens where you left it.
   if (place.view === 'notebook' && (!place.pageId || place.pageId.startsWith('day-'))) place = { view: 'notebook', pageId: dayId(isoToday()) };
   if (place.view === 'notebook') { const p = await getEntry(place.pageId); if (!place.pageId.startsWith('day-') && gone(p)) place = { view: 'notebook', pageId: dayId(isoToday()) }; }
@@ -4522,7 +4606,7 @@ async function start() {
   // Shared from another app (or shared earlier and not yet placed).
   await landShares();
   tidyShareBlanks().then((rows) => rows.length && applyRemote(rows)).catch((e) => console.error(e));
-  sync.start();
+  if (!syncing) sync.start();
   conflicts.count();
   // Scribe sent here to connect.
   if (asked.get('connect') === 'scribe') connectScribe().catch((e) => console.error(e));

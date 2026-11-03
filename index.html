@@ -221,6 +221,13 @@
       </div>
       <button type="button" class="links-chip" id="nb-links" hidden></button>
       <nav id="nb-zoom" class="nb-zoom" aria-label="Zoomed in from" hidden></nav>
+      <div class="evening-card" role="note" hidden>
+        <span class="ec-text">It’s after 9. Look back over today?</span>
+        <span class="ec-do">
+          <button type="button" class="pill primary ec-start">Review the day</button>
+          <button type="button" class="ghost-btn ec-skip">Not tonight</button>
+        </span>
+      </div>
       <article id="outline-editor" aria-label="Lines"></article>
       <section class="day-review" aria-label="Day review" hidden>
         <button type="button" class="dr-start" hidden>Review the day</button>
@@ -336,6 +343,7 @@
     <div class="panel-label view-label">Show</div>
     <label class="switch"><input type="checkbox" data-show="links"> Linked from</label>
     <label class="switch"><input type="checkbox" data-show="review"> Day review on day pages</label>
+    <label class="switch"><input type="checkbox" data-show="nudge"> After 9 pm, a reminder on today to review it</label>
     <label class="switch"><input type="checkbox" data-show="dots"> Note dots in the margin</label>
     <label class="switch"><input type="checkbox" data-show="handle"> Six-dot handle</label>
     <label class="switch"><input type="checkbox" data-show="bullets"> Bullets on notebook lines</label>

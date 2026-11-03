@@ -16,6 +16,8 @@ import { intoDrawer, outOfDrawer } from './stages.js';
 // the day page, so it syncs, and every choice made in it is kept there too.
 
 export const reviewId = (iso) => `review-${iso}`;
+// The hour (local time) the evening reminder shows on today: 9 pm, like the Daybook note.
+const EVENING = 21;
 export const MULLING = 'pg_mulling';
 const MULLING_TITLE = 'Still thinking about';
 
@@ -237,6 +239,33 @@ export class DayReview {
     });
     box.querySelector('.dr-start').addEventListener('click', () => this.run());
     box.querySelector('.dr-again').addEventListener('click', () => this.run());
+    // After 9 pm, today's page says it's time to look back over the day.
+    this.evCard = opts.card || null;
+    if (this.evCard) {
+      this.evCard.querySelector('.ec-start').addEventListener('click', () => {
+        this.box.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        this.run();
+      });
+      this.evCard.querySelector('.ec-skip').addEventListener('click', () => {
+        try { localStorage.setItem('eveningSkip', this.iso); } catch { /* private window */ }
+        this.renderCard();
+      });
+      // The clock passes 9 while the page is open.
+      setInterval(() => { if (this.iso && !this.row) this.renderCard(); }, 60000);
+    }
+  }
+
+  // Shown on today, from 9 pm, once there's something on the page and no
+  // review yet, unless you said "Not tonight".
+  evening() {
+    let skipped = null;
+    try { skipped = localStorage.getItem('eveningSkip'); } catch { /* private window */ }
+    return this.iso === isoOf(Date.now()) && !this.row && !this.busy && (this.lineCount || 0) >= 1 &&
+      new Date().getHours() >= EVENING && skipped !== this.iso;
+  }
+
+  renderCard() {
+    if (this.evCard) this.evCard.hidden = !this.evening();
   }
 
   isFolded() {
@@ -247,7 +276,7 @@ export class DayReview {
   // Shows the review for a day page (or nothing, on any other page).
   async show(page) {
     this.iso = page?.kind === 'day' ? (page.title || page.id.slice(4)) : null;
-    if (!this.iso) { this.box.hidden = true; return; }
+    if (!this.iso) { this.box.hidden = true; if (this.evCard) this.evCard.hidden = true; return; }
     await this.refresh();
   }
 
@@ -267,6 +296,7 @@ export class DayReview {
   }
 
   render() {
+    this.renderCard();
     const box = this.box;
     const row = this.row;
     box.classList.toggle('busy', this.busy);
