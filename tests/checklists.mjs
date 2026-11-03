@@ -169,7 +169,17 @@ try {
 
     // A tap on the phone ticks it without bringing up the keyboard.
     await phone.evaluate(() => document.activeElement?.blur());
-    await line(phone, 'Lantern').locator(':scope > .line-box').tap();
+    const box = line(phone, 'Lantern').locator(':scope > .line-box');
+    // Seen on the publish runner's older browser: say what the box looks like if it can't be tapped.
+    await box.waitFor({ state: 'visible', timeout: 5000 }).catch(async () => {
+      const info = await phone.evaluate(() => {
+        const b = [...document.querySelectorAll('#outline-editor .line-box')].map((x) => { const r = x.getBoundingClientRect(); const cs = getComputedStyle(x); return `${x.closest('li').querySelector(':scope > p').textContent}: ${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}x${Math.round(r.height)} ${cs.display} ${cs.visibility} ${cs.fontSize}`; });
+        const lis = [...document.querySelectorAll('#outline-editor li')].map((li) => `${li.className}|${getComputedStyle(li).display}`);
+        return { b, lis, view: document.documentElement.className, h: innerHeight, sy: scrollY };
+      });
+      throw new Error(JSON.stringify(info));
+    });
+    await box.tap();
     await sleep(200);
     assert.deepEqual((await boxes(phone)).slice(0, 3), ['[ ] Tent', '[x] Stove', '[x] Lantern']);
     assert.equal(await phone.evaluate(() => !!document.activeElement?.closest?.('#outline-editor')), false, 'the editor did not take focus');
