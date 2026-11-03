@@ -222,6 +222,30 @@ export async function placeVoice(it, answer, { withTag = (row) => row } = {}) {
   return rows;
 }
 
+// A recording made in Scribe with "Keep in Inkwell" on: the server files it on
+// the day page with what was heard and what Scribe typed in (fields.scribe).
+// It's written up here like a Capture, in Scribe's mode, from those words
+// (nothing is heard twice). Returns the rows written.
+export async function placeScribe(lineId) {
+  const line = await getEntry(lineId);
+  const s = line?.fields?.scribe;
+  if (!line || line.deleted || !s || line.fields?.voice || !String(s.raw || '').trim()) return [];
+  const text = String(s.text || '').trim();
+  // A paragraph or outline point per line, as Scribe typed it in.
+  const blocks = text.split(/\n+/).map((t) => t.trim()).filter(Boolean).map((t) => ({ text: t, el: 'paragraph', new_scene: false }));
+  return placeVoice({ line: line.id, wrote: line.text }, { raw: s.raw, mode: s.mode, blocks, notes: [], ...(s.by ? { heard_by: s.by } : {}) });
+}
+// Scribe recordings filed on the last week's day pages and not written up yet.
+export async function placeScribeWaiting(days = 7) {
+  const rows = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const day = `day-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    for (const k of await children(day)) if (k.kind === 'line' && k.fields?.scribe && !k.fields?.voice && !k.deleted) rows.push(...await placeScribe(k.id));
+  }
+  return rows;
+}
+
 // Shows a capture in another mode (or word for word). Edits to the version
 // showing are kept with it first. `ask` reaches the server when that mode
 // hasn't been written yet. Returns the rows written.
