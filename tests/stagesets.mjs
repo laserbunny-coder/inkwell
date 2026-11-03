@@ -284,6 +284,8 @@ try {
   await check('a world with nothing to film has no Shoot days in Make; one with scripts does', async () => {
     await go(page, { view: 'world', id: 'wd_poems' });
     await page.waitForSelector('#wh-board .sb-card');
+    // The last world's board can still be up for a moment; wait for this one's.
+    await page.waitForFunction(() => !!document.querySelector('#wh-board .sb-col[data-stage="Drafting"]'), null, { timeout: 5000 }).catch(() => {});
     assert.deepEqual((await board(page))[0].cols, ['New idea:1', 'Drafting:0', 'Polishing:0', 'Out:0']);
     await go(page, { view: 'stage', id: 'wd_poems', page: 'make' });
     await page.waitForSelector('.st-chips .chip');
