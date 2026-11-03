@@ -51,6 +51,7 @@ import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
+import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
 import { openBringIn } from './bringin.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, nextLabel, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, dropOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
@@ -298,6 +299,7 @@ const notebook = new Notebook({
     if (!inNotebook()) return;
     remember({ view: 'notebook', pageId: page.id, ...(notebook?.zoom ? { zoom: notebook.zoom } : {}) });
     dayReview?.show(page);
+    tidyNudge();
     $('#nb-more').replaceChildren(...(page.kind === 'page' ? [menuButton(() => pageMenu(page), 'More for this page')] : []));
     renderCrumb();
   },
@@ -802,6 +804,7 @@ async function migrateWorlds() {
 
 async function applyRemote(rows) {
   searchChanged(rows);
+  if (rows.some((r) => r.kind === 'tidy' || r.kind === 'change')) { redrawTidy(); tidyNudge(); }
   if (view() === 'tags' && tagsPage && rows.some((r) => r.tags?.length || r.id === 'settings-tag-groups')) tagsPage.refresh();
   if (rows.some((r) => r.kind === 'settings')) await notes.reloadTypes();
   if (rows.some((r) => r.kind === 'workflow')) setOwnWorkflows(await byKind('workflow'));
@@ -3694,6 +3697,7 @@ const commands = [
   { group: 'page', label: 'Stop Claude linking titles on this page', keys: '', run: () => makeList(null), when: () => inNotebook() && !!listOf(notebook.page) },
   { group: 'tidy', label: 'This page: rename, move to a world or trash…', keys: '', run: async () => popMenu(null, await pageMenu(notebook.page), menuSpot()), when: () => inNotebook() && notebook.page?.kind === 'page' },
   { group: 'tidy', label: 'This area: rename, move or trash…', keys: '', run: async () => popMenu(null, await areaMenu({ id: state.libArea }), menuSpot()), when: () => view() === 'library' && !!state.libArea },
+  { group: 'tidy', label: 'Tidy pass: Claude’s suggested tidy-ups, and what it changed', keys: '', words: ['tidy', 'clean up', 'merge', 'duplicates', 'undo claude', 'claude changes', 'suggestions'], run: () => setTimeout(showTidy, 120) },
   { group: 'tidy', label: 'Trash: bring things back', keys: '', run: showTrash },
   { group: 'sync', label: 'Two versions to check', urgent: true, keys: '', run: () => conflicts.open(), when: () => !$('#versions').hidden }
 ];
@@ -3812,6 +3816,35 @@ async function bringInOld() {
   });
 }
 const showClaudeKnows = async (thing) => openClaudeKnows(thing === undefined ? await knowsThing() : thing, { toast });
+
+// Claude's tidy pass (src/tidypass.js): its suggestions to tick yes or no, and
+// what it changed itself through the connector, each with an Undo.
+async function showTidy() {
+  if (!$('.palette').hidden) closePalette(false);
+  await openTidy({
+    flush: () => Promise.all([store.close(editor.state.doc), notebook.close()]),
+    setLife,
+    onRows: (rows) => applyRemote(rows),
+    open: (id) => openEntry(id),
+    canAsk: canAskServer,
+    // Claude makes the batch on the server; it comes down with the next sync.
+    ask: async () => { const got = await askServer({ mode: 'tidy' }); await sync.run(); return got?.count || 0; },
+    onClose: () => tidyNudge(),
+    toast
+  });
+}
+// On today's page, a quiet line while Claude has tidy-ups waiting or has changed something since you last looked.
+let nudgeAt = 0;
+async function tidyNudge() {
+  const el = $('.tidy-nudge');
+  if (!el) return;
+  const today = inNotebook() && notebook.isDay && notebook.page?.id === dayId(isoToday());
+  const stamp = ++nudgeAt;
+  const { waiting, changes } = today ? await tidyCounts() : { waiting: 0, changes: 0 };
+  if (stamp !== nudgeAt) return;
+  el.hidden = !(waiting || changes);
+  el.textContent = ['Tidy pass', waiting ? `${waiting} to look at` : '', changes ? `Claude changed ${changes === 1 ? 'a thing' : `${changes} things`}` : ''].filter(Boolean).join(' · ');
+}
 const menuSpot = () => ({ left: Math.max(8, window.innerWidth / 2 - 130), top: 110 });
 
 async function showTrash() {
@@ -4492,6 +4525,7 @@ dayReview = new DayReview($('.day-review'), {
   onOpen: (id) => openEntry(id),
   toast
 });
+$('.tidy-nudge').addEventListener('click', () => showTidy());
 // The Tags page: every tag, grouped, merged and gone through one by one.
 tagsPage = new TagsPage({
   sheet: $('#tags-sheet'),
@@ -4593,7 +4627,7 @@ async function start() {
     if (sp.get('capture')) openCapture();
     if (/^\d{4}-\d{2}-\d{2}$/.test(sp.get('review') || '')) { reviewing = sp.get('review'); reviewAsked(); }
   });
-  if (asked.has('capture') || asked.has('share') || asked.has('open') || asked.has('review') || asked.has('connect')) history.replaceState(history.state, '', location.pathname);
+  if (asked.has('capture') || asked.has('share') || asked.has('open') || asked.has('review') || asked.has('connect') || asked.has('tidy') || asked.has('summaries')) history.replaceState(history.state, '', location.pathname);
   if (/^\d{4}-\d{2}-\d{2}$/.test(asked.get('review') || '')) {
     reviewing = asked.get('review');
     // Signed in, wait for this device to catch up first (the review may
@@ -4602,6 +4636,10 @@ async function start() {
     if (signedIn) { await go({ view: 'notebook', pageId: dayId(reviewing) }); if (await getReview(reviewing)) await reviewAsked(); } else await reviewAsked();
   }
   if (asked.get('capture')) openCapture();
+  // The Monday note in Daybook links to ?tidy=<Monday>: the pass opens, and fills in as this device catches up.
+  if (asked.has('tidy')) showTidy().catch((e) => console.error(e));
+  // The monthly note in Daybook links to ?summaries: What Claude knows, with the weekly and monthly summaries.
+  if (asked.has('summaries')) showClaudeKnows(null).catch((e) => console.error(e));
   if (asked.get('open')) { asking = asked.get('open'); await openAsked(); }
   // Shared from another app (or shared earlier and not yet placed).
   await landShares();
