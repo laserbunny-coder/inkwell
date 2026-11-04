@@ -754,6 +754,19 @@ try {
     await p.keyboard.press('Escape');
   });
 
+  await check('“Change the writing font” opens the font picker, and changes nothing by itself', async () => {
+    await sleep(400);
+    const before = await p.evaluate(() => document.documentElement.dataset.font || 'newsreader');
+    await p.keyboard.press('Control+K');
+    await p.keyboard.type('Change the writing font');
+    await p.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('Change the writing font'));
+    await p.keyboard.press('Enter');
+    await p.waitForSelector('.page-settings', { state: 'visible' });
+    assert.equal(await p.evaluate(() => document.documentElement.dataset.font || 'newsreader'), before);
+    assert.equal(await p.evaluate(() => document.activeElement?.closest('.font-list') !== null), true);
+    await p.locator('#page-done').click();
+  });
+
   await check('a screenplay formats itself as you type, and keeps its elements', async () => {
     await sleep(400);
     await p.keyboard.press('Control+K');

@@ -3519,10 +3519,12 @@ function toggleTheme() {
   localStorage.setItem('theme', next);
 }
 
-function cycleFont() {
-  const i = FONTS.indexOf(currentFont());
-  setFont(FONTS[(i + 1) % FONTS.length].id);
-  toast(currentFont().name);
+// Opens the Aa panel at its font list, on the current font, so a font is picked, not guessed.
+function openFontPicker() {
+  if ($('.page-settings').hidden) togglePageSettings();
+  const pick = $('.font-pick');
+  pick.scrollIntoView({ block: 'start' });
+  (pick.querySelector('.font-list button.current') || pick.querySelector('.font-list button'))?.focus({ preventScroll: true });
 }
 
 async function exportChapter() {
@@ -3664,7 +3666,7 @@ const commands = [
   { group: 'page', label: 'Larger text', keys: 'Alt+=', run: () => setPage(currentWidth(), currentSize() + 1) },
   { group: 'page', label: 'Smaller text', keys: 'Alt+−', run: () => setPage(currentWidth(), currentSize() - 1) },
   { group: 'page', label: 'Light / dark', keys: `${mod}⇧L`, run: toggleTheme },
-  { group: 'page', label: 'Change the writing font', keys: '', run: cycleFont },
+  { group: 'page', label: 'Change the writing font', keys: '', words: ['typeface', 'mono', 'serif'], run: () => setTimeout(openFontPicker, 60) },
   { group: 'sync', label: 'Sync now', keys: '', run: () => sync.soon(0), when: () => !!sync.user },
   { group: 'sync', label: 'Sign in to sync between devices', keys: '', run: () => sync.signIn(), when: () => sync.available && !sync.user },
   { group: 'sync', label: 'Sign out of sync', keys: '', run: () => sync.signOut(), when: () => !!sync.user },
