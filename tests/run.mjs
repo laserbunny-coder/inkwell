@@ -187,6 +187,11 @@ try {
     assert.match(await p.locator('.font-list button', { hasText: 'Courier Prime' }).locator('.font-name').evaluate((el) => getComputedStyle(el).fontFamily), /Courier Prime/);
     // and says a little about it.
     assert.match(await p.locator('.font-list button', { hasText: 'JetBrains Mono' }).locator('.font-about').innerText(), /coding/);
+    // Thymer's font is there too.
+    await p.locator('.font-list button', { hasText: 'Cascadia Code' }).click();
+    assert.match(await family(), /Cascadia Code/);
+    assert.match(await p.evaluate(() => document.getElementById('font-cascadia').href), /Cascadia\+Code/);
+    await p.locator('.font-list button', { hasText: 'JetBrains Mono' }).click();
     await p.reload();
     await p.waitForSelector('#editor .ProseMirror');
     assert.match(await family(), /JetBrains Mono/);

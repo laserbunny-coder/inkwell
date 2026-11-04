@@ -33,6 +33,7 @@
 [data-font="plexsans"] { --prose: 'IBM Plex Sans', system-ui, sans-serif; }
 [data-font="iamono"] { --prose: 'iA Writer Mono', Consolas, monospace; }
 [data-font="iaquattro"] { --prose: 'iA Writer Quattro', Consolas, monospace; }
+[data-font="cascadia"] { --prose: 'Cascadia Code', 'Cascadia Mono', Consolas, monospace; }
 [data-font="jetbrains"] { --prose: 'JetBrains Mono', Consolas, monospace; }
 [data-font="geistmono"] { --prose: 'Geist Mono', Consolas, monospace; }
 [data-font="courier"] { --prose: 'Courier Prime', 'Courier New', monospace; }
