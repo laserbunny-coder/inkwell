@@ -224,6 +224,38 @@ try {
     assert.ok((await box()).height > 20, 'and is back after focus');
   });
 
+  await check('Ctrl+Shift+. brings section titles back in Focus, or puts them away outside it', async () => {
+    const box = () => laptop.locator('.scene-break[data-eid="sp_s1"]').boundingBox();
+    const shown = async () => (await box()).height > 20;
+    await laptop.locator('#editor p[data-eid="pp_2"]').click();
+    await laptop.keyboard.press('Control+Period');
+    await sleep(400);
+    assert.ok(!(await shown()), 'Focus starts without them');
+    await laptop.keyboard.press('Control+Shift+Period');
+    await sleep(200);
+    assert.ok(await shown(), 'asked for in Focus');
+    assert.ok(await laptop.locator('.scene-break[data-eid="sp_s1"] .scene-synopsis').isVisible(), 'with the summary');
+    assert.equal(await laptop.evaluate(() => localStorage.getItem('focusSections')), '1', 'remembered on this device');
+    await laptop.keyboard.press('Control+Period');
+    await sleep(400);
+    assert.ok(await shown(), 'still there out of Focus');
+    await laptop.keyboard.press('Control+Shift+Period');
+    await sleep(200);
+    assert.ok(!(await shown()), 'put away out of Focus');
+    assert.ok(await laptop.locator('#editor p[data-el="scene"]', { hasText: 'INT. KITCHEN' }).isVisible(), 'the script itself stays');
+    await laptop.keyboard.press('Control+Period');
+    await sleep(400);
+    assert.ok(await shown(), 'Focus keeps its own choice');
+    await laptop.keyboard.press('Control+Shift+Period');
+    await sleep(200);
+    assert.ok(!(await shown()), 'and lets it go again');
+    await laptop.keyboard.press('Control+Period');
+    await sleep(400);
+    await command(laptop, 'Show or hide section titles');
+    assert.ok(await shown(), 'the command brings them back too');
+    assert.equal(await laptop.evaluate(() => document.querySelector('[data-show="sections"]').checked), true, 'the Aa switch follows');
+  });
+
   // ---------- the grid ----------
 
   await check('Ctrl+Shift+G shows the script as a grid: scenes as rows, acts and sequences heading them', async () => {
