@@ -270,7 +270,7 @@ try {
     await laptop.locator('.pop-menu .pop-item', { hasText: 'Prop (likely)' }).click();
     await laptop.waitForSelector('.pd-el[data-element="pg_katana"]');
     await laptop.locator('.pd-el[data-element="pg_katana"] textarea[aria-label="Looks"]').fill('A battered wooden practice sword');
-    await laptop.locator('.pd-el[data-element="pg_katana"] input[aria-label="Locked look"]').fill('katana_v2 LoRA');
+    await laptop.locator('.pd-el[data-element="pg_katana"] input[aria-label="ComfyUI LoRA"]').fill('katana_v2 LoRA');
     await laptop.locator('.pd-style').click();
     await laptop.keyboard.type('Flat cel shading, warm palette');
     await laptop.locator('.gv-title').click();
@@ -278,7 +278,7 @@ try {
     await settle(laptop);
     assert.deepEqual(row('pg_katana').fields.element, { type: 'prop', snippet: 'A battered wooden practice sword', look: 'katana_v2 LoRA' });
     assert.equal(row('wd_nb').fields.production.style, 'Flat cel shading, warm palette');
-    await laptop.locator('.pd-el[data-element="pg_mom"] input[type=file]').setInputFiles({ name: 'mom-ref.png', mimeType: 'image/png', buffer: PNG });
+    await laptop.locator('.pd-el[data-element="pg_mom"] .pd-refs input[type=file]').setInputFiles({ name: 'mom-ref.png', mimeType: 'image/png', buffer: PNG });
     await laptop.waitForSelector('.pd-el[data-element="pg_mom"] .pd-refs .pd-render img');
     await settle(laptop);
     assert.equal(row('pg_mom').fields.element.refs.length, 1);
@@ -496,7 +496,7 @@ try {
     assert.match(zip, /NB-E01-S02-01 prompts\.txt/);
     assert.match(zip, /STILL PROMPT\nStill for The gate in the rain/);
     assert.match(zip, /References\/Mom 1\.png/);
-    assert.match(zip, /Katana \(Prop\) \[katana_v2 LoRA\]: A battered wooden practice sword/);
+    assert.match(zip, /Katana \(Prop\) \[LoRA: katana_v2 LoRA\]: A battered wooden practice sword/);
   });
 
   await check('another device sees it all: shots, stars, renders, the kit', async () => {

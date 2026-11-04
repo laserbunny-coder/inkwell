@@ -1,5 +1,5 @@
 import { getEntry, getMany, putEntries, byKind } from './db.js';
-import { tagsIn } from './model.js';
+import { tagsIn, entry, newId } from './model.js';
 import { loadStructure, rowsAt } from './grid.js';
 import { bookType, hasManuscript, worldOf, stageSetOf, toolsOf, toolsIn } from './library.js';
 import { addFile, fileUrl, fileBlob, isImage } from './files.js';
@@ -9,7 +9,9 @@ import {
   ELEMENT_TYPES, typeOf, elementsIn, plainPages, newElement, setElement, namesOf,
   findElements, sceneElements, changeBreakdown, sceneSig, shotCode, newShot, shotStage, SHOT_STAGES,
   withRenders, withPrompts, isVideo, shotForName, shootDays, newShootDay, dayTask, toCsv, toSrt, speechesIn, PLATFORMS,
-  MADE_BY, madeBy, needsFootage, AUDIO, audioOf, toPlan
+  MADE_BY, madeBy, needsFootage, AUDIO, audioOf, toPlan,
+  viewSlots, toolIdsFor, toolIdsOf, ASPECTS, RATES, rulesOf, genOf, secsOf, runsOf,
+  PRICES_ID, priceList, priceOf, pricesChecked, estimate, spent, money, toEdl, cutEvents
 } from './production.js';
 
 // The production view of a piece (Ctrl + Shift + S): its scenes, each with
@@ -76,6 +78,7 @@ export class ProductionView {
 
   async show(pieceId, opts = {}) {
     this.piece = await getEntry(pieceId);
+    this.healed = null;
     this.mode = opts.mode === 'deliver' || DELIVER_TABS.some((t) => t.id === opts.tab) ? 'deliver' : 'make';
     if (opts.tab) setPref(this.tabKey, opts.tab);
     if (opts.shot) this.open.add(opts.shot);
@@ -128,6 +131,11 @@ export class ProductionView {
     const members = new Map();
     for (const s of this.scenes) for (const m of s.members) members.set(m, s.id);
     const shots = (await byKind('shot')).sort((a, b) => a.sort - b.sort);
+    // Once each time the piece is opened (it reads every file's entry).
+    if (this.healed !== piece.id) { this.healed = piece.id; await this.heal(shots, piece); }
+    this.allShots = shots;
+    this.pricesRow = await getEntry(PRICES_ID);
+    this.prices = priceList(this.pricesRow);
     this.shotsOf = new Map();
     this.lost = [];
     for (const sh of shots) {
@@ -170,6 +178,32 @@ export class ProductionView {
     this.codes = new Map();
     for (const s of this.scenes) for (const sh of s.shots) this.codes.set(this.codeOf(sh, s), sh.id);
     return true;
+  }
+
+  // A render whose shot lost it (the shot was saved on another device at the
+  // same moment, and that copy won) goes back on its shot as a try of its own.
+  async heal(shots, piece) {
+    const mine = new Map(shots.filter((sh) => sh.fields?.piece === piece.id || !sh.fields?.piece).map((sh) => [sh.id, sh]));
+    if (!mine.size) return;
+    const lost = new Map();
+    for (const f of await byKind('file')) {
+      const sh = mine.get(f.fields?.shot);
+      if (!sh || f.deleted || f.fields?.trashed) continue;
+      if ((sh.fields?.tries || []).some((t) => (t.files || []).includes(f.id))) continue;
+      if (!lost.has(sh.id)) lost.set(sh.id, []);
+      lost.get(sh.id).push(f);
+    }
+    const rows = [];
+    for (const [id, files] of lost) {
+      const fresh = await getEntry(id);
+      if (!fresh || fresh.deleted) continue;
+      const tries = [...(fresh.fields?.tries || []), { id: newId('tr'), at: Math.min(...files.map((f) => f.created_at || Date.now())), by: files[0].fields?.by || 'me', still: '', video: '', files: files.map((f) => f.id), healed: true }];
+      rows.push({ ...fresh, fields: { ...fresh.fields, tries }, updated_at: Date.now() });
+    }
+    if (!rows.length) return;
+    await putEntries(rows);
+    this.hooks.changed(rows);
+    for (const r of rows) { const i = shots.findIndex((x) => x.id === r.id); if (i >= 0) shots[i] = r; }
   }
 
   codeOf(shot, scene) {
@@ -274,7 +308,7 @@ export class ProductionView {
     const pc = this.codeInput(this.piece.fields?.code || '', 'Piece', 'E01', (v) => this.savePiece({ code: v || null }));
     codes.append(show, make('span', 'pd-dash', '-'), pc, make('span', 'pd-dash', this.script ? '-S03-04' : '-04'));
     codes.title = 'Shot codes go in file names on the NAS and clip names in Resolve. Set them before files are named; after that, leave them.';
-    body.append(codes);
+    body.append(codes, this.costEl());
     if (this.script && !this.piece.fields?.numbered) {
       const note = make('div', 'pd-banner');
       note.append(make('span', '', 'Number the scenes so every shot gets a code that never changes.'));
@@ -505,6 +539,12 @@ export class ProductionView {
     box.dataset.shot = sh.id;
     const stage = shotStage(sh);
     box.dataset.stage = stage;
+    const run = s ? runsOf(s.shots).find((r) => r.shots.includes(sh)) : null;
+    if (run && run.shots.length > 1) {
+      box.classList.add('grouped');
+      if (run.shots[0] === sh) box.classList.add('group-first');
+      if (run.shots.at(-1) === sh) box.classList.add('group-last');
+    }
     const row = make('div', 'pd-shot-row');
     const code = make('button', 'pd-code', s ? this.codeOf(sh, s) : `#${f.n || ''}`);
     code.title = 'Copy the shot code (for the file name)';
@@ -540,6 +580,7 @@ export class ProductionView {
   shotDetail(sh, s) {
     const f = sh.fields || {};
     const d = make('div', 'pd-detail');
+    d.append(this.genEl(sh, s));
     for (const [k, label] of [['still', 'Still prompt'], ['video', 'Video prompt']]) {
       const wrap = make('div', 'pd-prompt');
       const top = make('div', 'pd-prompt-head');
@@ -575,6 +616,20 @@ export class ProductionView {
     add.append(input);
     strip.append(add);
     d.append(strip);
+    // Results kept as links (too big to keep, or on the NAS).
+    const links = (f.tries || []).flatMap((t) => (t.links || []).map((url) => ({ url, t })));
+    if (links.length) {
+      const ul = make('div', 'pd-links');
+      for (const { url, t } of links.reverse()) {
+        const a = make('a', 'pd-link', this.tryLabel(t) || url);
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.title = url;
+        ul.append(a);
+      }
+      d.append(ul);
+    }
     const acts = make('div', 'pd-add');
     const kit = make('button', 'ghost-btn', 'Download kit');
     kit.title = 'The prompts and the reference pictures of everything in the shot, in one .zip, for PixAI, Seedance or any tool on the web';
@@ -590,7 +645,7 @@ export class ProductionView {
       for (const t of [...earlier].reverse()) {
         const item = make('div', 'pd-try');
         const starred = (t.files || []).some((x) => x === f.star?.still || x === f.star?.video);
-        item.append(make('div', 'pd-try-head', `${new Date(t.at).toLocaleDateString()}${t.by === 'claude' ? ' · Claude' : ''}${t.files?.length ? ` · ${plural(t.files.length, 'render')}` : ''}${starred ? ' · ★' : ''}`));
+        item.append(make('div', 'pd-try-head', `${this.tryLabel(t)}${t.files?.length ? ` · ${plural(t.files.length, 'render')}` : ''}${starred ? ' · ★' : ''}`));
         if (t.still) item.append(make('p', 'pd-try-text', t.still));
         if (t.video) item.append(make('p', 'pd-try-text muted', t.video));
         const use = make('button', 'ghost-btn', 'Use these prompts again');
@@ -613,7 +668,8 @@ export class ProductionView {
       const meta = await getEntry(id);
       const url = await fileUrl(id);
       if (!url || !meta) { tile.classList.add('missing'); tile.title = 'Still on its way from another device'; return; }
-      tile.title = meta.title || '';
+      const t = (f.tries || []).find((x) => (x.files || []).includes(id));
+      tile.title = [meta.title || '', t && this.tryLabel(t)].filter(Boolean).join('\n');
       if (isVideo(meta.fields?.type)) {
         const v = make('video');
         v.src = url;
@@ -649,6 +705,21 @@ export class ProductionView {
     const bar = make('div', 'pd-viewer-bar');
     bar.append(make('span', 'pd-viewer-name', meta?.title || ''));
     const fresh = await getEntry(sh.id);
+    const tr = (fresh?.fields?.tries || []).find((x) => (x.files || []).includes(id));
+    if (tr) {
+      const what = [tr.model, tr.secs && `${tr.secs} s`, tr.settings].filter(Boolean).join(' · ');
+      if (what) bar.append(make('span', 'pd-viewer-name', what));
+      const cost = make('input', 'pd-cost-input');
+      cost.type = 'number';
+      cost.min = '0';
+      cost.step = '0.01';
+      cost.placeholder = 'Cost $';
+      cost.value = tr.cost ?? '';
+      cost.setAttribute('aria-label', 'What this try cost, in dollars');
+      cost.title = 'What this try cost, in dollars (adds to the spend on Make)';
+      cost.addEventListener('change', () => this.setTryCost(sh.id, tr.id, cost.value));
+      bar.append(cost);
+    }
     const starred = fresh?.fields?.star?.still === id || fresh?.fields?.star?.video === id;
     const star = make('button', 'pill', starred ? '★ Starred' : '☆ Star');
     star.addEventListener('click', async () => { await this.star(sh.id, id); close(); });
@@ -676,6 +747,8 @@ export class ProductionView {
       s && i > 0 && { label: 'Move up', run: () => this.nudge(sh, list, i, -1) },
       s && i < list.length - 1 && { label: 'Move down', run: () => this.nudge(sh, list, i, 1) },
       { label: s ? 'Move to another scene…' : 'Move to a scene…', run: () => this.hooks.menu(this.el.querySelector(`[data-shot="${CSS.escape(sh.id)}"] .pd-code`) || this.el, this.scenes.filter((x) => x.id !== s?.id).map((x) => ({ label: `${x.code ? `${x.code} ` : ''}${x.title}`, run: () => this.moveShot(sh, x) }))) },
+      s && i < list.length - 1 && (!sh.fields?.group || sh.fields.group !== list[i + 1].fields?.group) && { label: 'Make with the next shot, in one generation', run: () => this.joinNext(sh, list[i + 1]) },
+      sh.fields?.group && { label: 'Make on its own again', run: () => this.leaveGroup(sh, list) },
       { label: 'Made by…', sub: this.madeMenu(sh) },
       { label: 'Copy the shot code', run: () => this.copy(s ? this.codeOf(sh, s) : '', 'Shot code copied') },
       { label: 'Delete the shot', danger: true, run: () => this.deleteShot(sh) }
@@ -685,6 +758,252 @@ export class ProductionView {
   madeMenu(sh) {
     const now = madeBy(sh, this.set);
     return MADE_BY.map((m) => ({ label: `${m.id === now ? '✓ ' : ''}${m.label}`, run: () => this.setMade([sh], m.id) }));
+  }
+
+  // ---------- how it's generated ----------
+
+  // "Nov 3 · Claude · Kling 3.0 · 5 s · $0.40"
+  tryLabel(t) {
+    const cost = Number(t.cost);
+    return [
+      t.at && new Date(t.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      t.by === 'claude' && 'Claude',
+      t.model,
+      t.secs && `${t.secs} s`,
+      Number.isFinite(cost) && t.cost !== '' && t.cost !== null && t.cost !== undefined && `${t.cost_est ? '~' : ''}${money(cost)}`
+    ].filter(Boolean).join(' · ');
+  }
+
+  // The model, length, first and last frame, and the line it's timed to.
+  genEl(sh, s) {
+    const g = genOf(sh);
+    const box = make('div', 'pd-gen');
+    const field = (label, el) => { const w = make('label', 'pd-field'); w.append(make('span', 'pd-field-label', label), el); return w; };
+    const save = (patch) => this.saveGen(sh.id, patch);
+    const model = make('input', 'pd-input');
+    model.value = g.model || '';
+    model.placeholder = this.piece.fields?.gen?.model || 'Kling 3.0';
+    model.setAttribute('list', 'pd-models');
+    model.setAttribute('aria-label', 'Model');
+    model.addEventListener('change', () => save({ model: model.value.trim() }));
+    const secs = make('input', 'pd-input');
+    secs.type = 'number';
+    secs.min = '1';
+    secs.max = '120';
+    secs.step = '0.5';
+    secs.value = g.secs || '';
+    secs.placeholder = String(secsOf({}));
+    secs.setAttribute('aria-label', 'Length in seconds');
+    secs.addEventListener('change', () => save({ secs: Number(secs.value) > 0 ? Number(secs.value) : null }));
+    const stills = [];
+    for (const t of sh.fields?.tries || []) for (const id of t.files || []) if (this.kindOf?.get(id) === 'still') stills.push(id);
+    const frame = (key, label) => {
+      const sel = make('select', 'pd-input');
+      sel.setAttribute('aria-label', label);
+      sel.append(new Option(key === 'first' ? 'The starred still' : 'None', ''));
+      stills.forEach((id, i) => sel.append(new Option(`Still ${i + 1}${sh.fields?.star?.still === id ? ' ★' : ''}`, id)));
+      sel.value = stills.includes(g[key]) ? g[key] : '';
+      sel.addEventListener('change', () => save({ [key]: sel.value || null }));
+      return sel;
+    };
+    const lines = s ? speechesIn(s.rows || []) : [];
+    const sync = make('select', 'pd-input');
+    sync.setAttribute('aria-label', 'Timed to');
+    sync.append(new Option('Nothing', ''));
+    for (const l of lines) {
+      const text = `${l.who ? `${l.who}: ` : ''}${l.text}`;
+      sync.append(new Option(text.length > 70 ? `${text.slice(0, 69)}…` : text, text));
+    }
+    if (g.sync && !lines.some((l) => `${l.who ? `${l.who}: ` : ''}${l.text}` === g.sync)) sync.append(new Option(g.sync, g.sync));
+    sync.value = g.sync || '';
+    sync.addEventListener('change', () => save({ sync: sync.value || null }));
+    box.append(field('Model', model), field('Seconds', secs), field('First frame', frame('first', 'First frame')), field('Last frame', frame('last', 'Last frame')));
+    if (lines.length || g.sync) box.append(field('Timed to', sync));
+    const run = s ? runsOf(s.shots).find((r) => r.shots.includes(sh)) : null;
+    if (run && run.shots.length > 1) {
+      const total = run.shots.reduce((n, x) => n + secsOf(x), 0);
+      const codes = run.shots.map((x) => x.fields?.n).filter(Boolean);
+      box.append(make('p', 'pd-gen-run', `Made in one generation with shots ${codes[0]} to ${codes.at(-1)} (${total} s). Each keeps its own code; star the take on any one of them.`));
+    }
+    return box;
+  }
+
+  async saveGen(id, patch) {
+    const fresh = await getEntry(id);
+    if (!fresh) return;
+    const gen = { ...(fresh.fields?.gen || {}), ...patch };
+    for (const k of Object.keys(gen)) if (gen[k] === null || gen[k] === '') delete gen[k];
+    const fields = { ...fresh.fields, gen };
+    if (!Object.keys(gen).length) delete fields.gen;
+    await this.saveShot(id, { fields });
+    this.render();
+  }
+
+  async setTryCost(shotId, tryId, value) {
+    const fresh = await getEntry(shotId);
+    if (!fresh) return;
+    const n = Number(value);
+    const tries = (fresh.fields?.tries || []).map((t) => {
+      if (t.id !== tryId) return t;
+      const { cost_est: _e, ...rest } = t;
+      if (value === '' || !Number.isFinite(n) || n < 0) { delete rest.cost; return rest; }
+      return { ...rest, cost: Math.round(n * 100) / 100 };
+    });
+    await this.saveShotFields(shotId, { tries });
+    this.render();
+  }
+
+  // Shots next to each other made in one generation share a group.
+  async joinNext(sh, next) {
+    const a = await getEntry(sh.id);
+    const b = await getEntry(next.id);
+    const g = a.fields?.group || b.fields?.group || newId('gr');
+    const t = Date.now();
+    const rows = [{ ...a, fields: { ...a.fields, group: g }, updated_at: t }];
+    // The next shot's whole group comes along.
+    const s = this.scenes.find((x) => x.shots.some((y) => y.id === sh.id));
+    const theirs = b.fields?.group ? (s?.shots || []).filter((x) => x.fields?.group === b.fields.group && x.id !== a.id) : [b];
+    for (const x of theirs) { const f = await getEntry(x.id); if (f) rows.push({ ...f, fields: { ...f.fields, group: g }, updated_at: t }); }
+    await putEntries(rows);
+    this.hooks.changed(rows);
+    await this.render();
+    this.hooks.toast('Made in one generation', { label: 'Undo', run: async () => { await putEntries([a, b, ...theirs].map((x) => ({ ...x, updated_at: Date.now() }))); this.render(); } });
+  }
+
+  async leaveGroup(sh, list) {
+    const g = sh.fields?.group;
+    const rest = list.filter((x) => x.id !== sh.id && x.fields?.group === g);
+    const t = Date.now();
+    const off = async (x) => { const f = await getEntry(x.id); const fields = { ...f.fields }; delete fields.group; return { ...f, fields, updated_at: t }; };
+    const rows = [await off(sh)];
+    if (rest.length === 1) rows.push(await off(rest[0]));
+    await putEntries(rows);
+    this.hooks.changed(rows);
+    await this.render();
+  }
+
+  // ---------- cost ----------
+
+  costEl() {
+    const box = make('div', 'pd-cost');
+    const shots = this.scenes.flatMap((s) => s.shots);
+    const pg = this.piece.fields?.gen || {};
+    const tries = Number(pg.tries) > 0 ? Number(pg.tries) : 3;
+    const est = estimate(shots, this.prices, { model: pg.model || '', tries, live: (sh) => madeBy(sh, this.set) === 'live' });
+    const now = new Date();
+    const month = { from: new Date(now.getFullYear(), now.getMonth(), 1).getTime(), to: new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime() };
+    const here = spent([...shots, ...this.lost]);
+    const thisMonth = spent(this.allShots || [], month);
+    box.append(make('span', 'panel-label', 'Cost'));
+    const e = make('span', 'pd-cost-est');
+    e.append(make('strong', '', `About ${money(est.usd)}`), document.createTextNode(` for ${plural(est.shots, 'shot')}, ${Math.round(est.secs)} s, at `));
+    const model = make('input', 'pd-cost-input wide');
+    model.value = pg.model || '';
+    model.placeholder = 'Kling 3.0';
+    model.setAttribute('list', 'pd-models');
+    model.setAttribute('aria-label', 'Model for finals, where a shot doesn’t say');
+    model.title = 'The model for finals, where a shot doesn’t name its own';
+    model.addEventListener('change', async () => { await this.savePiece({ gen: { ...(this.piece.fields?.gen || {}), model: model.value.trim() } }); this.render(); });
+    const n = make('input', 'pd-cost-input');
+    n.type = 'number';
+    n.min = '1';
+    n.max = '20';
+    n.value = String(tries);
+    n.setAttribute('aria-label', 'Tries per shot');
+    n.addEventListener('change', async () => { await this.savePiece({ gen: { ...(this.piece.fields?.gen || {}), tries: Math.max(1, Math.min(20, Number(n.value) || 3)) } }); this.render(); });
+    e.append(model, document.createTextNode(' × '), n, document.createTextNode(' tries'));
+    box.append(e);
+    if (est.unpriced.length) {
+      const u = make('span', 'pd-cost-warn', `No price for ${est.unpriced.join(', ')}`);
+      u.title = 'Add it in Prices so the estimate counts it';
+      box.append(u);
+    }
+    box.append(make('span', 'pd-cost-spent', `Spent ${money(here.usd)} here · ${money(thisMonth.usd)} in ${now.toLocaleDateString(undefined, { month: 'long' })}`));
+    const checked = pricesChecked(this.prices);
+    const p = make('button', 'ghost-btn pd-cost-prices', checked ? `Prices from ${new Date(`${checked}T12:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'Prices');
+    p.title = 'See or change what each model costs. Claude keeps them up to date.';
+    p.addEventListener('click', () => this.pricesDialog());
+    box.append(p, this.modelList());
+    return box;
+  }
+
+  modelList() {
+    const dl = make('datalist');
+    dl.id = 'pd-models';
+    for (const x of this.prices) dl.append(new Option(x.model, x.model));
+    return dl;
+  }
+
+  async pricesDialog() {
+    const back = make('div', 'pd-modal');
+    const box = make('div', 'pd-modal-box');
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-label', 'Prices');
+    box.append(make('h2', '', 'Prices'));
+    box.append(make('p', 'hint', 'What each model costs, per second of video or per picture, in US dollars. The estimate on Make uses these. Claude checks them each week and updates them; anything you change here is kept.'));
+    const table = make('div', 'pd-price-table');
+    const head = make('div', 'pd-price-row head');
+    for (const h of ['Model', 'Where', 'Per', 'USD', 'Checked', '']) head.append(make('span', '', h));
+    table.append(head);
+    const rows = [];
+    const addRow = (p = {}) => {
+      const r = make('div', 'pd-price-row');
+      const m = Object.assign(make('input', 'pd-input'), { value: p.model || '', placeholder: 'Model' });
+      m.setAttribute('aria-label', 'Model');
+      const t = Object.assign(make('input', 'pd-input'), { value: p.tool || '', placeholder: 'Higgsfield' });
+      t.setAttribute('aria-label', 'Where');
+      const u = make('select', 'pd-input');
+      u.append(new Option('second', 'second'), new Option('picture', 'picture'));
+      u.value = p.unit === 'picture' ? 'picture' : 'second';
+      u.setAttribute('aria-label', 'Per');
+      const usd = Object.assign(make('input', 'pd-input'), { type: 'number', min: '0', step: '0.01', value: p.usd ?? '' });
+      usd.setAttribute('aria-label', 'Dollars');
+      const when = make('span', 'pd-price-when', p.checked ? `${p.checked}${p.by === 'claude' ? ' · Claude' : ''}` : '');
+      if (p.source) when.title = p.source;
+      const del = make('button', 'ghost-btn', '×');
+      del.setAttribute('aria-label', 'Remove this price');
+      const item = { p, m, t, u, usd };
+      del.addEventListener('click', () => { r.remove(); rows.splice(rows.indexOf(item), 1); });
+      r.append(m, t, u, usd, when, del);
+      rows.push(item);
+      table.append(r);
+    };
+    for (const p of this.prices) addRow(p);
+    box.append(table);
+    const acts = make('div', 'pd-add');
+    const more = make('button', 'ghost-btn', '+ Model');
+    more.addEventListener('click', () => { addRow(); rows.at(-1).m.focus(); });
+    const save = make('button', 'pill', 'Save');
+    const cancel = make('button', 'ghost-btn', 'Cancel');
+    const close = () => { back.remove(); document.removeEventListener('keydown', esc, true); };
+    const esc = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+    cancel.addEventListener('click', close);
+    save.addEventListener('click', async () => {
+      const today = new Date().toLocaleDateString('en-CA');
+      const list = rows.filter((x) => x.m.value.trim()).map(({ p, m, t, u, usd }) => {
+        const next = { model: m.value.trim(), tool: t.value.trim(), unit: u.value, usd: Math.max(0, Number(usd.value) || 0), ...(p.local ? { local: true } : {}) };
+        const same = p.model === next.model && (p.tool || '') === next.tool && (p.unit || 'second') === next.unit && Number(p.usd) === next.usd;
+        return same ? p : { ...next, checked: today, by: 'me' };
+      });
+      await this.savePrices(list);
+      close();
+    });
+    acts.append(more, save, cancel);
+    box.append(acts);
+    back.append(box);
+    back.addEventListener('click', (e) => { if (e.target === back) close(); });
+    document.addEventListener('keydown', esc, true);
+    document.body.append(back);
+    save.focus();
+  }
+
+  async savePrices(list) {
+    const fresh = await getEntry(PRICES_ID);
+    const row = fresh ? { ...fresh, deleted: false, fields: { ...fresh.fields, list }, updated_at: Date.now() } : entry('prices', { id: PRICES_ID, title: 'Prices', fields: { list } });
+    await putEntries([row]);
+    this.hooks.changed([row]);
+    await this.render();
+    this.hooks.toast('Prices saved');
   }
 
   // ---------- writing shots ----------
@@ -825,23 +1144,42 @@ export class ProductionView {
     const f = sh.fields || {};
     const code = s ? this.codeOf(sh, s) : 'shot';
     const els = (s?.uses || []).map((id) => this.elById.get(id)).filter(Boolean);
+    const g = genOf(sh);
+    const rules = rulesOf(this.world);
+    const idsText = (e) => Object.entries(toolIdsOf(e)).map(([k, v]) => `${{ soul: 'Higgsfield Soul', element: 'Higgsfield Element', lora: 'LoRA', kling: 'Kling' }[k] || k}: ${v}`).join('; ');
     const lines = [
-      code, s ? `Scene: ${s.title}` : '', sh.text ? `Shot: ${sh.text}` : '', f.framing ? `Framing: ${f.framing}` : '', '',
+      code, s ? `Scene: ${s.title}` : '', sh.text ? `Shot: ${sh.text}` : '', f.framing ? `Framing: ${f.framing}` : '',
+      g.model || g.secs ? `Generate: ${[g.model, `${secsOf(sh)} s`].filter(Boolean).join(', ')}` : '', g.sync ? `Timed to: ${g.sync}` : '', '',
       'STILL PROMPT', f.still || '(none yet)', '', 'VIDEO PROMPT', f.video || '(none yet)', '',
-      ...(els.length ? ['ELEMENTS', ...els.map((e) => `${e.title} (${typeOf(e.fields.element.type).label})${e.fields.element.look ? ` [${e.fields.element.look}]` : ''}: ${e.fields.element.snippet || ''}`)] : []),
-      this.world?.fields?.production?.style ? `\nSTYLE\n${this.world.fields.production.style}` : ''
+      ...(els.length ? ['ELEMENTS', ...els.map((e) => [
+        `${e.title} (${typeOf(e.fields.element.type).label})${idsText(e) ? ` [${idsText(e)}]` : ''}: ${e.fields.element.snippet || ''}`,
+        e.fields.element.lighting ? `  Lighting: ${e.fields.element.lighting}` : ''
+      ].filter(Boolean).join('\n'))] : []),
+      this.world?.fields?.production?.style ? `\nSTYLE\n${this.world.fields.production.style}` : '',
+      rules.aspect || rules.constraints ? `\nSHOW RULES\n${[rules.aspect && `Frame ${rules.aspect}, ${rules.fps} fps`, rules.constraints].filter(Boolean).join('\n')}` : ''
     ].filter((x) => x !== null);
     const files = [{ path: `${code} prompts.txt`, text: lines.join('\n').replace(/\n{3,}/g, '\n\n') }];
     for (const e of els) {
+      for (const slot of viewSlots(e.fields.element.type)) {
+        const id = e.fields.element.views?.[slot.id];
+        const b = id && await fileBlob(id);
+        const meta = id && await getEntry(id);
+        if (b) files.push({ path: `References/${e.title.replace(/[\\/:*?"<>|]/g, '-')} ${slot.label.toLowerCase()}.${extOf(meta?.title, meta?.fields?.type)}`, bytes: new Uint8Array(await b.arrayBuffer()) });
+      }
       for (const [i, id] of (e.fields.element.refs || []).entries()) {
         const b = await fileBlob(id);
         const meta = await getEntry(id);
         if (b) files.push({ path: `References/${e.title.replace(/[\\/:*?"<>|]/g, '-')} ${i + 1}.${extOf(meta?.title, meta?.fields?.type)}`, bytes: new Uint8Array(await b.arrayBuffer()) });
       }
     }
-    if (f.star?.still) {
-      const b = await fileBlob(f.star.still);
-      const meta = await getEntry(f.star.still);
+    if (g.last) {
+      const b = await fileBlob(g.last);
+      const meta = await getEntry(g.last);
+      if (b) files.push({ path: `${code} last frame.${extOf(meta?.title, meta?.fields?.type)}`, bytes: new Uint8Array(await b.arrayBuffer()) });
+    }
+    if (g.first || f.star?.still) {
+      const b = await fileBlob(g.first || f.star.still);
+      const meta = await getEntry(g.first || f.star.still);
       if (b) files.push({ path: `${code} still.${extOf(meta?.title, meta?.fields?.type)}`, bytes: new Uint8Array(await b.arrayBuffer()) });
     }
     download(`${code} kit.zip`, zip(files));
@@ -859,16 +1197,20 @@ export class ProductionView {
       id: s.id, code: s.code || '', heading: s.title, summary: s.synopsis || '',
       text: s.rows.map((r) => (r.kind === 'scene' ? `[${r.title || 'section'}]` : r.fields?.el === 'character' ? (r.text || '').toUpperCase() : r.text || '')).filter((t) => t.trim()).join('\n'),
       notes, elements: s.uses,
-      ...(withShots ? { shots: s.shots.map((sh) => ({ id: sh.id, code: this.codeOf(sh, s), what: sh.text || '', framing: sh.fields?.framing || '', still: sh.fields?.still || '', video: sh.fields?.video || '' })) } : {})
+      ...(withShots ? { shots: s.shots.map((sh) => ({ id: sh.id, code: this.codeOf(sh, s), what: sh.text || '', framing: sh.fields?.framing || '', still: sh.fields?.still || '', video: sh.fields?.video || '', model: genOf(sh).model || this.piece.fields?.gen?.model || '', secs: secsOf(sh), sync: genOf(sh).sync || '', group: sh.fields?.group || '' })) } : {})
     };
   }
 
   kitBody(only = null) {
-    return this.elements.filter((e) => !only || only.includes(e.id)).map((e) => ({ id: e.id, type: e.fields.element.type || 'other', name: e.title || '', also: e.fields.element.also || [], snippet: e.fields.element.snippet || '', look: e.fields.element.look || '' }));
+    return this.elements.filter((e) => !only || only.includes(e.id)).map((e) => ({
+      id: e.id, type: e.fields.element.type || 'other', name: e.title || '', also: e.fields.element.also || [], snippet: e.fields.element.snippet || '', look: e.fields.element.look || '',
+      lighting: e.fields.element.lighting || '', ids: toolIdsOf(e), views: viewSlots(e.fields.element.type).filter((v) => e.fields.element.views?.[v.id]).map((v) => v.label.toLowerCase())
+    }));
   }
 
   base(task) {
-    return { mode: 'production', task, piece: this.piece.title || '', world: this.world?.title || '', style: this.world?.fields?.production?.style || '' };
+    const r = rulesOf(this.world);
+    return { mode: 'production', task, piece: this.piece.title || '', world: this.world?.title || '', style: this.world?.fields?.production?.style || '', rules: [r.aspect && `Frame ${r.aspect}`, r.constraints].filter(Boolean).join('\n') };
   }
 
   async ask(label, body) {
@@ -1062,7 +1404,7 @@ export class ProductionView {
     const label = make('div', 'pd-prompt-head');
     label.append(make('span', 'panel-label', `Style rules for ${this.world.title || 'this world'}`));
     top.append(label, style);
-    body.append(top);
+    body.append(top, this.rulesEl());
     for (const t of ELEMENT_TYPES) {
       const els = this.elements.filter((e) => (e.fields.element.type || 'other') === t.id);
       if (!els.length) continue;
@@ -1085,6 +1427,80 @@ export class ProductionView {
     acts.append(add, use);
     body.append(acts);
     if (!this.elements.length) body.append(make('p', 'hint gv-hint', 'Elements are the bible pages a production needs to keep consistent: each character, location, prop and outfit, with reference pictures, its locked look (a LoRA or reference pack) and a few words on how it looks that go into every prompt.'));
+  }
+
+  // The show's constraint card: the frame, the frame rate, and what must
+  // always or never be true on screen. Every prompt keeps to it.
+  rulesEl() {
+    const r = rulesOf(this.world);
+    const card = make('section', 'pd-rules');
+    card.append(make('div', 'panel-label', 'Show rules'));
+    const row = make('div', 'pd-rules-row');
+    const pick = (label, values, value, key, blank) => {
+      const sel = make('select', 'pd-input');
+      if (blank) sel.append(new Option(blank, ''));
+      for (const v of values) sel.append(new Option(key === 'fps' ? `${v} fps` : v, v));
+      sel.value = value;
+      sel.setAttribute('aria-label', label);
+      sel.addEventListener('change', () => this.saveWorldProd({ [key]: sel.value }));
+      const w = make('label', 'pd-field');
+      w.append(make('span', 'pd-field-label', label), sel);
+      return w;
+    };
+    row.append(pick('Frame', ASPECTS, r.aspect, 'aspect', 'Not set'), pick('Frame rate', RATES, r.fps, 'fps'));
+    card.append(row);
+    const ta = make('textarea', 'pd-ta');
+    ta.value = r.constraints;
+    ta.rows = 3;
+    ta.placeholder = 'Always and never, one per line: Kenji is always a head shorter than Mom. Never any text or logos in frame. Night scenes stay blue.';
+    ta.setAttribute('aria-label', 'Always and never');
+    ta.addEventListener('input', () => this.later('constraints', () => this.saveWorldProd({ constraints: ta.value })));
+    ta.addEventListener('blur', () => this.now('constraints'));
+    const w = make('label', 'pd-field');
+    w.append(make('span', 'pd-field-label', 'Always and never'), ta);
+    card.append(w);
+    return card;
+  }
+
+  // A picture slot on a character sheet or a location's angles.
+  slotEl(e, slot) {
+    const x = e.fields.element;
+    const id = x.views?.[slot.id];
+    const tile = make('label', 'pd-render pd-slot' + (id ? '' : ' add'));
+    tile.dataset.slot = slot.id;
+    tile.title = id ? `${slot.label}: change the picture` : `Add the ${slot.label.toLowerCase()} view`;
+    const cap = make('span', 'pd-slot-label', slot.label);
+    if (id) fileUrl(id).then((url) => { if (url) { const img = make('img'); img.src = url; img.alt = slot.label; tile.prepend(img); } else tile.classList.add('missing'); });
+    tile.append(cap);
+    const input = make('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.hidden = true;
+    input.addEventListener('change', async () => {
+      const f = input.files[0];
+      if (!f) return;
+      const row = await addFile(f, { element: e.id, view: slot.id });
+      if (!row) { this.hooks.toast('That picture is over 50 MB.'); return; }
+      const fresh = await getEntry(e.id);
+      this.hooks.changed([await setElement(e.id, { views: { ...(fresh.fields?.element?.views || {}), [slot.id]: row.id } })]);
+      this.render();
+    });
+    tile.append(input);
+    if (id) {
+      const del = make('button', 'pd-star', '×');
+      del.setAttribute('aria-label', `Remove the ${slot.label.toLowerCase()} view`);
+      del.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const fresh = await getEntry(e.id);
+        const views = { ...(fresh.fields?.element?.views || {}) };
+        delete views[slot.id];
+        this.hooks.changed([await setElement(e.id, { views })]);
+        this.render();
+      });
+      tile.append(del);
+    }
+    return tile;
   }
 
   elementEl(e) {
@@ -1142,11 +1558,43 @@ export class ProductionView {
       wrap.append(make('span', 'pd-field-label', label), i);
       return wrap;
     };
-    card.append(
-      field('snippet', 'Looks', 'How it looks, in plain words a picture model follows. Goes into every prompt it’s in.', true),
-      field('look', 'Locked look', 'LoRA or reference pack name'),
-      field('also', 'Also called', 'Other names in the script, comma between')
-    );
+    const slots = viewSlots(x.type);
+    if (slots.length) {
+      const sheet = make('div', 'pd-views');
+      sheet.append(make('span', 'pd-field-label', x.type === 'character' ? 'Character sheet' : 'Angles'));
+      const row = make('div', 'pd-renders');
+      for (const slot of slots) row.append(this.slotEl(e, slot));
+      sheet.append(row);
+      card.insertBefore(sheet, refs);
+      refs.before(make('span', 'pd-field-label', 'Other references'));
+    }
+    card.append(field('snippet', 'Looks', 'How it looks, in plain words a picture model follows. Goes into every prompt it’s in.', true));
+    if (x.type === 'location') card.append(field('lighting', 'Lighting', 'One line, the same every time: late afternoon sun through blinds, warm, long shadows'));
+    card.append(field('also', 'Also called', 'Other names in the script, comma between'));
+    // Each tool's ID for it, so every prompt can call up the locked look.
+    const ids = make('div', 'pd-ids');
+    const have = toolIdsOf(e);
+    for (const t of toolIdsFor(x.type)) {
+      const i = make('input', 'pd-input');
+      i.value = have[t.id] || '';
+      i.placeholder = t.placeholder;
+      i.setAttribute('aria-label', t.label);
+      const save = async () => {
+        const fresh = await getEntry(e.id);
+        const el = fresh.fields?.element || {};
+        const v = i.value.trim();
+        if (t.id === 'lora') return setElement(e.id, { look: v });
+        const next = { ...(el.ids || {}) };
+        if (v) next[t.id] = v; else delete next[t.id];
+        return setElement(e.id, { ids: next });
+      };
+      i.addEventListener('input', () => this.later(`${e.id}:id:${t.id}`, save));
+      i.addEventListener('blur', () => this.now(`${e.id}:id:${t.id}`));
+      const w = make('label', 'pd-field');
+      w.append(make('span', 'pd-field-label', t.label), i);
+      ids.append(w);
+    }
+    card.append(ids);
     return card;
   }
 
@@ -1401,6 +1849,8 @@ export class ProductionView {
     file('Markdown (.md)', 'The words as plain text with headings', () => this.hooks.files('markdown', piece), ms);
     file('Shot list for Resolve (.csv)', 'Every shot with its code, scene, framing, prompts and the take you starred', async () => { await this.loadNames(); this.exportCsv(); }, this.scenes.length > 0);
     file('Dialogue for subtitles (.srt)', 'Every line of dialogue in order, two seconds each: fix the timing in Resolve', () => this.exportSrt(), this.script);
+    file('Rough cut for Resolve (.edl)', 'The starred takes in script order, each named by its shot code. Starred stills stand in for shots with no take yet', () => this.exportEdl(), this.scenes.length > 0);
+    file('Resolve hand-off (.zip)', 'The rough cut, every starred take renamed to its shot code, the shot list and the subtitles, in one folder for Resolve', () => this.exportHandoff(), this.scenes.length > 0);
     body.append(list);
     if (!list.children.length) body.append(make('p', 'hint gv-empty', 'This piece is an outline: open it and use Export from Ctrl + K.'));
     else body.append(make('p', 'hint', 'A shot’s kit (its prompts and reference pictures, as a .zip) is on each shot in Make.'));
@@ -1460,14 +1910,111 @@ export class ProductionView {
 
   // ---------- out to the edit ----------
 
-  exportCsv() {
-    const rows = [['Shot', 'Scene', 'Scene heading', 'What happens', 'Framing', 'Stage', 'Still prompt', 'Video prompt', 'Still', 'Take']];
+  csvText() {
+    const rows = [['Shot', 'Scene', 'Scene heading', 'What happens', 'Framing', 'Stage', 'Model', 'Seconds', 'Still prompt', 'Video prompt', 'Still', 'Take']];
     const name = (id) => this.fileNames.get(id) || '';
     for (const s of this.scenes) for (const sh of s.shots) {
       const f = sh.fields || {};
-      rows.push([this.codeOf(sh, s), s.code || '', s.title, sh.text || '', f.framing || '', SHOT_STAGES.find((x) => x.id === shotStage(sh)).label, f.still || '', f.video || '', name(f.star?.still), name(f.star?.video)]);
+      rows.push([this.codeOf(sh, s), s.code || '', s.title, sh.text || '', f.framing || '', SHOT_STAGES.find((x) => x.id === shotStage(sh)).label, genOf(sh).model || '', genOf(sh).secs || '', f.still || '', f.video || '', name(f.star?.still), name(f.star?.video)]);
     }
-    download(`${this.piece.title || 'Shots'} shot list.csv`, new Blob(['﻿' + toCsv(rows)], { type: 'text/csv' }));
+    return toCsv(rows);
+  }
+
+  exportCsv() {
+    download(`${this.piece.title || 'Shots'} shot list.csv`, new Blob(['﻿' + this.csvText()], { type: 'text/csv' }));
+  }
+
+  // ---------- the Resolve hand-off ----------
+
+  // The rough cut's events, with each file's name and real length.
+  async cut({ stills = true } = {}) {
+    const ids = new Set();
+    for (const s of this.scenes) for (const sh of s.shots) for (const id of Object.values(sh.fields?.star || {})) ids.add(id);
+    const files = new Map();
+    for (const id of ids) {
+      const meta = await getEntry(id);
+      if (!meta || meta.deleted) continue;
+      files.set(id, { name: meta.title || id, type: meta.fields?.type || '', secs: isVideo(meta.fields?.type) ? (meta.fields?.ms ? meta.fields.ms / 1000 : await this.videoSecs(id)) : 0 });
+    }
+    const scenes = this.scenes.map((s) => ({ shots: s.shots, code: (sh) => this.codeOf(sh, s) }));
+    return { events: cutEvents(scenes, files, { stills }), files };
+  }
+
+  // How long a video is, read from the file itself.
+  async videoSecs(id) {
+    const url = await fileUrl(id);
+    if (!url) return 0;
+    return new Promise((resolve) => {
+      const v = document.createElement('video');
+      const done = (n) => { clearTimeout(t); v.removeAttribute('src'); resolve(n); };
+      const t = setTimeout(() => done(0), 8000);
+      v.preload = 'metadata';
+      v.muted = true;
+      v.addEventListener('loadedmetadata', () => done(Number.isFinite(v.duration) ? Math.round(v.duration * 1000) / 1000 : 0));
+      v.addEventListener('error', () => done(0));
+      v.src = url;
+    });
+  }
+
+  // The file name a take goes by in the hand-off: its shot code. A run made
+  // in one generation is one file, named by its first shot.
+  handoffName(ev, files) {
+    const f = files.get(ev.file_id);
+    return `${ev.code}.${extOf(f?.name, f?.type)}`;
+  }
+
+  edlText(events, files) {
+    const named = events.map((e) => ({ ...e, file: this.handoffName(this.leadOf(events, e), files) }));
+    // Each event's reel is the file's name without its extension.
+    return toEdl(named.map((e) => ({ ...e, reel: e.file.replace(/\.[^.]+$/, '') })), { title: this.piece.title || 'Rough cut', fps: rulesOf(this.world).fps });
+  }
+
+  // The first event that uses the same file (the shot a shared take is named by).
+  leadOf(events, e) { return events.find((x) => x.file_id === e.file_id) || e; }
+
+  async exportEdl() {
+    const { events, files } = await this.cut();
+    if (!events.length) { this.hooks.toast('Star a take (or a still) on a shot first, then the rough cut has something to lay out.'); return; }
+    download(`${this.piece.title || 'Rough cut'}.edl`, new Blob([this.edlText(events, files)], { type: 'text/plain' }));
+    const takes = events.filter((e) => !e.still).length;
+    this.hooks.toast(`${plural(events.length, 'shot')} in the rough cut${takes < events.length ? `, ${events.length - takes} as stills` : ''}. Name each take by its shot code so Resolve finds it.`);
+  }
+
+  async exportHandoff() {
+    const { events, files } = await this.cut();
+    if (!events.length) { this.hooks.toast('Star a take (or a still) on a shot first, then there’s something to hand off.'); return; }
+    const out = [{ path: 'Rough cut.edl', text: this.edlText(events, files) }];
+    const seen = new Set();
+    let bytes = 0;
+    const missing = [];
+    for (const e of events) {
+      if (seen.has(e.file_id)) continue;
+      seen.add(e.file_id);
+      const b = await fileBlob(e.file_id);
+      if (!b) { missing.push(e.code); continue; }
+      bytes += b.size;
+      out.push({ path: `Takes/${this.handoffName(e, files)}`, bytes: new Uint8Array(await b.arrayBuffer()) });
+    }
+    if (bytes > 1.5 * 1024 * 1024 * 1024) { this.hooks.toast('The takes are over 1.5 GB, too big for one download. Use the rough cut (.edl) and the takes on the NAS instead.'); return; }
+    await this.loadNames();
+    out.push({ path: 'Shot list.csv', text: '﻿' + this.csvText() });
+    if (this.script) {
+      const rows = [];
+      for (const s of this.scenes) rows.push(...s.rows.filter((r) => r.kind === 'para'));
+      const speeches = speechesIn(rows);
+      if (speeches.length) out.push({ path: 'Subtitles.srt', text: toSrt(speeches) });
+    }
+    out.push({ path: 'Read me.txt', text: [
+      `${this.piece.title || 'Rough cut'}: hand-off for DaVinci Resolve`,
+      '',
+      '1. In Resolve, open Project Settings (Shift + 9), General Options, Conform Options, and set "Assist using reel names from the" to "Source clip filename".',
+      '2. Drag the Takes folder into the Media Pool.',
+      `3. File, Import, Timeline, then pick "Rough cut.edl". Keep the frame rate at ${rulesOf(this.world).fps} fps.`,
+      '4. The timeline lays out every starred take in script order. Clips named by a shot code (like NB-E01-S03-04) are the takes; a still stands in where no take is starred yet.',
+      missing.length ? `\nNot on this device yet (open them once in Inkwell, then hand off again): ${missing.join(', ')}` : ''
+    ].join('\r\n') });
+    download(`${this.piece.title || 'Rough cut'} for Resolve.zip`, zip(out));
+    this.hooks.toast(missing.length ? `Hand-off saved. ${plural(missing.length, 'take')} weren’t on this device yet.` : 'Hand-off saved for Resolve');
   }
 
   async exportSrt() {
@@ -1507,6 +2054,7 @@ export class ProductionView {
     return [
       this.hooks.canAsk() && { label: 'Break down every scene, with Claude', run: () => this.breakdown() },
       { label: 'Shot list for Resolve (.csv)', run: async () => { await this.loadNames(); this.exportCsv(); } },
+      { label: 'Rough cut for Resolve (.edl)', run: () => this.exportEdl() },
       this.script && { label: 'Dialogue for subtitles (.srt)', run: () => this.exportSrt() },
       this.script && !this.piece.fields?.numbered && { label: 'Number the scenes', run: () => this.hooks.numberScenes(this.piece) },
       'sep',
@@ -1514,6 +2062,13 @@ export class ProductionView {
       { label: hide.has('notes') ? 'Show production notes' : 'Hide production notes', run: () => flip('notes') },
       { label: hide.has('summary') ? 'Show scene summaries' : 'Hide scene summaries', run: () => flip('summary') },
       { label: hide.has('empty') ? 'Show scenes with no shots' : 'Hide scenes with no shots', run: () => flip('empty') },
+      { label: hide.has('cost') ? 'Show cost' : 'Hide cost', run: () => flip('cost') },
+      { label: hide.has('gen') ? 'Show generation details' : 'Hide generation details', run: () => flip('gen') },
+      { label: hide.has('views') ? 'Show character sheets and angles' : 'Hide character sheets and angles', run: () => flip('views') },
+      { label: hide.has('ids') ? 'Show tool IDs' : 'Hide tool IDs', run: () => flip('ids') },
+      { label: hide.has('rules') ? 'Show the show rules' : 'Hide the show rules', run: () => flip('rules') },
+      'sep',
+      { label: 'Prices…', run: () => this.pricesDialog() },
       this.piece.fields?.videoTools && !this.setTools.length && 'sep',
       this.piece.fields?.videoTools && !this.setTools.length && { label: 'Put the video tools away', run: () => this.setVideoTools(false) }
     ].filter(Boolean);

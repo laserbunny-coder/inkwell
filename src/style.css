@@ -1187,8 +1187,62 @@ div.pd-scene-title { cursor: default; }
 .pd-sheet-note { color: #1F7A6E; font-size: 12px; }
 .pd-post { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
 .pd-post-card { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+/* AI production: cost, generation details, kit locks, prices */
+.pd-cost { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 13px; color: var(--muted); border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 8px 12px; }
+.pd-cost strong { color: var(--ink); font-weight: 600; }
+.pd-cost-est { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.pd-cost-input { width: 5ch; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 2px 6px; font-size: 13px; color: var(--ink); }
+.pd-cost-input.wide { width: 16ch; }
+.pd-cost-input:focus { outline: none; border-color: var(--faint); }
+.pd-cost-warn { color: var(--accent); }
+.pd-cost-spent { color: var(--muted); }
+.pd-cost-prices { margin-left: auto; font-size: 12px; padding: 2px 8px; }
+.no-cost .pd-cost { display: none; }
+.pd-gen { display: grid; grid-template-columns: minmax(0, 1.4fr) 80px minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.pd-gen .pd-input { padding: 5px 8px; font-size: 13px; }
+.pd-gen .pd-field:nth-child(5) { grid-column: 1 / -1; }
+.pd-gen-run { grid-column: 1 / -1; margin: 0; font-size: 12.5px; color: var(--accent); }
+.no-gen .pd-gen { display: none; }
+.pd-shot.grouped { border-left: 2px solid var(--accent); padding-left: 6px; }
+.pd-shot.grouped:not(.group-first) { border-top-style: dashed; }
+.pd-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.pd-link { font-size: 12.5px; color: var(--accent); border: 1px solid var(--line); border-radius: 99px; padding: 2px 10px; text-decoration: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-link::before { content: '↗ '; }
+.pd-rules { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 10px 12px; }
+.pd-rules-row { display: grid; grid-template-columns: 140px 140px; gap: 8px; }
+.no-rules .pd-rules { display: none; }
+.pd-views { display: flex; flex-direction: column; gap: 4px; }
+.pd-slot { width: 64px; height: 84px; flex-direction: column; justify-content: flex-end; }
+.pd-slot img { position: absolute; inset: 0; }
+.pd-slot-label { position: relative; font-size: 10px; color: var(--faint); background: var(--bg); width: 100%; text-align: center; padding: 1px 0; }
+.pd-slot:not(.add) .pd-slot-label { background: rgba(0, 0, 0, .55); color: #E8E2D6; }
+.pd-slot.add { font-size: 11px; }
+.pd-slot.add::before { content: '+'; position: absolute; top: 24px; font-size: 18px; color: var(--faint); }
+.pd-slot .pd-star { opacity: 0; }
+.pd-slot:hover .pd-star { opacity: 1; }
+.no-views .pd-views { display: none; }
+.pd-ids { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.pd-ids .pd-input { padding: 4px 7px; font-size: 12.5px; }
+.no-ids .pd-ids { display: none; }
+.pd-cost-input[type="number"] { -moz-appearance: textfield; }
+.pd-viewer-bar .pd-cost-input { width: 9ch; background: transparent; color: #E8E2D6; border-color: #5a554e; }
+.pd-modal { position: fixed; inset: 0; z-index: 95; background: rgba(10, 9, 8, .6); display: flex; align-items: flex-start; justify-content: center; padding: 8vh 16px; overflow: auto; }
+.pd-modal-box { width: min(760px, 100%); background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+.pd-modal-box h2 { margin: 0; font-family: var(--prose); font-weight: 500; font-size: 20px; }
+.pd-price-table { display: flex; flex-direction: column; gap: 4px; }
+.pd-price-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr) 90px 80px 110px 28px; gap: 6px; align-items: center; }
+.pd-price-row .pd-input { padding: 4px 7px; font-size: 13px; }
+.pd-price-row.head span { font-size: 11px; color: var(--faint); }
+.pd-price-when { font-size: 11.5px; color: var(--faint); }
 @media (max-width: 700px) {
   .prod-view { padding: 56px 16px 12vh; }
+  .pd-gen { grid-template-columns: 1fr 80px; }
+  .pd-gen .pd-field:nth-child(n+3) { grid-column: 1 / -1; }
+  .pd-ids { grid-template-columns: 1fr; }
+  .pd-price-row { grid-template-columns: minmax(0, 1fr) 70px 28px; }
+  .pd-price-row > :nth-child(2), .pd-price-row > :nth-child(3), .pd-price-row > :nth-child(5) { display: none; }
+  .pd-cost-prices { margin-left: 0; }
+
   .pd-shot-row { grid-template-columns: 20px auto minmax(0, 1fr) 30px; }
   .pd-shot-row .pd-framing { grid-column: 3 / 4; grid-row: 2; }
   .pd-shot-row .pd-state { grid-column: 3 / 4; grid-row: 3; padding: 0 0 4px 4px; }
