@@ -15,6 +15,7 @@ export const FONTS = [
   // The two iA Writer fonts ship with the app (src/fonts), so they work offline from the start.
   { id: 'iamono', name: 'iA Writer Mono', group: 'mono', about: "The iA Writer app's font, loved by writers. Focused, typewriter-like but softer." },
   { id: 'iaquattro', name: 'iA Writer Quattro', group: 'mono', about: "iA Writer's in-between: mostly fixed-width, but wide letters get more room. Easy on long drafts." },
+  { id: 'cascadia', name: 'Cascadia Code', group: 'mono', about: "Thymer's dark-theme font, made by Microsoft for Windows Terminal. Friendly, a little handwritten.", family: 'Cascadia Code', spec: 'ital,wght@0,400;0,500;0,700;1,400' },
   { id: 'jetbrains', name: 'JetBrains Mono', group: 'mono', about: 'The most popular coding mono. Tall letters, very clear.', family: 'JetBrains Mono', spec: 'ital,wght@0,400;0,500;0,700;1,400' },
   { id: 'geistmono', name: 'Geist Mono', group: 'mono', about: "Geist's mono sibling. Minimal and modern.", family: 'Geist Mono', spec: 'wght@400;500;700' },
   { id: 'courier', name: 'Courier Prime', group: 'mono', about: 'The classic typewriter look, the screenplay standard.' },
