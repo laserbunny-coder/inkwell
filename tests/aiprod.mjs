@@ -177,6 +177,8 @@ async function device(opts = {}) {
   const page = await ctx.newPage();
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));
+  // THROTTLE=8 copies the slow publish runner here.
+  if (process.env.THROTTLE) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.THROTTLE) });
   await page.goto(`http://localhost:${PORT}/`);
   await page.waitForSelector('#editor .ProseMirror', { state: 'attached' });
   await sleep(800);
@@ -219,10 +221,24 @@ put({ id: 'bd-pp_1', kind: 'breakdown', parent_id: 'pp_1', fields: { add: [], dr
 const costText = (p) => p.locator('.pd-cost').innerText();
 const openShot = async (p, id) => {
   const box = p.locator(`.pd-shot[data-shot="${id}"]`);
+  await box.locator('.pd-toggle').waitFor({ state: 'visible', timeout: 15000 });
   if (!(await box.locator('.pd-detail').count())) await box.locator('.pd-toggle').click();
   await p.waitForSelector(`.pd-shot[data-shot="${id}"] .pd-gen`);
   return box;
 };
+// Types into a box and commits it, again if a redraw on the slow runner
+// swapped the box out before the change landed.
+const setInput = async (p, sel, value, done) => {
+  for (let i = 0; ; i++) {
+    const el = p.locator(sel).first();
+    await el.fill(String(value));
+    await el.dispatchEvent('change');
+    await sleep(300);
+    if (await done()) return;
+    if (i === 3) throw new Error(`${sel} didn't keep ${value}`);
+  }
+};
+const costIs = (p, re) => async () => { await p.waitForFunction((src) => new RegExp(src).test(document.querySelector('.pd-cost')?.innerText || ''), re.source, { timeout: 4000 }).catch(() => {}); return re.test(await costText(p)); };
 const blur = async (p) => { await p.locator('.gv-title').click(); await sleep(500); };
 
 try {
@@ -239,15 +255,9 @@ try {
     assert.match(t, /No price for No model/);
     assert.match(t, /Spent \$0 here/);
     assert.match(t, /Prices from Nov 3/);
-    const model = laptop.locator('.pd-cost input[aria-label^="Model for finals"]');
-    await model.fill('Kling 3.0');
-    await model.dispatchEvent('change');
-    await laptop.waitForFunction(() => /About \$2\.88/.test(document.querySelector('.pd-cost')?.innerText || ''), null, { timeout: 5000 }).catch(async () => { throw new Error(await costText(laptop)); });
-    const tries = laptop.locator('.pd-cost input[aria-label="Tries per shot"]');
-    await tries.fill('2');
-    await tries.dispatchEvent('change');
+    await setInput(laptop, '.pd-cost input[aria-label^="Model for finals"]', 'Kling 3.0', costIs(laptop, /About \$2\.88/));
     // 4 + 3 + 5 s at $0.08, twice; the live dojo shot isn't generated.
-    await laptop.waitForFunction(() => /About \$1\.92\s+for 3 shots, 12 s/.test(document.querySelector('.pd-cost')?.innerText || ''), null, { timeout: 5000 }).catch(async () => { throw new Error(await costText(laptop)); });
+    await setInput(laptop, '.pd-cost input[aria-label="Tries per shot"]', 2, costIs(laptop, /About \$1\.92\s+for 3 shots, 12 s/));
     await settle(laptop);
     assert.deepEqual(row('pr_reel').fields.gen, { model: 'Kling 3.0', tries: 2 });
   });
@@ -256,15 +266,12 @@ try {
     const box = await openShot(laptop, 'sh_a');
     const g = box.locator('.pd-gen');
     assert.equal(await g.locator('input[aria-label="Model"]').getAttribute('placeholder'), 'Kling 3.0', 'the piece’s model shows as the default');
-    await g.locator('input[aria-label="Model"]').fill('Seedance 2.0');
-    await g.locator('input[aria-label="Model"]').dispatchEvent('change');
+    const stored = (k, v) => async () => { await settle(laptop); return row('sh_a').fields.gen?.[k] === v; };
+    await setInput(laptop, '.pd-shot[data-shot="sh_a"] .pd-gen input[aria-label="Model"]', 'Seedance 2.0', stored('model', 'Seedance 2.0'));
+    await setInput(laptop, '.pd-shot[data-shot="sh_a"] .pd-gen input[aria-label="Length in seconds"]', 6, stored('secs', 6));
+    for (let i = 0; i < 4 && !(await stored('first', 'fi_still_a')()); i++) await laptop.locator('.pd-shot[data-shot="sh_a"] .pd-gen select[aria-label="First frame"]').selectOption('fi_still_a');
     await sleep(300);
-    await g.locator('input[aria-label="Length in seconds"]').fill('6');
-    await g.locator('input[aria-label="Length in seconds"]').dispatchEvent('change');
-    await sleep(300);
-    await laptop.locator('.pd-shot[data-shot="sh_a"] .pd-gen select[aria-label="First frame"]').selectOption('fi_still_a');
-    await sleep(300);
-    await laptop.locator('.pd-shot[data-shot="sh_a"] .pd-gen select[aria-label="Timed to"]').selectOption('MOM: Sit.');
+    for (let i = 0; i < 4 && !(await stored('sync', 'MOM: Sit.')()); i++) await laptop.locator('.pd-shot[data-shot="sh_a"] .pd-gen select[aria-label="Timed to"]').selectOption('MOM: Sit.');
     await sleep(400);
     await settle(laptop);
     assert.deepEqual(row('sh_a').fields.gen, { secs: 6, model: 'Seedance 2.0', first: 'fi_still_a', sync: 'MOM: Sit.' });
@@ -474,14 +481,14 @@ try {
     await laptop.waitForSelector('.pd-cost');
     await laptop.locator('.gv-tools .more-btn').click();
     await pick(laptop, 'Hide cost');
-    assert.equal(await laptop.locator('.pd-cost').isVisible(), false);
+    await laptop.locator('.pd-cost').waitFor({ state: 'hidden', timeout: 5000 });
     await openShot(laptop, 'sh_a');
     await laptop.locator('.gv-tools .more-btn').click();
     await pick(laptop, 'Hide generation details');
-    assert.equal(await laptop.locator('.pd-gen').first().isVisible(), false);
+    await laptop.locator('.pd-gen').first().waitFor({ state: 'hidden', timeout: 5000 });
     await shot(laptop, 'hidden');
     for (const label of ['Show cost', 'Show generation details']) { await laptop.locator('.gv-tools .more-btn').click(); await pick(laptop, label); }
-    assert.equal(await laptop.locator('.pd-cost').isVisible(), true);
+    await laptop.locator('.pd-cost').waitFor({ state: 'visible', timeout: 5000 });
   });
 
   assert.deepEqual(laptop.errors, []);

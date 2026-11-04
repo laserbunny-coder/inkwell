@@ -121,15 +121,15 @@ export class ProductionView {
     this.set = set.own ? set.base : set.id;
     const st = hasManuscript(piece) ? await loadStructure(piece) : { acts: [], pieces: [] };
     this.items = st.acts.length ? rowsAt(this.script ? 'slug' : 'scene', st, piece) : [];
-    this.scenes = this.items.filter((x) => x.type === 'row');
+    const scenes = this.items.filter((x) => x.type === 'row');
     const texts = new Map();
     for (const act of st.acts) for (const ch of act.chapters) for (const r of ch.rows) texts.set(r.id, r);
     this.texts = texts;
     this.elements = await elementsIn(this.world);
     this.elById = new Map(this.elements.map((e) => [e.id, e]));
-    const ids = new Set(this.scenes.map((s) => s.id));
+    const ids = new Set(scenes.map((s) => s.id));
     const members = new Map();
-    for (const s of this.scenes) for (const m of s.members) members.set(m, s.id);
+    for (const s of scenes) for (const m of s.members) members.set(m, s.id);
     const shots = (await byKind('shot')).sort((a, b) => a.sort - b.sort);
     // Once each time the piece is opened (it reads every file's entry).
     if (this.healed !== piece.id) { this.healed = piece.id; await this.heal(shots, piece); }
@@ -151,7 +151,7 @@ export class ProductionView {
       this.notesOf.get(s).push(n);
     }
     // Each scene's words, its elements and whether it changed since its shots.
-    for (const s of this.scenes) {
+    for (const s of scenes) {
       const rows = s.members.map((id) => texts.get(id)).filter(Boolean);
       s.rows = rows;
       s.text = rows.map((r) => (r.kind === 'scene' ? r.title || '' : r.text || '')).filter((t) => t.trim()).join('\n');
@@ -169,14 +169,15 @@ export class ProductionView {
     // shots keeps them even if its workflow has none.
     this.setTools = toolsIn(stageSetOf(piece, this.world), this.world);
     this.tools = toolsOf(piece, this.world);
-    if (!this.tools.length && (this.scenes.some((s) => s.shots.length) || this.lost.length)) this.tools = TABS.map((t) => t.id);
+    if (!this.tools.length && (scenes.some((s) => s.shots.length) || this.lost.length)) this.tools = TABS.map((t) => t.id);
     // Which renders are videos, for the storyboard's stills.
     const fileIds = new Set();
     for (const sh of shots) for (const t of sh.fields?.tries || []) for (const id of t.files || []) fileIds.add(id);
     this.kindOf = new Map((await getMany([...fileIds])).filter(Boolean).map((f) => [f.id, isVideo(f.fields?.type) ? 'video' : 'still']));
     // Every shot's code, for finding the shot a file name belongs to.
     this.codes = new Map();
-    for (const s of this.scenes) for (const sh of s.shots) this.codes.set(this.codeOf(sh, s), sh.id);
+    for (const s of scenes) for (const sh of s.shots) this.codes.set(this.codeOf(sh, s), sh.id);
+    this.scenes = scenes;
     return true;
   }
 
