@@ -3425,10 +3425,24 @@ function toggleFocus() {
   body.classList.remove('show-outline', 'show-top');
   syncSwitches();
 }
+// A script's own section titles and summaries (not the INT./EXT. ones), on or
+// off where you are: in Focus they stay away unless you ask for them, outside
+// it they show unless you put them away.
+function toggleFocusSections(on = !root.classList.contains('focus-sections')) {
+  root.classList.toggle('focus-sections', on);
+  localStorage.setItem('focusSections', on ? '1' : '0');
+  syncSwitches();
+}
+function toggleSections() {
+  const showing = root.classList.contains('focus') ? root.classList.contains('focus-sections') : !hidden().has('sections');
+  if (root.classList.contains('focus')) toggleFocusSections(!showing); else setShown('sections', !showing);
+  if (writing() && isScript()) toast(showing ? 'Section titles hidden' : 'Section titles showing');
+}
 function syncSwitches() {
   const h = hidden();
   document.querySelectorAll('[data-show]').forEach((c) => { c.checked = !h.has(c.dataset.show); });
   $('#focus-mode').checked = root.classList.contains('focus');
+  $('#focus-sections').checked = root.classList.contains('focus-sections');
   $('#focus-toggle').setAttribute('aria-pressed', String(root.classList.contains('focus')));
 }
 
@@ -3449,6 +3463,7 @@ setTimeout(() => recordProgress().catch((e) => console.error(e)), 20000);
 const toggleShortcuts = () => { const s = $('.shortcuts'); s.hidden = !s.hidden; if (s.hidden) currentEditor().commands.focus(); };
 document.querySelectorAll('[data-show]').forEach((c) => c.addEventListener('change', () => setShown(c.dataset.show, c.checked)));
 $('#focus-mode').addEventListener('change', toggleFocus);
+$('#focus-sections').addEventListener('change', (e) => toggleFocusSections(e.target.checked));
 $('#typewriter-mode').checked = root.classList.contains('typewriter');
 $('#typewriter-mode').addEventListener('change', toggleTypewriter);
 syncSwitches();
@@ -3671,6 +3686,7 @@ const commands = [
   { group: 'view', label: 'Back to the text from the grid', keys: `${mod}⇧G`, run: toggleGrid, when: () => view() === 'grid' },
   { group: 'view', label: 'Production (shots, kit, shoot days, posting)', keys: `${mod}⇧S`, run: toggleProduction, when: () => view() !== 'production' && view() !== 'library' },
   { group: 'view', label: 'Back to the text from production', keys: `${mod}⇧S`, run: toggleProduction, when: () => view() === 'production' },
+  { group: 'view', label: 'Show or hide section titles', keys: '⌘⇧.', run: () => toggleSections(), when: () => writing() && isScript() },
   { group: 'view', label: 'Show or hide section summaries', keys: '', run: () => setShown('synopsis', hidden().has('synopsis')), when: () => writing() && isScript() },
   { group: 'view', label: 'Fresh eyes: a new font, page and colour, to reread it cold', keys: `${mod}⇧Y`, words: ['reread', 'revise', 'unfamiliar'], run: () => toggleFreshEyes() },
   { group: 'view', label: 'Show or hide Claude’s notes in the margin', keys: '', run: () => setShown('claude', hidden().has('claude')) },
@@ -4178,6 +4194,7 @@ document.addEventListener('keydown', (e) => {
   const m = e.metaKey || e.ctrlKey;
   const k = e.key.toLowerCase();
   if (m && k === 'k') { e.preventDefault(); $('.palette').hidden ? openPalette() : closePalette(); }
+  else if (m && e.shiftKey && !e.altKey && e.code === 'Period') { e.preventDefault(); toggleSections(); }
   else if (m && e.key === '.') { e.preventDefault(); toggleFocus(); }
   else if (m && e.shiftKey && k === 'f') { e.preventDefault(); openPalette('search'); }
   else if (m && e.shiftKey && k === 'o') { e.preventDefault(); go({ view: 'library', area: null }); }
