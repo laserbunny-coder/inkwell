@@ -8,6 +8,7 @@ import { children, getEntry, putEntries, snapshots } from './db.js';
 import { keep } from './history.js';
 import { newId, tagsIn } from './model.js';
 import { placeSorts, bySort } from './order.js';
+import { walKey } from './panes.js';
 
 // The notebook's pages (daily pages and named pages) are outlines: lines you
 // can nest, Workflowy-style. Every line is its own entry whose parent is the
@@ -460,6 +461,11 @@ export function moveLine(editor, dir) {
   return true;
 }
 
+// A drag can leave this window for a pane beside it (panes.js): the app says
+// whether the pointer is over another window, and takes the drop there.
+let dragOut = null;
+export function setLineDragOut(hooks) { dragOut = hooks; }
+
 // Drags a line by its dot (shown or not) to sit before or after another.
 function startDrag(view, dragged, event, { onClick } = {}) {
   const eid = dragged.querySelector(':scope > .line-gutter')?.dataset.eid;
@@ -473,6 +479,8 @@ function startDrag(view, dragged, event, { onClick } = {}) {
     dragged.classList.add('dragging');
     document.body.classList.add('line-dragging');
   };
+  // Keep hearing the pointer even when it goes over a pane beside this window.
+  try { view.dom.setPointerCapture(event.pointerId); } catch { /* not a pointer we can hold */ }
   const find = (e) => {
     const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('li');
     if (!hit || !view.dom.contains(hit) || dragged.contains(hit)) return null;
@@ -483,36 +491,51 @@ function startDrag(view, dragged, event, { onClick } = {}) {
     if (!mark && Math.hypot(e.clientX - x0, e.clientY - y0) < 5) return;
     if (!mark) begin();
     drop = find(e);
+    const away = !drop && !!dragOut?.over(e);
+    document.body.classList.toggle('line-drag-away', away);
     mark.hidden = !drop;
     if (drop) Object.assign(mark.style, { left: `${drop.box.left}px`, width: `${drop.box.width}px`, top: `${(drop.after ? drop.box.bottom : drop.box.top) - 1}px` });
   };
   const done = (e) => {
+    try { view.dom.releasePointerCapture(event.pointerId); } catch { /* already let go */ }
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', done);
     window.removeEventListener('pointercancel', done);
     if (!mark) { if (e.type === 'pointerup') onClick?.(); return; }
     mark.remove();
     dragged.classList.remove('dragging');
-    document.body.classList.remove('line-dragging');
-    if (!drop || e.type === 'pointercancel') return;
-    const state = view.state;
-    const posOf = (id) => { let at = -1; if (!id) return at; state.doc.descendants((n, pos) => { if (at < 0 && n.type.name === 'listItem' && n.attrs.eid === id) at = pos; return at < 0; }); return at; };
-    const from = posOf(eid);
-    const at = posOf(drop.li.querySelector(':scope > .line-gutter')?.dataset.eid);
-    if (from < 0 || at < 0) return;
-    const node = state.doc.nodeAt(from);
-    const target = state.doc.nodeAt(at);
-    if (node?.type.name !== 'listItem' || target?.type.name !== 'listItem') return;
-    const tr = state.tr.delete(from, from + node.nodeSize);
-    const to = tr.mapping.map(drop.after ? at + target.nodeSize : at, drop.after ? 1 : -1);
-    tr.insert(to, node);
-    tr.setSelection(TextSelection.create(tr.doc, Math.min(to + 2, tr.doc.content.size)));
-    view.dispatch(tr.scrollIntoView());
-    view.focus();
+    document.body.classList.remove('line-dragging', 'line-drag-away');
+    if (e.type === 'pointercancel') return;
+    drop = find(e);
+    // Let go over a pane beside: it moves there.
+    if (!drop) { if (dragOut) Promise.resolve(dragOut.drop(e, eid)).catch((err) => console.error(err)); return; }
+    dropLineAt(view, eid, drop.li.querySelector(':scope > .line-gutter')?.dataset.eid, drop.after);
   };
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', done);
   window.addEventListener('pointercancel', done);
+}
+
+// Puts the line `eid` (with what's under it) just before or after the line `targetEid`.
+export function dropLineAt(view, eid, targetEid, after) {
+  const state = view.state;
+  const posOf = (id) => { let at = -1; if (!id) return at; state.doc.descendants((n, pos) => { if (at < 0 && n.type.name === 'listItem' && n.attrs.eid === id) at = pos; return at < 0; }); return at; };
+  if (!eid || eid === targetEid) return false;
+  const from = posOf(eid);
+  const at = posOf(targetEid);
+  if (from < 0 || at < 0) return false;
+  const node = state.doc.nodeAt(from);
+  const target = state.doc.nodeAt(at);
+  if (node?.type.name !== 'listItem' || target?.type.name !== 'listItem') return false;
+  // Not into itself.
+  if (at > from && at < from + node.nodeSize) return false;
+  const tr = state.tr.delete(from, from + node.nodeSize);
+  const to = tr.mapping.map(after ? at + target.nodeSize : at, after ? 1 : -1);
+  tr.insert(to, node);
+  tr.setSelection(TextSelection.create(tr.doc, Math.min(to + 2, tr.doc.content.size)));
+  view.dispatch(tr.scrollIntoView());
+  view.focus();
+  return true;
 }
 
 // Done: the line is struck through (Ctrl+Enter, or the Done button on a phone).
@@ -1110,7 +1133,8 @@ export function refsIn(content) {
   return [...ids];
 }
 
-const WAL = (id) => `wal:${id}`;
+// Per window: a pane beside the main window keeps its own (panes.js).
+const WAL = walKey;
 
 // Loads and saves one outline page, the same two-layer way as chapters:
 // write-ahead copy at once, changed lines to IndexedDB a moment later.

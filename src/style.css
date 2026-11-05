@@ -1782,3 +1782,61 @@ button.st-from:hover { color: var(--ink); }
 /* A new device, signed in, waits a moment for your writing before it opens. */
 html.starting main { visibility: hidden; }
 html.starting body::after { content: 'Getting your writing…'; position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); font: 15px var(--ui, system-ui); pointer-events: none; }
+
+/* ---------- side by side: panes beside the main view (panes.js) ---------- */
+:root { --panes-w: 0px; }
+.pane-sheet { display: contents; }
+.pane-sheet .ps-grab, .pane-sheet .ps-head { display: none; }
+.panes { position: fixed; top: 0; right: 0; bottom: 0; width: var(--panes-w); display: flex; z-index: 36; background: var(--bg); }
+html:not(.has-panes):not(.panes-sheet) .panes { display: none; }
+.pane { position: relative; min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: var(--bg); }
+.pane.off { display: none; }
+.pane-head { flex: none; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 18px; font: 12px var(--ui); color: var(--faint); border-bottom: 1px solid transparent; }
+.pane-kind { flex: none; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; }
+.pane-title { min-width: 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pane-space { flex: 1; }
+.pane-btn { flex: none; width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--faint); font-size: 14px; line-height: 1; cursor: pointer; }
+.pane-btn:hover, .pane-btn:focus-visible { color: var(--ink); background: var(--tint); }
+.pane.focus .pane-head { border-bottom-color: var(--line); }
+.pane.focus .pane-title { color: var(--ink); }
+.pane.focus::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--accent); opacity: .75; z-index: 2; pointer-events: none; }
+.pane-frame { flex: 1; min-height: 0; width: 100%; border: 0; display: block; background: var(--bg); }
+.pane-divider { position: absolute; left: -4px; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 3; }
+.pane-divider:hover { background: linear-gradient(90deg, transparent 3px, var(--line) 3px, var(--line) 5px, transparent 5px); }
+.pane-spine { display: none; }
+.pane.spine > :not(.pane-spine) { display: none; }
+.pane.spine .pane-spine { display: block; flex: 1; width: 100%; border: 0; background: var(--panel); color: var(--muted); writing-mode: vertical-rl; transform: rotate(180deg); font: 12px var(--ui); padding: 16px 0; text-align: end; white-space: nowrap; overflow: hidden; cursor: pointer; }
+.pane.spine .pane-spine:hover { color: var(--ink); }
+html.pane-resizing, html.pane-resizing * { cursor: col-resize !important; user-select: none; }
+html.pane-resizing .pane-frame { pointer-events: none; }
+html.focus .pane-head { display: none; }
+html.hide-panes .panes, html.hide-panes .pane-sheet { display: none !important; }
+body.line-drag-away, body.line-drag-away * { cursor: copy !important; }
+
+/* The main view makes room for them. */
+html.has-panes body { margin-right: var(--panes-w); }
+html.has-panes .topbar, html.has-panes .edge-top, html.has-panes .script-bar,
+html.has-panes .beside, html.has-panes .talk, html.has-panes .today-panel,
+html.has-panes .history, html.has-panes .tag-results, html.has-panes .versions,
+html.has-panes .capture, html.has-panes .pd-viewer, html.has-panes .pd-modal { right: var(--panes-w); }
+html.has-panes .palette, html.has-panes .page-settings, html.has-panes .note-types, html.has-panes .shortcuts,
+html.has-panes .stats, html.has-panes .go-panel, html.has-panes .toast { left: calc((100% - var(--panes-w)) / 2); }
+
+/* Inside a pane: only the view, none of the window's own controls. */
+html.in-pane .topbar, html.in-pane .edge, html.in-pane .placebar { display: none !important; }
+html.in-pane .page { padding-top: 40px; }
+
+/* On a phone: one pane at a time, in a sheet over what you're doing. */
+html.panes-sheet .pane-sheet { display: flex; flex-direction: column; position: fixed; left: 0; right: 0; bottom: 0; height: 56%; z-index: 75; background: var(--panel); border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; box-shadow: 0 -12px 40px rgba(0,0,0,.3); padding-bottom: env(safe-area-inset-bottom, 0px); }
+html.panes-sheet:not(.sheet-peek) .pane-sheet { visibility: hidden; pointer-events: none; transform: translateY(110%); }
+html.panes-sheet .pane-sheet.full { top: calc(28px + env(safe-area-inset-top, 0px)); height: auto; }
+html.panes-sheet .ps-grab { display: block; flex: none; width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin: 8px auto 4px; }
+html.panes-sheet .ps-head { display: flex; flex: none; align-items: center; gap: 2px; padding: 0 8px 6px 20px; font: 14px var(--ui); color: var(--muted); touch-action: none; }
+.ps-title { min-width: 0; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ps-space { flex: 1; }
+.ps-count { color: var(--faint); font-variant-numeric: tabular-nums; padding: 0 2px; }
+.ps-btn { min-width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--faint); font-size: 17px; }
+.ps-btn:active { background: var(--tint); }
+html.panes-sheet .panes { position: static; width: auto; flex: 1; min-height: 0; background: var(--panel); }
+html.panes-sheet .pane { flex: 1 1 auto !important; border-left: 0; background: var(--panel); }
+html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
