@@ -59,6 +59,9 @@ const paste = (page, text, html) => page.evaluate(({ text, html }) => {
   window.__outline.view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
 }, { text, html });
 
+// A blank indented line (spaces only, kept apart so editors don't trim them).
+const BLANK = '  ';
+
 // Each case: the page before (| is the caret, [+] a folded line), the keys, the page after.
 const CASES = [
   ['Enter at the end of a folded line adds a line after the whole group, still folded', `
@@ -103,6 +106,35 @@ Shared reel idea [+]
 ~Write the theme song|`, ['Enter', 'type:Book the dojo'], `
 ~Write the theme song
 Book the dojo|`],
+  ['Enter twice in an indented line leaves one blank line and stays at that level', `
+Cold open
+  Kenji trips on the mat|`, ['Enter', 'Enter', 'type:Momo laughs'], `
+Cold open
+  Kenji trips on the mat
+${BLANK}
+  Momo laughs|`],
+  ['A third Enter on an empty indented line steps out a level, keeping one blank', `
+Cold open
+  Kenji trips on the mat|`, ['Enter', 'Enter', 'Enter', 'type:Theme song'], `
+Cold open
+  Kenji trips on the mat
+${BLANK}
+Theme song|`],
+  ['Enter on an empty first line under a parent steps out a level at once', `
+Cold open
+  |`, ['Enter', 'type:Theme song'], `
+Cold open
+Theme song|`],
+  ['Enter on an empty indented line after a group stays at that level', `
+Cast
+  Kenji
+    Clumsy
+  |`, ['Enter', 'type:Momo'], `
+Cast
+  Kenji
+    Clumsy
+${BLANK}
+  Momo|`],
   ['Backspace at the start of a line joins it to the folded line above, which stays folded', `
 Shared reel idea [+]
   Kenji falls
