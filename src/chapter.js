@@ -3,8 +3,10 @@ import { keep } from './history.js';
 import { tagsIn, wordCount } from './model.js';
 import { refsIn } from './outline.js';
 import { placeSorts } from './order.js';
+import { walKey } from './panes.js';
 
-const WAL = (id) => `wal:${id}`;
+// Per window: a pane beside the main window keeps its own (panes.js).
+const WAL = walKey;
 const SNAPSHOT_IDLE_MS = 4000;
 const SAVE_DEBOUNCE_MS = 300;
 

@@ -28,7 +28,7 @@ import { MAX_BYTES, SPACE, spaceUsed, unsentFiles } from './files.js';
 import { vaultZip, vaultFiles, pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain, fromOutline, looksLikeOutline, SceneCodes, NUMBER_SCENES, assignCodes, codeOrder } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
-import { moveLine, canMoveLine, indentLines, outdentLines, removeLine, toggleDone, foldKey, toggleChecklist, toggleBox, lineChecks, hasBox, loadDoc, replaceDoc } from './outline.js';
+import { moveLine, canMoveLine, indentLines, outdentLines, removeLine, toggleDone, foldKey, toggleChecklist, toggleBox, lineChecks, hasBox, loadDoc, replaceDoc, setLineDragOut, dropLineAt } from './outline.js';
 import { SlashMenu, setSlashItems } from './slash.js';
 import { openHandleMenu } from './handlemenu.js';
 import { showSaveButton } from './savebutton.js';
@@ -50,6 +50,7 @@ import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } 
 import { pieceDoc, pageDoc, startDraft, draftHolding } from './drafts.js';
 import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
+import { inPane, PANE_ID, PaneHost, host as paneHost, sendChanged, onChanged } from './panes.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
@@ -60,6 +61,8 @@ import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor
 const $ = (s) => document.querySelector(s);
 const body = document.body;
 const root = document.documentElement;
+// Inside a pane beside the main window (panes.js): just the view, no chrome.
+if (inPane) root.classList.add('in-pane');
 const extensions = [
   // No lists or block quotes in a manuscript: they hold paragraphs the chapter
   // can't save as its own (typing "- " made a list whose words were lost).
@@ -148,6 +151,7 @@ function paragraphMenu({ node, index, count, handle }) {
     sections: [
       [
         text && { label: 'Add a note', keys: '⌘⇧N', run: () => notes.add(node.attrs.eid) },
+        node.attrs.eid && besideItem(() => ({ view: 'write', chapterId: state.chapterId, focus: node.attrs.eid })),
         text && { label: script ? 'Versions of this line' : 'Versions of this paragraph', run: at((from) => { editor.chain().setTextSelection(from + 1).focus().run(); alts.open({ scope: 'para' }); }) },
         text && { label: 'New version to rewrite', keys: '⌘⇧D', run: at((from) => { editor.chain().setTextSelection(from + 1).focus().run(); newParagraphVersion(editor); }) }
       ],
@@ -158,7 +162,8 @@ function paragraphMenu({ node, index, count, handle }) {
       [
         { label: 'Move up', keys: 'Alt+⇧↑', stay: true, half: 'move', off: index === 0, run: () => handle.move(index, index - 1) },
         { label: 'Move down', keys: 'Alt+⇧↓', stay: true, half: 'move', off: index >= count - 1, run: () => handle.move(index, index + 2) },
-        node.attrs.eid && { label: 'Move to…', run: () => setTimeout(() => sendSelectionPicker([node.attrs.eid]), 120) }
+        node.attrs.eid && { label: 'Move to…', run: () => setTimeout(() => sendSelectionPicker([node.attrs.eid]), 120) },
+        ...(node.attrs.eid ? paneMoves([node.attrs.eid], state.chapterId) : [])
       ],
       [{ label: 'Delete', danger: true, run: () => {
         const { from, to } = handle.range(index);
@@ -310,6 +315,7 @@ const notebook = new Notebook({
   onZoom: (zoom) => {
     if (!inNotebook() || !notebook.page) return;
     remember({ view: 'notebook', pageId: notebook.page.id, ...(zoom ? { zoom } : {}) });
+    if (inPane) renderCrumb();
   }
 });
 
@@ -392,6 +398,7 @@ function lineMenu(eid) {
       [
         // On a phone, Fold leads the menu.
         ...(touch.matches ? [fold, zoom] : [zoom, fold]),
+        besideItem(() => ({ view: 'notebook', pageId: notebook.page?.id, zoom: eid })),
         { label: node.attrs.done ? 'Not done' : 'Mark done', keys: '⌘↵', run: on(() => { toggleDone(ed); ed.commands.focus(); }) }
       ],
       [
@@ -403,7 +410,8 @@ function lineMenu(eid) {
         { label: 'Indent', keys: 'Tab', stay: true, half: 'indent', off: index === 0, run: on(() => { ed.commands.focus(); indentLines(ed); }) },
         { label: 'Move up', keys: 'Alt+⇧↑', stay: true, half: 'move', off: !canMoveLine(ed.state, -1, pos + 2), run: on(() => moveLine(ed, -1)) },
         { label: 'Move down', keys: 'Alt+⇧↓', stay: true, half: 'move', off: !canMoveLine(ed.state, 1, pos + 2), run: on(() => moveLine(ed, 1)) },
-        { label: 'Move to…', run: () => setTimeout(() => sendSelectionPicker([eid]), 120) }
+        { label: 'Move to…', run: () => setTimeout(() => sendSelectionPicker([eid]), 120) },
+        ...paneMoves([eid], notebook.page?.id)
       ],
       [{ label: under ? `Delete line and the ${lines(under)} under it` : 'Delete line', danger: true, run: () => {
         const now = findLine(eid);
@@ -492,10 +500,30 @@ let historyMode = 'replace';
 let lastPlace = null; // where you are, for the place bar (named once the crumb is drawn)
 function remember(place) {
   lastPlace = place;
+  if (inPane) { paneTrailAdd(place); return; }
   try { localStorage.setItem('place', JSON.stringify(place)); } catch { /* full */ }
   if (JSON.stringify(history.state) === JSON.stringify(place)) return;
   if (historyMode === 'push') history.pushState(place, '');
   else history.replaceState(place, '');
+}
+
+// A pane keeps its own Back and Forward: the browser's belong to the main window.
+const paneTrail = { back: [], fwd: [], at: null, stepping: false };
+function paneTrailAdd(place) {
+  const was = paneTrail.at;
+  if (was && JSON.stringify(was) !== JSON.stringify(place) && historyMode === 'push' && !paneTrail.stepping) {
+    paneTrail.back.push(was);
+    paneTrail.fwd = [];
+  }
+  paneTrail.at = place;
+}
+async function paneStep(dir) {
+  const from = dir < 0 ? paneTrail.back : paneTrail.fwd;
+  const place = from.pop();
+  if (!place) return;
+  if (paneTrail.at) (dir < 0 ? paneTrail.fwd : paneTrail.back).push(paneTrail.at);
+  paneTrail.stepping = true;
+  try { await go(place); } finally { paneTrail.stepping = false; }
 }
 
 window.addEventListener('popstate', async (e) => {
@@ -504,7 +532,11 @@ window.addEventListener('popstate', async (e) => {
   try { await go(e.state); } finally { historyMode = 'push'; }
 });
 
+// Shift + Enter in Go, or a middle-click on something that takes you
+// somewhere: the next place opens beside instead.
+let besideUntil = 0;
 async function go(place) {
+  if (besideUntil > Date.now()) { besideUntil = 0; return openBeside(place); }
   // Somewhere that has since gone to the Trash (Back can lead there): go nearby instead.
   if (place.view === 'write' && place.chapterId && gone(await getEntry(place.chapterId))) place = { view: 'library' };
   // Posting moved from Make to Deliver: an old place with its tab goes there.
@@ -641,21 +673,27 @@ function focusParagraph(eid) {
 // manuscript, books on their home page, and a single line or paragraph opens
 // where it lives.
 async function openEntry(id) {
+  const place = await placeOf(id);
+  if (place) return go(place);
+}
+// Where following a link to `id` leads (null: nowhere to go).
+async function placeOf(id) {
   const row = await getEntry(id);
   // A link to a day that hasn't been written on yet still opens that day.
-  if (!row && id?.startsWith('day-')) return go({ view: 'notebook', pageId: id });
-  if (gone(row)) return;
-  if (row.kind === 'project') return go({ view: 'project', id: row.id });
-  if (row.kind === 'world') return go({ view: 'world', id: row.id });
-  if (row.kind === 'area') return go({ view: 'library', area: row.id });
-  if (row.kind === 'shootday') return go({ view: 'production', id: row.parent_id, day: row.id });
-  if (row.kind === 'shot') { const piece = row.fields?.piece || (await bookOf(row))?.id; if (piece) return go({ view: 'production', id: piece, tab: 'shots', shot: row.id }); }
+  if (!row && id?.startsWith('day-')) return { view: 'notebook', pageId: id };
+  if (gone(row)) return null;
+  if (row.kind === 'project') return { view: 'project', id: row.id };
+  if (row.kind === 'world') return { view: 'world', id: row.id };
+  if (row.kind === 'area') return { view: 'library', area: row.id };
+  if (row.kind === 'shootday') return { view: 'production', id: row.parent_id, day: row.id };
+  if (row.kind === 'shot') { const piece = row.fields?.piece || (await bookOf(row))?.id; if (piece) return { view: 'production', id: piece, tab: 'shots', shot: row.id }; }
   const home = await rootOf(row);
-  if (!home) return;
+  if (!home) return null;
   const focus = home.id === row.id ? null : row.id;
-  if (home.kind === 'day' || home.kind === 'page') return go({ view: 'notebook', pageId: home.id, line: focus });
-  if (home.kind === 'project') return focus ? go({ view: 'notebook', pageId: home.id, line: focus }) : go({ view: 'project', id: home.id });
-  if (home.kind === 'chapter') return go({ view: 'write', chapterId: home.id, focus });
+  if (home.kind === 'day' || home.kind === 'page') return { view: 'notebook', pageId: home.id, line: focus };
+  if (home.kind === 'project') return focus ? { view: 'notebook', pageId: home.id, line: focus } : { view: 'project', id: home.id };
+  if (home.kind === 'chapter') return { view: 'write', chapterId: home.id, focus };
+  return null;
 }
 
 // A new page goes in the bible of the world you're in (or the piece whose page is open).
@@ -715,7 +753,8 @@ const sync = new Sync({
     if (s === 'synced') { seedIfEmpty(); conflicts.count(); checkSpace().catch(() => {}); blankOnce().then(writeOut); scribeKept(); openAsked(); reviewAsked(); }
     if (s !== 'syncing') checkUnsent().catch(() => {});
   },
-  onRemote: applyRemote
+  // What came from the cloud goes to the panes too.
+  onRemote: (rows) => { sendChanged(rows); return applyRemote(rows); }
 });
 // Changes that have waited a day or more for the cloud are called out on the
 // sync button, and the top bar peeks out once so it's seen.
@@ -752,7 +791,7 @@ async function checkSpace() {
   try { localStorage.setItem('spaceWarned', String(w.level)); } catch { /* ignore */ }
   toast(w.text);
 }
-setInterval(() => checkUnsent().catch(() => {}), 36e5);
+if (!inPane) setInterval(() => checkUnsent().catch(() => {}), 36e5);
 
 setMoveHooks({
   open: () => [
@@ -773,11 +812,27 @@ const tallySoon = (ms = 20000) => {
   tallyTimer = setTimeout(() => { tallyAt = Date.now(); recordProgress().catch((e) => console.error(e)); }, wait);
 };
 onLocalWrites((rows) => {
+  // The other windows (panes, or the main one) show it too.
+  sendChanged(rows);
+  if (inPane) { searchChanged(rows); return; }
+  wrote(rows);
+});
+// Written here or in a pane: off to the cloud, counted, and links to a renamed page follow.
+function wrote(rows) {
   sync.soon();
   searchChanged(rows);
   if (rows.some((r) => r.kind !== 'tally')) tallySoon();
   if (rows.some((r) => r.kind === 'file')) checkSpace().catch(() => {});
   retitleLinks(rows).then((changed) => { if (changed) { freshenRefs(editor); freshenRefs(notebook.editor); } }).catch((e) => console.error(e));
+}
+// Another window of this family wrote: show it here, the way changes from
+// another device show. The main window also sends the pane's writes on.
+onChanged(async (ids) => {
+  const rows = (await Promise.all(ids.map((id) => getEntry(id)))).filter(Boolean);
+  if (!rows.length) return;
+  if (!inPane) wrote(rows);
+  else retitleLinks(rows).then((changed) => { if (changed) { freshenRefs(editor); freshenRefs(notebook.editor); } }).catch(() => {});
+  await applyRemote(rows);
 });
 window.__sync = sync;
 window.__notebook = notebook;
@@ -1362,7 +1417,14 @@ async function drawCrumb() {
   // The top bar's buttons stay put; the one for where you are is lit.
   const here = { 'view-toggle': inNotebook() && !!notebook.page && notebook.page.kind === 'day', 'library-toggle': view() === 'library', 'drawer-toggle': view() === 'drawer', 'tags-toggle': view() === 'tags' };
   for (const [id, on] of Object.entries(here)) { const b = document.getElementById(id); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
-  nav.here(lastPlace, isToday ? ['Today'] : parts.map((p) => p.textContent.replace(/\s*▾\s*$/, '').trim()).filter(Boolean));
+  const names = isToday ? ['Today'] : parts.map((p) => p.textContent.replace(/\s*▾\s*$/, '').trim()).filter(Boolean);
+  // A pane's name shows in its header; the main window's in the place bar and recent places.
+  if (inPane) {
+    // Zoomed into a line: the line is its name.
+    const z = inNotebook() && notebook.zoom && notebook.editor.view.dom.querySelector(`.line-gutter[data-eid="${notebook.zoom}"]`)?.parentElement?.querySelector(':scope > p')?.textContent?.trim();
+    paneHost()?.here(PANE_ID, lastPlace, z ? [...names, z.length > 60 ? `${z.slice(0, 58)}…` : z] : names);
+  }
+  else nav.here(lastPlace, names);
 }
 
 // ---------- tidying up: rename, move, change kind, the Trash ----------
@@ -2714,9 +2776,11 @@ const sharing = new Sharing({
 window.__sharing = sharing;
 notes.comments = { reply: (n, t) => sharing.reply(n, t), resolve: (n) => sharing.resolve(n), toast };
 notes.skip = (n) => (n.type === 'claude' && hidden().has('claude')) || (n.type === 'comment' && hidden().has('comments'));
-setInterval(() => sharing.refresh().catch((e) => console.warn(e)), 120000);
-document.addEventListener('visibilitychange', () => { if (document.hidden) sharing.refresh().catch(() => {}); });
-setTimeout(() => sharing.refresh().catch(() => {}), 8000);
+if (!inPane) {
+  setInterval(() => sharing.refresh().catch((e) => console.warn(e)), 120000);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) sharing.refresh().catch(() => {}); });
+  setTimeout(() => sharing.refresh().catch(() => {}), 8000);
+}
 
 // What's shared from where you are: the piece, or the bible page.
 async function shareTarget() {
@@ -3407,6 +3471,7 @@ function setShown(name, on) {
   root.classList.toggle(`hide-${name}`, !on);
   if (name === 'claude' || name === 'comments') notes.render();
   if (name === 'linkpics') resetLinkPics();
+  if (name === 'panes') { if (!on) panes?.closeAll(); panes?.layout(); }
   syncSwitches();
 }
 // Reading a script through: only the script pages, no sections, notes or tools.
@@ -3457,9 +3522,11 @@ async function step(dir) {
 }
 
 const progressPanel = new StatsPanel($('.stats'), { onClose: () => currentEditor().commands.focus() });
-document.addEventListener('visibilitychange', () => { if (document.hidden) recordProgress().catch(() => {}); });
-// Once things have settled after opening.
-setTimeout(() => recordProgress().catch((e) => console.error(e)), 20000);
+if (!inPane) {
+  document.addEventListener('visibilitychange', () => { if (document.hidden) recordProgress().catch(() => {}); });
+  // Once things have settled after opening.
+  setTimeout(() => recordProgress().catch((e) => console.error(e)), 20000);
+}
 const toggleShortcuts = () => { const s = $('.shortcuts'); s.hidden = !s.hidden; if (s.hidden) currentEditor().commands.focus(); };
 document.querySelectorAll('[data-show]').forEach((c) => c.addEventListener('change', () => setShown(c.dataset.show, c.checked)));
 $('#focus-mode').addEventListener('change', toggleFocus);
@@ -3705,6 +3772,10 @@ const commands = [
   { group: 'page', label: 'Name the section levels (Act, Sequence, Scene…)', keys: '', run: nameSectionLevels, when: () => writing() && isScript() },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
   { group: 'view', label: 'What Claude knows: its one-line note on this, and weekly summaries', keys: '', words: ['about', 'summary', 'second brain', 'memory', 'digest', 'weekly'], run: () => showClaudeKnows() },
+  { group: 'view', label: 'Open where you are in a pane beside (middle-click opens anything beside)', words: ['pane', 'side by side', 'split', 'beside', 'two', 'compare'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => openBeside(lastPlace) },
+  { group: 'view', label: 'Show the panes beside', words: ['pane', 'peek', 'side by side'], when: () => !!panes?.count && panes.sheet && !panes.sheetOpen, run: () => panes.showSheet() },
+  { group: 'view', label: 'Close the pane you’re in', keys: `${mod}⌥W`, words: ['pane', 'side by side', 'close'], when: () => inPane, run: () => paneHost()?.close(PANE_ID) },
+  { group: 'view', label: 'Close all the panes beside', words: ['pane', 'side by side', 'close'], when: () => !!panes?.count, run: () => panes.closeAll() },
   { group: 'new', label: 'Save links from your browser (Save to Inkwell button)…', keys: '', words: ['bookmark', 'bookmarklet', 'share', 'save link', 'twitter', 'x', 'web page', 'computer', 'desktop'], run: () => showSaveButton(), when: () => !matchMedia('(pointer: coarse)').matches },
   { group: 'new', label: 'Bring in old notes (from Thymer, Tana, Workflowy, OneNote)…', keys: '', words: ['import', 'paste', 'opml', 'markdown', 'migrate', 'old apps'], run: () => bringInOld() },
   { group: 'sync', label: 'Connect Scribe, the dictation keyboard…', keys: '', run: () => connectScribe() },
@@ -4148,8 +4219,15 @@ $('#palette-input').addEventListener('keydown', (e) => {
   if (e.key === 'ArrowUp') { e.preventDefault(); selectPalette(Math.max(paletteIndex - 1, 0)); }
   if (e.key === 'Enter') {
     e.preventDefault();
+    const beside = e.shiftKey && !['move', 'pick'].includes(paletteMode);
     // Enter pressed before the list arrived still picks the best match.
-    paletteReady.then(() => { if (paletteItems[paletteIndex]) runCommand(paletteItems[paletteIndex]); });
+    paletteReady.then(() => {
+      const c = paletteItems[paletteIndex];
+      if (!c) return;
+      // Shift + Enter: where it leads opens beside.
+      if (beside && !c.stay && (!c.group || c.group === 'go')) besideUntil = Date.now() + 1500;
+      runCommand(c);
+    });
   }
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (paletteGroup && !e.target.value) openGroup(null); else closePalette(); }
   if (e.key === 'Backspace' && paletteGroup && !e.target.value) { e.preventDefault(); openGroup(null); }
@@ -4195,6 +4273,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   const m = e.metaKey || e.ctrlKey;
   const k = e.key.toLowerCase();
+  if (paneKeys(e, m)) return;
   if (m && k === 'k') { e.preventDefault(); $('.palette').hidden ? openPalette() : closePalette(); }
   else if (m && e.shiftKey && !e.altKey && e.code === 'Period') { e.preventDefault(); toggleSections(); }
   else if (m && e.key === '.') { e.preventDefault(); toggleFocus(); }
@@ -4202,8 +4281,8 @@ document.addEventListener('keydown', (e) => {
   else if (m && e.shiftKey && k === 'o') { e.preventDefault(); go({ view: 'library', area: null }); }
   else if (m && k === 'o') { e.preventDefault(); if (!$('.palette').hidden) closePalette(false); nav.toggle(true); }
   else if (m && e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); step(e.key === 'ArrowDown' ? 1 : -1); }
-  else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketLeft') { e.preventDefault(); history.back(); }
-  else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketRight') { e.preventDefault(); history.forward(); }
+  else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketLeft') { e.preventDefault(); if (inPane) paneStep(-1); else history.back(); }
+  else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketRight') { e.preventDefault(); if (inPane) paneStep(1); else history.forward(); }
   else if (m && !e.altKey && e.code === 'Semicolon' && (writing() || inNotebook()) && currentEditor().isFocused) { e.preventDefault(); if (e.shiftKey) insertTime(currentEditor()); else insertDay(currentEditor(), 0); }
   else if (m && (e.key === '/' || e.code === 'Slash')) { e.preventDefault(); toggleShortcuts(); }
   else if (m && e.shiftKey && k === 'p') { e.preventDefault(); progressPanel.toggle(); }
@@ -4540,7 +4619,7 @@ async function openCapture(opts) {
   await Promise.all([store.close(editor.state.doc), notebook.close()]);
   capture.show(opts);
 }
-window.addEventListener('online', () => writeOut());
+if (!inPane) window.addEventListener('online', () => writeOut());
 
 // The day review: Claude sums up a day's page and sorts what's on it, and you
 // decide each thing (Daybook, keep thinking, split, let go).
@@ -4604,12 +4683,248 @@ async function makeList(list) {
   listSoon(500);
 }
 // Sharing again while Inkwell is already open brings it to the front.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) landShares(); });
+if (!inPane) document.addEventListener('visibilitychange', () => { if (!document.hidden) landShares(); });
+
+// ---------- side by side ----------
+
+// Other places open in panes beside the main view (panes.js). The main window
+// keeps them; a pane asks it.
+const panes = inPane ? null : new PaneHost({
+  mainPlace: () => lastPlace,
+  goMain: (place) => go(place),
+  focusMain: () => { window.focus(); try { currentEditor().commands.focus(); } catch { /* nothing to type in */ } },
+  isOff: () => root.classList.contains('hide-panes'),
+  toast
+});
+if (panes) window.__panes = panes;
+
+async function openBeside(place, opts = {}) {
+  if (!place?.view) return;
+  const h = paneHost();
+  if (!h) return;
+  await h.open(place, { from: inPane ? PANE_ID : null, ...opts });
+}
+async function openEntryBeside(id) { await openBeside(await placeOf(id)); }
+
+// "Open beside" in a handle menu (Peek beside on a phone).
+function besideItem(place) {
+  if (root.classList.contains('hide-panes') || !paneHost()) return null;
+  return touch.matches
+    ? { label: 'Peek beside', run: () => openBeside(place()) }
+    : { label: 'Open beside', keys: 'Middle-click', run: () => openBeside(place()) };
+}
+// "Move to <a page open beside>", one for each pane showing a page, day or chapter.
+function paneMoves(ids, here) {
+  const roots = (paneHost()?.roots() || []).filter((r) => r.id !== here && !(inPane && r.pane === PANE_ID));
+  // The main window counts too, from a pane.
+  if (inPane && lastMainRoot() && lastMainRoot().id !== here) roots.unshift(lastMainRoot());
+  const seen = new Set();
+  return roots.filter((r) => !seen.has(r.id) && seen.add(r.id)).slice(0, 3).map((r) => ({
+    label: `Move to ${r.title}`,
+    run: async () => {
+      const fallback = r.id.startsWith('day-') ? entry('day', { id: r.id, title: r.id.slice(4) }) : null;
+      const n = await moveEntries(ids, r.id, { fallback });
+      if (n) toast(`Moved to ${r.title}`);
+    }
+  }));
+}
+// From a pane: the page or chapter open in the main window.
+function lastMainRoot() {
+  try {
+    const main = window.parent;
+    const pl = main.__panes?.hooks.mainPlace();
+    const id = pl?.view === 'notebook' ? pl.pageId : pl?.view === 'write' ? pl.chapterId : null;
+    if (!id) return null;
+    const title = main.document.querySelector('#crumb .here')?.textContent || 'the main view';
+    return { id, title };
+  } catch { return null; }
+}
+
+// Ctrl + Alt + → / ←: the next or previous pane (the main view counts).
+// Ctrl + Alt + W closes the pane you're in; Ctrl + Alt + Enter makes it the main view.
+function paneKeys(e, m) {
+  const h = paneHost();
+  if (inPane && e.altKey && !m && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.target.closest?.('input, textarea, [contenteditable="true"]')) {
+    e.preventDefault();
+    paneStep(e.key === 'ArrowLeft' ? -1 : 1);
+    return true;
+  }
+  if (!h || !m || !e.altKey || e.shiftKey) return false;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    if (!h.count) return false;
+    e.preventDefault();
+    if (inPane) h.focused(PANE_ID); else h.focused('');
+    h.cycle(e.key === 'ArrowRight' ? 1 : -1);
+    return true;
+  }
+  if (e.code === 'KeyW' && h.count) {
+    e.preventDefault();
+    if (inPane) h.close(PANE_ID); else toast('Click into a pane to close it (or its ×)');
+    return true;
+  }
+  if (e.key === 'Enter' && inPane) { e.preventDefault(); h.swap(PANE_ID); return true; }
+  return false;
+}
+
+// Middle-click opens it beside, the way a browser opens a link in a new tab:
+// a line's or paragraph's six dots, a [[link]], a #tag, a card in the Library
+// or a world, a chapter in the outline, a part of the path, a result in Go.
+const BESIDE = 'a[data-ref], .line-gutter, .block-handle, .tag[data-tag], [data-id], .tree-chapter, .crumb-part, #palette-list > li, .past-list [data-line]';
+const besideTarget = (e) => (e.button === 1 && !root.classList.contains('hide-panes') && paneHost() ? e.target.closest?.(BESIDE) : null);
+// (No auto-scroll from the middle button on these.)
+document.addEventListener('mousedown', (e) => { if (besideTarget(e)) { e.preventDefault(); e.stopPropagation(); } }, true);
+document.addEventListener('auxclick', (e) => { if (besideTarget(e)) { e.preventDefault(); e.stopPropagation(); } }, true);
+document.addEventListener('pointerdown', (e) => {
+  const el = besideTarget(e);
+  if (!el) return;
+  e.preventDefault();
+  e.stopPropagation();
+  middleBeside(el).catch((err) => console.error(err));
+}, true);
+async function middleBeside(el) {
+  if (el.matches('a[data-ref]')) return openEntryBeside(el.getAttribute('data-ref'));
+  if (el.matches('.line-gutter')) {
+    const eid = el.dataset.eid;
+    if (eid && notebook.page) return openBeside({ view: 'notebook', pageId: notebook.page.id, zoom: eid });
+    return;
+  }
+  if (el.matches('.block-handle')) {
+    const eid = editor.view.dom.children[blocks.index]?.getAttribute('data-eid');
+    if (state.chapterId) return openBeside({ view: 'write', chapterId: state.chapterId, ...(eid ? { focus: eid } : {}) });
+    return;
+  }
+  if (el.matches('.tag[data-tag]')) return openBeside({ view: 'tags', tag: el.dataset.tag });
+  if (el.matches('.past-list [data-line]')) return openBeside({ view: 'notebook', pageId: el.dataset.day, line: el.dataset.line });
+  if (el.dataset.id && (await placeOf(el.dataset.id))) return openEntryBeside(el.dataset.id);
+  // Anything else that takes you somewhere: where its click would go.
+  besideUntil = Date.now() + 1500;
+  el.click();
+}
+
+// ---------- dropping a line dragged from another window ----------
+
+// The spot under (x, y) in this window: a line on the page open here, or a
+// paragraph in the chapter open here.
+function dropSpotAt(x, y) {
+  if (inNotebook() && notebook.page) {
+    const dom = notebook.editor.view.dom;
+    let li = document.elementFromPoint(x, y)?.closest?.('li');
+    if (li && !dom.contains(li)) li = null;
+    let after = true;
+    const box = dom.getBoundingClientRect();
+    if (!li) {
+      // Beside or below the lines: at the end of the page (or zoomed line).
+      if (x < box.left - 80 || x > box.right + 80 || y < box.top) return null;
+      const shown = [...dom.querySelectorAll('li')].filter((l) => l.getClientRects().length && !l.classList.contains('zoom-root') && !l.classList.contains('zoom-path'));
+      li = shown.filter((l) => !l.parentElement.closest('li') || l.parentElement.closest('li').classList.contains('zoom-root')).at(-1) || shown.at(-1);
+      if (!li) return null;
+    } else {
+      const r = (li.querySelector(':scope > p') || li).getBoundingClientRect();
+      after = y > r.top + r.height / 2;
+    }
+    const eid = li.querySelector(':scope > .line-gutter')?.dataset.eid;
+    if (!eid) return null;
+    let top = li;
+    while (top.parentElement?.closest('li') && dom.contains(top.parentElement.closest('li'))) top = top.parentElement.closest('li');
+    const r = (li.querySelector(':scope > p') || li).getBoundingClientRect();
+    return { kind: 'line', rootId: notebook.page.id, eid, after, top: top.querySelector(':scope > .line-gutter')?.dataset.eid || eid, mark: { left: r.left, width: r.width, top: after ? r.bottom : r.top } };
+  }
+  if (writing() && state.chapterId) {
+    const dom = editor.view.dom;
+    let el = document.elementFromPoint(x, y);
+    while (el && el.parentElement !== dom) el = el.parentElement;
+    if (!el) {
+      const box = dom.getBoundingClientRect();
+      if (x < box.left - 80 || x > box.right + 80 || y < box.bottom) return null;
+      el = dom.lastElementChild;
+      if (!el) return null;
+    }
+    const r = el.getBoundingClientRect();
+    const after = y > r.top + r.height / 2 || !el.previousElementSibling;
+    const prev = after ? el : el.previousElementSibling;
+    const pr = prev.getBoundingClientRect();
+    return { kind: 'para', rootId: state.chapterId, after: prev.getAttribute('data-eid'), mark: { left: pr.left, width: pr.width, top: pr.bottom } };
+  }
+  return null;
+}
+let dropMark = null;
+function showDrop(spot) {
+  if (!spot) { dropMark?.remove(); dropMark = null; return false; }
+  if (!dropMark) { dropMark = document.createElement('div'); dropMark.className = 'line-drop'; document.body.append(dropMark); }
+  Object.assign(dropMark.style, { left: `${spot.mark.left}px`, width: `${spot.mark.width}px`, top: `${spot.mark.top - 1}px` });
+  return true;
+}
+// Alt + drop: a link to the line, where it was dropped.
+async function addLinkAt(eid, spot) {
+  showDrop(null);
+  const row = await getEntry(eid);
+  if (!row || gone(row)) return false;
+  const title = (row.text || row.title || 'Untitled').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Untitled';
+  const ed = spot.kind === 'line' ? notebook.editor : editor;
+  const s = ed.schema.nodes;
+  const ref = s.entryRef.create({ id: eid, title });
+  let at = -1;
+  let size = 0;
+  ed.state.doc.descendants((n, pos) => {
+    if (at >= 0) return false;
+    const match = spot.kind === 'line' ? n.type.name === 'listItem' && n.attrs.eid === spot.eid : n.attrs?.eid === spot.after && n.isBlock;
+    if (match) { at = pos; size = n.nodeSize; }
+    return at < 0;
+  });
+  if (at < 0) return false;
+  const node = spot.kind === 'line' ? s.listItem.create(null, s.paragraph.create(null, ref)) : s.paragraph.create(null, ref);
+  const to = spot.kind === 'line' && !spot.after ? at : at + size;
+  ed.view.dispatch(ed.state.tr.insert(to, node));
+  ed.commands.focus();
+  return true;
+}
+// The window it was dragged from moves it (so its own editor lets go of it).
+async function moveOutTo(eid, spot) {
+  const row = await getEntry(eid);
+  if (!row || gone(row)) return false;
+  const here = inNotebook() ? notebook.page?.id : state.chapterId;
+  // The same page in both windows: the one it was dropped in moves it there.
+  if (here === spot.rootId) return true;
+  const fallback = spot.rootId.startsWith('day-') ? entry('day', { id: spot.rootId, title: spot.rootId.slice(4) }) : null;
+  const n = await moveEntries([eid], spot.rootId, { after: spot.kind === 'line' ? spot.top : spot.after, fallback });
+  return n > 0;
+}
+// Once the line has arrived here, it goes exactly where it was dropped.
+async function settleAt(eid, spot) {
+  showDrop(null);
+  if (spot.kind !== 'line') return true;
+  for (let i = 0; i < 40; i++) {
+    if (!notebook.store.idle) await notebook.store.flush(notebook.editor.state.doc);
+    let has = false;
+    notebook.editor.state.doc.descendants((n) => { if (n.attrs?.eid === eid) has = true; return !has; });
+    if (has) return dropLineAt(notebook.editor.view, eid, spot.eid, spot.after);
+    if (i % 5 === 4) await notebook.applyRemote([await getEntry(eid)].filter(Boolean));
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return false;
+}
+window.__pane = {
+  go: (place) => go(place),
+  focus: () => { try { currentEditor().commands.focus(); } catch { /* nothing to type in */ } },
+  closing: () => { store.close(editor.state.doc); notebook.close(); },
+  dropOver: (x, y) => showDrop(dropSpotAt(x, y)),
+  dropClear: () => showDrop(null),
+  dropSpot: (x, y) => dropSpotAt(x, y),
+  addLink: (eid, spot) => addLinkAt(eid, spot),
+  moveOut: (eid, spot) => moveOutTo(eid, spot),
+  settle: (eid, spot) => settleAt(eid, spot)
+};
+// A line dragged by its dots out of this window, over another one.
+setLineDragOut({
+  over: (e) => !!paneHost()?.dragOver(inPane ? PANE_ID : '', e.clientX, e.clientY),
+  drop: (e, eid) => paneHost()?.drop(inPane ? PANE_ID : '', e.clientX, e.clientY, { eid, alt: e.altKey }) || false
+});
 
 // ---------- start ----------
 
 async function start() {
   if (localStorage.getItem('font')) setFont(localStorage.getItem('font'));
+  if (inPane) return startPane();
   // A first run gets a starter novel, but with sync only once the cloud has
   // said the account is empty. Signed in, wait a moment for that first pull,
   // so the app opens on your own writing; signed out, it waits for sign-in.
@@ -4644,6 +4959,8 @@ async function start() {
   // Opened where it belongs (tests wait for this before moving around).
   root.classList.remove('starting');
   root.dataset.started = '1';
+  // The panes that were open beside come back.
+  panes?.restore();
   // A recording cut short (the app closed, the phone died) is kept, not lost.
   const recovered = await recoverRecording().catch((e) => { console.error(e); return null; });
   if (recovered) { toast('A recording that was cut short is kept on today’s page'); await showCapture(recovered); }
@@ -4694,6 +5011,19 @@ async function start() {
   // Search reads everything once; do it while idle so the first search is quick.
   setTimeout(() => (window.requestIdleCallback || setTimeout)(() => searchIndex().catch((e) => console.warn(e))), 15000);
   if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('./sw.js');
+}
+
+// A pane opens where it was asked to and leaves the rest (syncing, sharing,
+// tidying, recordings) to the main window.
+async function startPane() {
+  await sync.attach();
+  setOwnWorkflows(await byKind('workflow'));
+  const place = paneHost()?.placeFor(PANE_ID) || { view: 'notebook', pageId: dayId(isoToday()) };
+  await go(place);
+  historyMode = 'push';
+  root.classList.remove('starting');
+  root.dataset.started = '1';
+  paneHost()?.started(PANE_ID);
 }
 
 start();

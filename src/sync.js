@@ -206,6 +206,14 @@ export class Sync {
     await this.run();
   }
 
+  // A pane beside the main window: it knows who's signed in (for who wrote
+  // what, and for pictures) but leaves the syncing to the main window.
+  async attach() {
+    if (!this.backend) return;
+    this.user = await this.backend.user().catch(() => null);
+    if (this.user) { setWriter(this.user.id); setFileBackend(this.backend, this.user.id); }
+  }
+
   signIn() { return this.backend?.signIn(); }
   invoke(name, body) { return this.backend.invoke(name, body); }
 
