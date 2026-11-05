@@ -1805,7 +1805,7 @@ html:not(.has-panes):not(.panes-sheet) .panes { display: none; }
 .pane-divider:hover { background: linear-gradient(90deg, transparent 3px, var(--line) 3px, var(--line) 5px, transparent 5px); }
 .pane-spine { display: none; }
 .pane.spine > :not(.pane-spine) { display: none; }
-.pane.spine .pane-spine { display: block; flex: 1; width: 100%; border: 0; background: var(--panel); color: var(--muted); writing-mode: vertical-rl; transform: rotate(180deg); font: 12px var(--ui); padding: 16px 0; text-align: end; white-space: nowrap; overflow: hidden; cursor: pointer; }
+.pane.spine .pane-spine { display: block; flex: 1; width: 100%; border: 0; background: var(--panel); color: var(--muted); writing-mode: vertical-rl; text-orientation: sideways; transform: rotate(180deg); font: 12px var(--ui); padding: 16px 0; text-align: end; white-space: nowrap; overflow: hidden; cursor: pointer; }
 .pane.spine .pane-spine:hover { color: var(--ink); }
 html.pane-resizing, html.pane-resizing * { cursor: col-resize !important; user-select: none; }
 html.pane-resizing .pane-frame { pointer-events: none; }
