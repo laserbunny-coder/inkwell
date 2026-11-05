@@ -745,6 +745,22 @@ export const OutlineFold = Extension.create({
             return true;
           });
         }
+        // Enter on an empty indented line keeps one blank line between
+        // paragraphs at that level: when the line above it has words, a new
+        // line starts below and this one stays blank. Only when the line above
+        // is blank too (or there's none) does Enter step out a level.
+        if (li && !li.firstChild.content.size && !kidsOf(li) && $e.depth > 3 && $e.node($e.depth - 1) === li &&
+          li.attrs.eid !== st?.zoom && $e.index($e.depth - 2) > 0) {
+          const prev = $e.node($e.depth - 2).child($e.index($e.depth - 2) - 1);
+          if (prev.firstChild?.content.size) {
+            return this.editor.commands.command(({ tr, dispatch }) => {
+              const after = $e.after($e.depth - 1);
+              tr.insert(after, this.editor.schema.nodes.listItem.create(null, this.editor.schema.nodes.paragraph.create()));
+              if (dispatch) tr.setSelection(TextSelection.create(tr.doc, after + 2)).scrollIntoView();
+              return true;
+            });
+          }
+        }
         // Enter inside a mirror doesn't cut its words in two (that would cut
         // its original too); it opens a new line after it.
         const { $from: $m, $to: $mt } = this.editor.state.selection;
