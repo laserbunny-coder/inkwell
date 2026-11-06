@@ -15,7 +15,14 @@ try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require(
 let failed = 0;
 const errors = [];
 async function check(name, fn) {
-  try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message}`); if (process.env.STACK) console.log(e.stack); }
+  try { await fn(); console.log(`ok   ${name}`); } catch (e) {
+    failed += 1;
+    const at = (e.stack || '').split('\n').find((l) => l.includes('woven.mjs')) || '';
+    let seen = '';
+    try { seen = await p.evaluate(() => [...document.querySelectorAll('.toast, .palette:not([hidden]), .wv-sheet')].map((x) => `${x.className}: ${x.innerText.slice(0, 200)}`).join(' | ')); } catch {}
+    console.log(`FAIL ${name}\n     ${e.message}\n     ${at.trim()}${seen ? `\n     on screen: ${seen}` : ''}`);
+    if (process.env.STACK) console.log(e.stack);
+  }
 }
 
 // ---------- without a browser ----------
