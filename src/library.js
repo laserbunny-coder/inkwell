@@ -249,9 +249,12 @@ export async function newPiece(parentId, type, title, lines, label) {
   const world = await worldOf({ parent_id: parentId });
   // A script brought in with its scene numbers stays numbered.
   const numbered = lines?.some((l) => l.code);
+  // A new script starts in the view you last picked (Woven or Classic).
+  let woven = false;
+  try { woven = type === 'screenplay' && !lines?.length && localStorage.getItem('scriptView') === 'woven'; } catch { /* no storage */ }
   const project = entry('project', {
     title, parent_id: parentId, area_id: world?.area_id || null, sort: (siblings.at(-1)?.sort || 0) + 1,
-    fields: { type, ...(levels ? { levels } : {}), ...(label ? { label } : {}), ...(numbered ? { numbered: true } : {}) }
+    fields: { type, ...(levels ? { levels } : {}), ...(label ? { label } : {}), ...(numbered ? { numbered: true } : {}), ...(woven ? { woven: true } : {}) }
   });
   rows.push(project);
   if (type === 'novel') {

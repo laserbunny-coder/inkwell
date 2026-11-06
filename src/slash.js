@@ -15,6 +15,8 @@ const MATCH = /(?:^|\s)\/([\p{L}\p{N}]{0,20})$/u;
 // "more" items only show once something is typed (the weekdays, say).
 let itemsFor = () => [];
 export function setSlashItems(fn) { itemsFor = fn; }
+// Whether the menu is showing over this editor (its keys come first then).
+export const slashOpen = (view) => !!shown && shown.view === view && !box.hidden;
 
 const box = document.createElement('div');
 box.className = 'slash';

@@ -792,8 +792,8 @@ try {
     await p.keyboard.type('MARA');
     await p.keyboard.press('Enter');
     await p.keyboard.type('Is anyone up here?');
+    // After dialogue, Enter goes to the next name.
     await p.keyboard.press('Enter');
-    await p.keyboard.press('Tab');
     const els = await p.$$eval('#editor .ProseMirror > p', (ps) => ps.map((x) => x.dataset.el || 'action'));
     assert.deepEqual(els, ['scene', 'action', 'character', 'dialogue', 'character']);
     assert.equal(await p.locator('#editor p[data-el="scene"]').evaluate((x) => getComputedStyle(x).textTransform), 'uppercase');
