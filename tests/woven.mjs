@@ -72,10 +72,14 @@ const clickOn = async (text) => {
   await p.waitForFunction((t) => window.__editor.state.selection.$from.parent.textContent.includes(t), text);
 };
 const run = async (label) => {
+  // Wait for the palette to have focus and fill it whole, so no typed letters
+  // are lost on a slow machine, then choose the command by its name.
   await p.keyboard.press('Control+K');
-  await p.keyboard.type(label);
-  await p.waitForFunction((l) => document.querySelector('#palette-list li')?.textContent.includes(l), label);
-  await p.keyboard.press('Enter');
+  await p.waitForFunction(() => document.activeElement?.id === 'palette-input');
+  await p.locator('#palette-input').fill(label);
+  const item = p.locator('#palette-list li', { hasText: label }).first();
+  await item.waitFor();
+  await item.click();
 };
 
 try {
