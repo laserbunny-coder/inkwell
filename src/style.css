@@ -163,6 +163,110 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 :root.script #editor p[data-el="dialogue"]:has(> br:only-child)::before { content: 'Dialogue'; }
 :root.script #editor p[data-el="transition"]:has(> br:only-child)::before { content: 'CUT TO:'; float: right; }
 
+/* Woven: a script written as flowing prose (woven.js). The writing font and
+   size are the Aa panel's; names and words sit centred under each other; each
+   scene heading is hidden and drawn as a faint line, with your title on it and a
+   dot in the margin. The look (wovenlook.js) sets the --wv-* values per script. */
+:root { --wv-blue: #3a6db0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --wv-blue: #86aee6; } }
+:root[data-theme="dark"] { --wv-blue: #86aee6; }
+:root[data-theme="light"] { --wv-blue: #3a6db0; }
+:root.script.woven #editor .ProseMirror { font-family: var(--prose); font-size: var(--text-size, 21px); line-height: 1.7; }
+:root.script.woven #editor .ProseMirror p { margin: 0 0 1.1em -8px; }
+:root.script.woven #editor p[data-el="scene"] { display: none; }
+:root.script.woven #editor p[data-el="character"] { text-align: center; text-transform: uppercase; letter-spacing: .06em; font-size: .78em; font-family: var(--ui); font-weight: 600; color: var(--wv-name-c, var(--wv-blue)); margin: 1.5em 0 .15em -8px; }
+:root.script.woven #editor p[data-el="dialogue"] { text-align: center; margin: 0 12% 1.1em calc(12% - 8px); }
+:root.script.woven #editor p[data-el="paren"] { text-align: center; font-style: italic; color: var(--muted); font-size: .9em; margin: 0 18% .1em calc(18% - 8px); }
+:root.script.woven #editor p[data-el="dialogue"]:has(+ p[data-el="paren"]) { margin-bottom: .1em; }
+:root.script.woven #editor p[data-el="transition"] { text-align: right; text-transform: uppercase; font-size: .78em; letter-spacing: .08em; color: var(--muted); font-family: var(--ui); }
+:root.script.woven.wv-dl-left #editor :is(p[data-el="character"], p[data-el="dialogue"], p[data-el="paren"]) { text-align: left; margin-left: calc(10% - 8px); margin-right: 8%; }
+:root.script.woven.wv-dl-left #editor p[data-el="paren"] { margin-left: calc(14% - 8px); }
+/* Empty lines say what they're for, centred like the words. */
+:root.script.woven #editor p:has(> br:only-child)::before { content: 'What we see…'; float: none; display: block; height: 0; text-align: inherit; }
+:root.script.woven #editor p[data-el="character"]:has(> br:only-child)::before { content: 'NAME'; }
+:root.script.woven #editor p[data-el="dialogue"]:has(> br:only-child)::before { content: 'What they say'; }
+:root.script.woven #editor p[data-el="paren"]:has(> br:only-child)::before { content: '(how)'; }
+:root.script.woven #editor p[data-el="transition"]:has(> br:only-child)::before { content: 'CUT TO:'; }
+/* The faint line between scenes, with its title on it. */
+.wv-line { display: none; }
+:root.script.woven .wv-line { display: flex; position: relative; align-items: center; justify-content: center; min-height: 1.4em; margin: 1.5em 0 1.3em; user-select: none; font-size: var(--text-size, 21px); }
+:root.script.woven .wv-line::before { content: ''; position: absolute; top: 50%; left: calc((100% - var(--wv-line-len, 100%)) / 2); right: calc((100% - var(--wv-line-len, 100%)) / 2); border-top: var(--wv-line-w, 1px) solid var(--wv-line-c, var(--ink)); opacity: var(--wv-line-o, .18); }
+:root.script.woven .wv-line[data-kind="continuous"]::before { border-top-style: dashed; }
+:root.script.woven .wv-line[data-kind="flashback"]::before { border-top-style: dotted; }
+:root.script.woven .wv-line.wv-top { margin: 0 0 .6em; min-height: 1.2em; }
+:root.script.woven .wv-line.wv-top::before { display: none; }
+:root.script.woven .ProseMirror > .wv-line:first-child:not(.wv-top) { margin-top: .2em; }
+.wv-title { position: relative; border: 0; background: var(--bg); padding: 0 .7em; font-family: var(--wv-title-font, var(--prose)); font-size: var(--wv-title-size, .8em); color: var(--wv-title-c, var(--muted)); text-transform: var(--wv-title-case, none); letter-spacing: var(--wv-title-track, .01em); line-height: 1.3; cursor: pointer; border-radius: 4px; }
+.wv-title:hover { color: var(--accent); }
+.wv-line.untitled .wv-title { color: var(--faint); opacity: .7; font-family: var(--ui); font-size: 11px; letter-spacing: .04em; text-transform: none; }
+.wv-line.wv-top.untitled .wv-title { visibility: hidden; }
+.wv-line.wv-top.untitled:hover .wv-title { visibility: visible; }
+:root.wv-tleft .wv-line { justify-content: flex-start; }
+:root.wv-tleft .wv-title { padding-left: 0; margin-left: 0; }
+.wv-dot { position: absolute; left: -30px; top: 50%; width: 9px; height: 9px; margin-top: -4.5px; padding: 0; border: 1.5px solid transparent; border-radius: 50%; background: var(--faint); opacity: .55; cursor: pointer; }
+.wv-dot::after { content: ''; position: absolute; inset: -8px; }
+.wv-dot:hover { opacity: 1; transform: scale(1.25); }
+.wv-line[data-status="guess"] .wv-dot { background: transparent; border-color: var(--faint); }
+.wv-line[data-status="missing"] .wv-dot { background: #d9a441; opacity: .9; }
+@media (max-width: 700px) { .wv-dot { left: -16px; } }
+/* Quiet: Focus keeps the line only (titles too with Ctrl + Shift + .), and no dots. */
+:root.focus .wv-dot, :root.reading .wv-dot, :root.hide-scenedots .wv-dot { display: none; }
+:root.focus:not(.focus-sections) .wv-title, :root.reading .wv-title, :root.hide-sections:not(.focus) .wv-title { visibility: hidden; }
+:root.focus.focus-sections .wv-line.untitled:not(:hover) .wv-title { opacity: .45; }
+/* A title is the section just above the hidden heading: drawn on the line, so the section itself hides. */
+:root.script.woven .scene-break:is([data-level="3"], [data-level="4"], [data-level="5"], [data-level="6"]):has(+ .wv-line) { display: none; }
+/* Scene numbers, once numbered, sit on the line's title. */
+/* The scene's card: kind, place, inside or out, time, title. */
+.wv-pop { position: fixed; z-index: 80; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.22); padding: 14px; font-family: var(--ui); font-size: 13px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 24px); overflow: auto; }
+.wv-pop[hidden] { display: none; }
+.wv-pop-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.wv-pop-n { font-weight: 600; }
+.wv-pop-slug { font-family: 'Courier Prime', 'Courier New', monospace; font-size: 12px; color: var(--muted); text-transform: uppercase; }
+.wv-pop-guess { flex-basis: 100%; font-size: 11.5px; color: var(--faint); }
+.wv-pop input { width: 100%; box-sizing: border-box; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 7px 9px; font: inherit; }
+.wv-pop input:focus { outline: none; border-color: var(--accent); }
+.wv-pop-title { font-family: var(--prose) !important; font-size: 15px !important; }
+.wv-pop-row { display: flex; flex-direction: column; gap: 5px; }
+.wv-pop-row input + input { margin-top: 4px; }
+.wv-pop-label, .wv-tune-label { font-size: 11px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.wv-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.wv-chip { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.wv-chip:hover { color: var(--ink); border-color: var(--faint); }
+.wv-chip.current { background: var(--tint); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.wv-pop-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: flex-end; }
+.wv-pop-lack { flex-basis: 100%; font-size: 12px; color: var(--muted); }
+.wv-pop-remove { margin-right: auto; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; padding: 0; }
+/* The Aa panel's part for a script: Woven or Classic, and the look. */
+.woven-pick { display: flex; flex-direction: column; gap: 8px; margin-bottom: 6px; }
+.woven-pick[hidden] { display: none; }
+.wv-views { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.wv-views button { border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; }
+.wv-views button span { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); }
+.wv-views button.current { border-color: var(--accent); background: var(--tint); color: var(--accent); }
+.woven-look[hidden] { display: none; }
+.woven-look { display: flex; flex-direction: column; gap: 8px; }
+.wv-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.wv-preset { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 10px; font-size: 14px; cursor: pointer; color: var(--ink); }
+.wv-preset.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.wv-tune summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+.wv-tune[open] summary { margin-bottom: 6px; }
+.wv-tune-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.wv-font { font-size: 14px; }
+.wv-ask { display: flex; gap: 6px; }
+.wv-ask input { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 12.5px; }
+/* Prepare for shoot. */
+.wv-sheet { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.35); display: flex; align-items: flex-start; justify-content: center; padding: 8vh 16px 16px; overflow: auto; }
+.wv-sheet-card { width: min(560px, 100%); background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; font-family: var(--ui); font-size: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+.wv-sheet-card h2 { margin: 0 0 10px; font-size: 18px; font-weight: 600; }
+.wv-sheet-card h3 { margin: 18px 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.wv-sheet-note, .wv-sheet-busy { color: var(--muted); }
+.wv-qs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.wv-q { display: flex; flex-direction: column; gap: 5px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.wv-q.answered { opacity: .5; }
+.wv-q-n { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.wv-q-in { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12.5px; min-width: 10ch; }
+.wv-sheet-foot { display: flex; justify-content: flex-end; margin-top: 18px; }
+
 .scene-break { display: flex; justify-content: center; align-items: center; gap: 12px; margin: .4em 0 1.6em; color: var(--faint); font-family: var(--ui); font-size: 12px; letter-spacing: .18em; user-select: none; }
 .scene-break.ProseMirror-selectednode { color: var(--accent); }
 .scene-title { border: 0; background: transparent; color: var(--faint); font-size: 12px; letter-spacing: .04em; width: 14ch; padding: 4px; border-radius: 4px; }

@@ -18,8 +18,10 @@ export const ELEMENTS = [
 ];
 export const elementLabel = (id) => ELEMENTS.find((e) => e.id === id)?.label || 'Action';
 
-// What comes after each element when you press Enter.
-const NEXT = { scene: 'action', action: 'action', character: 'dialogue', paren: 'dialogue', dialogue: 'action', transition: 'scene' };
+// What comes after each element when you press Enter. After dialogue the
+// next name (most scenes are people talking back and forth); Enter on that
+// empty name goes back to action.
+const NEXT = { scene: 'action', action: 'action', character: 'dialogue', paren: 'dialogue', dialogue: 'character', transition: 'scene' };
 // Tab steps through these; Shift+Tab goes back.
 const CYCLE = ['action', 'character', 'dialogue', 'paren', 'transition', 'scene'];
 

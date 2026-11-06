@@ -333,6 +333,14 @@
   </div>
 
   <div class="page-settings" role="dialog" aria-label="View settings" hidden>
+    <div class="woven-pick" hidden>
+      <span class="row"><span>This script</span></span>
+      <div class="wv-views" role="radiogroup" aria-label="Script view">
+        <button type="button" data-sv="woven" role="radio">Woven<span>flowing, no scene headings</span></button>
+        <button type="button" data-sv="classic" role="radio">Classic<span>the standard page</span></button>
+      </div>
+      <div class="woven-look" hidden></div>
+    </div>
     <label><span class="row"><span>Page width</span><span id="width-value"></span></span>
       <input type="range" id="page-width" min="420" max="1100" step="10"></label>
     <label><span class="row"><span>Text size</span><span id="size-value"></span></span>
@@ -357,6 +365,7 @@
     <label class="switch"><input type="checkbox" data-show="linkpics"> Pictures on shared links</label>
     <label class="switch"><input type="checkbox" data-show="sections"> Section titles in scripts <span class="keys">⌘⇧.</span></label>
     <label class="switch"><input type="checkbox" data-show="synopsis"> Section summaries in scripts</label>
+    <label class="switch"><input type="checkbox" data-show="scenedots"> Scene dots beside Woven scripts</label>
     <label class="switch"><input type="checkbox" data-show="claude"> Claude’s notes in the margin</label>
     <label class="switch"><input type="checkbox" data-show="comments"> Readers’ comments in the margin</label>
     <label class="switch"><input type="checkbox" id="fresh-eyes"> Fresh eyes: reread it in a new font, page and colour <span class="keys">⌘⇧Y</span></label>

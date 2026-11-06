@@ -29,7 +29,11 @@ import { vaultZip, vaultFiles, pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain, fromOutline, looksLikeOutline, SceneCodes, NUMBER_SCENES, assignCodes, codeOrder } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
 import { moveLine, canMoveLine, indentLines, outdentLines, removeLine, toggleDone, foldKey, toggleChecklist, toggleBox, lineChecks, hasBox, loadDoc, replaceDoc, setLineDragOut, dropLineAt } from './outline.js';
-import { SlashMenu, setSlashItems } from './slash.js';
+import { SlashMenu, setSlashItems, slashOpen } from './slash.js';
+import { Woven, ScenePop, newScene, guessAll, redraw as redrawWoven, placeList, sceneAt, scenesOf, ensureHeading, setMarker, KINDS as SCENE_KINDS } from './woven.js';
+import { applyLook, renderLook, cleanLook, DEFAULT_LOOK } from './wovenlook.js';
+import { prepareForShoot } from './wovenprep.js';
+import { elementsIn, plainPages, newElement } from './production.js';
 import { openHandleMenu } from './handlemenu.js';
 import { showSaveButton } from './savebutton.js';
 import { openPicker } from './picker.js';
@@ -71,11 +75,16 @@ const extensions = [
   TagMarks.configure({ onTag: (t) => notebook.showTag(t) }),
   ScriptElements.configure({ isScript: () => isScript() }),
   SceneCodes.configure({ numbering: () => (isScript() && state.project?.fields?.numbered ? numbering : null) }),
+  Woven.configure({ isWoven: () => isWoven(), busy: (v) => slashOpen(v), places: (doc) => placeList(biblePlaces, doc), onDot: (ref, anchor, title) => scenePop.open(ref, anchor, title), onBlocked: (m) => toast(m) }),
   FileEmbed.configure({ onTooBig: tooBig }), SlashMenu
 ];
 // The scene numbers in the numbered script's other chapters, around the one open.
 let numbering = { before: null, after: null, used: [] };
 const isScript = () => root.classList.contains('script');
+// Woven: the script written as flowing prose, scene headings hidden (woven.js).
+const isWoven = () => root.classList.contains('woven');
+// The world's places (bible pages that are locations), for guessing where a scene is.
+let biblePlaces = [];
 // What the levels of a script's sections are called (Act, Sequence, Scene…), per piece.
 const sectionNames = () => state.project?.fields?.sections || SECTION_NAMES;
 function tooBig(f) { toast(`“${f.name}” is too big to add (the limit is ${Math.round(MAX_BYTES / 1048576)} MB)`); }
@@ -141,7 +150,7 @@ function paragraphMenu({ node, index, count, handle }) {
     ? { label: 'Turn into', chips: [1, 2, 3, ...(node.attrs.level > 3 ? [node.attrs.level] : [])].map((l) => ({ label: sectionName(l, sectionNames()), current: (node.attrs.level || 1) === l, run: at((from) => editor.view.dispatch(editor.state.tr.setNodeMarkup(from, undefined, { ...editor.state.doc.nodeAt(from).attrs, level: l }))) })) }
     : null;
   const turn = depthChips || (!text ? null : script
-    ? { label: 'Turn into', chips: ELEMENTS.map((x) => ({ label: x.short || x.label, current: el === x.id, run: into((c) => (kind === 'heading' ? c.setNode('paragraph') : c).updateAttributes('paragraph', { el: x.id })) })) }
+    ? { label: 'Turn into', chips: ELEMENTS.map((x) => ({ label: x.short || x.label, current: el === x.id, run: x.id === 'scene' && isWoven() ? at((from) => { editor.chain().setTextSelection(from + 1).focus().run(); newScene(editor); }) : into((c) => (kind === 'heading' ? c.setNode('paragraph') : c).updateAttributes('paragraph', { el: x.id })) })) }
     : { label: 'Turn into', chips: [
       { label: 'Paragraph', current: kind === 'paragraph', run: into((c) => c.setNode('paragraph')) },
       { label: 'Heading', current: kind === 'heading', run: into((c) => c.setNode('heading', { level: 2 })) }
@@ -176,6 +185,12 @@ function paragraphMenu({ node, index, count, handle }) {
 }
 // A new section in a script, at the same depth as the one it follows (a
 // scene after a scene), ready to name. Tab in its name goes a level deeper.
+// Changes the line you're on. In Woven a scene heading isn't a line you see,
+// so "Scene" starts a new scene there instead.
+function setElement(el) {
+  if (el === 'scene' && isWoven()) { editor.commands.focus(); return newScene(editor); }
+  return editor.chain().focus().updateAttributes('paragraph', { el }).run();
+}
 function insertSection(at) {
   let level = 1;
   editor.state.doc.forEach((n, pos) => { if (pos < at && n.type.name === 'sceneBreak') level = n.attrs.level || 1; });
@@ -277,7 +292,7 @@ tapBar(scriptBar, 'button[data-el], button[data-alt], button[data-ins], button[d
   } else if (what === 'prev' || what === 'next') flip(editor, what === 'prev' ? -1 : 1);
   else if (b.dataset.el === 'section') {
     insertSection(editor.state.selection.$from.before(1));
-  } else editor.chain().focus().updateAttributes('paragraph', { el: b.dataset.el }).run();
+  } else setElement(b.dataset.el);
   placeScriptBar();
 });
 editor.on('transaction', placeScriptBar);
@@ -947,9 +962,11 @@ async function openChapter(id) {
   if (book && book.id !== state.project?.id) state.project = book;
   root.classList.toggle('script', bookType(book) === 'screenplay');
   root.classList.toggle('numbered', !!book?.fields?.numbered);
+  await syncWoven(book);
   numbering = book?.fields?.numbered ? await numberingAround(book, id) : { before: null, after: null, used: [] };
   requestAnimationFrame(placeScriptBar);
   loadDoc(editor, doc);
+  if (isWoven()) guessAll(editor);
   if (recovered) store.change(editor.state.doc);
   else statusEl.textContent = 'Saved';
   freshenRefs(editor);
@@ -982,6 +999,137 @@ async function numberingAround(piece, chapterId) {
 
 // Number a script's scenes, for production. Once on, every scene keeps its
 // number for good and new ones slot in (3A); turning it off only hides them.
+// ---------- Woven ----------
+
+// The script open is Woven or Classic (a per-script switch, kept with the
+// script so every device shows it the same way), and Woven wears its look.
+async function syncWoven(book) {
+  const on = isScript() && !!book?.fields?.woven;
+  root.classList.toggle('woven', on);
+  applyLook(root, on ? (book.fields.look || DEFAULT_LOOK) : null);
+  if (on) await loadPlaces(book);
+  if (!on) scenePop?.close();
+  wovenPick();
+}
+
+async function loadPlaces(book) {
+  const world = book ? await worldOf(book) : null;
+  if (!world) { biblePlaces = []; return; }
+  const pages = [
+    ...(await elementsIn(world)).filter((p) => p.fields?.element?.type === 'location'),
+    ...(await plainPages(world)).filter((x) => x.guess === 'location').map((x) => x.page)
+  ];
+  biblePlaces = pages.filter((p) => (p.title || '').trim() && !/^(places|locations|sets)$/i.test(p.title.trim())).map((p) => ({
+    name: p.title.trim(), ie: p.fields?.place?.ie || '', also: p.fields?.place?.also || [], notime: !!p.fields?.place?.notime, page: p.id
+  }));
+}
+
+async function setWoven(on) {
+  const b = await currentBook();
+  if (!b || bookType(b) !== 'screenplay') return;
+  const fresh = await getEntry(b.id);
+  if (!!fresh.fields?.woven === on) return;
+  const next = { ...fresh, fields: { ...fresh.fields, woven: on }, updated_at: Date.now() };
+  await putEntries([next]);
+  if (state.project?.id === b.id) state.project = next;
+  try { localStorage.setItem('scriptView', on ? 'woven' : 'classic'); } catch { /* private window */ }
+  await syncWoven(next);
+  if (on) guessAll(editor); else redrawWoven(editor);
+  notes.layout();
+  toast(on ? 'Woven: the scene headings are hidden as faint lines. Classic shows them again.' : 'Classic: the standard screenplay page. Your Woven titles stay as sections.');
+}
+
+async function saveLook(look) {
+  const b = await currentBook();
+  if (!b) return;
+  const fresh = await getEntry(b.id);
+  const next = { ...fresh, fields: { ...fresh.fields, look: cleanLook(look) }, updated_at: Date.now() };
+  await putEntries([next]);
+  if (state.project?.id === b.id) state.project = next;
+  if (isWoven()) applyLook(root, next.fields.look);
+}
+
+// The Aa panel's part for the script that's open: Woven or Classic, and its look.
+function wovenPick() {
+  const box = $('.woven-pick');
+  if (!box) return;
+  const script = writing() && isScript();
+  box.hidden = !script;
+  if (!script) return;
+  box.querySelectorAll('[data-sv]').forEach((b) => {
+    const cur = (b.dataset.sv === 'woven') === isWoven();
+    b.classList.toggle('current', cur);
+    b.setAttribute('aria-checked', String(cur));
+  });
+  const look = box.querySelector('.woven-look');
+  look.hidden = !isWoven();
+  if (isWoven()) renderLook(look, {
+    look: () => state.project?.fields?.look || DEFAULT_LOOK,
+    save: (l) => saveLook(l),
+    canAsk: canAskServer,
+    toast,
+    ask: async (text) => {
+      const got = await askServer({ mode: 'woven', task: 'look', describe: text, piece: state.project?.title || '' });
+      if (got?.error) throw new Error(got.error);
+      return got?.look || null;
+    }
+  });
+}
+document.querySelectorAll('.woven-pick [data-sv]').forEach((b) => b.addEventListener('click', () => setWoven(b.dataset.sv === 'woven')));
+
+const scenePop = new ScenePop({ editor: () => editor, places: () => placeList(biblePlaces, editor.state.doc), toast: (m, a) => toast(m, a) });
+
+// The card for the scene the caret is in (the same one the margin dot opens).
+function sceneDetails() {
+  const s = sceneAt(editor.state.doc, editor.state.selection.from);
+  if (!s) return;
+  const dom = s.eid ? editor.view.dom.querySelector(`.wv-line[data-eid="${s.eid}"] .wv-dot`) : editor.view.dom.querySelector('.wv-line.wv-top .wv-dot');
+  scenePop.open({ eid: s.eid, at: s.at }, dom);
+}
+
+// /continuous, /intercut, /flashback, /montage: the scene you're in becomes one.
+function markScene(kind) {
+  let s = sceneAt(editor.state.doc, editor.state.selection.from);
+  if (!s) return;
+  const pos = s.node ? s.pos : ensureHeading(editor, s);
+  s = sceneAt(editor.state.doc, pos + 1);
+  const m = { ...s.marker, kind };
+  if (kind === 'continuous' && !m.place) {
+    // Straight on: the same place as the scene before.
+    const all = scenesOf(editor.state.doc);
+    const prev = all[all.findIndex((x) => x.pos === pos) - 1];
+    if (prev?.marker.place) { m.place = prev.marker.place; m.ie ||= prev.marker.ie; }
+  }
+  if (kind !== 'continuous' && s.marker.kind === 'continuous') m.time = '';
+  setMarker(editor, pos, m);
+  toast(`Scene ${s.node?.attrs.code || s.n}: ${SCENE_KINDS.find((k) => k.id === kind)?.label.toLowerCase()}`);
+}
+
+async function prepareShoot() {
+  if (!isWoven()) return;
+  const world = state.project ? await worldOf(state.project) : null;
+  await prepareForShoot({
+    editor,
+    places: (doc) => placeList(biblePlaces, doc),
+    biblePlaces: () => biblePlaces,
+    piece: () => state.project?.title || '',
+    canAsk: canAskServer,
+    ask: async (body) => { const got = await askServer(body); if (got?.error) throw new Error(got.error); return got; },
+    toast,
+    makePlaces: async (list) => {
+      if (!world) throw new Error('This script isn’t in a world yet, so there’s no bible to add places to.');
+      for (const p of list) {
+        const page = await newElement(world, 'location', p.name);
+        if (p.ie) await putEntries([{ ...page, fields: { ...page.fields, place: { ie: p.ie } }, updated_at: Date.now() }]);
+      }
+      await loadPlaces(state.project);
+      redrawWoven(editor);
+      await refreshViews();
+      toast(`${list.length === 1 ? 'A place page' : `${list.length} place pages`} made in ${world.title || 'the world'}’s bible`);
+    }
+  });
+}
+
 async function toggleNumbering(piece) {
   const b = await getEntry(piece.id);
   const on = !b.fields?.numbered;
@@ -1542,10 +1690,10 @@ async function setKind(book, type) {
   const next = await changeType(b, type);
   if (state.project?.id === b.id) {
     state.project = next;
-    if (view() === 'write') { root.classList.toggle('script', type === 'screenplay'); placeScriptBar(); refreshWords(); }
+    if (view() === 'write') { root.classList.toggle('script', type === 'screenplay'); await syncWoven(next); placeScriptBar(); refreshWords(); }
   }
   await refreshViews();
-  toast(`“${nameOf(b)}” is now written as ${formatName(next).toLowerCase()}`, { label: 'Undo', run: async () => { await changeType(await getEntry(b.id), bookType(b)); if (state.project?.id === b.id) { state.project = await getEntry(b.id); if (view() === 'write') root.classList.toggle('script', bookType(b) === 'screenplay'); } await refreshViews(); } });
+  toast(`“${nameOf(b)}” is now written as ${formatName(next).toLowerCase()}`, { label: 'Undo', run: async () => { await changeType(await getEntry(b.id), bookType(b)); if (state.project?.id === b.id) { state.project = await getEntry(b.id); if (view() === 'write') { root.classList.toggle('script', bookType(b) === 'screenplay'); await syncWoven(state.project); } } await refreshViews(); } });
 }
 
 async function moveBookToArea(book, areaId) {
@@ -3458,6 +3606,7 @@ function togglePageSettings() {
   setPage(currentWidth(), currentSize());
   loadPreviews();
   showFonts();
+  wovenPick();
   panel.hidden = false;
   $('#page-width').focus();
 }
@@ -3586,6 +3735,13 @@ function toggleTheme() {
   localStorage.setItem('theme', next);
 }
 
+// Opens the Aa panel at the script's look.
+function openLook() {
+  if ($('.page-settings').hidden) togglePageSettings();
+  $('.woven-pick')?.scrollIntoView({ block: 'start' });
+  $('.woven-pick .wv-preset.current')?.focus({ preventScroll: true });
+}
+
 // Opens the Aa panel at its font list, on the current font, so a font is picked, not guessed.
 function openFontPicker() {
   if ($('.page-settings').hidden) togglePageSettings();
@@ -3688,7 +3844,13 @@ const commands = [
   { group: 'write', label: 'Zoom into this line', keys: 'click its handle', run: () => notebook.zoomTo(notebook.currentLine()), when: inNotebook },
   { group: 'write', label: 'Zoom out', keys: 'Esc', run: () => notebook.zoomTo(null), when: () => inNotebook() && !!notebook.zoom },
   { group: 'write', label: 'Fold or unfold this line', keys: `${mod}↑ ${mod}↓`, run: () => notebook.toggleFold(), when: inNotebook },
-  ...ELEMENTS.map((x) => ({ group: 'write', label: `Script: ${x.label}`, keys: 'Tab', run: () => editor.chain().focus().updateAttributes('paragraph', { el: x.id }).run(), when: () => writing() && isScript() })),
+  ...ELEMENTS.map((x) => ({ group: 'write', label: `Script: ${x.label}`, keys: 'Tab', run: () => setElement(x.id), when: () => writing() && isScript() && !(x.id === 'scene' && isWoven()) })),
+  { group: 'write', label: 'Script view: Woven (flowing, scene headings hidden)', keys: '', words: ['woven', 'flowing', 'prose', 'quiet', 'view'], run: () => setWoven(true), when: () => writing() && isScript() && !isWoven() },
+  { group: 'write', label: 'Script view: Classic (the standard screenplay page)', keys: '', words: ['woven', 'classic', 'standard', 'view', 'courier'], run: () => setWoven(false), when: () => writing() && isWoven() },
+  { group: 'write', label: 'Woven: new scene here', keys: `${mod}⇧↵`, words: ['scene', 'cut', 'line', 'break'], run: () => { editor.commands.focus(); newScene(editor); }, when: () => writing() && isWoven() },
+  { group: 'write', label: 'Woven: this scene’s place, time and title…', keys: '/scene', words: ['scene', 'place', 'time', 'slug', 'heading', 'title'], run: sceneDetails, when: () => writing() && isWoven() },
+  { group: 'write', label: 'Woven: prepare for shoot (fill in every scene’s place and time)', keys: '', words: ['shoot', 'production', 'slug', 'headings', 'breakdown', 'claude'], run: prepareShoot, when: () => writing() && isWoven() },
+  { group: 'view', label: 'Woven: this script’s look (line, names, title font)…', keys: '', words: ['look', 'genre', 'style', 'font', 'colour', 'color', 'kung fu'], run: openLook, when: () => writing() && isWoven() },
   { group: 'write', label: 'Script: Section (your own heading)', keys: '# ', run: () => { insertSection(editor.state.selection.$from.before(1)); }, when: () => writing() && isScript() },
   { group: 'write', label: 'Insert the time', keys: `${mod}⇧;`, run: () => insertTime(currentEditor()), when: () => writing() || inNotebook() },
   { group: 'write', label: 'Insert today’s date', keys: `${mod};`, run: () => insertDay(currentEditor(), 0), when: () => writing() || inNotebook() },
@@ -3852,6 +4014,12 @@ setSlashItems((ed) => {
     outline && { id: 'box', label: 'Box', hint: 'a tick box on this line', keys: '[ ]', words: ['checkbox', 'todo', 'tick'], run: (e) => toggleBox(e) },
     !outline && !inScript && { id: 'scene', label: 'Scene break', keys: '⌘⇧↵', words: ['break', 'divider'], run: (e) => e.chain().focus().insertSceneBreak().run() },
     inScript && { id: 'section', label: 'Section', hint: 'your own heading', words: ['act', 'sequence', 'heading'], run: () => { insertSection(editor.state.selection.$from.before(1)); } },
+    inScript && isWoven() && { id: 'cut', label: 'New scene', hint: 'a faint line, from here on', keys: '⌘⇧↵', words: ['scene', 'break', 'line'], run: () => newScene(editor) },
+    inScript && isWoven() && { id: 'continuous', label: 'Continuous', hint: 'straight on from the scene before', words: ['cont'], run: () => markScene('continuous') },
+    inScript && isWoven() && { id: 'intercut', label: 'Intercut', hint: 'two places at once (a phone call)', words: ['phone', 'cross'], run: () => markScene('intercut') },
+    inScript && isWoven() && { id: 'flashback', label: 'Flashback', hint: 'this scene is the past', words: ['past', 'memory'], run: () => markScene('flashback') },
+    inScript && isWoven() && { id: 'montage', label: 'Montage', hint: 'a run of moments', words: ['series'], run: () => markScene('montage') },
+    inScript && isWoven() && { id: 'scene', label: 'Scene details', hint: 'place, time, title', words: ['place', 'time', 'title', 'slug'], run: () => setTimeout(sceneDetails, 30) },
     ...days
   ].filter(Boolean);
 });
