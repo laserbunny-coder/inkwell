@@ -59,6 +59,7 @@ import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
 import { openBringIn } from './bringin.js';
+import { CatchupPage } from './catchup.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, nextLabel, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, dropOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
 
@@ -305,6 +306,7 @@ window.visualViewport?.addEventListener('scroll', placeScriptBar);
 
 let railTimer;
 let tagsPage = null; // the Tags page (set up with capture, below)
+let catchupPage = null; // Catch-up: what Claude threads did, what needs you (below)
 let dayReview = null; // the day review under a day page (set up with capture, below)
 const notebook = new Notebook({
   onPick: openPicker,
@@ -630,6 +632,9 @@ async function go(place) {
   } else if (place.view === 'tags') {
     remember(place);
     await tagsPage?.show(place);
+  } else if (place.view === 'catchup') {
+    remember({ view: 'catchup' });
+    await catchupPage?.show();
   } else if (place.view === 'grid') {
     state.gridId = place.id;
     remember(place);
@@ -1524,6 +1529,8 @@ async function drawCrumb() {
     parts.push(link(PAGE_NAMES[state.stage.page] || '', () => {}, 'here'));
   } else if (view() === 'drawer') {
     parts.push(lib, link('Drawer', () => {}, 'here'));
+  } else if (view() === 'catchup') {
+    parts.push(link('Catch-up', () => {}, 'here'));
   } else if (view() === 'compare') {
     const g = await getEntry(state.compareId);
     if (g) { const up = await within(g); parts.push(...(up ? up.out : [lib]), bookPart(g)); }
@@ -1563,7 +1570,7 @@ async function drawCrumb() {
   await renderStrip();
   const isToday = lastPlace?.view === 'notebook' && lastPlace.pageId === dayId(isoToday());
   // The top bar's buttons stay put; the one for where you are is lit.
-  const here = { 'view-toggle': inNotebook() && !!notebook.page && notebook.page.kind === 'day', 'library-toggle': view() === 'library', 'drawer-toggle': view() === 'drawer', 'tags-toggle': view() === 'tags' };
+  const here = { 'view-toggle': inNotebook() && !!notebook.page && notebook.page.kind === 'day', 'library-toggle': view() === 'library', 'drawer-toggle': view() === 'drawer', 'tags-toggle': view() === 'tags', 'catchup-toggle': view() === 'catchup' };
   for (const [id, on] of Object.entries(here)) { const b = document.getElementById(id); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
   const names = isToday ? ['Today'] : parts.map((p) => p.textContent.replace(/\s*▾\s*$/, '').trim()).filter(Boolean);
   // A pane's name shows in its header; the main window's in the place bar and recent places.
@@ -3092,7 +3099,7 @@ async function toggleGrid() {
 
 const PAGE_NAMES = { gather: 'Gather', shape: 'Shape', write: 'Write', revise: 'Revise', make: 'Make', deliver: 'Deliver', notes: 'Notes' };
 // Views you look at rather than type in: the tabs sit faintly at the top there.
-const LOOKING = ['library', 'tags', 'world', 'project', 'grid', 'production', 'deliver', 'compare', 'stage', 'drawer'];
+const LOOKING = ['library', 'tags', 'catchup', 'world', 'project', 'grid', 'production', 'deliver', 'compare', 'stage', 'drawer'];
 const strip = new PageStrip($('#page-tabs'), { pick: (id) => goPage(id) });
 const nav = new Nav({
   go: (place) => go(place),
@@ -3122,6 +3129,7 @@ async function pageContext() {
   if (v === 'library') return { scope: 'desk', active: 'library' };
   if (v === 'tags') return { scope: 'desk', active: 'tags' };
   if (v === 'drawer') return { scope: 'desk', active: 'drawer' };
+  if (v === 'catchup') return { scope: 'desk', active: 'catchup' };
   if (v === 'notebook') {
     const p = notebook.page;
     if (!p || p.kind === 'day') return { scope: 'desk', active: 'today' };
@@ -3155,6 +3163,7 @@ async function goPage(id) {
   if (id === 'drawer') return go({ view: 'drawer' });
   if (id === 'library') return go({ view: 'library', area: null });
   if (id === 'tags') return go({ view: 'tags' });
+  if (id === 'catchup') return go({ view: 'catchup' });
   const ctx = await pageContext();
   if (!ctx?.id) return;
   return openPage(await getEntry(ctx.id), id);
@@ -3820,6 +3829,7 @@ const commands = [
   { group: 'go', label: 'Search inside all your writing', keys: `${mod}⇧F`, run: () => openPalette('search') },
   { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
   { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
+  { group: 'go', label: 'Catch-up: what your Claude threads did today, and what needs you', keys: `${mod}⇧U`, words: ['claude', 'threads', 'needs you', 'updates', 'today'], run: () => go({ view: 'catchup' }) },
   { group: 'go', label: 'Today’s page', keys: `${mod}J`, run: () => go({ view: 'notebook', pageId: dayId(isoToday()) }) },
   { group: 'go', label: 'Side panel with today’s lines, beside what you’re doing', keys: `${mod}⇧J`, words: ['panel', 'side'], run: () => todayPanel.toggle() },
   { group: 'go', label: 'The Drawer: ideas with no home yet', keys: '', words: ['ideas', 'jackie chan'], run: () => go({ view: 'drawer' }) },
@@ -4435,6 +4445,7 @@ document.addEventListener('click', (e) => {
   if (cmd === 'mic') captureHere({ start: true });
   if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
   if (cmd === 'tags') go({ view: 'tags' });
+  if (cmd === 'catchup') go({ view: 'catchup' });
   if (cmd === 'close-tag') { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
 });
 
@@ -4455,6 +4466,7 @@ document.addEventListener('keydown', (e) => {
   else if (m && (e.key === '/' || e.code === 'Slash')) { e.preventDefault(); toggleShortcuts(); }
   else if (m && e.shiftKey && k === 'p') { e.preventDefault(); progressPanel.toggle(); }
   else if (m && e.shiftKey && k === 'j') { e.preventDefault(); todayPanel.toggle(); }
+  else if (m && e.shiftKey && !e.altKey && k === 'u') { e.preventDefault(); go({ view: 'catchup' }); }
   else if (m && k === 'j') { e.preventDefault(); toggleWriteToday(); }
   else if (m && k === '1') { e.preventDefault(); body.classList.toggle('pin-outline'); }
   else if (m && k === '2' && writing()) { e.preventDefault(); toggleNotes(); }
@@ -4815,6 +4827,20 @@ tagsPage = new TagsPage({
   ask: askServer,
   canAsk: canAskServer,
   changed: (rows) => applyRemote(rows),
+  toast
+});
+// Catch-up: what Claude threads did today across every Claude project, and
+// what needs you. Both live in Daybook's side of the database.
+const catchupBackend = () => window.__catchup || (sync.user && sync.backend?.catchup ? sync.backend : null);
+catchupPage = new CatchupPage({
+  sheet: $('#catchup-sheet'),
+  fetch: (since) => { const b = catchupBackend(); return b ? b.catchup(since) : null; },
+  done: (id) => catchupBackend().doneNeed(id),
+  later: (id, until) => catchupBackend().laterNeed(id, until),
+  ask: askServer,
+  canAsk: canAskServer,
+  open: (id) => openEntry(id),
+  base: () => location.origin + location.pathname,
   toast
 });
 // The 9 pm note in Daybook links to ?review=<date>: open that day and its

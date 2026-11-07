@@ -65,6 +65,7 @@
           <button type="button" class="tb-btn" data-cmd="drawer" id="drawer-toggle" title="The Drawer: ideas with no home yet">Drawer</button>
           <button type="button" class="tb-btn" data-cmd="library" id="library-toggle" title="Library (⌘⇧O)">Library</button>
           <button type="button" class="tb-btn" data-cmd="tags" id="tags-toggle" title="Tags: every #tag, grouped">Tags</button>
+          <button type="button" class="tb-btn" data-cmd="catchup" id="catchup-toggle" title="Catch-up: what your Claude threads did today, and what needs you (⌘⇧U)">Catch-up</button>
           <button type="button" class="tb-btn" data-cmd="go" id="go-toggle" title="Go: the last place, this piece’s pages, the desk (⌘O)">Go</button>
         </span>
         <span class="tb-group tb-view">
@@ -126,6 +127,10 @@
 
   <main class="tags-home" aria-label="Tags">
     <div class="lib-sheet" id="tags-sheet"></div>
+  </main>
+
+  <main class="catchup-home" aria-label="Catch-up">
+    <div class="lib-sheet cu-sheet" id="catchup-sheet"></div>
   </main>
 
   <main class="project-home" aria-label="Book">
@@ -356,6 +361,8 @@
     <label class="switch"><input type="checkbox" data-show="nudge"> After 9 pm, a reminder on today to review it</label>
     <label class="switch"><input type="checkbox" data-show="marks"> Link and tag ideas in the day review</label>
     <label class="switch"><input type="checkbox" data-show="tidy"> Tidy pass reminder on Today</label>
+    <label class="switch"><input type="checkbox" data-show="catchup"> Catch-up button in the top bar</label>
+    <label class="switch"><input type="checkbox" data-show="cuclaude"> Claude’s one-line read on Catch-up</label>
     <label class="switch"><input type="checkbox" data-show="dots"> Note dots in the margin</label>
     <label class="switch"><input type="checkbox" data-show="handle"> Six-dot handle</label>
     <label class="switch"><input type="checkbox" data-show="bullets"> Bullets on notebook lines</label>
@@ -449,6 +456,7 @@
       <dt>⌘[ ⌘]</dt><dd>Back and forward</dd>
       <dt>⌘/</dt><dd>This list</dd>
       <dt>⌘⇧P</dt><dd>Progress: words and pages over time</dd>
+      <dt>⌘⇧U</dt><dd>Catch-up: what your Claude threads did, what needs you</dd>
       <dt>⌘⇧G</dt><dd>Plot grid (in Shape): the story as a table, and back</dd>
       <dt>⌘⇧S</dt><dd>Make: shots, storyboard, kit, shoot days, and back</dd>
       <dt>Esc</dt><dd>Close whatever is open</dd>

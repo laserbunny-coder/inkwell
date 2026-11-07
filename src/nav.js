@@ -240,7 +240,7 @@ export class Nav {
     }
 
     const desk = make('div', 'go-desk');
-    for (const [id, label, keys] of [['today', 'Today', '⌘J'], ['drawer', 'Drawer', ''], ['library', 'Library', '⌘⇧O'], ['tags', 'Tags', '']]) {
+    for (const [id, label, keys] of [['today', 'Today', '⌘J'], ['drawer', 'Drawer', ''], ['library', 'Library', '⌘⇧O'], ['tags', 'Tags', ''], ['catchup', 'Catch-up', '⌘⇧U']]) {
       const b = make('button', 'go-tab desk' + (active === id && !inside ? ' on' : ''));
       b.append(make('span', 'go-tab-name', label));
       if (keys && !this.hooks.isTouch()) b.append(make('span', 'keys', this.hooks.keyLabel(keys)));

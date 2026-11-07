@@ -70,7 +70,7 @@ try {
   await check('the Go panel’s desk reaches Today, the Drawer, the Library and Tags', async () => {
     await p.keyboard.press('Control+O');
     await p.waitForSelector('.go-panel', { state: 'visible' });
-    assert.deepEqual(await p.locator('.go-desk .go-tab-name').allInnerTexts(), ['Today', 'Drawer', 'Library', 'Tags']);
+    assert.deepEqual(await p.locator('.go-desk .go-tab-name').allInnerTexts(), ['Today', 'Drawer', 'Library', 'Tags', 'Catch-up']);
     await p.locator('.go-desk .go-tab', { hasText: 'Tags' }).click();
     await p.waitForFunction(() => document.documentElement.dataset.view === 'tags');
     await p.keyboard.press('Control+O');
@@ -104,7 +104,7 @@ try {
     await p.mouse.move(640, 40, { steps: 4 });
     await p.waitForFunction(() => document.body.classList.contains('show-top'));
     await sleep(300);
-    assert.deepEqual(await p.locator('.tb-tools button').allInnerTexts(), ['Mic', 'Today', 'Drawer', 'Library', 'Tags', 'Go', 'Notes', 'Focus', 'Aa', 'Ctrl+K']);
+    assert.deepEqual(await p.locator('.tb-tools button').allInnerTexts(), ['Mic', 'Today', 'Drawer', 'Library', 'Tags', 'Catch-up', 'Go', 'Notes', 'Focus', 'Aa', 'Ctrl+K']);
     await p.locator('#go-toggle').click();
     await p.waitForSelector('.go-panel', { state: 'visible' });
     await p.keyboard.press('Escape');

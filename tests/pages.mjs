@@ -447,7 +447,7 @@ try {
     assert.ok(await page.locator('.nb-date').isHidden());
     assert.equal(await page.locator('.rail-top').count(), 0);
     // The right side never changes: the four places, then Go.
-    assert.deepEqual(await page.locator('.tb-places .tb-btn').allInnerTexts(), ['Today', 'Drawer', 'Library', 'Tags', 'Go']);
+    assert.deepEqual(await page.locator('.tb-places .tb-btn').allInnerTexts(), ['Today', 'Drawer', 'Library', 'Tags', 'Catch-up', 'Go']);
     await page.waitForSelector('#page-tabs .pt-tab');
     assert.deepEqual((await tabs(page))[0], 'overview');
   });

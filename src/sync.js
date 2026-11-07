@@ -108,6 +108,27 @@ function supabaseBackend() {
       if (error) throw error;
       return data.map(({ id, title }) => ({ id, title }));
     },
+    // Catch-up: Needs you items (open, and set aside with Later) and the
+    // updates Claude threads logged since a time. Both are Daybook's tables,
+    // read-only here except a Needs you item's cleared and set-aside times.
+    async catchup(sinceIso) {
+      const [needs, updates] = await Promise.all([
+        sb.from('notes').select('id,title,body,link,kind,project,project_link,created_at,resolved_at,snoozed_until').not('kind', 'is', null).is('resolved_at', null).order('created_at').limit(200),
+        sb.from('claude_updates').select('id,project,project_link,link,thread,text,place,state,created_at').gte('created_at', sinceIso).order('created_at').limit(500)
+      ]);
+      if (needs.error) throw needs.error;
+      // Before Daybook's update is in, the updates table isn't there yet: show Needs you alone.
+      if (updates.error) console.warn(updates.error);
+      return { needs: needs.data || [], updates: updates.error ? [] : updates.data || [] };
+    },
+    async doneNeed(id) {
+      const { error } = await sb.from('notes').update({ resolved_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw error;
+    },
+    async laterNeed(id, until) {
+      const { error } = await sb.from('notes').update({ snoozed_until: until }).eq('id', id);
+      if (error) throw error;
+    },
     // Pictures and files, in the private "writing-files" bucket, one folder per person.
     async upload(path, blob, type) {
       const { error } = await sb.storage.from('writing-files').upload(path, blob, { contentType: type, upsert: true });
