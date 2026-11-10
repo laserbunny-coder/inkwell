@@ -67,10 +67,10 @@ try {
     await p.waitForFunction(() => document.querySelector('#tb-back')?.textContent === '‹ Library');
   });
 
-  await check('the Go panel’s desk reaches Today, the Drawer, the Library and Tags', async () => {
+  await check('the Go panel’s rooms reach Today, the Desk, the Library, the Drawer and Tags', async () => {
     await p.keyboard.press('Control+O');
     await p.waitForSelector('.go-panel', { state: 'visible' });
-    assert.deepEqual(await p.locator('.go-desk .go-tab-name').allInnerTexts(), ['Today', 'Drawer', 'Library', 'Tags']);
+    assert.deepEqual(await p.locator('.go-desk .go-tab-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags']);
     await p.locator('.go-desk .go-tab', { hasText: 'Tags' }).click();
     await p.waitForFunction(() => document.documentElement.dataset.view === 'tags');
     await p.keyboard.press('Control+O');
@@ -101,7 +101,7 @@ try {
     await p.mouse.move(640, 400);
     await sleep(300);
     assert.equal(await p.locator('.rail').isVisible(), true);
-    assert.deepEqual(await p.locator('.rail-rooms button').allInnerTexts(), ['Today', 'Library']);
+    assert.deepEqual(await p.locator('.rail-rooms button').allInnerTexts(), ['Today', 'Desk', 'Library']);
     assert.deepEqual(await p.locator('.rail-tools button').allInnerTexts(), ['Capture', 'Go', 'Everything', 'Look']);
     // The bar doesn't hide and come down any more: where you are is always in view.
     const bar = await p.locator('.topbar').evaluate((el) => ({ top: Math.round(el.getBoundingClientRect().top), opacity: getComputedStyle(el).opacity }));
@@ -133,7 +133,7 @@ try {
     assert.deepEqual(onLibrary.map((t) => t.replace('*', '')), onToday.map((t) => t.replace('*', '')), 'nothing moved');
     await pillOn('#library-toggle');
     // Inside the Library, the switch at the top centre has its three views; the Library stays lit in the rail.
-    assert.deepEqual(await p.locator('.place-switch button').allInnerTexts(), ['Shelves', 'Drawer', 'Tags']);
+    assert.deepEqual(await p.locator('.place-switch:not(.desk-switch) button').allInnerTexts(), ['Shelves', 'Drawer', 'Tags']);
     assert.equal(await p.locator('#shelves-toggle').getAttribute('aria-current'), 'page');
     await p.locator('#tags-toggle').click();
     await p.waitForFunction(() => document.documentElement.dataset.view === 'tags');
@@ -142,7 +142,7 @@ try {
     assert.equal(await p.locator('#library-toggle').getAttribute('aria-current'), 'page');
     await toToday(p);
     await sleep(300);
-    assert.equal(await p.locator('.place-switch').isVisible(), false, 'no switch on Today yet');
+    assert.equal(await p.locator('.place-switch:not(.desk-switch)').isVisible(), false, 'no switch on Today yet');
   });
 
   await check('the five looks: one tap changes the whole app, and it sticks after a reload', async () => {
@@ -195,18 +195,18 @@ try {
   await ph.waitForSelector('#editor .ProseMirror');
   await sleep(500);
 
-  await check('on a phone a bar along the bottom has Today, Library, the mic, Go and More, and lights the room you are in', async () => {
+  await check('on a phone a bar along the bottom has Today, Desk, the mic, Library and Go, and lights the room you are in', async () => {
     await settle(ph);
     await ph.locator('.pb-today').tap();
     await ph.waitForSelector('.notebook', { state: 'visible' });
     await settle(ph);
     assert.equal(await ph.locator('.placebar').isVisible(), true);
-    assert.deepEqual(await ph.locator('.placebar .pb-word').allInnerTexts(), ['Today', 'Library', 'Go', 'More']);
+    assert.deepEqual(await ph.locator('.placebar .pb-word').allInnerTexts(), ['Today', 'Desk', 'Library', 'Go']);
     assert.match(await ph.locator('.pb-place').getAttribute('aria-label'), /^Today/, 'Go still says where you are');
     assert.equal(await ph.locator('.pb-today').getAttribute('aria-current'), 'page');
     assert.equal(await ph.locator('.pb-lib').getAttribute('aria-current'), null);
     assert.equal(await ph.locator('#mic-toggle').isVisible(), false, 'the computer’s tools stay off the phone');
-    assert.equal(await ph.locator('.pb-menu').getAttribute('aria-label'), 'Menu');
+    assert.equal(await ph.locator('.pb-menu').count(), 0, 'the menu is the Go sheet’s last line now');
   });
 
   await check('on a phone the Go sheet opens from the place, and Back returns', async () => {

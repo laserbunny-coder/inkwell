@@ -1,5 +1,6 @@
 import './style.css';
 import './frame.css';
+import './desk.css';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { EntryIds, SceneBreak, sectionName, SECTION_NAMES } from './schema.js';
@@ -52,6 +53,7 @@ import { sendToDaybook, sendPending, queueTask } from './daybook.js';
 import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker, speakersOn, mine, sendMeetingToAcro } from './meeting.js';
 import { DayReview, getReview } from './review.js';
 import { TagsPage, tagIndex, statsOf } from './tags.js';
+import { DeskPage, DESK_ID } from './desk.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { pieceDoc, pageDoc, startDraft, draftHolding } from './drafts.js';
 import { printPiece } from './print.js';
@@ -309,6 +311,7 @@ window.visualViewport?.addEventListener('scroll', placeScriptBar);
 
 let railTimer;
 let tagsPage = null; // the Tags page (set up with capture, below)
+let deskPage = null; // the Desk: every project, what needs you (below)
 let dayReview = null; // the day review under a day page (set up with capture, below)
 const notebook = new Notebook({
   onPick: openPicker,
@@ -583,7 +586,7 @@ async function go(place) {
   if (['grid', 'production', 'deliver', 'compare', 'stage'].includes(place.view)) await store.close(editor.state.doc);
   if (place.view !== 'write') { if (beside.isOpen) beside.close(); if (talk.isOpen) talk.close(); }
   if (from === 'notebook' && place.view !== 'notebook') notebook.close();
-  frame.turn(from, place.view, pageOfPlace(place));
+  frame.turn(from, place.view, pageOfPlace(place), place.view === 'desk' ? place.tab || 'stage' : null);
   if (place.view === 'write') delete root.dataset.view;
   else root.dataset.view = place.view;
   body.classList.remove('show-outline');
@@ -635,6 +638,9 @@ async function go(place) {
   } else if (place.view === 'tags') {
     remember(place);
     await tagsPage?.show(place);
+  } else if (place.view === 'desk') {
+    remember({ view: 'desk', ...(place.tab === 'history' ? { tab: 'history' } : {}) });
+    await deskPage?.show(place);
   } else if (place.view === 'grid') {
     state.gridId = place.id;
     remember(place);
@@ -884,6 +890,7 @@ async function applyRemote(rows) {
   searchChanged(rows);
   if (rows.some((r) => r.kind === 'tidy' || r.kind === 'change')) { redrawTidy(); tidyNudge(); }
   if (view() === 'tags' && tagsPage && rows.some((r) => r.tags?.length || r.id === 'settings-tag-groups')) tagsPage.refresh();
+  if (view() === 'desk' && rows.some((r) => r.kind === 'world' || r.kind === 'area' || r.id === DESK_ID)) deskPage?.refresh();
   if (rows.some((r) => r.kind === 'settings')) await notes.reloadTypes();
   if (rows.some((r) => r.kind === 'workflow')) setOwnWorkflows(await byKind('workflow'));
   if (state.chapterId && rows.some((r) => r.links?.includes(state.chapterId))) renderChapterLinks();
@@ -1529,6 +1536,10 @@ async function drawCrumb() {
     parts.push(link(PAGE_NAMES[state.stage.page] || '', () => {}, 'here'));
   } else if (view() === 'drawer') {
     parts.push(lib, link('Drawer', () => {}, 'here'));
+  } else if (view() === 'desk') {
+    const history = lastPlace?.tab === 'history';
+    parts.push(link('Desk', () => go({ view: 'desk' }), history ? '' : 'here'));
+    if (history) parts.push(link('History', () => {}, 'here'));
   } else if (view() === 'compare') {
     const g = await getEntry(state.compareId);
     if (g) { const up = await within(g); parts.push(...(up ? up.out : [lib]), bookPart(g)); }
@@ -1568,7 +1579,7 @@ async function drawCrumb() {
   await renderStrip();
   const isToday = lastPlace?.view === 'notebook' && lastPlace.pageId === dayId(isoToday());
   // The top bar's buttons stay put; the one for where you are is lit.
-  const here = { 'view-toggle': inNotebook() && !!notebook.page && notebook.page.kind === 'day', 'library-toggle': view() === 'library', 'drawer-toggle': view() === 'drawer', 'tags-toggle': view() === 'tags' };
+  const here = { 'view-toggle': inNotebook() && !!notebook.page && notebook.page.kind === 'day', 'library-toggle': view() === 'library', 'drawer-toggle': view() === 'drawer', 'tags-toggle': view() === 'tags', 'desk-toggle': view() === 'desk' };
   for (const [id, on] of Object.entries(here)) { const b = document.getElementById(id); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
   const names = isToday ? ['Today'] : parts.map((p) => p.textContent.replace(/\s*▾\s*$/, '').trim()).filter(Boolean);
   // A pane's name shows in its header; the main window's in the place bar and recent places.
@@ -3098,7 +3109,7 @@ async function toggleGrid() {
 
 const PAGE_NAMES = { gather: 'Gather', shape: 'Shape', write: 'Write', revise: 'Revise', make: 'Make', deliver: 'Deliver', notes: 'Notes' };
 // Views you look at rather than type in: the tabs sit faintly at the top there.
-const LOOKING = ['library', 'tags', 'world', 'project', 'grid', 'production', 'deliver', 'compare', 'stage', 'drawer'];
+const LOOKING = ['library', 'tags', 'desk', 'world', 'project', 'grid', 'production', 'deliver', 'compare', 'stage', 'drawer'];
 const strip = new PageStrip($('#page-tabs'), { pick: (id) => goPage(id) });
 const nav = new Nav({
   go: (place) => go(place),
@@ -3158,6 +3169,7 @@ async function pageContext() {
   if (v === 'library') return { scope: 'desk', active: 'library' };
   if (v === 'tags') return { scope: 'desk', active: 'tags' };
   if (v === 'drawer') return { scope: 'desk', active: 'drawer' };
+  if (v === 'desk') return { scope: 'desk', active: 'desk' };
   if (v === 'notebook') {
     const p = notebook.page;
     if (!p || p.kind === 'day') return { scope: 'desk', active: 'today' };
@@ -3191,6 +3203,8 @@ async function goPage(id) {
   if (id === 'drawer') return go({ view: 'drawer' });
   if (id === 'library') return go({ view: 'library', area: null });
   if (id === 'tags') return go({ view: 'tags' });
+  if (id === 'desk') return go({ view: 'desk' });
+  if (id === 'desk-history') return go({ view: 'desk', tab: 'history' });
   const ctx = await pageContext();
   if (!ctx?.id) return;
   return openPage(await getEntry(ctx.id), id);
@@ -3846,11 +3860,13 @@ async function exportBook() {
 
 const writing = () => view() === 'write';
 const commands = [
-  { group: 'go', label: 'Go: back to the last place, this piece’s pages, the desk', keys: `${mod}O`, words: ['back', 'recent', 'jump', 'switch'], run: () => setTimeout(() => nav.open(), 60) },
+  { group: 'go', label: 'Go: back to the last place, this piece’s pages, the rooms', keys: `${mod}O`, words: ['back', 'recent', 'jump', 'switch'], run: () => setTimeout(() => nav.open(), 60) },
   { group: 'go', label: 'Go to… a book, chapter or page', keys: '', run: () => openPalette('go') },
   { group: 'go', label: 'Search inside all your writing', keys: `${mod}⇧F`, run: () => openPalette('search') },
   { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
   { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
+  { group: 'go', label: 'Desk: every project, what needs you and who’s working on it', keys: `${mod}⇧U`, words: ['claude', 'threads', 'needs you', 'calls', 'catch-up', 'catchup', 'updates', 'projects', 'stage'], run: () => go({ view: 'desk' }) },
+  { group: 'go', label: 'History: every Claude thread, newest first', keys: '', words: ['threads', 'closed', 'finished', 'desk', 'search threads'], run: () => go({ view: 'desk', tab: 'history' }) },
   { group: 'go', label: 'Today’s page', keys: `${mod}J`, run: () => go({ view: 'notebook', pageId: dayId(isoToday()) }) },
   { group: 'go', label: 'Side panel with today’s lines, beside what you’re doing', keys: `${mod}⇧J`, words: ['panel', 'side'], run: () => todayPanel.toggle() },
   { group: 'go', label: 'The Drawer: ideas with no home yet', keys: '', words: ['ideas', 'jackie chan'], run: () => go({ view: 'drawer' }) },
@@ -4466,6 +4482,8 @@ document.addEventListener('click', (e) => {
   if (cmd === 'mic') captureHere({ start: true });
   if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
   if (cmd === 'tags') go({ view: 'tags' });
+  if (cmd === 'desk') go({ view: 'desk' });
+  if (cmd === 'desk-history') go({ view: 'desk', tab: 'history' });
   if (cmd === 'close-tag') { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
 });
 
@@ -4486,6 +4504,7 @@ document.addEventListener('keydown', (e) => {
   else if (m && (e.key === '/' || e.code === 'Slash')) { e.preventDefault(); toggleShortcuts(); }
   else if (m && e.shiftKey && k === 'p') { e.preventDefault(); progressPanel.toggle(); }
   else if (m && e.shiftKey && k === 'j') { e.preventDefault(); todayPanel.toggle(); }
+  else if (m && e.shiftKey && !e.altKey && k === 'u') { e.preventDefault(); go({ view: 'desk' }); }
   else if (m && k === 'j') { e.preventDefault(); toggleWriteToday(); }
   else if (m && k === '1') { e.preventDefault(); body.classList.toggle('pin-outline'); }
   else if (m && k === '2' && writing()) { e.preventDefault(); toggleNotes(); }
@@ -4848,6 +4867,32 @@ tagsPage = new TagsPage({
   changed: (rows) => applyRemote(rows),
   toast
 });
+// The Desk: every project with what needs you and who's working on it, and
+// History, every Claude thread there has been. Calls and updates live in
+// Daybook's side of the database.
+const deskBackend = () => window.__desk || (sync.user && sync.backend?.desk ? sync.backend : null);
+deskPage = new DeskPage({
+  sheet: $('#desk-sheet'),
+  fetch: (since) => { const b = deskBackend(); return b ? b.desk(since) : null; },
+  fetchAll: () => { const b = deskBackend(); return b ? b.deskAll() : null; },
+  done: (id) => deskBackend().doneNeed(id),
+  later: (id, until) => deskBackend().laterNeed(id, until),
+  ask: askServer,
+  canAsk: canAskServer,
+  open: (id) => openEntry(id),
+  go: (place) => go(place),
+  base: () => location.origin + location.pathname,
+  changed: (rows) => applyRemote(rows),
+  onCount: (n) => { frame.count(n); nav.count(n); },
+  toast
+});
+// The number beside Desk keeps up without the Desk being open.
+let deskPeeked = 0;
+const peekDesk = () => { if (inPane || document.hidden || Date.now() - deskPeeked < 120000) return; deskPeeked = Date.now(); deskPage.peek(); };
+// Sync may still be signing in when the app opens, so look twice early on.
+if (!inPane) for (const ms of [4000, 20000]) setTimeout(() => { deskPeeked = Date.now(); deskPage.peek(); }, ms);
+setInterval(peekDesk, 300000);
+document.addEventListener('visibilitychange', peekDesk);
 // The 9 pm note in Daybook links to ?review=<date>: open that day and its
 // review, or ask Claude for one once this device has caught up.
 let reviewing = null;

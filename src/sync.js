@@ -108,6 +108,36 @@ function supabaseBackend() {
       if (error) throw error;
       return data.map(({ id, title }) => ({ id, title }));
     },
+    // The Desk: Needs you items and the updates Claude threads logged. Both
+    // are Daybook's tables, read-only here except a Needs you item's cleared
+    // and set-aside times.
+    async desk(sinceIso) {
+      const [needs, updates] = await Promise.all([
+        sb.from('notes').select('id,title,body,link,kind,project,project_link,created_at,resolved_at,snoozed_until').not('kind', 'is', null).is('resolved_at', null).order('created_at').limit(300),
+        sb.from('claude_updates').select('id,project,project_link,link,thread,text,place,state,created_at').gte('created_at', sinceIso).order('created_at', { ascending: false }).limit(800)
+      ]);
+      if (needs.error) throw needs.error;
+      if (updates.error) console.warn(updates.error);
+      return { needs: needs.data || [], updates: updates.error ? [] : updates.data || [] };
+    },
+    // Everything there has ever been, answered calls too, for History.
+    async deskAll() {
+      const [needs, updates] = await Promise.all([
+        sb.from('notes').select('id,title,body,link,kind,project,project_link,created_at,resolved_at,snoozed_until').not('kind', 'is', null).order('created_at', { ascending: false }).limit(2000),
+        sb.from('claude_updates').select('id,project,project_link,link,thread,text,place,state,created_at').order('created_at', { ascending: false }).limit(5000)
+      ]);
+      if (needs.error) throw needs.error;
+      if (updates.error) console.warn(updates.error);
+      return { needs: needs.data || [], updates: updates.error ? [] : updates.data || [] };
+    },
+    async doneNeed(id) {
+      const { error } = await sb.from('notes').update({ resolved_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw error;
+    },
+    async laterNeed(id, until) {
+      const { error } = await sb.from('notes').update({ snoozed_until: until }).eq('id', id);
+      if (error) throw error;
+    },
     // Pictures and files, in the private "writing-files" bucket, one folder per person.
     async upload(path, blob, type) {
       const { error } = await sb.storage.from('writing-files').upload(path, blob, { contentType: type, upsert: true });

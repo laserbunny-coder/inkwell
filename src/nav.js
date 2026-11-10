@@ -2,9 +2,9 @@
 // anywhere.
 //
 // On a phone a bar sits along the bottom (hidden while the keyboard is up):
-// Today, Library, the mic in the middle, Go and More. Go opens the Go sheet:
+// Today, Desk, the mic in the middle, Library and Go. Go opens the Go sheet:
 // the last few places (the first is Back), the path up, this piece's or
-// world's pages, and the rooms.
+// world's pages, the rooms, and Everything (the whole menu).
 // On a computer the top bar names the place, with the last place as its first
 // button, and Ctrl + O opens the same panel (Enter flips straight back).
 
@@ -27,9 +27,9 @@ export function placeKey(p) {
 
 const ICONS = {
   today: '<circle cx="12" cy="12" r="3.6"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.7 5.7l1.5 1.5M16.8 16.8l1.5 1.5M5.7 18.3l1.5-1.5M16.8 7.2l1.5-1.5"/>',
+  desk: '<path d="M12 4l8 4-8 4-8-4 8-4zM4 12.5l8 4 8-4M4 16.5l8 4 8-4"/>',
   library: '<path d="M5.5 4v16M10 4v16M14 6.5l4.5 13"/>',
   go: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.6-4.6"/>',
-  more: '<circle cx="6" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="18" cy="12" r="1" fill="currentColor"/>'
 };
 const MIC = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 
@@ -62,6 +62,8 @@ export class Nav {
     this.back.addEventListener('click', () => this.jumpBack());
     this.today = item('pb-today', 'today', 'Today');
     this.today.addEventListener('click', () => { this.close(false); this.hooks.goPage('today'); });
+    this.desk = item('pb-desk', 'desk', 'Desk');
+    this.desk.addEventListener('click', () => { this.close(false); this.hooks.goPage('desk'); });
     this.lib = item('pb-lib', 'library', 'Library');
     this.lib.addEventListener('click', () => { this.close(false); this.hooks.goPage('library'); });
     const mic = make('button', 'pb-mic');
@@ -70,10 +72,7 @@ export class Nav {
     mic.addEventListener('click', () => this.hooks.capture());
     this.place = item('pb-place', 'go', 'Go');
     this.place.addEventListener('click', () => this.toggle());
-    const menu = item('pb-menu', 'more', 'More');
-    menu.setAttribute('aria-label', 'Menu');
-    menu.addEventListener('click', () => this.hooks.menu());
-    bar.append(this.today, this.lib, mic, this.place, menu);
+    bar.append(this.today, this.desk, mic, this.lib, this.place);
     // In focus mode the bar shrinks to a handle; a tap brings it back for a moment.
     const handle = make('button', 'pb-handle');
     handle.setAttribute('aria-label', 'Show the bar');
@@ -154,8 +153,14 @@ export class Nav {
     this.place.setAttribute('aria-label', `${this.context ? `${this.name} · ${this.context}` : this.name || 'Inkwell'}. Go somewhere else`);
     // The room you're in is lit; inside a project neither is.
     const view = this.current?.view;
-    const room = view === 'notebook' && (!this.current.pageId || this.current.pageId.startsWith('day-')) ? 'today' : ['library', 'drawer', 'tags'].includes(view) ? 'library' : '';
-    for (const [el, id] of [[this.today, 'today'], [this.lib, 'library']]) { if (room === id) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); }
+    const room = view === 'notebook' && (!this.current.pageId || this.current.pageId.startsWith('day-')) ? 'today' : view === 'desk' ? 'desk' : ['library', 'drawer', 'tags'].includes(view) ? 'library' : '';
+    for (const [el, id] of [[this.today, 'today'], [this.desk, 'desk'], [this.lib, 'library']]) { if (room === id) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); }
+  }
+
+  // How many things need you, on the phone's Desk button.
+  count(n) {
+    if (n > 0) this.desk.dataset.n = String(n); else delete this.desk.dataset.n;
+    this.desk.setAttribute('aria-label', n > 0 ? `Desk, ${n} waiting on you` : 'Desk');
   }
 
   jumpBack() {
@@ -259,7 +264,7 @@ export class Nav {
     }
 
     const desk = make('div', 'go-desk');
-    for (const [id, label, keys] of [['today', 'Today', '⌘J'], ['drawer', 'Drawer', ''], ['library', 'Library', '⌘⇧O'], ['tags', 'Tags', '']]) {
+    for (const [id, label, keys] of [['today', 'Today', '⌘J'], ['desk', 'Desk', '⌘⇧U'], ['library', 'Library', '⌘⇧O'], ['drawer', 'Drawer', ''], ['tags', 'Tags', '']]) {
       const b = make('button', 'go-tab desk' + (active === id && !inside ? ' on' : ''));
       b.append(make('span', 'go-tab-name', label));
       if (keys && !this.hooks.isTouch()) b.append(make('span', 'keys', this.hooks.keyLabel(keys)));
@@ -272,6 +277,13 @@ export class Nav {
       desk.append(o);
     }
     section('Rooms', desk);
+    // The phone's bar has no room for the menu, so it's the sheet's last line.
+    if (this.hooks.isTouch()) {
+      const all = make('button', 'go-all', 'Everything');
+      all.append(make('span', 'go-ctx', 'the whole menu, settings and Look'));
+      all.addEventListener('click', go(() => this.hooks.menu()));
+      parts.push(all);
+    }
     if (!this.hooks.isTouch()) parts.push(make('p', 'go-hint', `${this.hooks.keyLabel('⌘O')}, then Enter, flips you back to where you just were. Typing finds anything.`));
     p.replaceChildren(...parts);
   }

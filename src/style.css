@@ -342,10 +342,10 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 }
 
 /* Views: the manuscript (default), the notebook, the library and a book's home */
-.notebook, .library, .project-home, .world-home, .tags-home, .grid-view, .prod-view, .compare-view, .stage-view { display: none; }
+.notebook, .library, .project-home, .world-home, .tags-home, .desk-home, .grid-view, .prod-view, .compare-view, .stage-view { display: none; }
 :root[data-view] .page { display: none; }
 :root[data-view] .when-write { display: none; }
-:root[data-view="notebook"] .notebook, :root[data-view="library"] .library, :root[data-view="project"] .project-home, :root[data-view="world"] .world-home, :root[data-view="tags"] .tags-home, :root[data-view="grid"] .grid-view, :root[data-view="production"] .prod-view, :root[data-view="deliver"] .prod-view, :root[data-view="compare"] .compare-view, :root[data-view="stage"] .stage-view, :root[data-view="drawer"] .stage-view { display: flex; }
+:root[data-view="notebook"] .notebook, :root[data-view="library"] .library, :root[data-view="project"] .project-home, :root[data-view="world"] .world-home, :root[data-view="tags"] .tags-home, :root[data-view="desk"] .desk-home, :root[data-view="grid"] .grid-view, :root[data-view="production"] .prod-view, :root[data-view="deliver"] .prod-view, :root[data-view="compare"] .compare-view, :root[data-view="stage"] .stage-view, :root[data-view="drawer"] .stage-view { display: flex; }
 
 .notebook { justify-content: center; padding: 72px 32px 40vh; }
 .nb-sheet { width: 100%; max-width: var(--page-width, 660px); }
@@ -490,7 +490,7 @@ button.tree-area:hover { color: var(--ink); }
 .dot { width: 8px; height: 8px; border-radius: 2px; flex: none; display: inline-block; }
 
 /* Library and a book's home */
-.library, .project-home, .world-home, .tags-home { justify-content: center; padding: 72px 32px 20vh; }
+.library, .project-home, .world-home, .tags-home, .desk-home { justify-content: center; padding: 72px 32px 20vh; }
 .lib-sheet { width: 100%; max-width: 1000px; }
 .lib-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
 .lib-head h1, .ph-head h1 { font-family: var(--prose); font-weight: 500; font-size: 38px; margin: 0; flex: 1; outline: none; }
@@ -621,7 +621,7 @@ html.focus .past-days:not(.open) { display: none !important; }
 .past-more { height: 1px; }
 
 @media (max-width: 760px) {
-  .library, .project-home, .world-home, .tags-home { padding: 48px 18px 20vh; }
+  .library, .project-home, .world-home, .tags-home, .desk-home { padding: 48px 18px 20vh; }
   .ph-grid { grid-template-columns: 1fr; }
   .chips, .chip-row { align-items: flex-start; justify-content: flex-start; }
   #lib-path { text-align: left; }
@@ -1550,12 +1550,12 @@ body.looking .topbar:hover, body.looking .topbar:focus-within, body.show-top .to
   .topbar { padding: 8px 10px; }
   .topbar.has-tabs .crumb { flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
   .topbar.has-tabs .crumb::-webkit-scrollbar { display: none; }
-  body.looking:not(.typing) :is(.library, .project-home, .world-home, .tags-home, .grid-view, .prod-view, .stage-view, .compare-view) { padding-top: max(28px, calc(var(--topbar-h, 48px) + 24px)); }
+  body.looking:not(.typing) :is(.library, .project-home, .world-home, .tags-home, .desk-home, .grid-view, .prod-view, .stage-view, .compare-view) { padding-top: max(28px, calc(var(--topbar-h, 48px) + 24px)); }
 }
 /* On a computer the faint bar stays on the pages you look at, so they start below it. */
 @media (min-width: 701px) {
   /* Not tied to typing, so the page doesn't jump when a box gets or loses the caret. */
-  body.looking :is(.library, .project-home, .world-home, .tags-home, .grid-view, .prod-view, .stage-view, .compare-view) { padding-top: max(104px, calc(var(--topbar-h, 88px) + 20px)); }
+  body.looking :is(.library, .project-home, .world-home, .tags-home, .desk-home, .grid-view, .prod-view, .stage-view, .compare-view) { padding-top: max(104px, calc(var(--topbar-h, 88px) + 20px)); }
 }
 
 /* ---------- The Today panel ---------- */
@@ -1716,6 +1716,7 @@ button.st-from:hover { color: var(--ink); }
 .go-tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
 .go-desk { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .go-desk:has(> :nth-child(5)) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.go-desk:has(> :nth-child(6)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .go-tab { min-height: 48px; border-radius: 10px; border: 0; background: var(--bg); color: var(--ink); font: 13px var(--ui); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; padding: 4px; }
 .go-tab:hover, .go-tab:focus-visible { outline: 1px solid var(--accent); }
 .go-tab.desk { border: 1px solid var(--line); background: none; }
@@ -1742,7 +1743,7 @@ button.st-from:hover { color: var(--ink); }
   .edge-left { display: none; }
   .placebar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; align-items: center; justify-content: space-around; gap: 0; padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); background: var(--panel); border-top: 1px solid var(--line); font-family: var(--ui); }
   body { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
-  /* Today, Library, the mic in the middle, Go and More: a small drawing over one word each. */
+  /* Today, Desk, the mic in the middle, Library and Go: a small drawing over one word each. */
   .placebar button { border: 0; background: none; color: var(--muted); font: 500 10.5px var(--ui); flex: none; }
   .placebar .pb-item { flex: 1 1 0; min-width: 0; height: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 0; border-radius: 12px; letter-spacing: .01em; transition: color var(--t1, .12s); }
   .placebar .pb-item[aria-current="page"] { color: var(--ink); }

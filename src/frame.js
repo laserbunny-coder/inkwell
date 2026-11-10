@@ -82,7 +82,7 @@ const moves = () => currentMotion() === 'full';
 const TIME = ['notebook'];
 const LIBRARY = ['library', 'drawer', 'tags'];
 const PAGES = ['overview', 'gather', 'shape', 'write', 'revise', 'make', 'deliver', 'notes', 'meetings'];
-const roomOf = (v) => (TIME.includes(v) ? 'today' : LIBRARY.includes(v) ? 'library' : 'project');
+const roomOf = (v) => (TIME.includes(v) ? 'today' : v === 'desk' ? 'desk' : LIBRARY.includes(v) ? 'library' : 'project');
 
 // ---------- the frame ----------
 
@@ -99,6 +99,8 @@ export class Frame {
     wide.addEventListener('change', () => this.apply());
     window.addEventListener('resize', () => this.glide());
     document.fonts?.addEventListener?.('loadingdone', () => this.glide());
+    // Another look sets the words in another face, so the highlight finds them again.
+    document.addEventListener('inkwell:look', () => { this.glide(); setTimeout(() => this.glide(), 250); });
     // Once the rest of the app has set itself up (the hooks reach into it).
     queueMicrotask(() => this.apply());
   }
@@ -131,6 +133,20 @@ export class Frame {
     this.shelves.title = 'Shelves: your areas and worlds';
     this.swPill = make('span', 'switch-pill');
     this.swPill.setAttribute('aria-hidden', 'true');
+    // The Desk's two views: what's on stage, and every thread there has been.
+    this.deskSwitch = make('div', 'place-switch desk-switch');
+    this.deskSwitch.setAttribute('role', 'group');
+    this.deskSwitch.setAttribute('aria-label', 'Views of the Desk');
+    this.dkPill = make('span', 'switch-pill');
+    this.dkPill.setAttribute('aria-hidden', 'true');
+    this.onStage = make('button', 'tb-btn', 'On stage');
+    this.onStage.dataset.cmd = 'desk';
+    this.onStage.title = 'On stage: every project, what needs you and who’s working on it';
+    this.history = make('button', 'tb-btn', 'History');
+    this.history.dataset.cmd = 'desk-history';
+    this.history.title = 'History: every Claude thread, newest first';
+    this.deskSwitch.append(this.dkPill, this.onStage, this.history);
+    this.deskSwitch.hidden = true;
     // Page tabs are redrawn each time, so their highlight lives beside them and slides.
     this.tabsPill = make('span', 'tabs-pill');
     this.tabsPill.setAttribute('aria-hidden', 'true');
@@ -154,6 +170,7 @@ export class Frame {
     const bar = $('.topbar');
     if (want) {
       this.move($('#view-toggle'), this.rooms);
+      this.move($('#desk-toggle'), this.rooms);
       this.move($('#library-toggle'), this.rooms);
       this.rail.prepend(this.pill);
       const k = (text) => this.hooks.keyLabel?.(text) || text;
@@ -165,7 +182,7 @@ export class Frame {
       this.switch.append(this.swPill, this.shelves);
       this.move($('#drawer-toggle'), this.switch);
       this.move($('#tags-toggle'), this.switch);
-      this.mid.append(this.tabsPill, this.switch);
+      this.mid.append(this.tabsPill, this.switch, this.deskSwitch);
       this.move($('#page-tabs'), this.mid);
       this.move($('#tb-back'), this.left);
       this.move($('#crumb'), this.left);
@@ -190,17 +207,19 @@ export class Frame {
   }
 
   // Which way the next place lies from this one, for the way it arrives.
-  turn(from, to, page) {
-    if (!moves()) { delete root.dataset.turn; return; }
+  turn(from, to, page, tab) {
+    if (!moves()) { delete root.dataset.turn; this.lastTab = tab || null; return; }
     const a = roomOf(from);
     const b = roomOf(to);
     let turn = 'rise';
-    if (a === b && a === 'library') turn = LIBRARY.indexOf(to) > LIBRARY.indexOf(from) ? 'fwd' : LIBRARY.indexOf(to) < LIBRARY.indexOf(from) ? 'back' : 'rise';
+    if (a === b && a === 'desk') turn = tab === 'history' ? 'fwd' : this.lastTab === 'history' ? 'back' : 'rise';
+    else if (a === b && a === 'library') turn = LIBRARY.indexOf(to) > LIBRARY.indexOf(from) ? 'fwd' : LIBRARY.indexOf(to) < LIBRARY.indexOf(from) ? 'back' : 'rise';
     else if (a === b && a === 'project' && page && this.lastPage && page !== this.lastPage) turn = PAGES.indexOf(page) > PAGES.indexOf(this.lastPage) ? 'fwd' : 'back';
     else if (a !== b && b === 'project') turn = 'in';
     else if (a !== b && a === 'project') turn = 'out';
     root.dataset.turn = turn;
     this.lastPage = page || null;
+    this.lastTab = tab || null;
     if (from === to) { root.classList.remove('turned'); void root.offsetWidth; root.classList.add('turned'); }
     else root.classList.remove('turned');
   }
@@ -217,12 +236,25 @@ export class Frame {
       const at = { library: this.shelves, drawer: document.getElementById('drawer-toggle'), tags: document.getElementById('tags-toggle') }[v];
       for (const b of this.switch.querySelectorAll('button')) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
     }
+    this.deskSwitch.hidden = v !== 'desk';
+    if (v === 'desk') {
+      const at = this.last?.tab === 'history' ? this.history : this.onStage;
+      for (const b of [this.onStage, this.history]) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
+    }
     // The Library is one room: its word in the rail stays lit on the Drawer and Tags too.
     const libBtn = document.getElementById('library-toggle');
     if (lib) libBtn?.setAttribute('aria-current', 'page');
     this.contents.hidden = !this.hooks.hasContents?.();
     this.drawProjects();
     this.glide();
+  }
+
+  // How many things need you, beside Desk. Amber means nothing else in the app.
+  count(n) {
+    const b = document.getElementById('desk-toggle');
+    if (!b) return;
+    if (n > 0) b.dataset.n = String(n); else delete b.dataset.n;
+    b.setAttribute('aria-label', n > 0 ? `Desk, ${n} waiting on you` : 'Desk');
   }
 
   async drawProjects() {
@@ -271,6 +303,7 @@ export class Frame {
         this.pill.style.height = `${a.height}px`;
       }
       put(this.swPill, this.switch, this.switch.querySelector('[aria-current="page"]'));
+      put(this.dkPill, this.deskSwitch, this.deskSwitch.querySelector('[aria-current="page"]'));
       const tabs = document.getElementById('page-tabs');
       put(this.tabsPill, this.mid, tabs && !tabs.hidden ? tabs.querySelector('.pt-tab.on') : null);
     });
