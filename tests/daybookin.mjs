@@ -104,7 +104,13 @@ const command = async (p, name) => {
 // Opens the box and waits until it has read Daybook.
 const box = async (p) => {
   await command(p, 'Bring in Daybook');
-  await p.waitForSelector('.dbin-box');
+  const seen = await p.waitForSelector('.dbin-box', { timeout: 10000 }).then(() => true, () => false);
+  if (!seen) {
+    // GitHub's slower machine has dropped this first Enter right after a start: say what showed, then ask again.
+    console.log('     (no box yet:', await p.evaluate(() => JSON.stringify({ palette: !document.querySelector('.palette')?.hidden, typed: document.querySelector('#palette-input')?.value, first: document.querySelector('#palette-list li')?.textContent, view: document.documentElement.dataset.view })), ')');
+    await command(p, 'Bring in Daybook');
+    await p.waitForSelector('.dbin-box');
+  }
   await p.waitForFunction(() => { const t = document.querySelector('.dbin-body')?.textContent || ''; return t && !t.startsWith('Reading'); });
   return p.locator('.dbin-body p').allInnerTexts();
 };

@@ -298,6 +298,11 @@ try {
   await check('back in the text, the scene is where the grid put it', async () => {
     await laptop.keyboard.press('Control+Shift+G');
     await laptop.waitForSelector('html:not([data-view]) #editor .scene-break[data-eid="sp_s3"]');
+    // The text may draw once from what it had before the move, then again: wait for the moved order.
+    await laptop.waitForFunction(() => {
+      const o = [...document.querySelectorAll('#editor .ProseMirror > [data-eid]')].map((e) => e.dataset.eid);
+      return o.includes('sp_s1') && o.indexOf('sp_s3') < o.indexOf('sp_s1');
+    }, null, { timeout: 5000 }).catch(() => {});
     const order = await laptop.locator('#editor .ProseMirror > [data-eid]').evaluateAll((els) => els.map((e) => e.dataset.eid));
     assert.ok(order.indexOf('sp_s3') < order.indexOf('sp_s1'));
     assert.equal(order[order.indexOf('sp_s3') + 1], 'pp_5');

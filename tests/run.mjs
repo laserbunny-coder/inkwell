@@ -835,7 +835,7 @@ try {
     await sleep(500);
     await ph.keyboard.press('Control+K');
     await ph.waitForSelector('#palette-list li');
-    await ph.keyboard.type('New screenplay');
+    await ph.locator('#palette-input').fill('New screenplay');
     await ph.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('New screenplay'));
     await ph.keyboard.press('Enter');
     await ph.waitForSelector('#lib-new', { state: 'visible' });
@@ -844,6 +844,8 @@ try {
     await ph.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Idea');
     await sleep(400);
     await ph.keyboard.press('Control+O');
+    // Type once Go's find box has the keys (on a slow machine the first ones were lost).
+    await ph.waitForFunction(() => document.activeElement?.classList.contains('go-find'));
     await ph.keyboard.type('Script · Pocket');
     await ph.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('Script · Pocket'));
     await ph.keyboard.press('Enter');
