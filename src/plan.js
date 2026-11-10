@@ -321,7 +321,7 @@ export class Plan {
     row.dataset.task = id;
     if (i.occ) row.dataset.occ = i.occ;
     if (ghost) row.dataset.ghost = i.ghost;
-    if (!done && !ghost && drag && hover.matches) row.draggable = true;
+    if (!done && !ghost && drag) { row.dataset.move = '1'; if (hover.matches) row.draggable = true; }
     const check = make('button', 'pl-check');
     check.innerHTML = ICON.check;
     check.dataset.act = 'tick';
@@ -481,7 +481,7 @@ export class Plan {
     b.dataset.act = 'more';
     if (i.occ) b.dataset.occ = i.occ;
     if (i.ghost) { b.dataset.ghost = i.ghost; b.title = `${repeatWord(i.task.repeat)}: it comes round on this day`; }
-    if (!done && !i.ghost && hover.matches) b.draggable = true;
+    if (!done && !i.ghost) { b.dataset.move = '1'; if (hover.matches) b.draggable = true; }
     b.append(make('span', 'pw-t', i.row.text || 'Untitled'));
     const mins = i.task.habit ? 0 : done ? i.task.actual || i.task.est : i.task.est;
     if (mins) b.append(make('small', '', span(mins)));
@@ -910,16 +910,36 @@ export class Plan {
   drags(root) {
     let id = null;
     const clear = () => root.querySelectorAll('.drop-before, .drop-after, .drop-on').forEach((x) => x.classList.remove('drop-before', 'drop-after', 'drop-on'));
-    const spot = (e) => {
-      const zone = e.target.closest?.('.pw-day, .pw-tray');
+    const spot = (e, target = e.target) => {
+      const zone = target?.closest?.('.pw-day, .pw-tray');
       if (zone) return { zone };
-      const list = e.target.closest?.('.pl-list');
+      const list = target?.closest?.('.pl-list');
       if (!list) return null;
       const rows = [...list.querySelectorAll('.pl-task:not(.done):not(.carried):not(.ghost)')].filter((r) => r.dataset.task !== id);
       let after = null;
       for (const r of rows) { const b = r.getBoundingClientRect(); if (e.clientY > b.top + b.height / 2) after = r; }
       return { list, rows, after };
     };
+    const show = (s) => {
+      clear();
+      if (!s) return;
+      if (s.zone) s.zone.classList.add('drop-on');
+      else if (s.after) s.after.classList.add('drop-after');
+      else (s.rows[0] || s.list.querySelector('.pl-add'))?.classList.add('drop-before');
+    };
+    const land = async (s, moved) => {
+      if (!s) return;
+      if (s.zone) {
+        const day = s.zone.dataset.day || null;
+        const i = this.item(moved);
+        if (!i || (i.task.day || null) === day) return this.refresh();
+        return this.wrote(await setTask(moved, { day, order: this.lastOrder(day) }));
+      }
+      const ids = s.rows.map((r) => r.dataset.task);
+      ids.splice(s.after ? ids.indexOf(s.after.dataset.task) + 1 : 0, 0, moved);
+      return this.wrote(await arrange(ids, s.list.dataset.day));
+    };
+    this.touchDrags(root, { spot, show, clear, land, setId: (v) => { id = v; } });
     root.addEventListener('dragstart', (e) => {
       const row = e.target.closest?.('[data-task][draggable="true"]');
       if (!row) return;
@@ -935,10 +955,7 @@ export class Plan {
       if (!s) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      clear();
-      if (s.zone) s.zone.classList.add('drop-on');
-      else if (s.after) s.after.classList.add('drop-after');
-      else (s.rows[0] || s.list.querySelector('.pl-add'))?.classList.add('drop-before');
+      show(s);
     });
     root.addEventListener('drop', async (e) => {
       if (!id) return;
@@ -948,16 +965,73 @@ export class Plan {
       clear();
       if (!s) return;
       e.preventDefault();
-      if (s.zone) {
-        const day = s.zone.dataset.day || null;
-        const i = this.item(moved);
-        if (!i || (i.task.day || null) === day) return this.refresh();
-        return this.wrote(await setTask(moved, { day, order: this.lastOrder(day) }));
-      }
-      const ids = s.rows.map((r) => r.dataset.task);
-      ids.splice(s.after ? ids.indexOf(s.after.dataset.task) + 1 : 0, 0, moved);
-      return this.wrote(await arrange(ids, s.list.dataset.day));
+      return land(s, moved);
     });
+  }
+
+  // On a touch screen there's no mouse drag: press and hold a task, then
+  // slide it to its new place (or, in Week, onto another day). Holding still
+  // instead brings up the task's menu as before; a quick swipe still scrolls.
+  touchDrags(root, { spot, show, clear, land, setId }) {
+    const HOLD = 320;
+    let t = null; // { row, id, x, y, armed, moving, timer }
+    const end = () => {
+      if (!t) return;
+      clearTimeout(t.timer);
+      t.row.classList.remove('dragging', 'pl-armed');
+      document.documentElement.classList.remove('pl-touchdrag');
+      t = null;
+      setId(null);
+      clear();
+    };
+    const at = (x, y) => spot({ clientY: y }, document.elementFromPoint(x, y));
+    root.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return end();
+      const row = e.target.closest?.('[data-task][data-move]');
+      if (!row || e.target.closest('input')) return;
+      const { clientX: x, clientY: y } = e.touches[0];
+      t = { row, id: row.dataset.task, x, y, armed: false, moving: false };
+      t.timer = setTimeout(() => {
+        if (!t) return;
+        t.armed = true;
+        row.classList.add('pl-armed');
+        navigator.vibrate?.(12);
+      }, HOLD);
+    }, { passive: true });
+    root.addEventListener('touchmove', (e) => {
+      if (!t) return;
+      const { clientX: x, clientY: y } = e.touches[0];
+      if (!t.armed) {
+        if (Math.hypot(x - t.x, y - t.y) > 10) end(); // a scroll, not a hold
+        return;
+      }
+      e.preventDefault();
+      if (!t.moving) {
+        if (Math.hypot(x - t.x, y - t.y) < 6) return;
+        t.moving = true;
+        setId(t.id);
+        t.row.classList.add('dragging');
+        document.documentElement.classList.add('pl-touchdrag');
+      }
+      show(at(x, y));
+      // Near the top or bottom edge, the page scrolls along.
+      const edge = 60;
+      if (y < edge) window.scrollBy(0, -12);
+      else if (y > window.innerHeight - edge) window.scrollBy(0, 12);
+    }, { passive: false });
+    root.addEventListener('touchend', (e) => {
+      if (!t) return;
+      const was = t;
+      if (!was.moving) return end();
+      e.preventDefault(); // no tap on whatever is under the finger
+      const { clientX: x, clientY: y } = e.changedTouches[0];
+      const s = at(x, y);
+      end();
+      land(s, was.id);
+    });
+    root.addEventListener('touchcancel', end);
+    // The long-press menu only when the task wasn't moved.
+    root.addEventListener('contextmenu', (e) => { if (t?.moving) { e.preventDefault(); e.stopImmediatePropagation(); } else end(); }, true);
   }
 
   // A running timer counts up on the page once a second.

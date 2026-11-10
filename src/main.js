@@ -534,6 +534,26 @@ const currentEditor = () => (inNotebook() ? notebook.editor : editor);
 
 // ---------- getting around ----------
 
+// The phone opens on Today when you've been away a while (see the start).
+const PHONE = matchMedia('(hover: none) and (pointer: coarse)');
+const AWAY = 3 * 60 * 60 * 1000;
+function phoneAway(now = Date.now()) {
+  if (!PHONE.matches || inPane) return false;
+  let at = 0;
+  try { at = Number(localStorage.getItem('placeAt')) || 0; } catch { /* ignore */ }
+  if (!at) return false;
+  return now - at > AWAY || isoToday() !== isoOf(new Date(at));
+}
+// The app left open in the background counts too: it comes back on Today.
+if (!inPane) {
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { try { localStorage.setItem('placeAt', String(Date.now())); } catch { /* full */ } return; }
+    if (!root.dataset.started || !phoneAway() || document.querySelector('dialog[open]')) return;
+    if (lastPlace?.view === 'notebook' && lastPlace.pageId === dayId(isoToday())) return;
+    go({ view: 'notebook', pageId: dayId(isoToday()) });
+  });
+}
+
 // Where you are, kept per device so the app opens back there.
 // Each place also goes in the browser's history, so Back and Forward (mouse
 // buttons, Alt+← →, ⌘[ ]) step through where you've been.
@@ -542,7 +562,7 @@ let lastPlace = null; // where you are, for the place bar (named once the crumb 
 function remember(place) {
   lastPlace = place;
   if (inPane) { paneTrailAdd(place); return; }
-  try { localStorage.setItem('place', JSON.stringify(place)); } catch { /* full */ }
+  try { localStorage.setItem('place', JSON.stringify(place)); localStorage.setItem('placeAt', String(Date.now())); } catch { /* full */ }
   if (JSON.stringify(history.state) === JSON.stringify(place)) return;
   if (historyMode === 'push') history.pushState(place, '');
   else history.replaceState(place, '');
@@ -5465,6 +5485,9 @@ async function start() {
   setTimeout(migrateOnce, 6000);
   let place = null;
   try { place = JSON.parse(localStorage.getItem('place') || 'null'); } catch { /* ignore */ }
+  // On the phone, coming back on a new day or after a few hours away opens
+  // on Today (the day's plan on top); a quick look away keeps your place.
+  if (place?.view && phoneAway()) place = { view: 'notebook', pageId: dayId(isoToday()) };
   // A first run opens in the novel to write in, or on today's page while
   // there's nothing of yours here yet (signed out, or still catching up).
   if (!place?.view) place = (await lastChapterAnywhere()) ? { view: 'write' } : { view: 'notebook', pageId: dayId(isoToday()) };
