@@ -2,9 +2,9 @@
 // anywhere.
 //
 // On a phone a bar sits along the bottom (hidden while the keyboard is up):
-// Back to the last place (named, so you know where it goes), the place you're
-// in, Today, the mic and the menu. Tapping the place opens the Go sheet: the
-// last few places, the path up, this piece's or world's pages, and the desk.
+// Today, Library, the mic in the middle, Go and More. Go opens the Go sheet:
+// the last few places (the first is Back), the path up, this piece's or
+// world's pages, and the rooms.
 // On a computer the top bar names the place, with the last place as its first
 // button, and Ctrl + O opens the same panel (Enter flips straight back).
 
@@ -25,6 +25,12 @@ export function placeKey(p) {
   return [p.view, p.chapterId || p.pageId || p.id || p.area || '', p.page || p.tab || p.tag || ''].join(':');
 }
 
+const ICONS = {
+  today: '<circle cx="12" cy="12" r="3.6"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.7 5.7l1.5 1.5M16.8 16.8l1.5 1.5M5.7 18.3l1.5-1.5M16.8 7.2l1.5-1.5"/>',
+  library: '<path d="M5.5 4v16M10 4v16M14 6.5l4.5 13"/>',
+  go: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.6-4.6"/>',
+  more: '<circle cx="6" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="18" cy="12" r="1" fill="currentColor"/>'
+};
 const MIC = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 
 export class Nav {
@@ -44,20 +50,30 @@ export class Nav {
     // The phone's bar.
     const bar = make('nav', 'placebar');
     bar.setAttribute('aria-label', 'Getting around');
+    // One word under one small drawing each, the mic in the middle.
+    const item = (cls, name, word) => {
+      const el = make('button', `pb-item ${cls}`);
+      el.innerHTML = `<svg class="pb-ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
+      el.append(make('span', 'pb-word', word));
+      return el;
+    };
+    // Back lives in the Go sheet (Jump back) and on the phone's own back swipe.
     this.back = make('button', 'pb-back');
     this.back.addEventListener('click', () => this.jumpBack());
-    this.place = make('button', 'pb-place');
-    this.place.addEventListener('click', () => this.toggle());
-    const today = make('button', 'pb-today', 'Today');
-    today.addEventListener('click', () => { this.close(false); this.hooks.goPage('today'); });
+    this.today = item('pb-today', 'today', 'Today');
+    this.today.addEventListener('click', () => { this.close(false); this.hooks.goPage('today'); });
+    this.lib = item('pb-lib', 'library', 'Library');
+    this.lib.addEventListener('click', () => { this.close(false); this.hooks.goPage('library'); });
     const mic = make('button', 'pb-mic');
     mic.setAttribute('aria-label', 'Capture by voice');
     mic.innerHTML = MIC;
     mic.addEventListener('click', () => this.hooks.capture());
-    const menu = make('button', 'pb-menu', '⋯');
+    this.place = item('pb-place', 'go', 'Go');
+    this.place.addEventListener('click', () => this.toggle());
+    const menu = item('pb-menu', 'more', 'More');
     menu.setAttribute('aria-label', 'Menu');
     menu.addEventListener('click', () => this.hooks.menu());
-    bar.append(this.back, this.place, today, mic, menu);
+    bar.append(this.today, this.lib, mic, this.place, menu);
     // In focus mode the bar shrinks to a handle; a tap brings it back for a moment.
     const handle = make('button', 'pb-handle');
     handle.setAttribute('aria-label', 'Show the bar');
@@ -135,8 +151,11 @@ export class Nav {
       b.textContent = last ? `‹ ${last.name}` : '';
       b.title = last ? `Back to ${last.context ? `${last.name} · ${last.context}` : last.name}` : '';
     }
-    this.place.replaceChildren(make('span', 'pb-name', this.context ? `${this.name} · ${this.context}` : this.name || 'Inkwell'), make('span', 'pb-up', '▴'));
-    this.place.setAttribute('aria-label', `${this.name}. Go somewhere else`);
+    this.place.setAttribute('aria-label', `${this.context ? `${this.name} · ${this.context}` : this.name || 'Inkwell'}. Go somewhere else`);
+    // The room you're in is lit; inside a project neither is.
+    const view = this.current?.view;
+    const room = view === 'notebook' && (!this.current.pageId || this.current.pageId.startsWith('day-')) ? 'today' : ['library', 'drawer', 'tags'].includes(view) ? 'library' : '';
+    for (const [el, id] of [[this.today, 'today'], [this.lib, 'library']]) { if (room === id) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); }
   }
 
   jumpBack() {
@@ -252,7 +271,7 @@ export class Nav {
       o.addEventListener('click', go(() => this.hooks.outline()));
       desk.append(o);
     }
-    section('Desk', desk);
+    section('Rooms', desk);
     if (!this.hooks.isTouch()) parts.push(make('p', 'go-hint', `${this.hooks.keyLabel('⌘O')}, then Enter, flips you back to where you just were. Typing finds anything.`));
     p.replaceChildren(...parts);
   }

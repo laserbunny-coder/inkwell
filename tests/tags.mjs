@@ -223,12 +223,13 @@ try {
     assert.deepEqual((await row(page, 'l4')).tags, ['stunts']);
   });
 
-  await check('the end says so, and the shelf and Library both lead to the Tags page', async () => {
+  await check('the end says so, and the shelf and the Library’s switch both lead to the Tags page', async () => {
     for (let i = 0; i < 3; i++) { await page.keyboard.press('Alt+ArrowRight'); await sleep(300); }
     await page.waitForSelector('.tg-end');
     await page.keyboard.press('Control+Shift+O');
-    await page.waitForSelector('.library .lib-tags');
-    await page.click('.library .lib-tags');
+    // Tags is one of the Library's three views now, in the switch at the top centre.
+    await page.waitForSelector('.place-switch #tags-toggle');
+    await page.click('.place-switch #tags-toggle');
     await page.waitForSelector('.tags-home .tg-tag');
     assert.equal(await page.evaluate(() => document.documentElement.dataset.view), 'tags');
   });

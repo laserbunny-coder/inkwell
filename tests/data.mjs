@@ -127,6 +127,8 @@ try {
     await p.waitForSelector('#versions', { state: 'visible' });
     await p.locator('#versions').click();
     await p.waitForSelector('.versions-pair');
+    // The panel slides in; measure once it has landed.
+    await p.locator('.versions').evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
     // The buttons sit side by side and start inside the panel, not cut off at its left edge.
     const list = await p.locator('.versions-list').boundingBox();
     const btns = await p.locator('.versions-list li').first().locator('.versions-actions button').evaluateAll((bs) => bs.map((b) => { const r = b.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width }; }));

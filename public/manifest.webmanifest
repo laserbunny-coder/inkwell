@@ -4,8 +4,8 @@
   "start_url": "./",
   "display": "standalone",
   "launch_handler": { "client_mode": "navigate-existing" },
-  "background_color": "#F6F1E7",
-  "theme_color": "#1C1A17",
+  "background_color": "#0E1117",
+  "theme_color": "#0E1117",
   "icons": [
     {
       "src": "icon-192.png",

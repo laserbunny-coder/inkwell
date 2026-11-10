@@ -165,14 +165,17 @@ try {
     await page.waitForSelector('#wh-board .sb-card');
   });
 
-  await check('the tabs sit in the top strip: Overview, then Gather to Deliver, faint on a page you look at', async () => {
+  await check('the tabs sit at the top centre: Overview, then Gather to Deliver, with the pill on the one you are in', async () => {
     assert.deepEqual(await tabs(page), ['overview*', 'gather', 'shape', 'write', 'revise', 'make', 'deliver']);
     await page.mouse.move(700, 500);
     await sleep(500);
     assert.ok(await shown(page));
     assert.ok(await page.evaluate(() => document.body.classList.contains('looking')));
-    const op = await page.evaluate(() => getComputedStyle(document.querySelector('.topbar')).opacity);
-    assert.ok(Number(op) < 0.8, op);
+    // The bar stays put and readable; the tabs are in its middle, between the path and the status.
+    const bar = await page.evaluate(() => { const x = (q) => document.querySelector(q).getBoundingClientRect(); return { opacity: getComputedStyle(document.querySelector('.topbar')).opacity, crumb: x('#crumb').right, tabs: x('#page-tabs').left, tabsEnd: x('#page-tabs').right, right: x('.tb-r').left }; });
+    assert.equal(bar.opacity, '1');
+    assert.ok(bar.crumb <= bar.tabs && bar.tabsEnd <= bar.right, JSON.stringify(bar));
+    await page.waitForFunction(() => { const a = document.querySelector('.tabs-pill')?.getBoundingClientRect(); const b = document.querySelector('#page-tabs .pt-tab.on')?.getBoundingClientRect(); return a && b && a.width > 0 && Math.abs(a.left - b.left) < 2; });
     await shot(page, 'pages-overview');
   });
 
@@ -399,24 +402,27 @@ try {
     assert.equal((await get(page, 'pr_reel2')).fields.draft, 2);
   });
 
-  await check('writing: the strip never shows, comes back at the top edge, and is gone in focus', async () => {
+  await check('writing: the bar and the rail stay where they are, and both are gone in focus', async () => {
     assert.equal(await viewOf(page), 'write');
-    assert.ok(!(await shown(page)), 'hidden while writing');
-    await page.mouse.move(700, 4);
-    await sleep(400);
-    assert.ok(await shown(page), 'back at the top edge');
-    assert.ok(await page.locator('#page-tabs').isVisible());
-    assert.deepEqual(await tabs(page), ['overview', 'gather', 'shape', 'write*', 'revise', 'make', 'deliver']);
     await page.mouse.move(700, 500);
     await sleep(400);
+    assert.ok(await shown(page), 'the bar stays while writing');
+    assert.ok(await page.locator('.rail').isVisible());
+    assert.ok(await page.locator('#page-tabs').isVisible());
+    assert.deepEqual(await tabs(page), ['overview', 'gather', 'shape', 'write*', 'revise', 'make', 'deliver']);
     await page.keyboard.press('Control+.');
-    await sleep(300);
+    await sleep(500);
+    assert.ok(!(await page.locator('.rail').isVisible()), 'no rail in focus');
+    assert.ok(!(await page.locator('#crumb').isVisible()), 'no bar in focus');
+    // The text takes the whole width: nothing is left over where the rail was.
+    assert.equal(await page.evaluate(() => getComputedStyle(document.body).marginLeft), '0px');
     await page.keyboard.down('Alt');
     await sleep(600);
     assert.ok(await page.locator('#page-tabs').isHidden(), 'no tabs in focus');
     await page.keyboard.up('Alt');
     await page.keyboard.press('Control+.');
-    await sleep(300);
+    await sleep(500);
+    assert.ok(await page.locator('.rail').isVisible(), 'the rail is back');
   });
 
   // ---------- the desk ----------
@@ -425,7 +431,7 @@ try {
     await command(page, 'The Drawer');
     await page.waitForFunction(() => document.documentElement.dataset.view === 'drawer');
     await page.waitForSelector('.st-drawer .st-card');
-    // Out on the desk there are no page tabs: the fixed Drawer button is lit instead.
+    // Out on the desk there are no page tabs: Drawer is lit in the Library's switch instead.
     assert.deepEqual(await tabs(page), []);
     assert.ok(await page.locator('#page-tabs').isHidden());
     assert.equal(await page.locator('#drawer-toggle').getAttribute('aria-current'), 'page');
@@ -446,8 +452,8 @@ try {
     assert.ok(await page.locator('#nb-today').isHidden());
     assert.ok(await page.locator('.nb-date').isHidden());
     assert.equal(await page.locator('.rail-top').count(), 0);
-    // The right side never changes: the four places, then Go.
-    assert.deepEqual(await page.locator('.tb-places .tb-btn').allInnerTexts(), ['Today', 'Drawer', 'Library', 'Tags', 'Go']);
+    // The rail never changes: the two rooms on top.
+    assert.deepEqual(await page.locator('.rail-rooms button').allInnerTexts(), ['Today', 'Library']);
     await page.waitForSelector('#page-tabs .pt-tab');
     assert.deepEqual((await tabs(page))[0], 'overview');
   });

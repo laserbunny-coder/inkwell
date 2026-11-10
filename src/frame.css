@@ -73,7 +73,8 @@ html, body { -webkit-font-smoothing: antialiased; }
 
 .rail { display: none; }
 @media (min-width: 701px) {
-  html.has-rail { --rail-w: 208px; }
+  /* Anything scrolled into view lands below the bar, not under it. */
+  html.has-rail { --rail-w: 208px; scroll-padding-top: 60px; }
   html.has-rail body { margin-left: var(--rail-w); }
   html.has-rail .rail {
     display: flex; flex-direction: column; gap: 1px;
@@ -107,7 +108,9 @@ html, body { -webkit-font-smoothing: antialiased; }
   /* The left edge no longer opens the contents; the rail's own word does. */
   html.has-rail .edge-left { display: none; }
   html.has-rail .edge-top { left: var(--rail-w); }
-  html.has-rail .outline { left: var(--rail-w); z-index: 41; padding-top: 22px; box-shadow: 14px 0 40px rgba(0, 0, 0, .28); }
+  html.has-rail .outline { left: var(--rail-w); z-index: 41; padding-top: 22px; }
+  html.has-rail body.show-outline .outline, html.has-rail body.pin-outline .outline { box-shadow: 14px 0 40px rgba(0, 0, 0, .28); }
+  :root[data-look="paper"].has-rail body.show-outline .outline, :root[data-look="paper"].has-rail body.pin-outline .outline { box-shadow: 14px 0 40px rgba(40, 36, 28, .12); }
 
   /* ---------- The bar: where you are, the switch, how it's saved ---------- */
 
@@ -123,7 +126,7 @@ html, body { -webkit-font-smoothing: antialiased; }
   .tb-l { gap: 8px; overflow: hidden; }
   .tb-m { position: relative; justify-self: center; gap: 2px; }
   .tb-r { justify-self: end; gap: 6px; }
-  html.has-rail .topbar .crumb { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; color: var(--muted); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+  html.has-rail .topbar .crumb { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; color: var(--muted); padding-right: 28px; mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
   html.has-rail .topbar .crumb .crumb-part { color: inherit; }
   html.has-rail .topbar .crumb .crumb-part:hover, html.has-rail .topbar .crumb .crumb-part.here { color: var(--ink); }
   html.has-rail .tb-back { height: 26px; border-radius: 99px; background: var(--raise); color: var(--soft); padding: 0 11px 0 9px; }
@@ -140,13 +143,14 @@ html, body { -webkit-font-smoothing: antialiased; }
   html.has-rail .page-tabs[data-scope] .pt-tab[data-page="overview"] { margin-right: 0; }
 
   /* Focus: only the text. The rail steps off to the left and the page takes its room. */
-  html.has-rail .rail { transition: transform var(--t3) var(--e), opacity var(--t2) ease; }
+  html.has-rail .rail { transition: transform var(--t3) var(--e), opacity var(--t2) ease, visibility 0s; }
   html.has-rail body { transition: margin-left var(--t3) var(--e); }
-  html.has-rail .topbar { transition: left var(--t3) var(--e), opacity var(--t2) ease; }
-  :root.focus.has-rail .rail { transform: translateX(-100%); opacity: 0; pointer-events: none; }
+  html.has-rail .topbar { transition: left var(--t3) var(--e), opacity var(--t2) ease, visibility 0s; }
+  /* Hidden for real once it has slid away, so Tab can't wander into it. */
+  :root.focus.has-rail .rail { transform: translateX(-100%); opacity: 0; pointer-events: none; visibility: hidden; transition: transform var(--t3) var(--e), opacity var(--t2) ease, visibility 0s var(--t3); }
   :root.focus.has-rail body { margin-left: 0; }
-  :root.focus.has-rail .topbar { left: 0; opacity: 0 !important; pointer-events: none; }
-  :root.focus.has-rail body.show-top .topbar, :root.focus.has-rail body.alt-held .topbar { opacity: 1 !important; pointer-events: auto; }
+  :root.focus.has-rail .topbar { left: 0; opacity: 0 !important; pointer-events: none; visibility: hidden; transition: left var(--t3) var(--e), opacity var(--t2) ease, visibility 0s var(--t2); }
+  :root.focus.has-rail body.show-top .topbar, :root.focus.has-rail body.alt-held .topbar { opacity: 1 !important; pointer-events: auto; visibility: visible; transition: left var(--t3) var(--e), opacity var(--t2) ease, visibility 0s; }
   :root.focus.has-rail .outline { left: 0; }
 }
 
@@ -200,3 +204,29 @@ html, body { -webkit-font-smoothing: antialiased; }
 :root:not([data-motion="off"]) :is(.pill, .tb-btn, .rail-item, .pt-tab, .ghost-btn) { transition: color var(--t1) ease, background-color var(--t1) ease, scale .08s ease; }
 :root[data-motion="off"] :is(.rail, .topbar, body) { transition: none !important; }
 :root[data-motion="gentle"].has-rail :is(.rail, body) { transition: opacity var(--t2) ease; }
+
+/* ---------- Quiet by default ---------- */
+
+/* Tags read as part of the line; colour is kept for links and for what needs you. */
+.tag { color: var(--muted); }
+.tag:hover { color: var(--ink); }
+/* No boxes inside boxes: a column is a hairline and a label, a card a soft lift. */
+.sb-col { background: transparent; border: 0; border-top: 1px solid var(--line2); border-radius: 0; padding: 10px 0 0; }
+.sb-col.drop { background: var(--tint); border-top-color: var(--accent); }
+.sb-card { background: var(--raise); border-color: transparent; border-radius: var(--r); }
+.sb-card:hover { border-color: var(--line2); }
+.card, .st-card { border-radius: 10px; }
+/* Cards answer the pointer with colour only: they are dragged, and a card that
+   lifts under the pointer loses the drag. */
+:root:not([data-motion="off"]) :is(.card, .sb-card, .st-card) { transition: border-color var(--t1) ease, background-color var(--t1) ease; }
+@media (min-width: 701px) {
+  /* The switch at the top has Tags now. */
+  html.has-rail .lib-tags { display: none; }
+}
+@media (max-width: 700px) {
+  :root:is([data-look="midnight"], [data-look="paper"]) :is(#nb-title, #wh-title, #ph-title, .lib-head h1, .tags-home h1) { font-size: 34px; }
+  :root:is([data-look="midnight"], [data-look="paper"]) .st-title { font-size: 30px; }
+}
+/* A ticked box pops and settles. */
+@keyframes tick-pop { 0% { scale: .7; } 55% { scale: 1.18; } 100% { scale: 1; } }
+:root[data-motion="full"] #outline-editor .line-box[aria-checked="true"] { animation: tick-pop var(--t2) var(--e); }

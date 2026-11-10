@@ -25,7 +25,7 @@
       d.dataset.theme = lk === 'paper' ? 'light' : 'dark';
       const mo = localStorage.getItem('motion');
       if (mo) d.dataset.motion = mo;
-      if (matchMedia('(min-width: 701px)').matches && window.parent === window) d.classList.add('has-rail');
+      if (matchMedia('(min-width: 701px) and (hover: hover)').matches && window.parent === window) d.classList.add('has-rail');
       const f = localStorage.getItem('font'), fh = localStorage.getItem('fontHref');
       if (f) d.dataset.font = f;
       if (f && fh) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.id = 'font-' + f; l.href = fh; document.head.appendChild(l); }

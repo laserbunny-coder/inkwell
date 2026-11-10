@@ -7,8 +7,11 @@
 // on a wide screen and puts them back on a narrow one, where the phone's own
 // bar takes over.
 
+import { setFont, currentFont } from './fonts.js';
+
 const root = document.documentElement;
-const wide = matchMedia('(min-width: 701px)');
+// A rail needs room and a pointer; a touch screen keeps its bottom bar.
+const wide = matchMedia('(min-width: 701px) and (hover: hover)');
 
 const make = (tag, cls, text) => {
   const el = document.createElement(tag);
@@ -45,6 +48,12 @@ export function setLook(id, { keep = true } = {}) {
     document.head.appendChild(l);
   }
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', look.bar);
+  // Typewriter is one fixed-width face for everything, the writing too; leaving it gives your font back.
+  if (keep) {
+    const before = read('fontBefore');
+    if (look.id === 'typewriter' && currentFont().group !== 'mono') { save('fontBefore', currentFont().id); setFont('cascadia'); }
+    else if (look.id !== 'typewriter' && before) { if (currentFont().id === 'cascadia') setFont(before); save('fontBefore', null); }
+  }
   if (keep) {
     save('look', look.id);
     save('theme', look.light ? 'light' : 'dark');

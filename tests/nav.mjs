@@ -89,7 +89,7 @@ try {
     await p.keyboard.press('Escape');
   });
 
-  await check('Escape closes the Go panel; the top bar holds the buttons and comes down near the top', async () => {
+  await check('Escape closes the Go panel; the rail holds the rooms and the tools, and the bar above the page stays put', async () => {
     await p.keyboard.press('Control+O');
     await p.waitForSelector('.go-panel', { state: 'visible' });
     await p.keyboard.press('Escape');
@@ -97,44 +97,81 @@ try {
     await toToday(p);
     assert.equal(await p.locator('.corner').count(), 0, 'no corner strip');
     assert.equal(await p.locator('.placeline').count(), 0, 'no place line');
-    // Nothing shows until the mouse nears the top: 40px down is close enough.
+    // The rail is always there: rooms on top, the tools at the foot.
     await p.mouse.move(640, 400);
     await sleep(300);
-    assert.equal(await p.evaluate(() => document.body.classList.contains('show-top')), false);
-    await p.mouse.move(640, 40, { steps: 4 });
-    await p.waitForFunction(() => document.body.classList.contains('show-top'));
-    await sleep(300);
-    assert.deepEqual(await p.locator('.tb-tools button').allInnerTexts(), ['Mic', 'Today', 'Drawer', 'Library', 'Tags', 'Go', 'Notes', 'Focus', 'Aa', 'Ctrl+K']);
+    assert.equal(await p.locator('.rail').isVisible(), true);
+    assert.deepEqual(await p.locator('.rail-rooms button').allInnerTexts(), ['Today', 'Library']);
+    assert.deepEqual(await p.locator('.rail-tools button').allInnerTexts(), ['Capture', 'Go', 'Everything', 'Look']);
+    // The bar doesn't hide and come down any more: where you are is always in view.
+    const bar = await p.locator('.topbar').evaluate((el) => ({ top: Math.round(el.getBoundingClientRect().top), opacity: getComputedStyle(el).opacity }));
+    assert.deepEqual(bar, { top: 0, opacity: '1' });
+    assert.equal(await p.locator('#crumb').isVisible(), true);
+    // The page starts to the right of the rail, never under it.
+    const edges = await p.evaluate(() => ({ rail: document.querySelector('.rail').getBoundingClientRect().right, page: document.querySelector('.notebook').getBoundingClientRect().left }));
+    assert.ok(edges.page >= edges.rail, `page ${edges.page} starts under the rail ${edges.rail}`);
     await p.locator('#go-toggle').click();
     await p.waitForSelector('.go-panel', { state: 'visible' });
     await p.keyboard.press('Escape');
     await p.waitForSelector('.go-panel', { state: 'hidden' });
-    // Well below the bar it tucks away again.
-    await p.mouse.move(640, 500, { steps: 4 });
-    await p.waitForFunction(() => !document.body.classList.contains('show-top'));
-    // Overshooting into the window's title bar still brings it down.
-    await p.evaluate(() => document.documentElement.dispatchEvent(new MouseEvent('mouseleave', { clientX: 640, clientY: -5 })));
-    assert.equal(await p.evaluate(() => document.body.classList.contains('show-top')), true);
-    await p.mouse.move(640, 500, { steps: 4 });
-    await p.waitForFunction(() => !document.body.classList.contains('show-top'));
   });
 
-  await check('the top bar’s buttons stay in the same places everywhere, and the place you’re in is lit', async () => {
-    const tools = () => p.locator('.tb-tools button').evaluateAll((els) => els.map((e) => `${e.textContent}@${Math.round(e.getBoundingClientRect().x)}${e.getAttribute('aria-current') ? '*' : ''}`));
-    const show = () => p.evaluate(() => document.body.classList.add('show-top'));
+  await check('the rail’s words stay in the same places everywhere, and the room you’re in is lit', async () => {
+    const tools = () => p.locator('.rail button').evaluateAll((els) => els.filter((e) => e.offsetParent && !e.closest('.rail-projects')).map((e) => `${e.textContent}@${Math.round(e.getBoundingClientRect().y)}${e.getAttribute('aria-current') ? '*' : ''}`));
+    // The pill behind the lit word has slid onto it.
+    const pillOn = (sel) => p.waitForFunction((q) => { const a = document.querySelector('.rail-pill')?.getBoundingClientRect(); const b = document.querySelector(q)?.getBoundingClientRect(); return a && b && a.height > 0 && Math.abs(a.top - b.top) < 2; }, sel);
     await toToday(p);
-    await show();
     await sleep(300);
     const onToday = await tools();
     assert.ok(onToday.some((t) => t.startsWith('Today@') && t.endsWith('*')), onToday.join(' '));
+    await pillOn('#view-toggle');
     await p.keyboard.press('Control+Shift+O');
     await p.waitForFunction(() => document.documentElement.dataset.view === 'library');
-    await show();
     await sleep(300);
     const onLibrary = await tools();
     assert.ok(onLibrary.some((t) => t.startsWith('Library@') && t.endsWith('*')), onLibrary.join(' '));
     assert.deepEqual(onLibrary.map((t) => t.replace('*', '')), onToday.map((t) => t.replace('*', '')), 'nothing moved');
-    await p.evaluate(() => document.body.classList.remove('show-top'));
+    await pillOn('#library-toggle');
+    // Inside the Library, the switch at the top centre has its three views; the Library stays lit in the rail.
+    assert.deepEqual(await p.locator('.place-switch button').allInnerTexts(), ['Shelves', 'Drawer', 'Tags']);
+    assert.equal(await p.locator('#shelves-toggle').getAttribute('aria-current'), 'page');
+    await p.locator('#tags-toggle').click();
+    await p.waitForFunction(() => document.documentElement.dataset.view === 'tags');
+    await sleep(300);
+    assert.equal(await p.locator('#tags-toggle').getAttribute('aria-current'), 'page');
+    assert.equal(await p.locator('#library-toggle').getAttribute('aria-current'), 'page');
+    await toToday(p);
+    await sleep(300);
+    assert.equal(await p.locator('.place-switch').isVisible(), false, 'no switch on Today yet');
+  });
+
+  await check('the five looks: one tap changes the whole app, and it sticks after a reload', async () => {
+    const bg = () => p.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    assert.equal(await p.evaluate(() => document.documentElement.dataset.look), 'midnight');
+    assert.equal(await bg(), 'rgb(14, 17, 23)');
+    await p.locator('.rail-tools [data-cmd=page]').click();
+    assert.deepEqual(await p.locator('.look-opt .look-name').allInnerTexts(), ['Midnight Ink', 'Lamplight', 'Graphite', 'Typewriter', 'Paper']);
+    await p.locator('.look-opt', { hasText: 'Paper' }).click();
+    assert.equal(await p.evaluate(() => document.documentElement.dataset.look), 'paper');
+    assert.equal(await p.evaluate(() => document.documentElement.dataset.theme), 'light');
+    assert.notEqual(await bg(), 'rgb(14, 17, 23)');
+    await p.locator('.look-opt', { hasText: 'Lamplight' }).click();
+    assert.equal(await p.evaluate(() => document.documentElement.dataset.theme), 'dark');
+    await p.locator('#page-done').click();
+    await p.reload();
+    await p.waitForSelector('.rail-tools [data-cmd=page]');
+    await sleep(500);
+    assert.equal(await p.evaluate(() => document.documentElement.dataset.look), 'lamplight');
+    // Motion: Full, Fades only, Off.
+    await p.locator('.rail-tools [data-cmd=page]').click();
+    assert.deepEqual(await p.locator('.motion-opt').allInnerTexts(), ['Full', 'Fades only', 'Off']);
+    await p.locator('.motion-opt', { hasText: 'Off' }).click();
+    assert.equal(await p.evaluate(() => document.documentElement.dataset.motion), 'off');
+    await p.locator('.motion-opt', { hasText: 'Full' }).click();
+    assert.equal(await p.evaluate(() => document.documentElement.dataset.motion), 'full');
+    await p.locator('.look-opt', { hasText: 'Midnight Ink' }).click();
+    await p.locator('#page-done').click();
+    assert.equal(await p.evaluate(() => document.documentElement.dataset.look), 'midnight');
   });
 
   await check('Alt + Left goes back without flashing the tab numbers; holding Alt alone shows them', async () => {
@@ -158,13 +195,16 @@ try {
   await ph.waitForSelector('#editor .ProseMirror');
   await sleep(500);
 
-  await check('on a phone a bar along the bottom names the place, with Today, the mic and Menu', async () => {
+  await check('on a phone a bar along the bottom has Today, Library, the mic, Go and More, and lights the room you are in', async () => {
     await settle(ph);
     await ph.locator('.pb-today').tap();
     await ph.waitForSelector('.notebook', { state: 'visible' });
     await settle(ph);
     assert.equal(await ph.locator('.placebar').isVisible(), true);
-    assert.match(await ph.locator('.pb-place .pb-name').innerText(), /^Today/);
+    assert.deepEqual(await ph.locator('.placebar .pb-word').allInnerTexts(), ['Today', 'Library', 'Go', 'More']);
+    assert.match(await ph.locator('.pb-place').getAttribute('aria-label'), /^Today/, 'Go still says where you are');
+    assert.equal(await ph.locator('.pb-today').getAttribute('aria-current'), 'page');
+    assert.equal(await ph.locator('.pb-lib').getAttribute('aria-current'), null);
     assert.equal(await ph.locator('#mic-toggle').isVisible(), false, 'the computer’s tools stay off the phone');
     assert.equal(await ph.locator('.pb-menu').getAttribute('aria-label'), 'Menu');
   });
@@ -177,8 +217,12 @@ try {
     await ph.locator('.go-desk .go-tab', { hasText: 'Library' }).tap();
     await ph.waitForFunction(() => document.documentElement.dataset.view === 'library');
     await settle(ph);
-    await ph.waitForFunction(() => document.querySelector('.pb-back')?.textContent === '‹ Today');
-    await ph.locator('.pb-back').tap();
+    assert.equal(await ph.locator('.pb-lib').getAttribute('aria-current'), 'page', 'Library is lit');
+    // Back is the first thing in the Go sheet.
+    await ph.locator('.pb-place').tap();
+    await ph.waitForSelector('.go-panel', { state: 'visible' });
+    assert.match(await ph.locator('.go-chip.first .go-name').innerText(), /^Today/);
+    await ph.locator('.go-chip.first').tap();
     await ph.waitForSelector('.notebook', { state: 'visible' });
     assert.equal(await viewOf(ph), 'notebook');
     const wide = await ph.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -187,9 +231,7 @@ try {
 
   await check('on a phone each thing has one place: no path, Menu or Aa at the top, and no top strip on the desk', async () => {
     await settle(ph);
-    await ph.locator('.pb-place').tap();
-    await ph.waitForSelector('.go-panel', { state: 'visible' });
-    await ph.locator('.go-desk .go-tab', { hasText: 'Library' }).tap();
+    await ph.locator('.pb-lib').tap();
     await ph.waitForFunction(() => document.documentElement.dataset.view === 'library');
     await settle(ph);
     for (const sel of ['#crumb', '#palette-toggle', '[data-cmd="page"]', '#page-tabs']) assert.equal(await ph.locator(`.topbar ${sel}`).isVisible(), false, `${sel} shows at the top`);
