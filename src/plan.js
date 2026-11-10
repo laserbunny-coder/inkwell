@@ -9,9 +9,11 @@ import { popMenu, askText } from './menu.js';
 import {
   loadTasks, dayPlan, weekPlan, pace, planSettings, savePlanSettings, setTask, unTask, tickTask, tookTask, startTimer, stopTimer,
   addTask, renameTask, arrange, plainLine, parseEst, readSpan, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE, stepsPage, stepsHome,
-  moveTask, isStretch, stretchWord, isRepeat, repeatWord, readDays, parseAdd, history, occItem, setRepeat, skipTask, rollTicked, dow
+  moveTask, isStretch, stretchWord, isRepeat, repeatWord, readDays, parseAdd, history, occItem, setRepeat, skipTask, rollTicked, dow, areaHours
 } from './tasks.js';
+import { areas, areaColor } from './library.js';
 import { drawAhead, aheadClick, aheadContext, aheadDrags } from './ahead.js';
+import { clockWord, freeLeft } from './calendar.js';
 
 const make = (tag, cls, text) => {
   const el = document.createElement(tag);
@@ -55,6 +57,9 @@ export class Plan {
     this.week = null; // any day of the week shown (null: this week)
     this.items = [];
     this.free = 45;
+    this.dayEnd = 22; // the hour the day ends, for "left today"
+    this.cal = []; // calendar events for the days showing
+    this.calKey = '';
     this.took = null; // the task just ticked, asked how long it took
     this.just = null;
     for (const el of [box, sheet, steps].filter(Boolean)) {
@@ -130,16 +135,55 @@ export class Plan {
     }
     if (!this.dayShown && !this.pageShown && !this.stepsShown) return;
     const turn = (this.turn = (this.turn || 0) + 1);
-    const [items, settings, src] = await Promise.all([loadTasks(), planSettings(), this.pageShown && this.tab === 'ahead' ? this.hooks.ahead?.() : null]);
+    const [items, settings, src, areaList] = await Promise.all([loadTasks(), planSettings(), this.pageShown && this.tab === 'ahead' ? this.hooks.ahead?.() : null, this.pageShown && this.tab === 'week' ? areas() : null]);
     if (turn !== this.turn) return;
     this.items = items;
     this.free = settings.free;
+    this.dayEnd = settings.dayEnd;
+    this.targets = settings.areas;
+    if (areaList) this.areaList = areaList;
     if (src) this.aheadSrc = src;
+    this.loadCalendar(turn);
+    this.redraw();
+    this.tickClock();
+  }
+
+  redraw() {
     if (this.renaming) return;
     if (this.dayShown) this.drawDay();
     if (this.stepsShown) this.drawSteps();
     if (this.pageShown) { if (this.tab === 'pace') this.drawPace(); else if (this.tab === 'ahead') drawAhead(this); else if (this.tab === 'day') this.drawDay(this.sheet, this.today); else this.drawWeek(); }
-    this.tickClock();
+  }
+
+  // Calendar events for the days showing: what's kept draws at once, and the
+  // latest follows when it differs.
+  loadCalendar(turn) {
+    const week = this.pageShown && this.tab === 'week' ? weekOf(this.week || this.today) : null;
+    const range = this.dayShown ? [this.day, this.day] : week ? [week[0], week[6]] : this.pageShown && this.tab === 'day' ? [this.today, this.today] : null;
+    if (!range || !this.hooks.calendar || this.hooks.off?.('calendar')) { this.cal = []; this.calKey = ''; return; }
+    const key = range.join('|');
+    const got = this.hooks.calendar(range[0], range[1]);
+    if (got.now) this.cal = got.now;
+    else if (key !== this.calKey) this.cal = [];
+    this.calKey = key;
+    got.fresh.then((list) => {
+      if (turn !== this.turn || !list || JSON.stringify(list) === JSON.stringify(this.cal)) return;
+      this.cal = list;
+      this.redraw();
+    });
+  }
+
+  // One calendar event, said quietly.
+  eventLine(e, cls) {
+    const el = make('div', `${cls}${!e.allDay && e.end < Date.now() ? ' past' : ''}`);
+    el.dataset.event = e.id;
+    const dot = make('i');
+    if (e.color) dot.style.background = e.color;
+    const mins = e.allDay ? 0 : Math.round((e.end - e.start) / 6e4);
+    el.append(dot, make('span', 'ev-t', e.allDay ? 'All day' : clockWord(e.start)), make('span', 'ev-w', e.title));
+    if (mins && cls === 'pl-ev') el.append(make('span', 'ev-d', span(mins)));
+    el.title = `${e.title}${e.allDay ? '' : ` · ${clockWord(e.start)} to ${clockWord(e.end)}`}${e.calendar ? ` · ${e.calendar}` : ''}`;
+    return el;
   }
 
   // After the plan writes: the open page hears about it, and the plan redraws.
@@ -188,14 +232,30 @@ export class Plan {
     const said = [];
     if (p.todo.length) said.push(p.left ? `${span(p.left)} to do` : `${p.todo.length} to do`);
     if (p.done.length) said.push(p.spent ? `${span(p.spent)} done` : `${p.done.length} done`);
-    head.append(make('span', 'pl-sum', said.join(' · ')), this.switchRow('day'));
+    head.append(make('span', 'pl-sum', said.join(' · ')));
+    const evs = this.cal.filter((e) => e.day === day);
+    // Today: the time still free before your day ends, less what's on the calendar.
+    if (day === today && p.todo.length) {
+      const free = Math.floor(freeLeft(evs, Date.now(), this.dayEnd) / 5) * 5;
+      const left = make('button', `pl-left${p.left > free ? ' over' : ''}`, `${span(free)} left today`);
+      left.dataset.act = 'dayend';
+      const h = Math.floor(this.dayEnd);
+      const m = Math.round((this.dayEnd % 1) * 60);
+      left.title = `Until ${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h < 12 || h === 24 ? 'am' : 'pm'}${evs.some((e) => !e.allDay) ? ', less what’s on your calendar' : ''}: click to change when your day ends`;
+      head.append(left);
+    }
+    head.append(this.switchRow('day'));
+    const cal = make('div', 'pl-cal');
+    cal.setAttribute('aria-label', 'On your calendar');
+    for (const e of evs) cal.append(this.eventLine(e, 'pl-ev'));
+    cal.hidden = !evs.length;
     const list = make('div', 'pl-list');
     list.dataset.day = day;
     for (const i of p.carried) list.append(...this.taskRow(i, { carried: true, next: day === today && i === p.next }));
     for (const i of p.open) list.append(...this.taskRow(i, { next: day === today && i === p.next }));
     list.append(this.addRow(day, 'Add a task'));
     for (const i of p.done) list.append(...this.taskRow(i, {}));
-    box.replaceChildren(head, list);
+    box.replaceChildren(head, cal, list);
     box.dataset.n = String(p.todo.length + p.done.length);
     this.restore(box, held);
     this.just = null;
@@ -393,6 +453,7 @@ export class Plan {
       h.title = 'Open this day';
       h.append(make('b', '', String(dateOf(d.iso).getDate())), make('span', '', `${long(d.iso, { weekday: 'short' })}${d.min ? ` · ${span(d.min)}` : ''}`));
       col.append(h);
+      for (const e of this.cal.filter((x) => x.day === d.iso)) col.append(this.eventLine(e, 'pw-ev'));
       for (const i of d.open) col.append(this.chip(i));
       for (const i of d.done) col.append(this.chip(i));
       col.append(this.addRow(d.iso, 'Add'));
@@ -406,6 +467,8 @@ export class Plan {
     chips.append(this.addRow(null, 'Add'));
     tray.append(chips);
     const parts = [head, grid, tray];
+    const byArea = this.areaRows(first);
+    if (byArea) parts.push(byArea);
     if (w.late && thisWeek) parts.push(make('p', 'pl-note', `${w.late} still open from before this week. ${w.late === 1 ? 'It waits' : 'They wait'} at the top of today’s plan.`));
     this.sheet.replaceChildren(...parts);
     this.restore(this.sheet, held);
@@ -424,6 +487,64 @@ export class Plan {
     if (mins) b.append(make('small', '', span(mins)));
     else if (isRepeat(i.task) && !done) b.append(make('small', 'pw-rep', '↻'));
     return b;
+  }
+
+  // Under the week: hours worked in each area against the hours you mean to
+  // give it. An area shows once it has a target, or hours this week.
+  areaRows(anyDay) {
+    // An area that sits in another comes right under it.
+    const list = [];
+    const walk = (parent) => { for (const a of this.areaList || []) if ((a.parent_id || null) === parent && !list.includes(a)) { list.push(a); walk(a.id); } };
+    walk(null);
+    for (const a of this.areaList || []) if (!list.includes(a)) list.push(a);
+    if (!list.length) return null;
+    const worked = areaHours(this.items, list, anyDay);
+    const targets = this.targets || {};
+    const shown = list.filter((a) => Number(targets[a.id]) > 0 || (!a.parent_id && worked.get(a.id)));
+    const box = make('section', 'pw-areas');
+    box.append(make('h2', 'pl-label', 'Areas this week'));
+    const rows = make('div', 'pa-rows');
+    for (const a of shown) {
+      const min = worked.get(a.id) || 0;
+      const of = Number(targets[a.id]) > 0 ? Number(targets[a.id]) * 60 : 0;
+      const m = make('div', 'pl-meter pa-row');
+      m.dataset.area = a.id;
+      const dot = make('i', 'pa-dot');
+      dot.style.background = areaColor(a);
+      const name = make('span', `pl-meter-n${a.parent_id ? ' sub' : ''}`);
+      name.append(dot, a.title || 'Untitled');
+      const track = make('span', 'pl-track');
+      const fill = make('i', of && min >= of ? 'met' : '');
+      fill.style.width = `${of ? Math.min(100, (min / of) * 100) : 0}%`;
+      track.append(fill);
+      if (!of) track.classList.add('bare');
+      const say = make('button', 'pl-meter-v', of ? `${hours(min)} h of ${hours(of)} h` : `${hours(min)} h`);
+      say.dataset.act = 'area-target';
+      say.title = of ? 'Hours a week you mean to give this area: click to change' : 'Click to say how many hours a week this area should get';
+      m.append(name, track, say);
+      rows.append(m);
+    }
+    const rest = list.filter((a) => !shown.includes(a));
+    if (rest.length) {
+      const more = make('button', 'wp-link pa-more', shown.length ? 'Another area…' : 'Give an area its hours…');
+      more.dataset.act = 'area-pick';
+      rows.append(more);
+    }
+    box.append(rows);
+    return box;
+  }
+
+  async askTarget(areaId) {
+    const a = (this.areaList || []).find((x) => x.id === areaId);
+    if (!a) return;
+    const now = Number(this.targets?.[areaId]) || 0;
+    const v = await askText({ title: `Hours a week for ${a.title || 'this area'}`, value: now ? String(now) : '', type: 'number', placeholder: '10', ok: 'Save', body: 'The week shows the hours you worked in it against this. 0 takes the target away.' });
+    if (v === null || v === undefined || v === false) return;
+    const n = Number(v);
+    if (!String(v).trim() || !(n >= 0) || n > 168) return;
+    const next = { ...(this.targets || {}) };
+    if (n > 0) next[areaId] = n; else delete next[areaId];
+    await this.wrote(await savePlanSettings({ areas: next }));
   }
 
   // This week's hours against the hours you have.
@@ -521,6 +642,12 @@ export class Plan {
     if (act === 'week-now') return this.hooks.go({ view: 'plan', tab: 'week' });
     if (act === 'open-day') return this.hooks.go({ view: 'notebook', pageId: `day-${el.closest('[data-day]').dataset.day}` });
     if (act === 'free') return this.askFree();
+    if (act === 'dayend') return this.askDayEnd();
+    if (act === 'area-target') return this.askTarget(el.closest('[data-area]').dataset.area);
+    if (act === 'area-pick') {
+      const shown = new Set([...this.sheet.querySelectorAll('.pa-row')].map((r) => r.dataset.area));
+      return popMenu(el, (this.areaList || []).filter((a) => !shown.has(a.id)).map((a) => ({ label: a.title || 'Untitled', run: () => this.askTarget(a.id) })));
+    }
     if (act === 'all-done') { this.allDone = !this.allDone; return this.drawSteps(); }
     if (!i) return;
     if (act === 'day') return popMenu(el, this.dayItems(i));
@@ -606,6 +733,16 @@ export class Plan {
     const n = Number(v);
     if (!v || !(n > 0) || n > 168) return;
     await this.wrote(await savePlanSettings({ free: n }));
+  }
+
+  async askDayEnd() {
+    const pad = (n) => String(n).padStart(2, '0');
+    const v = await askText({ title: 'When does your day end?', type: 'time', value: `${pad(Math.floor(this.dayEnd) % 24)}:${pad(Math.round((this.dayEnd % 1) * 60))}`, ok: 'Save', body: '“Left today” counts from now to then, less what’s on your calendar.' });
+    const m = /^(\d{1,2}):(\d\d)/.exec(String(v || ''));
+    if (!m) return;
+    const hour = Number(m[1]) + Number(m[2]) / 60;
+    if (!(hour > 0)) return;
+    await this.wrote(await savePlanSettings({ dayEnd: hour }));
   }
 
   estItems(i) {

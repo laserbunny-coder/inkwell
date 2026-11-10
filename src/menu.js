@@ -139,6 +139,8 @@ export function askText({ title, value = '', ok = 'Save', placeholder = '', body
     box.setAttribute('aria-modal', 'true');
     const input = make('input', 'ask-input');
     input.type = type;
+    // Half hours are numbers too.
+    if (type === 'number') input.step = 'any';
     input.value = value;
     input.placeholder = placeholder;
     input.setAttribute('aria-label', title);

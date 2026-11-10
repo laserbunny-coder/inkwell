@@ -296,7 +296,9 @@ export async function loadTasks(today = isoOf()) {
 export async function planSettings() {
   const row = await getEntry(PLAN_ID);
   const f = row && !row.deleted ? row.fields || {} : {};
-  return { free: Number(f.free) > 0 ? Number(f.free) : FREE_HOURS };
+  // dayEnd: the hour your day ends (22 = 10 pm), for "left today".
+  // areas: { area id: the hours a week you mean to give it }.
+  return { areas: f.areas && typeof f.areas === 'object' ? f.areas : {}, free: Number(f.free) > 0 ? Number(f.free) : FREE_HOURS, dayEnd: Number(f.dayEnd) > 0 && Number(f.dayEnd) <= 24 ? Number(f.dayEnd) : 22 };
 }
 export async function savePlanSettings(next) {
   const prev = await getEntry(PLAN_ID);
@@ -341,6 +343,26 @@ export function weekPlan(items, anyDay, today = isoOf()) {
   // Still open from before this week: they wait on today's plan.
   const late = mine.filter((i) => !isDone(i) && i.task.day && i.task.day < days[0].iso).length;
   return { days, tray, late, min: days.reduce((a, d) => a + d.min, 0) };
+}
+
+// Hours worked in a week, by area: what was ticked off that week (what it
+// really took) in each project's area, and in the areas that area sits in.
+// areas: [{ id, parent_id }]. → Map(area id → minutes). Habits have no hours.
+export function areaHours(items, areas, anyDay) {
+  const days = weekOf(anyDay);
+  const [first, last] = [days[0], days[6]];
+  const up = new Map(areas.map((a) => [a.id, a.parent_id || null]));
+  const out = new Map();
+  const add = (areaId, min) => {
+    for (let id = areaId, n = 0; id && min > 0 && n < 12; id = up.get(id), n++) out.set(id, (out.get(id) || 0) + min);
+  };
+  for (const i of items) {
+    const area = i.world?.area_id;
+    if (!i.mine || !area || i.task.habit) continue;
+    if (isDone(i)) { const d = doneDay(i); if (d >= first && d <= last) add(area, real(i)); }
+    if (isRepeat(i.task)) for (const d of i.task.did || []) if (d[0] >= first && d[0] <= last && d[2] !== i.task.done_at) add(area, d[1] ?? (i.task.est || 0));
+  }
+  return out;
 }
 
 // Weeks ahead: the next weeks as columns, a lane for each project.

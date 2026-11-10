@@ -68,6 +68,7 @@ import { inPane, PANE_ID, PaneHost, host as paneHost, sendChanged, onChanged, BE
 import { SideNotes } from './sidenotes.js';
 import { Talk } from './talk.js';
 import { aheadSource } from './ahead.js';
+import { events as calendarEvents } from './calendar.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
@@ -5078,6 +5079,8 @@ plan = new Plan({
     // Weeks ahead: the lanes as the Desk seats them, and shoot days.
     ahead: () => aheadSource((since) => { const b = deskBackend(); return b ? b.desk(since) : null; }),
     talk: () => (inPane || !paneHost() || root.classList.contains('hide-panes') ? null : () => openTalk()),
+    // Google Calendar, read-only, through the reader Daybook's server already has.
+    calendar: (from, to) => calendarEvents((a, b) => (window.__calendar ? window.__calendar(a, b) : sync.user && sync.invoke ? sync.invoke('calendar', { timeMin: a, timeMax: b }) : null), from, to),
     toast
   }
 });
