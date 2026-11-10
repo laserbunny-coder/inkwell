@@ -15,6 +15,14 @@ const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT
 await sleep(1500);
 const URL = `http://localhost:${PORT}/`;
 
+const pick = async (p, name) => {
+  if (!(await p.locator('#palette-input').isVisible())) await p.keyboard.press('Control+K');
+  await p.waitForSelector('#palette-list li');
+  await p.locator('#palette-input').fill(name);
+  await p.waitForFunction((n) => document.querySelector('#palette-list li')?.textContent.includes(n), name);
+  await p.locator('#palette-input').press('Enter');
+};
+
 let failed = 0;
 async function check(name, fn) {
   try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message.split('\n').slice(0, 4).join('\n     ')}`); }
@@ -62,10 +70,7 @@ try {
   });
 
   await check('Ctrl + K, “Phone alerts” opens the panel with the account’s switches', async () => {
-    await page.keyboard.press('Control+K');
-    await page.keyboard.type('Phone alerts');
-    await sleep(300);
-    await page.keyboard.press('Enter');
+    await pick(page, 'Phone alerts');
     await page.waitForSelector('.al-panel');
     assert.equal(await page.locator('.al-panel h2').innerText(), 'Phone alerts');
     const kinds = await page.locator('.al-kind b').allInnerTexts();

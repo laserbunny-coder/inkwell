@@ -1,6 +1,6 @@
 // Google Calendar events, read-only, as faint lines in Today's plan. They
-// come from the same server function Daybook used ("calendar": it only ever
-// reads). What was last seen is kept on this device, so the plan draws at
+// come from the server function "calendar" (it only ever reads); Inkwell
+// connects the calendar itself (Ctrl + K, "Google Calendar"). What was last seen is kept on this device, so the plan draws at
 // once and still shows them offline.
 
 import { isoOf, addDays, dateOf } from './tasks.js';
@@ -69,6 +69,9 @@ export function events(fetcher, from, to) {
   asking.set(key, fresh);
   return { now, fresh };
 }
+
+// Forget what was asked, so the next look goes to the server (just connected).
+export function forgetCalendar() { mem.clear(); }
 
 // "9:30 am", "2 pm".
 export function clockWord(ms) {

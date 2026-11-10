@@ -41,6 +41,21 @@ function supabaseBackend() {
     auth: { persistSession: true, detectSessionInUrl: true, flowType: 'pkce' }
   });
   let channel = null;
+  // Google Calendar, Inkwell's own way in: the sign-in that asked for the calendar comes back with a key that
+  // goes to the server (it can be saved there, never read back). Only when Inkwell asked for it, so a plain
+  // sign-in never replaces a working calendar key. Out of the auth callback first, as Supabase asks.
+  sb.auth.onAuthStateChange((_e, session) => {
+    let asked = false;
+    try { asked = localStorage.getItem('calConnect') === '1'; } catch {}
+    const key = session?.provider_refresh_token;
+    if (!asked || !key) return;
+    try { localStorage.removeItem('calConnect'); } catch {}
+    setTimeout(async () => {
+      const { error } = await sb.rpc('save_google_token', { refresh: key });
+      if (error) console.warn(error);
+      window.dispatchEvent(new CustomEvent('calendar-connected', { detail: { ok: !error } }));
+    }, 0);
+  });
   return {
     async user() {
       const { data } = await sb.auth.getSession();
@@ -51,6 +66,15 @@ function supabaseBackend() {
       return sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
     },
     signOut() { return sb.auth.signOut(); },
+    connectCalendar() {
+      try { localStorage.setItem('calConnect', '1'); } catch {}
+      return sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname, scopes: 'https://www.googleapis.com/auth/calendar.readonly', queryParams: { access_type: 'offline', prompt: 'consent' } } });
+    },
+    async hasCalendar() {
+      const { data, error } = await sb.rpc('has_google_token');
+      if (error) throw error;
+      return !!data;
+    },
     // Calls one of the server functions (they live with Daybook's, in the same project).
     async invoke(name, body) {
       const { data, error } = await sb.functions.invoke(name, { body });

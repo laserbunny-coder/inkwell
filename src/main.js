@@ -69,7 +69,7 @@ import { inPane, PANE_ID, PaneHost, host as paneHost, sendChanged, onChanged, BE
 import { SideNotes } from './sidenotes.js';
 import { Talk } from './talk.js';
 import { aheadSource } from './ahead.js';
-import { events as calendarEvents } from './calendar.js';
+import { events as calendarEvents, forgetCalendar } from './calendar.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
@@ -4109,6 +4109,7 @@ const commands = [
   { group: 'page', label: 'Name the section levels (Act, Sequence, Scene…)', keys: '', run: nameSectionLevels, when: () => writing() && isScript() },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
   { group: 'sync', label: 'Phone alerts (day review, Needs you, your week and month)…', keys: '', run: () => openAlerts({ backend: sync.backend, signedIn: !!sync.user, toast }) },
+  { group: 'sync', label: 'Google Calendar: show your events on Today and the week…', keys: '', words: ['calendar', 'google', 'connect', 'events'], run: () => connectCalendar() },
   { group: 'view', label: 'What Claude knows: its one-line note on this, and weekly summaries', keys: '', words: ['about', 'summary', 'second brain', 'memory', 'digest', 'weekly'], run: () => showClaudeKnows() },
   { group: 'view', label: 'Beside: today’s plan next to this page (again: put it away)', keys: `${mod}\\`, words: ['pane', 'side by side', 'split', 'beside', 'plan', 'tasks', 'today'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => toggleBesidePane() },
   { group: 'view', label: 'Talk it through with Claude, beside where you are', keys: '⌥T', words: ['claude', 'talk', 'think', 'plan', 'week', 'moves', 'ask', 'beside', 'overwhelmed', 'too much'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => openTalk() },
@@ -5116,6 +5117,23 @@ plan = new Plan({
   }
 });
 if (inNotebook() && notebook.page) plan.showDay(notebook.page);
+
+// Google Calendar, connected from Inkwell itself (it used to borrow Daybook's sign-in).
+async function connectCalendar() {
+  const b = sync.backend;
+  if (!b?.connectCalendar || !sync.user) { toast('Sign in first (Ctrl + K, “Sign in”), then connect your calendar.'); return; }
+  let has = null;
+  try { has = await b.hasCalendar(); } catch {}
+  const yes = await ask(has
+    ? { title: 'Your Google Calendar is connected', body: 'Its events show on Today and the week. Connect again if they stopped showing, or to use another Google account.', ok: 'Connect again' }
+    : { title: 'Connect your Google Calendar', body: 'Your events show on Today and the week, and “left today” counts them. Inkwell only reads your calendar and never changes it. Google asks you to allow this.', ok: 'Connect' });
+  if (yes) b.connectCalendar();
+}
+window.addEventListener('calendar-connected', (e) => {
+  forgetCalendar();
+  toast(e.detail?.ok ? 'Your Google Calendar is connected. Its events show on Today and the week.' : 'Google said yes, but the calendar couldn’t be saved. Try again from Ctrl + K, “Google Calendar”.');
+  plan.refresh?.();
+});
 
 // The number beside Desk keeps up without the Desk being open.
 let deskPeeked = 0;
