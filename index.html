@@ -68,10 +68,11 @@
         <span class="tb-group tb-mic"><button type="button" class="tb-btn mic" data-cmd="mic" id="mic-toggle" title="Capture by voice; it lands where you are (⌥C)">Mic</button></span>
         <span class="tb-group tb-places">
           <button type="button" class="tb-btn" data-cmd="today" id="view-toggle" title="Today’s page (⌘J)">Today</button>
+          <button type="button" class="tb-btn" data-cmd="desk" id="desk-toggle" title="Desk: every project, what needs you and who’s working on it (⌘⇧U)">Desk</button>
           <button type="button" class="tb-btn" data-cmd="drawer" id="drawer-toggle" title="The Drawer: ideas with no home yet">Drawer</button>
           <button type="button" class="tb-btn" data-cmd="library" id="library-toggle" title="Library (⌘⇧O)">Library</button>
           <button type="button" class="tb-btn" data-cmd="tags" id="tags-toggle" title="Tags: every #tag, grouped">Tags</button>
-          <button type="button" class="tb-btn" data-cmd="go" id="go-toggle" title="Go: the last place, this piece’s pages, the desk (⌘O)">Go</button>
+          <button type="button" class="tb-btn" data-cmd="go" id="go-toggle" title="Go: the last place, this piece’s pages, the rooms (⌘O)">Go</button>
         </span>
         <span class="tb-group tb-view">
           <button type="button" class="tb-btn" data-cmd="notes" id="notes-toggle" title="Notes beside the text (⌘2)">Notes</button>
@@ -132,6 +133,10 @@
 
   <main class="tags-home" aria-label="Tags">
     <div class="lib-sheet" id="tags-sheet"></div>
+  </main>
+
+  <main class="desk-home" aria-label="Desk">
+    <div class="lib-sheet dk-sheet" id="desk-sheet"></div>
   </main>
 
   <main class="project-home" aria-label="Book">
@@ -362,6 +367,8 @@
     <label class="switch"><input type="checkbox" data-show="nudge"> After 9 pm, a reminder on today to review it</label>
     <label class="switch"><input type="checkbox" data-show="marks"> Link and tag ideas in the day review</label>
     <label class="switch"><input type="checkbox" data-show="tidy"> Tidy pass reminder on Today</label>
+    <label class="switch"><input type="checkbox" data-show="deskread"> Claude’s one-line read on the Desk</label>
+    <label class="switch"><input type="checkbox" data-show="deskcount"> How many things need you, beside Desk</label>
     <label class="switch"><input type="checkbox" data-show="dots"> Note dots in the margin</label>
     <label class="switch"><input type="checkbox" data-show="handle"> Six-dot handle</label>
     <label class="switch"><input type="checkbox" data-show="bullets"> Bullets on notebook lines</label>
@@ -451,6 +458,7 @@
       <dt>⌥0</dt><dd>Overview of the world or piece you’re in</dd>
       <dt>⌥C</dt><dd>Talk: it lands where you are, in the draft, on the page or on today (again to keep it, Esc to throw it away)</dd>
       <dt>⌘⇧O</dt><dd>Library</dd>
+      <dt>⌘⇧U</dt><dd>Desk: every project, what needs you, who’s working on it</dd>
       <dt>⌘⌥↓ ⌘⌥↑</dt><dd>Next or previous chapter (or day)</dd>
       <dt>⌘[ ⌘]</dt><dd>Back and forward</dd>
       <dt>⌘/</dt><dd>This list</dd>

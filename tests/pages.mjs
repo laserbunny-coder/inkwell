@@ -453,7 +453,7 @@ try {
     assert.ok(await page.locator('.nb-date').isHidden());
     assert.equal(await page.locator('.rail-top').count(), 0);
     // The rail never changes: the two rooms on top.
-    assert.deepEqual(await page.locator('.rail-rooms button').allInnerTexts(), ['Today', 'Library']);
+    assert.deepEqual(await page.locator('.rail-rooms button').allInnerTexts(), ['Today', 'Desk', 'Library']);
     await page.waitForSelector('#page-tabs .pt-tab');
     assert.deepEqual((await tabs(page))[0], 'overview');
   });

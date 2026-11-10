@@ -23,6 +23,15 @@ this repository.
   Michael says GitHub is restored and gives the go-ahead. Work can be planned
   and built on a local copy, but nothing goes to GitHub.
 
+## Cloudflare, every time
+
+Inkwell is published in two places: GitHub Pages (the usual address) and a
+Cloudflare Worker named `inkwell` (https://inkwell.laserbunny.workers.dev), so
+the app stays up if GitHub is ever unavailable again. Michael's rule (Nov 9,
+2026): every time an update is published on GitHub, publish the same build to
+Cloudflare right after. The Cloudflare publish runs `npx wrangler deploy` from
+Michael's desktop PC, and he has to give the go while that session is running.
+
 ## Copies of the code away from GitHub
 
 The code must never live only on GitHub. After each batch of work, save a copy
