@@ -42,6 +42,10 @@ const db = {
     { id: 'u5', project: 'Inkwell', project_link: INK, link: `${INK}?thread=redesign`, thread: 'Redesign Inkwell from the ground up', text: 'The new frame is live: rail, switch, five looks', place: null, state: 'live', created_at: T('2026-11-09T09:30:00') },
   ],
 };
+// The switch and the path are lit at the very end of a move, after the page
+// itself is drawn: wait for them rather than read them at once.
+const lit = (p, sel, text) => p.waitForFunction(([s, t]) => document.querySelector(s)?.innerText.trim() === t, [sel, text]);
+const crumbIs = (p, re) => p.waitForFunction((src) => new RegExp(src).test(document.querySelector('#crumb')?.innerText || ''), re.source);
 const calls = [];
 const asked = [];
 
@@ -116,18 +120,18 @@ try {
     await page.keyboard.press('Control+Shift+U');
     await page.waitForSelector('.desk-home .dk-chair', { state: 'visible' });
     assert.equal(await viewOf(page), 'desk');
-    assert.equal(await page.locator('#desk-toggle').getAttribute('aria-current'), 'page');
+    await page.waitForFunction(() => document.querySelector('#desk-toggle')?.getAttribute('aria-current') === 'page');
     assert.equal(await page.locator('#desk-toggle').getAttribute('data-n'), '4');
     assert.equal(await page.locator('#desk-toggle').getAttribute('aria-label'), 'Desk, 4 waiting on you');
-    assert.match(await page.locator('#crumb').innerText(), /^Desk$/);
+    await crumbIs(page, /^Desk$/);
     assert.match(await page.locator('.dk-calls').innerText(), /4 calls waiting · about 27 min/);
     assert.match(await page.locator('.dk-eyebrow').innerText(), /MONDAY, NOV 9/i);
   });
 
   await check('the top-centre switch is On stage and History, with the pill on the lit one', async () => {
     assert.deepEqual(await page.locator('.desk-switch button').allInnerTexts(), ['On stage', 'History']);
-    assert.equal(await page.locator('.desk-switch [aria-current="page"]').innerText(), 'On stage');
-    assert.ok(await page.locator('.place-switch:not(.desk-switch)').isHidden(), 'the Library’s switch is away');
+    await lit(page, '.desk-switch [aria-current="page"]', 'On stage');
+    assert.ok(await page.locator('.place-switch:not(.desk-switch):not(.today-switch)').isHidden(), 'the Library’s switch is away');
     assert.ok(await page.locator('.dk-switch').isHidden(), 'no second switch on the page');
     await still(page);
     await page.waitForFunction(() => {
@@ -267,16 +271,19 @@ try {
 
   await check('an Inkwell place in the catch-up opens right here', async () => {
     await page.locator('.dk-catchup .dk-ev', { hasText: 'Reel 3 prompts' }).locator('a.dk-place').click();
-    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
+    // The day counts as visited once it's in the browser's own history.
+    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && history.state?.view === 'notebook');
     await page.goBack();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'desk');
+    await page.waitForSelector('.dk-chair');
+    await lit(page, '.desk-switch [aria-current="page"]', 'On stage');
   });
 
   await check('History: every thread, newest activity first, answered and finished ones too', async () => {
     await page.locator('.desk-switch button', { hasText: 'History' }).click();
     await page.waitForSelector('.dk-thread');
-    assert.equal(await page.locator('.desk-switch [aria-current="page"]').innerText(), 'History');
-    assert.match(await page.locator('#crumb').innerText(), /Desk\s*›\s*History/);
+    await lit(page, '.desk-switch [aria-current="page"]', 'History');
+    await crumbIs(page, /Desk\s*›\s*History/);
     assert.equal(await page.locator('.dk-head h1').innerText(), 'History');
     const names = await page.locator('.dk-thread .dk-name').allInnerTexts();
     assert.deepEqual(names, ['Make this week’s Acro reels', 'Draft Reel 3 prompts', 'Redesign Inkwell from the ground up', 'Overnight stills', 'Try opening two things side by side', 'Try the AI production tools on Reel 4', 'Tidy the old imports', 'Choose the speech-to-text service', 'Rethink the screenplay']);
