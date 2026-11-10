@@ -833,22 +833,24 @@ try {
     // The app must have finished starting, or the keys land before it listens (slow machines).
     await ph.waitForFunction(() => document.documentElement.dataset.started === '1', null, { timeout: 20000 }).catch(() => {});
     await sleep(500);
+    // Each wait says which step it was, and commands are tapped rather than sent Enter: on GitHub's
+    // slower machine a key pressed right after a start sometimes didn't reach the box it was meant for.
+    const until = (what, fn, arg) => ph.waitForFunction(fn, arg).catch((e) => { throw new Error(`${what}: ${e.message}`); });
     await ph.keyboard.press('Control+K');
     await ph.waitForSelector('#palette-list li');
     await ph.locator('#palette-input').fill('New screenplay');
-    await ph.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('New screenplay'));
-    await ph.keyboard.press('Enter');
+    await until('the list shows New screenplay', () => document.querySelector('#palette-list li')?.textContent.includes('New screenplay'));
+    await ph.locator('#palette-list li').first().click();
     await ph.waitForSelector('#lib-new', { state: 'visible' });
     await ph.fill('#lib-new-title', 'Pocket');
-    await ph.keyboard.press('Enter');
-    await ph.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Idea');
+    await ph.locator('#lib-new-title').press('Enter');
+    await until('the new screenplay opens on its Idea', () => document.querySelector('#nb-title')?.textContent === 'Idea');
     await sleep(400);
     await ph.keyboard.press('Control+O');
-    // Type once Go's find box has the keys (on a slow machine the first ones were lost).
-    await ph.waitForFunction(() => document.activeElement?.classList.contains('go-find'));
+    await until('Go’s find box has the keys', () => document.activeElement?.classList.contains('go-find'));
     await ph.keyboard.type('Script · Pocket');
-    await ph.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('Script · Pocket'));
-    await ph.keyboard.press('Enter');
+    await until('the list shows Script · Pocket', () => document.querySelector('#palette-list li')?.textContent.includes('Script · Pocket'));
+    await ph.locator('#palette-list li').first().click();
     await ph.waitForSelector('html.script #editor p[data-el="scene"]');
     await ph.locator('#editor p[data-el="scene"]').tap();
     await ph.waitForSelector('.script-bar', { state: 'visible' });

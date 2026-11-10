@@ -90,12 +90,14 @@ const all = (p) => p.evaluate(() => new Promise((res) => {
 const live = async (p) => (await all(p)).filter((r) => !r.deleted && r.kind !== 'version');
 // Runs a command by name. It waits for the command list, writes straight into
 // its box (so nothing else can take the keys on a slow machine) and waits for
-// the list to narrow to the command before Enter.
+// the list to narrow to the command before clicking it.
 const pick = async (p, name) => {
   await p.waitForSelector('#palette-list li');
   await p.locator('#palette-input').fill(name);
   await p.waitForFunction((n) => document.querySelector('#palette-list li')?.textContent.includes(n), name);
-  await p.locator('#palette-input').press('Enter');
+  // A click on the command, not Enter: on GitHub's slower machine an Enter right after a start
+  // sometimes left the list open with the right command on top and no box.
+  await p.locator('#palette-list li').first().click();
 };
 const command = async (p, name) => {
   if (!(await p.locator('#palette-input').isVisible())) await p.keyboard.press('Control+K');
@@ -104,13 +106,7 @@ const command = async (p, name) => {
 // Opens the box and waits until it has read Daybook.
 const box = async (p) => {
   await command(p, 'Bring in Daybook');
-  const seen = await p.waitForSelector('.dbin-box', { timeout: 10000 }).then(() => true, () => false);
-  if (!seen) {
-    // GitHub's slower machine has dropped this first Enter right after a start: say what showed, then ask again.
-    console.log('     (no box yet:', await p.evaluate(() => JSON.stringify({ palette: !document.querySelector('.palette')?.hidden, typed: document.querySelector('#palette-input')?.value, first: document.querySelector('#palette-list li')?.textContent, view: document.documentElement.dataset.view })), ')');
-    await command(p, 'Bring in Daybook');
-    await p.waitForSelector('.dbin-box');
-  }
+  await p.waitForSelector('.dbin-box');
   await p.waitForFunction(() => { const t = document.querySelector('.dbin-body')?.textContent || ''; return t && !t.startsWith('Reading'); });
   return p.locator('.dbin-body p').allInnerTexts();
 };
