@@ -35,7 +35,8 @@ const clock = (task, now) => {
 
 // hooks: view() → the view showing, changed(rows) (rows this wrote, for the
 // page that may have them open), openEntry(id), go(place), toast(text),
-// off(name) → is that part switched off under Look.
+// off(name) → is that part switched off under Look, beside(id) → a way to
+// open that entry beside (null when there's none).
 export class Plan {
   constructor({ box, sheet, hooks }) {
     this.box = box;
@@ -83,7 +84,8 @@ export class Plan {
   }
 
   async showPage(place) {
-    this.tab = place.tab === 'pace' ? 'pace' : 'week';
+    // 'day' is today's plan on its own: what "Plan" shows beside another page.
+    this.tab = ['pace', 'day'].includes(place.tab) ? place.tab : 'week';
     this.week = place.week || null;
     this.sheet.dataset.tab = this.tab;
     await this.refresh();
@@ -105,7 +107,7 @@ export class Plan {
     this.free = settings.free;
     if (this.renaming) return;
     if (this.dayShown) this.drawDay();
-    if (this.pageShown) { if (this.tab === 'pace') this.drawPace(); else this.drawWeek(); }
+    if (this.pageShown) { if (this.tab === 'pace') this.drawPace(); else if (this.tab === 'day') this.drawDay(this.sheet, this.today); else this.drawWeek(); }
     this.tickClock();
   }
 
@@ -146,9 +148,7 @@ export class Plan {
 
   // ---------- Day ----------
 
-  drawDay() {
-    const box = this.box;
-    const day = this.day;
+  drawDay(box = this.box, day = this.day) {
     const today = this.today;
     const p = dayPlan(this.items, day, today);
     const held = this.held(box);
@@ -259,7 +259,7 @@ export class Plan {
   placeOf(i) {
     if (i.world) return i.world.title || 'Untitled';
     if (i.root.id === TASKS_PAGE) return '';
-    if (i.root.kind === 'day') return this.dayShown && i.root.title === this.day ? '' : long(i.root.title, { month: 'short', day: 'numeric' });
+    if (i.root.kind === 'day') return i.root.title === (this.pageShown ? this.today : this.day) && (this.dayShown || this.tab === 'day') ? '' : long(i.root.title, { month: 'short', day: 'numeric' });
     return i.root.title || 'Untitled';
   }
 
@@ -535,6 +535,7 @@ export class Plan {
       { label: t.est ? `Takes ${span(t.est)}` : 'How long it takes', sub: this.estItems(i) },
       'sep',
       { label: 'Open it where it’s written', run: () => this.hooks.openEntry(i.row.id) },
+      ...(this.hooks.beside?.(i.row.id) ? [{ label: 'Open it beside', run: this.hooks.beside(i.row.id) }] : []),
       { label: 'Not a task any more', run: async () => { await this.wrote(await unTask(i.row.id)); this.hooks.toast?.('It’s a plain line again, still where it was written'); } }
     );
     popMenu(anchor, items, at);

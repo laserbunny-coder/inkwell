@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require('playwright');
 
-const PORT = 4231;
+const PORT = 4267;
 const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
 await sleep(1500);
 const URL = `http://localhost:${PORT}/`;
@@ -29,6 +29,9 @@ function remote(op, arg, where) {
   if (op === 'pull') return [...table.values()].filter((r) => r.updated_at > arg.since).sort((a, b) => (a.updated_at < b.updated_at ? -1 : 1)).slice(arg.from, arg.from + 500);
 }
 const fake = () => {
+  // These checks are about a row of panes: Look → "More than one pane beside".
+  // (One pane, Plan and Notes are in tests/beside.mjs.)
+  try { localStorage.setItem('manyPanes', '1'); } catch { /* no storage yet */ }
   window.__syncBackend = {
     user: async () => ({ id: 'u1' }),
     onAuth() {}, signIn() {}, signOut() {}, subscribe() {}, unsubscribe() {},
@@ -231,7 +234,7 @@ try {
 
   // ---------- a phone ----------
   const phone = await browser.newContext({ ...devices['Pixel 7'], colorScheme: 'dark' });
-  await phone.addInitScript(() => { window.__syncBackend = null; });
+  await phone.addInitScript(() => { window.__syncBackend = null; try { localStorage.setItem('manyPanes', '1'); } catch { /* no storage yet */ } });
   const ph = await phone.newPage();
   ph.on('pageerror', (e) => errors.push(e.message));
   await ph.goto(URL);

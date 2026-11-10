@@ -63,7 +63,8 @@ import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } 
 import { pieceDoc, pageDoc, startDraft, draftHolding } from './drafts.js';
 import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
-import { inPane, PANE_ID, PaneHost, host as paneHost, sendChanged, onChanged } from './panes.js';
+import { inPane, PANE_ID, PaneHost, host as paneHost, sendChanged, onChanged, BESIDE_PLACES } from './panes.js';
+import { SideNotes } from './sidenotes.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
@@ -570,6 +571,8 @@ window.addEventListener('popstate', async (e) => {
 let besideUntil = 0;
 async function go(place) {
   if (besideUntil > Date.now()) { besideUntil = 0; return openBeside(place); }
+  // A menu left open belongs to the place you're leaving.
+  closeMenu();
   // Somewhere that has since gone to the Trash (Back can lead there): go nearby instead.
   if (place.view === 'write' && place.chapterId && gone(await getEntry(place.chapterId))) place = { view: 'library' };
   // Posting moved from Make to Deliver: an old place with its tab goes there.
@@ -590,6 +593,9 @@ async function go(place) {
   }
   if (place.view === 'notebook' && place.pageId && !place.pageId.startsWith('day-') && gone(await getEntry(place.pageId))) place = { view: 'notebook', pageId: dayId(isoToday()) };
   if (place.view === 'notebook' && !place.pageId && notebook.page && !notebook.isDay && gone(await getEntry(notebook.page.id))) place = { view: 'notebook', pageId: dayId(isoToday()) };
+  // Today's plan on its own, and the notes of the draft next door, only live
+  // beside something: in the main window they'd be the day's page.
+  if (!inPane && ((place.view === 'plan' && place.tab === 'day') || place.view === 'sidenotes')) place = { view: 'notebook', pageId: dayId(isoToday()) };
   const from = view();
   // Switch at once so the next keystroke lands in the right place; saving catches up.
   if (from === 'write' && place.view !== 'write') store.close(editor.state.doc);
@@ -652,8 +658,11 @@ async function go(place) {
     remember(place);
     await tagsPage?.show(place);
   } else if (place.view === 'plan') {
-    remember({ view: 'plan', tab: place.tab === 'pace' ? 'pace' : 'week', ...(place.week ? { week: place.week } : {}) });
+    remember({ view: 'plan', tab: ['pace', 'day'].includes(place.tab) ? place.tab : 'week', ...(place.week ? { week: place.week } : {}) });
     await plan?.showPage(place);
+  } else if (place.view === 'sidenotes') {
+    remember({ view: 'sidenotes' });
+    await sideNotes.show();
   } else if (place.view === 'desk') {
     remember({ view: 'desk', ...(place.tab === 'history' ? { tab: 'history' } : {}) });
     await deskPage?.show(place);
@@ -676,6 +685,8 @@ async function go(place) {
   }
   renderCrumb();
   renderRail();
+  // Notes beside follow the main window.
+  if (!inPane) panes?.mainMoved(lastPlace);
 }
 
 async function openBook(projectId) {
@@ -945,6 +956,7 @@ async function applyRemote(rows) {
   }
   if (rows.some((r) => r.parent_id === state.chapterId && ['para', 'scene', 'heading'].includes(r.kind))) await applyRemoteChapter();
   if (rows.some((r) => r.kind === 'note' && r.fields?.chapter_id === state.chapterId)) await notes.load(state.chapterId);
+  if (view() === 'sidenotes' && rows.some((r) => ['note', 'para', 'scene', 'heading', 'chapter', 'settings'].includes(r.kind))) sideNotes.soon();
   if (view() === 'grid' && rows.some((r) => ['note', 'thread', 'para', 'scene', 'chapter', 'act', 'project', 'world'].includes(r.kind))) grid.refresh();
   if ((view() === 'production' || view() === 'deliver') && rows.some((r) => ['shot', 'breakdown', 'shootday', 'file', 'page', 'note', 'para', 'scene', 'chapter', 'act', 'project', 'world', 'share'].includes(r.kind))) production.refresh();
   if (stagePage.isOpen && rows.some((r) => ['line', 'page', 'project', 'world', 'event', 'tie', 'shootday', 'note', 'share'].includes(r.kind))) stagePage.refresh();
@@ -1554,7 +1566,10 @@ async function drawCrumb() {
   } else if (view() === 'drawer') {
     parts.push(lib, link('Drawer', () => {}, 'here'));
   } else if (view() === 'plan') {
-    parts.push(link('Today', () => go({ view: 'notebook', pageId: dayId(isoToday()) }), ''), link(lastPlace?.tab === 'pace' ? 'Pace' : 'Week', () => {}, 'here'));
+    if (lastPlace?.tab === 'day') parts.push(link('Today', () => {}, 'here'));
+    else parts.push(link('Today', () => go({ view: 'notebook', pageId: dayId(isoToday()) }), ''), link(lastPlace?.tab === 'pace' ? 'Pace' : 'Week', () => {}, 'here'));
+  } else if (view() === 'sidenotes') {
+    parts.push(link(sideNotes.title || 'No draft open', () => {}, 'here'));
   } else if (view() === 'desk') {
     const history = lastPlace?.tab === 'history';
     parts.push(link('Desk', () => go({ view: 'desk' }), history ? '' : 'here'));
@@ -3707,6 +3722,8 @@ function toggleFocus() {
   const on = !root.classList.contains('focus');
   root.classList.toggle('focus', on);
   if (!on) root.classList.remove('reading');
+  // Focus is only the words: what's beside steps out, and is back when you leave.
+  if (!inPane) { panes?.layout(); syncBeside(); }
   localStorage.setItem('focus', on ? '1' : '0');
   edgesQuietUntil = Date.now() + 600;
   body.classList.remove('show-outline', 'show-top');
@@ -3729,6 +3746,7 @@ function syncSwitches() {
   const h = hidden();
   document.querySelectorAll('[data-show]').forEach((c) => { c.checked = !h.has(c.dataset.show); });
   $('#focus-mode').checked = root.classList.contains('focus');
+  $('#many-panes').checked = localStorage.getItem('manyPanes') === '1';
   $('#focus-sections').checked = root.classList.contains('focus-sections');
   $('#focus-toggle').setAttribute('aria-pressed', String(root.classList.contains('focus')));
 }
@@ -3751,6 +3769,11 @@ if (!inPane) {
 }
 const toggleShortcuts = () => { const s = $('.shortcuts'); s.hidden = !s.hidden; if (s.hidden) currentEditor().commands.focus(); };
 document.querySelectorAll('[data-show]').forEach((c) => c.addEventListener('change', () => setShown(c.dataset.show, c.checked)));
+// One pane beside unless you ask for a row of them. Back to one: the last one stays.
+$('#many-panes').addEventListener('change', (e) => {
+  if (e.target.checked) localStorage.setItem('manyPanes', '1');
+  else { localStorage.removeItem('manyPanes'); for (const p of (panes?.panes || []).slice(0, -1)) panes.close(p.id); }
+});
 $('#focus-mode').addEventListener('change', toggleFocus);
 $('#focus-sections').addEventListener('change', (e) => toggleFocusSections(e.target.checked));
 $('#typewriter-mode').checked = root.classList.contains('typewriter');
@@ -4009,6 +4032,8 @@ const commands = [
   { group: 'page', label: 'Name the section levels (Act, Sequence, Scene…)', keys: '', run: nameSectionLevels, when: () => writing() && isScript() },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
   { group: 'view', label: 'What Claude knows: its one-line note on this, and weekly summaries', keys: '', words: ['about', 'summary', 'second brain', 'memory', 'digest', 'weekly'], run: () => showClaudeKnows() },
+  { group: 'view', label: 'Beside: today’s plan next to this page (again: put it away)', keys: `${mod}\\`, words: ['pane', 'side by side', 'split', 'beside', 'plan', 'tasks', 'today'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => toggleBesidePane() },
+  { group: 'view', label: 'In the Beside pane: this draft’s notes, listed next to it', words: ['pane', 'side by side', 'beside', 'notes', 'margin', 'comments'], when: () => !inPane && !!panes && writing() && !root.classList.contains('hide-panes'), run: () => openBeside(BESIDE_PLACES.notes) },
   { group: 'view', label: 'Open where you are in a pane beside (middle-click opens anything beside)', words: ['pane', 'side by side', 'split', 'beside', 'two', 'compare'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => openBeside(lastPlace) },
   { group: 'view', label: 'Show the panes beside', words: ['pane', 'peek', 'side by side'], when: () => !!panes?.count && panes.sheet && !panes.sheetOpen, run: () => panes.showSheet() },
   { group: 'view', label: 'Close the pane you’re in', keys: `${mod}⌥W`, words: ['pane', 'side by side', 'close'], when: () => inPane, run: () => paneHost()?.close(PANE_ID) },
@@ -4504,7 +4529,9 @@ document.addEventListener('click', (e) => {
   if (cmd === 'library') go({ view: 'library', area: null });
   if (cmd === 'grid') toggleGrid();
   if (cmd === 'production') toggleProduction();
-  if (cmd === 'today') go({ view: 'notebook', pageId: dayId(isoToday()) });
+  // Beside, the plan's own Day is today's plan alone, not the whole page.
+  if (cmd === 'today') go(inPane && view() === 'plan' ? BESIDE_PLACES.plan : { view: 'notebook', pageId: dayId(isoToday()) });
+  if (cmd === 'beside') toggleBesidePane();
   if (cmd === 'drawer') go({ view: 'drawer' });
   if (cmd === 'go') nav.toggle();
   if (cmd === 'mic') captureHere({ start: true });
@@ -4524,6 +4551,7 @@ document.addEventListener('keydown', (e) => {
   if (m && k === 'k') { e.preventDefault(); $('.palette').hidden ? openPalette() : closePalette(); }
   else if (m && e.shiftKey && !e.altKey && e.code === 'Period') { e.preventDefault(); toggleSections(); }
   else if (m && e.key === '.') { e.preventDefault(); toggleFocus(); }
+  else if (m && !e.shiftKey && !e.altKey && e.code === 'Backslash') { e.preventDefault(); toggleBesidePane(); }
   else if (m && e.shiftKey && k === 'f') { e.preventDefault(); openPalette('search'); }
   else if (m && e.shiftKey && k === 'o') { e.preventDefault(); go({ view: 'library', area: null }); }
   else if (m && k === 'o') { e.preventDefault(); if (!$('.palette').hidden) closePalette(false); nav.toggle(true); }
@@ -4957,7 +4985,9 @@ plan = new Plan({
   hooks: {
     view,
     changed: (rows) => applyRemote(rows),
-    openEntry: (id) => openEntry(id),
+    // Beside, a task's place opens in the main window and the plan stays.
+    openEntry: (id) => (inPane && view() === 'plan' ? openInMain(id) : openEntry(id)),
+    beside: (id) => (inPane || root.classList.contains('hide-panes') || !paneHost() ? null : () => openEntryBeside(id)),
     go: (place) => go(place),
     off: (name) => hidden().has(name),
     toast
@@ -5017,9 +5047,41 @@ const panes = inPane ? null : new PaneHost({
   goMain: (place) => go(place),
   focusMain: () => { window.focus(); try { currentEditor().commands.focus(); } catch { /* nothing to type in */ } },
   isOff: () => root.classList.contains('hide-panes'),
+  many: () => localStorage.getItem('manyPanes') === '1',
+  focus: () => root.classList.contains('focus'),
+  changed: () => syncBeside(),
   toast
 });
 if (panes) window.__panes = panes;
+
+// Beside (Ctrl + \): with nothing beside, today's plan opens there; otherwise
+// what's beside is put away, or brought back. From a pane it's the same.
+function toggleBesidePane() {
+  const h = paneHost();
+  if (!h) return;
+  if (h.hooks.isOff()) { toast('Beside is switched off (Look → Beside)'); return; }
+  if (!inPane && root.classList.contains('focus') && !h.sheet) { toast('Focus is only the words. Leave it (⌘.) to see what’s beside.'); return; }
+  if (!h.toggle()) openBeside(BESIDE_PLACES.plan);
+}
+function syncBeside() {
+  const b = $('#beside-toggle');
+  if (!b || !panes) return;
+  b.setAttribute('aria-pressed', String(panes.showing));
+  b.title = panes.count ? (panes.showing ? 'Put away what’s beside (⌘\\)' : 'Bring back what’s beside (⌘\\)') : 'Beside: today’s plan, notes or another page next to this one (⌘\\)';
+}
+// From a pane: somewhere opens in the main window, and the pane stays as it is.
+async function openInMain(id) {
+  const place = await placeOf(id);
+  if (place) await paneHost()?.hooks.goMain(place);
+}
+// The notes of the draft in the main window, listed beside (sidenotes.js).
+const sideNotes = new SideNotes($('#side-notes'), {
+  mainPlace: () => paneHost()?.hooks.mainPlace() || null,
+  open: async (chapterId, paraId) => { const h = paneHost(); if (!h) return; await h.hooks.goMain({ view: 'write', chapterId, focus: paraId }); h.focused(''); h.hooks.focusMain(); },
+  skip: (n) => notes.skip(n),
+  shown: () => view() === 'sidenotes',
+  named: () => { if (view() === 'sidenotes') renderCrumb(); }
+});
 
 async function openBeside(place, opts = {}) {
   if (!place?.view) return;
@@ -5228,6 +5290,7 @@ async function settleAt(eid, spot) {
 }
 window.__pane = {
   go: (place) => go(place),
+  mainMoved: () => { if (view() === 'sidenotes') sideNotes.soon(); },
   focus: () => { try { currentEditor().commands.focus(); } catch { /* nothing to type in */ } },
   closing: () => { store.close(editor.state.doc); notebook.close(); },
   dropOver: (x, y) => showDrop(dropSpotAt(x, y)),

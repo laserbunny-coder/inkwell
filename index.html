@@ -77,6 +77,7 @@
         <span class="tb-group tb-view">
           <button type="button" class="tb-btn" data-cmd="notes" id="notes-toggle" title="Notes beside the text (⌘2)">Notes</button>
           <button type="button" class="tb-btn" data-cmd="focus" id="focus-toggle" title="Focus: just the text (⌘.)">Focus</button>
+          <button type="button" class="tb-btn" data-cmd="beside" id="beside-toggle" aria-pressed="false" title="Beside: today’s plan, notes or another page next to this one (⌘\)">Beside</button>
           <button type="button" class="tb-btn" data-cmd="page" aria-label="Page width and text size" title="Page width, text size, what to show">Aa</button>
         </span>
         <button type="button" class="pill" data-cmd="palette" id="palette-toggle" title="Everything you can do (⌘K). Shortcuts: ⌘/">⌘K</button>
@@ -141,6 +142,10 @@
 
   <main class="plan-home" aria-label="Week and pace">
     <div class="lib-sheet pl-sheet" id="plan-sheet"></div>
+  </main>
+
+  <main class="notes-home" aria-label="Notes beside">
+    <div class="lib-sheet sn-sheet" id="side-notes"></div>
   </main>
 
   <main class="project-home" aria-label="Book">
@@ -382,7 +387,8 @@
     <label class="switch"><input type="checkbox" data-show="dots"> Note dots in the margin</label>
     <label class="switch"><input type="checkbox" data-show="handle"> Six-dot handle</label>
     <label class="switch"><input type="checkbox" data-show="bullets"> Bullets on notebook lines</label>
-    <label class="switch"><input type="checkbox" data-show="panes"> Panes: middle-click opens things side by side</label>
+    <label class="switch"><input type="checkbox" data-show="panes"> Beside: a pane next to the page <span class="keys">⌘\</span>, and middle-click opens things there</label>
+    <label class="switch"><input type="checkbox" id="many-panes"> More than one pane beside (up to three in a row)</label>
     <label class="switch"><input type="checkbox" data-show="alts"> Marks on words and paragraphs with alternates</label>
     <label class="switch"><input type="checkbox" data-show="voice"> Mode chips on voice captures</label>
     <label class="switch"><input type="checkbox" data-show="linkpics"> Pictures on shared links</label>
@@ -481,6 +487,7 @@
     <h3>What shows</h3>
     <dl>
       <dt>⌘.</dt><dd>Focus: just the text</dd>
+      <dt>⌘\</dt><dd>Beside: today’s plan next to the page; again puts it away</dd>
       <dt>⌘⇧.</dt><dd>Script section titles and summaries, on or off</dd>
       <dt>⌘1</dt><dd>Keep the sidebar open</dd>
       <dt>⌘2</dt><dd>Notes beside the text</dd>

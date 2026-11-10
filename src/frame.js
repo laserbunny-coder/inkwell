@@ -203,7 +203,7 @@ export class Frame {
       this.move($('#page-tabs'), this.mid);
       this.move($('#tb-back'), this.left);
       this.move($('#crumb'), this.left);
-      for (const id of ['chapter-links-chip', 'words', 'status', 'versions', 'sync', 'notes-toggle', 'focus-toggle']) this.move(document.getElementById(id), this.right);
+      for (const id of ['chapter-links-chip', 'words', 'status', 'versions', 'sync', 'notes-toggle', 'focus-toggle', 'beside-toggle']) this.move(document.getElementById(id), this.right);
       bar.append(this.left, this.mid, this.right);
       document.body.prepend(this.rail);
       root.classList.add('has-rail');
