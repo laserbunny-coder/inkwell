@@ -153,7 +153,7 @@ try {
   });
 
   await check('the plan’s own Week and Pace open in the pane; Day comes back to today’s plan alone', async () => {
-    await f.locator('#plan-sheet .pl-switch button', { hasText: 'Week' }).click();
+    await f.locator('#plan-sheet .pl-switch button[data-cmd="week"]').click();
     f = await pane(page, 'plan', 'week');
     await headIs(page, 'Plan', 'Week');
     assert.equal((await head(page)).swap, true);

@@ -67,6 +67,7 @@ import { CompareView, BesidePane } from './compare.js';
 import { inPane, PANE_ID, PaneHost, host as paneHost, sendChanged, onChanged, BESIDE_PLACES } from './panes.js';
 import { SideNotes } from './sidenotes.js';
 import { Talk } from './talk.js';
+import { aheadSource } from './ahead.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
@@ -665,7 +666,7 @@ async function go(place) {
     remember(place);
     await tagsPage?.show(place);
   } else if (place.view === 'plan') {
-    remember({ view: 'plan', tab: ['pace', 'day'].includes(place.tab) ? place.tab : 'week', ...(place.week ? { week: place.week } : {}) });
+    remember({ view: 'plan', tab: ['pace', 'day', 'ahead'].includes(place.tab) ? place.tab : 'week', ...(place.week ? { week: place.week } : {}) });
     await plan?.showPage(place);
   } else if (place.view === 'sidenotes') {
     remember({ view: 'sidenotes' });
@@ -1582,7 +1583,7 @@ async function drawCrumb() {
     parts.push(lib, link('Drawer', () => {}, 'here'));
   } else if (view() === 'plan') {
     if (lastPlace?.tab === 'day') parts.push(link('Today', () => {}, 'here'));
-    else parts.push(link('Today', () => go({ view: 'notebook', pageId: dayId(isoToday()) }), ''), link(lastPlace?.tab === 'pace' ? 'Pace' : 'Week', () => {}, 'here'));
+    else parts.push(link('Today', () => go({ view: 'notebook', pageId: dayId(isoToday()) }), ''), link(lastPlace?.tab === 'pace' ? 'Pace' : lastPlace?.tab === 'ahead' ? 'Weeks ahead' : 'Week', () => {}, 'here'));
   } else if (view() === 'sidenotes') {
     parts.push(link(sideNotes.title || 'No draft open', () => {}, 'here'));
   } else if (view() === 'talk') {
@@ -3291,6 +3292,7 @@ async function goPage(id) {
   if (id === 'library') return go({ view: 'library', area: null });
   if (id === 'tags') return go({ view: 'tags' });
   if (id === 'week') return go({ view: 'plan', tab: 'week' });
+  if (id === 'ahead') return go({ view: 'plan', tab: 'ahead' });
   if (id === 'pace') return go({ view: 'plan', tab: 'pace' });
   if (id === 'desk') return go({ view: 'desk' });
   if (id === 'desk-history') return go({ view: 'desk', tab: 'history' });
@@ -3963,6 +3965,7 @@ const commands = [
   { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
   { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
   { group: 'go', label: 'Week: seven days of tasks, and what isn’t on a day yet', keys: '', words: ['plan', 'tasks', 'schedule', 'calendar', 'hours', 'tray'], run: () => go({ view: 'plan', tab: 'week' }) },
+  { group: 'go', label: 'Weeks ahead: six weeks, a lane for each project', keys: '', words: ['plan', 'roadmap', 'weeks', 'months', 'dates', 'deadline', 'milestone', 'schedule', 'timeline', 'stretch'], run: () => go({ view: 'plan', tab: 'ahead' }) },
   { group: 'go', label: 'Pace: what you planned against what it really took', keys: '', words: ['plan', 'tasks', 'time', 'estimate', 'looking back', 'hours'], run: () => go({ view: 'plan', tab: 'pace' }) },
   { group: 'go', label: 'Desk: every project, what needs you and who’s working on it', keys: `${mod}⇧U`, words: ['claude', 'threads', 'needs you', 'calls', 'catch-up', 'catchup', 'updates', 'projects', 'stage'], run: () => go({ view: 'desk' }) },
   { group: 'go', label: 'History: every Claude thread, newest first', keys: '', words: ['threads', 'closed', 'finished', 'desk', 'search threads'], run: () => go({ view: 'desk', tab: 'history' }) },
@@ -4591,6 +4594,7 @@ document.addEventListener('click', (e) => {
   if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
   if (cmd === 'tags') go({ view: 'tags' });
   if (cmd === 'week') go({ view: 'plan', tab: 'week' });
+  if (cmd === 'ahead') go({ view: 'plan', tab: 'ahead' });
   if (cmd === 'pace') go({ view: 'plan', tab: 'pace' });
   if (cmd === 'desk') go({ view: 'desk' });
   if (cmd === 'desk-history') go({ view: 'desk', tab: 'history' });
@@ -5071,6 +5075,9 @@ plan = new Plan({
     off: (name) => hidden().has(name),
     // A project's steps were drawn again: its next date may have moved.
     steps: () => { if (view() === 'world' && state.worldId) projectPage?.setDate(nextDate(state.worldId)); },
+    // Weeks ahead: the lanes as the Desk seats them, and shoot days.
+    ahead: () => aheadSource((since) => { const b = deskBackend(); return b ? b.desk(since) : null; }),
+    talk: () => (inPane || !paneHost() || root.classList.contains('hide-panes') ? null : () => openTalk()),
     toast
   }
 });

@@ -1,14 +1,17 @@
-// The plan. Today is one room seen from three distances: Day (the plan on top
+// The plan. Today is one room seen from four distances: Day (the plan on top
 // of the day's page), Week (seven days and the tray of things not on a day
-// yet) and Pace (what you planned against what it really took). Tasks are
+// yet), Weeks ahead (six weeks, a lane for each project: ahead.js) and Pace
+// (what you planned against what it really took). Tasks are
 // ordinary lines with a day (see tasks.js), gathered here from wherever they
 // live. Plain text on hairlines; nothing is copied.
 
 import { popMenu, askText } from './menu.js';
 import {
   loadTasks, dayPlan, weekPlan, pace, planSettings, savePlanSettings, setTask, unTask, tickTask, tookTask, startTimer, stopTimer,
-  addTask, renameTask, arrange, plainLine, parseEst, readSpan, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE, stepsPage, stepsHome
+  addTask, renameTask, arrange, plainLine, parseEst, readSpan, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE, stepsPage, stepsHome,
+  moveTask, isStretch, stretchWord
 } from './tasks.js';
+import { drawAhead, aheadClick, aheadContext, aheadDrags } from './ahead.js';
 
 const make = (tag, cls, text) => {
   const el = document.createElement(tag);
@@ -23,7 +26,7 @@ const ICON = {
   check: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M3 8.500l3.200 3.200L13 4.800" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 };
 const ESTS = [5, 10, 15, 30, 45, 60, 90, 120, 180];
-const TABS = [['day', 'Day', 'today'], ['week', 'Week', 'week'], ['pace', 'Pace', 'pace']];
+const TABS = [['day', 'Day', 'today'], ['week', 'Week', 'week'], ['ahead', 'Weeks ahead', 'ahead'], ['pace', 'Pace', 'pace']];
 const hover = matchMedia('(hover: hover)');
 const long = (iso, opts) => dateOf(iso).toLocaleDateString('en-US', opts);
 // "12:04" while a timer runs.
@@ -36,8 +39,9 @@ const clock = (task, now) => {
 // hooks: view() → the view showing, changed(rows) (rows this wrote, for the
 // page that may have them open), openEntry(id), go(place), toast(text),
 // off(name) → is that part switched off under Look, beside(id) → a way to
-// open that entry beside (null when there's none). steps is where a project's
-// own tasks show on its page.
+// open that entry beside (null when there's none), ahead() → the lanes and
+// dates for Weeks ahead, talk() → a way to open Claude beside (or null).
+// steps is where a project's own tasks show on its page.
 export class Plan {
   constructor({ box, sheet, steps = null, hooks }) {
     this.box = box;
@@ -57,6 +61,7 @@ export class Plan {
       el.addEventListener('click', (e) => this.click(e));
       el.addEventListener('keydown', (e) => this.key(e));
       el.addEventListener('contextmenu', (e) => {
+        if (el === sheet && aheadContext(this, e)) return;
         const row = e.target.closest('[data-task]');
         if (!row || e.target.closest('input')) return;
         e.preventDefault();
@@ -64,6 +69,9 @@ export class Plan {
       });
       if (el !== steps) this.drags(el);
     }
+    this.aheadSrc = null; // the lanes and dates Weeks ahead was last drawn with
+    this.aheadAdd = null; // { world, week, day } while something is being typed into a lane
+    aheadDrags(this, sheet);
   }
 
   item(id) { return this.items.find((i) => i.row.id === id) || null; }
@@ -99,8 +107,10 @@ export class Plan {
 
   async showPage(place) {
     // 'day' is today's plan on its own: what "Plan" shows beside another page.
-    this.tab = ['pace', 'day'].includes(place.tab) ? place.tab : 'week';
+    this.tab = ['pace', 'day', 'ahead'].includes(place.tab) ? place.tab : 'week';
     this.week = place.week || null;
+    this.aheadAdd = null;
+    this.aheadHeld = false;
     this.sheet.dataset.tab = this.tab;
     await this.refresh();
   }
@@ -115,14 +125,15 @@ export class Plan {
   async refresh() {
     if (!this.dayShown && !this.pageShown && !this.stepsShown) return;
     const turn = (this.turn = (this.turn || 0) + 1);
-    const [items, settings] = await Promise.all([loadTasks(), planSettings()]);
+    const [items, settings, src] = await Promise.all([loadTasks(), planSettings(), this.pageShown && this.tab === 'ahead' ? this.hooks.ahead?.() : null]);
     if (turn !== this.turn) return;
     this.items = items;
     this.free = settings.free;
+    if (src) this.aheadSrc = src;
     if (this.renaming) return;
     if (this.dayShown) this.drawDay();
     if (this.stepsShown) this.drawSteps();
-    if (this.pageShown) { if (this.tab === 'pace') this.drawPace(); else if (this.tab === 'day') this.drawDay(this.sheet, this.today); else this.drawWeek(); }
+    if (this.pageShown) { if (this.tab === 'pace') this.drawPace(); else if (this.tab === 'ahead') drawAhead(this); else if (this.tab === 'day') this.drawDay(this.sheet, this.today); else this.drawWeek(); }
     this.tickClock();
   }
 
@@ -264,9 +275,12 @@ export class Plan {
     }
     // On a project's page a step says its day; click to move it.
     if (when && !done) {
-      const d = make('button', `pl-when${t.day ? (t.day < this.today ? ' late' : '') : ' unset'}`, dayWord(t.day, this.today));
+      const stretch = isStretch(t);
+      const late = stretch ? t.until < this.today : t.day && t.day < this.today;
+      const word = stretch ? stretchWord(t) : `${t.mark ? '◆ ' : ''}${dayWord(t.day, this.today)}`;
+      const d = make('button', `pl-when${t.day ? (late ? ' late' : '') : ' unset'}${t.mark === 'hard' ? ' hard' : ''}`, word);
       d.dataset.act = 'day';
-      d.setAttribute('aria-label', t.day ? `Planned for ${dayWord(t.day, this.today)}; click to move it` : 'Not on a day yet; click to pick one');
+      d.setAttribute('aria-label', stretch ? `From ${word}; click to move it` : t.day ? `${t.mark ? 'A date to hit: ' : 'Planned for '}${dayWord(t.day, this.today)}${t.mark === 'hard' ? ', and it can’t move' : ''}; click to move it` : 'Not on a day yet; click to pick one');
       meta.append(d);
     }
     if (!done) {
@@ -474,6 +488,7 @@ export class Plan {
     const el = e.target.closest('[data-act]');
     if (!el) return;
     const act = el.dataset.act;
+    if (act.startsWith('ahead-')) return aheadClick(this, act, el);
     const row = el.closest('[data-task], [data-took]');
     const i = row ? this.item(row.dataset.task || row.dataset.took) : null;
     if (act === 'week-prev' || act === 'week-next') return this.hooks.go({ view: 'plan', tab: 'week', week: addDays(weekOf(this.week || this.today)[0], act === 'week-prev' ? -7 : 7) });
@@ -536,8 +551,9 @@ export class Plan {
     await this.wrote(i.task.run ? await stopTimer(i.row.id) : await startTimer(i.row.id));
   }
 
+  // A stretch of work keeps its length when its first day moves.
   async move(i, day) {
-    await this.wrote(await setTask(i.row.id, { day, order: this.lastOrder(day) }));
+    await this.wrote(await moveTask(i.row.id, day, this.lastOrder(day)));
   }
 
   async est(i, minutes) {
@@ -600,6 +616,11 @@ export class Plan {
     }
     items.push('sep', ...this.dayItems(i), 'sep',
       { label: t.est ? `Takes ${span(t.est)}` : 'How long it takes', sub: this.estItems(i) },
+      // With a day, it can be a date to hit: a diamond in Weeks ahead.
+      ...(!done && t.day && !isStretch(t) ? [
+        { label: 'A date to hit', current: !!t.mark, run: async () => this.wrote(await setTask(i.row.id, { mark: t.mark ? null : 'date' })) },
+        ...(t.mark ? [{ label: 'This date can’t move', current: t.mark === 'hard', run: async () => this.wrote(await setTask(i.row.id, { mark: t.mark === 'hard' ? 'date' : 'hard' })) }] : [])
+      ] : []),
       'sep',
       { label: 'Open it where it’s written', run: () => this.hooks.openEntry(i.row.id) },
       ...(this.hooks.beside?.(i.row.id) ? [{ label: 'Open it beside', run: this.hooks.beside(i.row.id) }] : []),

@@ -6,8 +6,13 @@
 //
 // fields.task = { v: 1, day: 'YYYY-MM-DD' | null, est: minutes | null,
 //   done_at: ms | null, actual: minutes | null, log: [[start, end], …],
-//   run: ms | null (the timer is going since then), order: number, owner }
+//   run: ms | null (the timer is going since then), order: number, owner,
+//   until: 'YYYY-MM-DD' | null, mark: 'date' | 'hard' | null }
 // A line's own "done" (fields.done) is the tick; done_at says when.
+// A task with an "until" is a stretch of work, from its day through that
+// day: a bar in Weeks ahead, not something on one day's plan. A task with a
+// "mark" is a date to hit (hard: it can't move): a diamond in Weeks ahead,
+// and still a task on its day.
 
 import { getEntry, putEntries, tasked, children, isTrashed } from './db.js';
 import { entry, newId, tagsIn } from './model.js';
@@ -67,11 +72,21 @@ export function dayWord(iso, today = isoOf()) {
 // The quiet label after a task's words where it's written.
 export function chipLabel(task, done = false, today = isoOf()) {
   if (done) return task.actual ? `Done · ${span(task.actual)}` : 'Done';
-  return [dayWord(task.day, today), task.est ? span(task.est) : null, task.run ? 'timing' : null].filter(Boolean).join(' · ');
+  return [isStretch(task) ? stretchWord(task) : dayWord(task.day, today), task.est ? span(task.est) : null, task.run ? 'timing' : null].filter(Boolean).join(' · ');
 }
 
 const blank = () => ({ v: 1, day: null, est: null, done_at: null, actual: null, log: [], run: null, order: 0 });
 export const taskOf = (row) => (row?.fields?.task?.v ? row.fields.task : null);
+// A stretch of work: it has a first day and a last.
+export const isStretch = (task) => !!(task?.day && task.until && task.until >= task.day);
+const short = (iso) => dateOf(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+// "Nov 16 to 29", "Nov 30 to Dec 13".
+export function stretchWord(task) {
+  const a = dateOf(task.day);
+  const b = dateOf(task.until);
+  if (task.day === task.until) return short(task.day);
+  return `${short(task.day)} to ${a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear() ? b.getDate() : short(task.until)}`;
+}
 
 // Minutes on the clock for a task: what the timer has recorded, and what it's
 // recording now.
@@ -137,7 +152,7 @@ const real = (i) => i.task.actual ?? i.task.est ?? 0;
 // One day's plan: what's still open (things carried over from earlier days
 // first, on today's plan only), then what's done.
 export function dayPlan(items, day, today = isoOf()) {
-  const mine = items.filter((i) => i.mine);
+  const mine = items.filter((i) => i.mine && !isStretch(i.task));
   const open = mine.filter((i) => !isDone(i) && i.task.day === day).sort(byOrder);
   const carried = day === today ? mine.filter((i) => !isDone(i) && i.task.day && i.task.day < today).sort((a, b) => (a.task.day < b.task.day ? -1 : a.task.day > b.task.day ? 1 : byOrder(a, b))) : [];
   const done = mine.filter((i) => isDone(i) && doneDay(i) === day).sort((a, b) => (a.task.done_at || 0) - (b.task.done_at || 0));
@@ -147,7 +162,7 @@ export function dayPlan(items, day, today = isoOf()) {
 
 // A week: seven days, and the tray of open tasks not on a day yet.
 export function weekPlan(items, anyDay, today = isoOf()) {
-  const mine = items.filter((i) => i.mine);
+  const mine = items.filter((i) => i.mine && !isStretch(i.task));
   const days = weekOf(anyDay).map((iso) => {
     const open = mine.filter((i) => !isDone(i) && i.task.day === iso).sort(byOrder);
     const done = mine.filter((i) => isDone(i) && doneDay(i) === iso).sort((a, b) => (a.task.done_at || 0) - (b.task.done_at || 0));
@@ -157,6 +172,48 @@ export function weekPlan(items, anyDay, today = isoOf()) {
   // Still open from before this week: they wait on today's plan.
   const late = mine.filter((i) => !isDone(i) && i.task.day && i.task.day < days[0].iso).length;
   return { days, tray, late, min: days.reduce((a, d) => a + d.min, 0) };
+}
+
+// Weeks ahead: the next weeks as columns, a lane for each project.
+// lanes: [{ id, title, color, faint }] in the order they should show.
+// dates: [{ world, iso, text, hard, go }] from outside the tasks (shoot days).
+// → { weeks: [{ iso (its Monday), last, now, min, over }], free (minutes),
+//     lanes: [{ …lane, bars: [{ item, from, to, early, late }],
+//               dates: [{ col, iso, text, hard, item | null, go }] }],
+//     note } where from/to/col count weeks from 1.
+export function aheadPlan(items, { today = isoOf(), weeks = 6, free = FREE_HOURS, lanes = [], dates = [] } = {}) {
+  const first = weekOf(today)[0];
+  const cols = Array.from({ length: weeks }, (_x, n) => {
+    const iso = addDays(first, n * 7);
+    return { iso, last: addDays(iso, 6), now: n === 0, min: 0, over: false };
+  });
+  const end = cols[weeks - 1].last;
+  // Whole days first, so a clock change in between can't shift a week.
+  const colOf = (iso) => Math.floor(Math.round((dateOf(iso) - dateOf(first)) / 864e5) / 7) + 1;
+  // Each week's hours: your tasks on its days (what's done this week counts
+  // as what it took), the same sum the Week view shows.
+  for (const i of items) {
+    if (!i.mine || isStretch(i.task)) continue;
+    const day = isDone(i) ? doneDay(i) : i.task.day;
+    if (!day || day < first || day > end) continue;
+    cols[colOf(day) - 1].min += isDone(i) ? real(i) : est(i);
+  }
+  for (const c of cols) c.over = c.min > free * 60;
+  const out = lanes.map((lane) => {
+    const mine = items.filter((i) => i.world?.id === lane.id && !isDone(i));
+    const bars = mine.filter((i) => isStretch(i.task) && i.task.until >= first && i.task.day <= end)
+      .sort((a, b) => a.task.day.localeCompare(b.task.day) || byOrder(a, b))
+      .map((i) => ({ item: i, from: Math.max(1, colOf(i.task.day)), to: Math.min(weeks, colOf(i.task.until)), early: i.task.day < first, late: i.task.until > end }));
+    const marks = mine.filter((i) => i.task.mark && i.task.day && !isStretch(i.task) && i.task.day >= first && i.task.day <= end)
+      .map((i) => ({ col: colOf(i.task.day), iso: i.task.day, text: i.row.text || 'Untitled', hard: i.task.mark === 'hard', item: i, go: null }));
+    const other = dates.filter((d) => d.world === lane.id && d.iso >= first && d.iso <= end)
+      .map((d) => ({ col: colOf(d.iso), iso: d.iso, text: d.text, hard: !!d.hard, item: null, go: d.go || null }));
+    return { ...lane, bars, dates: [...marks, ...other].sort((a, b) => a.iso.localeCompare(b.iso)) };
+  });
+  const full = cols.find((c) => c.over);
+  const long = (iso) => dateOf(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+  const note = full ? `${full.now ? 'This week' : `The week of ${long(full.iso)}`} is over your ${hours(free * 60)} hours by ${hours(full.min - free * 60)}.` : '';
+  return { weeks: cols, free: free * 60, lanes: out, note };
 }
 
 // Looking back: what was ticked off in the last days, planned against real.
@@ -197,6 +254,15 @@ const withTask = (row, patch) => { row.fields.task = { ...blank(), ...(row.field
 // Makes a line a task (or changes its day, estimate, place in the day).
 // A task has a box to tick.
 export const setTask = (id, patch = {}) => change(id, (r) => { withTask(r, patch); if (r.fields.box !== true) r.fields.box = true; });
+// A new first day for a task. A stretch keeps its length; off its day, it's
+// no longer a stretch.
+export const moveTask = (id, day, order) => change(id, (r) => {
+  const t = taskOf(r);
+  const patch = { day, ...(order ? { order } : {}) };
+  if (t && isStretch(t)) patch.until = day ? addDays(day, Math.round((dateOf(t.until) - dateOf(t.day)) / 864e5)) : null;
+  withTask(r, patch);
+  if (r.fields.box !== true) r.fields.box = true;
+});
 // The line stays, with its box; it's only no longer on any plan.
 export const unTask = (id) => change(id, (r) => { if (!r.fields.task) return false; delete r.fields.task; });
 
@@ -229,7 +295,7 @@ export const stopTimer = (id, now = Date.now()) => change(id, (r) => { withTask(
 // A step added on a project's page lives on that project's Steps page (home).
 export const stepsPage = (worldId) => `steps-${worldId}`;
 export const stepsHome = (world) => ({ id: stepsPage(world.id), title: 'Steps', parent_id: world.id });
-export async function addTask({ text, day = null, est = null, order = 0, home = null }) {
+export async function addTask({ text, day = null, est = null, order = 0, home = null, until = null, mark = null }) {
   const now = Date.now();
   const rows = [];
   const at = home || { id: TASKS_PAGE, title: 'Tasks', parent_id: null };
@@ -243,7 +309,7 @@ export async function addTask({ text, day = null, est = null, order = 0, home = 
   const last = (await children(at.id)).filter((r) => r.kind === 'line').at(-1);
   const line = entry('line', {
     id: newId('li'), parent_id: at.id, sort: (last?.sort || 0) + GAP, text, content: text ? [{ type: 'text', text }] : null, tags: tagsIn(text), links: [],
-    fields: { done: false, gather: null, gathered: null, mirror: null, box: true, task: { ...blank(), day, est, order } }
+    fields: { done: false, gather: null, gathered: null, mirror: null, box: true, task: { ...blank(), day, est, order, ...(until ? { until } : {}), ...(mark ? { mark } : {}) } }
   });
   rows.push(line);
   await putEntries(rows);

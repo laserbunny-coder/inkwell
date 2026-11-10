@@ -64,11 +64,11 @@ try {
   const page = await open({ width: 1440, height: 900 });
   await today(page);
 
-  await check('a day’s page has its plan on top, and the top-centre switch is Day, Week, Pace', async () => {
+  await check('a day’s page has its plan on top, and the top-centre switch is Day, Week, Weeks ahead, Pace', async () => {
     assert.ok(await page.locator('#plan').isVisible());
     assert.equal(await page.locator('#plan .pl-label').innerText(), 'PLAN');
     assert.equal(await page.locator('#plan input[data-add]').getAttribute('placeholder'), 'Add a task');
-    assert.deepEqual(await page.locator('.today-switch button').allInnerTexts(), ['Day', 'Week', 'Pace']);
+    assert.deepEqual(await page.locator('.today-switch button').allInnerTexts(), ['Day', 'Week', 'Weeks ahead', 'Pace']);
     await lit(page, '.today-switch [aria-current="page"]', 'Day');
     assert.ok(await page.locator('.place-switch:not(.desk-switch):not(.today-switch)').isHidden(), 'the Library’s switch is away');
     assert.ok(await page.locator('#plan .pl-switch').isHidden(), 'with the rail, no second switch in the page');
@@ -246,7 +246,7 @@ try {
   });
 
   await check('Week: seven days from Monday, today’s tasks under today, hours against the hours you have', async () => {
-    await page.locator('.today-switch button', { hasText: 'Week' }).click();
+    await page.locator('.today-switch button[data-cmd="week"]').click();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'plan');
     await still(page);
     await sleep(300);
@@ -305,7 +305,7 @@ try {
   });
 
   await check('free hours: a click on the hours changes what a week is weighed against', async () => {
-    await page.locator('.today-switch button', { hasText: 'Week' }).click();
+    await page.locator('.today-switch button[data-cmd="week"]').click();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'plan');
     await sleep(400);
     await page.locator('#plan-sheet .pl-meter-v').click();
@@ -475,7 +475,7 @@ try {
   await today(mid);
   await add(mid, 'Board Reel 2 1h');
   await check('1000 px: the week folds to four columns without spilling', async () => {
-    await mid.locator('.today-switch button', { hasText: 'Week' }).click();
+    await mid.locator('.today-switch button[data-cmd="week"]').click();
     await mid.waitForFunction(() => document.documentElement.dataset.view === 'plan');
     await still(mid);
     const w = await mid.evaluate(() => [document.documentElement.scrollWidth, innerWidth, getComputedStyle(document.querySelector('.pw-week')).gridTemplateColumns.split(' ').length]);
@@ -489,9 +489,9 @@ try {
   const phone = await open({ width: 412, height: 915 }, { hasTouch: true, isMobile: true });
   await today(phone);
   await phone.waitForFunction(() => { document.activeElement?.blur(); return !document.body.classList.contains('kb-up'); });
-  await check('phone: the plan sits on top of today, with Day, Week, Pace in the page', async () => {
+  await check('phone: the plan sits on top of today, with Day, Week, Weeks ahead, Pace in the page', async () => {
     assert.ok(await phone.locator('#plan').isVisible());
-    assert.deepEqual(await phone.locator('#plan .pl-switch button').allInnerTexts(), ['Day', 'Week', 'Pace']);
+    assert.deepEqual(await phone.locator('#plan .pl-switch button').allInnerTexts(), ['Day', 'Week', 'Weeks ahead', 'Pace']);
     await add(phone, 'Call Dana 30m');
     await add(phone, 'Order the storage drive');
     assert.deepEqual(await words(phone), ['Call Dana', 'Order the storage drive']);
@@ -514,7 +514,7 @@ try {
     assert.equal((await taskNamed(phone, 'Order the storage drive')).fields.task.day, '2026-11-10');
   });
   await check('phone: Week is one day under another, and nothing spills', async () => {
-    await phone.locator('#plan .pl-switch button', { hasText: 'Week' }).tap();
+    await phone.locator('#plan .pl-switch button[data-cmd="week"]').tap();
     await phone.waitForFunction(() => document.documentElement.dataset.view === 'plan');
     await still(phone);
     await sleep(300);

@@ -13,7 +13,7 @@ import './talk.css';
 import { getEntry, putEntries, byKind, isTrashed } from './db.js';
 import { editedAt } from './library.js';
 import { seatsFor, deskSettings, saveDeskSettings, DESK_ID, STAGES, tomorrowMorning } from './desk.js';
-import { loadTasks, planSettings, setTask, addTask, stepsHome, isoOf, addDays, dateOf, dayWord } from './tasks.js';
+import { loadTasks, planSettings, moveTask, addTask, stepsHome, isStretch, stretchWord, aheadPlan, isoOf, addDays, dateOf, dayWord } from './tasks.js';
 
 const DAY = 864e5;
 const KEEP = 30; // messages kept for each conversation
@@ -52,7 +52,11 @@ export async function talkContext({ scope = null, data = null, now = Date.now(),
   const mine = seats.filter((s) => (scope ? s.world?.id === scope : s.stage === 'on' || s.calls.length)).slice(0, 12);
   const known = { tasks: new Map(), worlds: new Map(), calls: new Map(), settings };
   const open = tasks.filter((i) => !i.row.fields?.done && i.mine);
-  const step = (i) => { known.tasks.set(i.row.id, i); return { id: i.row.id, text: clip(i.row.text, 140), day: i.task.day || '', minutes: i.task.est || 0 }; };
+  // A stretch of work says its last day too; a date to hit says whether it can move.
+  const step = (i) => {
+    known.tasks.set(i.row.id, i);
+    return { id: i.row.id, text: clip(i.row.text, 140), day: i.task.day || '', minutes: i.task.est || 0, ...(isStretch(i.task) ? { until: i.task.until } : {}), ...(i.task.mark ? { date_to_hit: i.task.mark === 'hard' ? 'cannot move' : 'can move' } : {}) };
+  };
   const projects = mine.map((seat) => {
     const w = seat.world ? byId.get(seat.world.id) : null;
     if (w) known.worlds.set(w.id, { row: w, seat });
@@ -79,10 +83,12 @@ export async function talkContext({ scope = null, data = null, now = Date.now(),
   const week = [];
   for (let n = 0; n < 7; n++) {
     const day = addDays(today, n);
-    const on = open.filter((i) => i.task.day === day);
+    const on = open.filter((i) => i.task.day === day && !isStretch(i.task));
     week.push({ day, weekday: dateOf(day).toLocaleDateString('en-US', { weekday: 'long' }), planned_minutes: on.reduce((m, i) => m + (i.task.est || 0), 0), tasks: on.length });
   }
-  const overdue = open.filter((i) => i.task.day && i.task.day < today).length;
+  const overdue = open.filter((i) => i.task.day && i.task.day < today && !isStretch(i.task)).length;
+  // The six weeks Weeks ahead shows, with the hours planned in each.
+  const ahead = aheadPlan(tasks, { today, free: plan.free }).weeks.map((w) => ({ week_of: w.iso, planned_minutes: w.min }));
   const body = {
     mode: 'talk',
     now: new Date(now).toLocaleString('en-US', { weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
@@ -90,6 +96,7 @@ export async function talkContext({ scope = null, data = null, now = Date.now(),
     about: scope ? clip(byId.get(scope)?.title, 80) || 'this project' : '',
     free_hours_a_week: plan.free,
     week,
+    weeks_ahead: ahead,
     overdue_tasks: overdue,
     projects,
     other_projects: others,
@@ -112,14 +119,17 @@ export function checkMoves(moves, known, today = isoOf()) {
     if (m.type === 'move_task') {
       const i = known.tasks.get(m.task);
       const day = isDay(m.day) ? m.day : null;
-      if (!i || (i.task.day || null) === day || (day && day < today)) continue;
-      move = { type: 'move_task', task: m.task, day, label: say(day ? `Move “${clip(i.row.text, 80)}” to ${dayWord(day, today)}` : `Take “${clip(i.row.text, 80)}” off its day`) };
+      // A date that can't move doesn't.
+      if (!i || i.task.mark === 'hard' || (i.task.day || null) === day || (day && day < today)) continue;
+      move = { type: 'move_task', task: m.task, day, label: say(day ? `Move “${clip(i.row.text, 80)}” to ${isStretch(i.task) ? `start ${dayWord(day, today)}` : dayWord(day, today)}` : `Take “${clip(i.row.text, 80)}” off its day`) };
     } else if (m.type === 'add_step') {
       const w = known.worlds.get(m.project);
       const text = clip(m.text, 200);
       const day = isDay(m.day) && m.day >= today ? m.day : null;
       if (!w || !text) continue;
-      move = { type: 'add_step', project: m.project, text, day, est: Number(m.minutes) > 0 ? Math.min(Math.round(Number(m.minutes)), 600) : null, label: say(`Add “${text}” to ${w.row.title || 'the project'}`) };
+      // With a last day it's a stretch of work: a bar in Weeks ahead.
+      const until = day && isDay(m.until) && m.until > day && m.until <= addDays(day, 180) ? m.until : null;
+      move = { type: 'add_step', project: m.project, text, day, until, est: until ? null : Number(m.minutes) > 0 ? Math.min(Math.round(Number(m.minutes)), 600) : null, label: say(until ? `Add “${text}” to ${w.row.title || 'the project'}, ${stretchWord({ day, until })}` : `Add “${text}” to ${w.row.title || 'the project'}`) };
     } else if (m.type === 'set_stage') {
       const w = known.worlds.get(m.project);
       if (!w || !(m.stage in STAGES) || w.seat.stage === m.stage) continue;
@@ -135,7 +145,7 @@ export function checkMoves(moves, known, today = isoOf()) {
       move = { type: 'call_later', call: m.call, label: say(`Set “${clip(c.title, 80)}” aside until tomorrow morning`) };
     }
     if (!move) continue;
-    const key = JSON.stringify([move.type, move.task, move.project, move.call, move.day, move.stage, move.text]);
+    const key = JSON.stringify([move.type, move.task, move.project, move.call, move.day, move.stage, move.text, move.until]);
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({ ...move, ...base });
@@ -160,7 +170,7 @@ export async function applyMoves(moves, { words = '', later = null, now = Date.n
         const me = all.find((i) => i.row.id === m.task);
         if (!me) continue;
         const order = Math.max(0, ...all.filter((i) => (i.task.day || null) === m.day).map((i) => i.task.order || 0)) + 1;
-        await setTask(m.task, { day: m.day, order });
+        await moveTask(m.task, m.day, order);
         turn(me.world?.id, m.label);
       } else if (m.type === 'add_step') {
         const w = await getEntry(m.project);
@@ -168,7 +178,7 @@ export async function applyMoves(moves, { words = '', later = null, now = Date.n
         const home = stepsHome(w);
         await touch(home.id);
         const order = Math.max(0, ...(await loadTasks()).filter((i) => (i.task.day || null) === m.day).map((i) => i.task.order || 0)) + 1;
-        const rows = await addTask({ text: m.text, day: m.day, est: m.est, order, home });
+        const rows = await addTask({ text: m.text, day: m.day, est: m.est, order, home, until: m.until || null });
         for (const r of rows) if (!before.has(r.id)) before.set(r.id, null);
         turn(w.id, m.label);
       } else if (m.type === 'set_stage') {

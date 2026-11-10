@@ -147,7 +147,7 @@ export class Frame {
     this.history.title = 'History: every Claude thread, newest first';
     this.deskSwitch.append(this.dkPill, this.onStage, this.history);
     this.deskSwitch.hidden = true;
-    // Today from three distances: the day, the week, and looking back.
+    // Today from four distances: the day, the week, the weeks ahead, and looking back.
     this.todaySwitch = make('div', 'place-switch today-switch');
     this.todaySwitch.setAttribute('role', 'group');
     this.todaySwitch.setAttribute('aria-label', 'Views of Today');
@@ -159,10 +159,13 @@ export class Frame {
     this.weekBtn = make('button', 'tb-btn', 'Week');
     this.weekBtn.dataset.cmd = 'week';
     this.weekBtn.title = 'Week: seven days, and what isn’t on a day yet';
+    this.aheadBtn = make('button', 'tb-btn', 'Weeks ahead');
+    this.aheadBtn.dataset.cmd = 'ahead';
+    this.aheadBtn.title = 'Weeks ahead: six weeks, a lane for each project';
     this.paceBtn = make('button', 'tb-btn', 'Pace');
     this.paceBtn.dataset.cmd = 'pace';
     this.paceBtn.title = 'Pace: what you planned against what it really took';
-    this.todaySwitch.append(this.tdPill, this.dayBtn, this.weekBtn, this.paceBtn);
+    this.todaySwitch.append(this.tdPill, this.dayBtn, this.weekBtn, this.aheadBtn, this.paceBtn);
     this.todaySwitch.hidden = true;
     // Page tabs are redrawn each time, so their highlight lives beside them and slides.
     this.tabsPill = make('span', 'tabs-pill');
@@ -229,8 +232,8 @@ export class Frame {
     const a = roomOf(from);
     const b = roomOf(to);
     let turn = 'rise';
-    // Day, Week and Pace are one room from further and further back.
-    const far = (v, t) => (v === 'plan' ? (t === 'pace' ? 2 : 1) : 0);
+    // Day, Week, Weeks ahead and Pace are one room from further and further back.
+    const far = (v, t) => (v === 'plan' ? (t === 'pace' ? 3 : t === 'ahead' ? 2 : 1) : 0);
     if (a === b && a === 'today' && far(from, this.lastTab) !== far(to, tab)) turn = far(to, tab) > far(from, this.lastTab) ? 'out' : 'in';
     else if (a === b && a === 'desk') turn = tab === 'history' ? 'fwd' : this.lastTab === 'history' ? 'back' : 'rise';
     else if (a === b && a === 'library') turn = LIBRARY.indexOf(to) > LIBRARY.indexOf(from) ? 'fwd' : LIBRARY.indexOf(to) < LIBRARY.indexOf(from) ? 'back' : 'rise';
@@ -264,8 +267,8 @@ export class Frame {
     const day = v === 'plan' || (v === 'notebook' && !!this.hooks.onDay?.());
     this.todaySwitch.hidden = !day;
     if (day) {
-      const at = v === 'plan' ? (this.last?.tab === 'pace' ? this.paceBtn : this.weekBtn) : this.dayBtn;
-      for (const b of [this.dayBtn, this.weekBtn, this.paceBtn]) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
+      const at = v === 'plan' ? (this.last?.tab === 'pace' ? this.paceBtn : this.last?.tab === 'ahead' ? this.aheadBtn : this.weekBtn) : this.dayBtn;
+      for (const b of [this.dayBtn, this.weekBtn, this.aheadBtn, this.paceBtn]) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
     }
     // The Library is one room: its word in the rail stays lit on the Drawer and Tags too.
     const libBtn = document.getElementById('library-toggle');
