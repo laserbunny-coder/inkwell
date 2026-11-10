@@ -1,4 +1,5 @@
 import './style.css';
+import './frame.css';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { EntryIds, SceneBreak, sectionName, SECTION_NAMES } from './schema.js';
@@ -41,6 +42,7 @@ import { PlotGrid, threadsOf, worldPromises } from './grid.js';
 import { ProductionView } from './prodview.js';
 import { PageStrip, TodayPanel, isLife, taskHint, personalArea } from './pages.js';
 import { Nav } from './nav.js';
+import { Frame, lookPicker, startLook, toggleLight } from './frame.js';
 import { StagePage, intoDrawer, gatherItems } from './stages.js';
 import { CaptureScreen, writeOutPending, recoverRecording, writeOutAgain, requeueBlank } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, placeScribeWaiting, RAW } from './voice.js';
@@ -67,6 +69,8 @@ const body = document.body;
 const root = document.documentElement;
 // Inside a pane beside the main window (panes.js): just the view, no chrome.
 if (inPane) root.classList.add('in-pane');
+// The look (colours and typefaces) and how much things move, per device.
+startLook();
 const extensions = [
   // No lists or block quotes in a manuscript: they hold paragraphs the chapter
   // can't save as its own (typing "- " made a list whose words were lost).
@@ -579,6 +583,7 @@ async function go(place) {
   if (['grid', 'production', 'deliver', 'compare', 'stage'].includes(place.view)) await store.close(editor.state.doc);
   if (place.view !== 'write') { if (beside.isOpen) beside.close(); if (talk.isOpen) talk.close(); }
   if (from === 'notebook' && place.view !== 'notebook') notebook.close();
+  frame.turn(from, place.view, pageOfPlace(place));
   if (place.view === 'write') delete root.dataset.view;
   else root.dataset.view = place.view;
   body.classList.remove('show-outline');
@@ -1573,6 +1578,7 @@ async function drawCrumb() {
     paneHost()?.here(PANE_ID, lastPlace, z ? [...names, z.length > 60 ? `${z.slice(0, 58)}…` : z] : names);
   }
   else nav.here(lastPlace, names);
+  frame.here(lastPlace);
 }
 
 // ---------- tidying up: rename, move, change kind, the Trash ----------
@@ -3108,6 +3114,36 @@ const nav = new Nav({
   keyLabel,
   refocus: () => { if (!touch.matches && (writing() || inNotebook())) currentEditor().commands.focus(); }
 });
+// The rail of rooms and the switch at the top centre (frame.js).
+// The world something sits in, for lighting it up in the rail.
+async function worldAround(row) {
+  for (let r = row, i = 0; r && i < 40; r = r.parent_id && (await getEntry(r.parent_id)), i++) if (r.kind === 'world') return r;
+  return null;
+}
+async function currentWorldId() {
+  const v = view();
+  const id = v === 'world' ? state.worldId : v === 'project' ? state.bookId : v === 'grid' ? state.gridId : v === 'production' || v === 'deliver' ? state.prodId
+    : v === 'stage' ? state.stage?.id : v === 'compare' ? state.compareId : v === 'write' ? state.project?.id : v === 'notebook' && notebook.page?.kind !== 'day' ? notebook.page?.id : null;
+  return id ? (await worldAround(await getEntry(id)))?.id || null : null;
+}
+const RAIL_PROJECTS = 7;
+async function railProjects() {
+  const [all, list, here] = [await areas(), (await byKind('world')).filter((w) => !gone(w)), await currentWorldId()];
+  const byId = new Map(all.map((a) => [a.id, a]));
+  return list.sort((a, b) => editedAt(b) - editedAt(a)).slice(0, RAIL_PROJECTS)
+    .map((w) => ({ id: w.id, title: w.title, color: areaColor(byId.get(w.area_id)), current: w.id === here }));
+}
+// Which of a project's pages a place is, so its rooms slide in work order.
+const pageOfPlace = (p) => (p.view === 'stage' ? p.page : { world: 'overview', project: 'overview', write: 'write', grid: 'shape', production: 'make', deliver: 'deliver', compare: 'revise' }[p.view]) || null;
+const frame = new Frame({
+  keyLabel,
+  projects: railProjects,
+  openProject: (id) => go({ view: 'world', id }),
+  contents: () => body.classList.toggle('pin-outline'),
+  hasContents: () => writing() && !!state.project,
+  page: () => strip.ctx?.active || null
+});
+lookPicker($('.page-settings'));
 // A phone has no keys, so the menu button says what it is.
 if (touch.matches) document.querySelectorAll('[data-cmd="palette"]').forEach((b) => { b.textContent = 'Menu'; });
 
@@ -3728,12 +3764,7 @@ $('#page-done').addEventListener('click', togglePageSettings);
 const mod = '⌘'; // shown as Ctrl+ off a Mac, see keys.js
 showKeysForThisComputer();
 
-function toggleTheme() {
-  const dark = getComputedStyle(document.documentElement).colorScheme === 'dark';
-  const next = dark ? 'light' : 'dark';
-  document.documentElement.dataset.theme = next;
-  localStorage.setItem('theme', next);
-}
+function toggleTheme() { toggleLight(); }
 
 // Opens the Aa panel at the script's look.
 function openLook() {
