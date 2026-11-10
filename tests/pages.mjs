@@ -131,7 +131,7 @@ try {
     assert.deepEqual(cols, ['Writing 1', 'Posted 1']);
     assert.ok(await page.locator('#wh-stagebar').isHidden());
     const next = await page.locator('#wh-next').innerText();
-    assert.match(next, /Gather\s*3 things in to file/);
+    assert.match(next, /Gather\s*3 things in to file/i);
     assert.match(next, /Shoot day Sat, Jan 16 · Reel 2: Breakfast/);
     assert.match(next, /Board Reel 2: Breakfast/);
     assert.match(await page.locator('#wh-recent').innerText(), /Reel 1: The Audition/);
@@ -139,8 +139,10 @@ try {
   });
 
   await check('one button moves a piece on to its next status, on the board and on the piece; Undo takes it back', async () => {
+    // The way on shows when you point at a piece.
+    await page.locator('#wh-board .sb-card[data-id="pr_reel2"]').hover();
     await page.waitForSelector('#wh-board .sb-card[data-id="pr_reel2"] .sb-next');
-    assert.equal(await page.locator('.sb-card[data-id="pr_reel2"] .sb-next').innerText(), 'Start boarding');
+    assert.match(await page.locator('.sb-card[data-id="pr_reel2"] .sb-next').innerText(), /^Start boarding/);
     // The last status has nowhere to go.
     assert.equal(await page.locator('.sb-card[data-id="pr_reel1"] .sb-next').count(), 0);
     await shot(page, 'status-board');

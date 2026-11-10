@@ -238,6 +238,20 @@ export function taskOf(iso, path, it, base, { title, area_id } = {}) {
   };
 }
 
+// A card answered here is answered: its lines stop counting as loose (see
+// loose.js), and count again if the choice is taken back.
+async function markSorted(ids, on, how = 'review') {
+  const rows = [];
+  for (const r of await headLines(ids)) {
+    if (on ? r.fields?.sorted : r.fields?.sorted?.how !== how) continue;
+    const fields = { ...(r.fields || {}) };
+    if (on) fields.sorted = { at: Date.now(), how }; else delete fields.sorted;
+    rows.push({ ...r, fields, updated_at: Date.now() });
+  }
+  if (rows.length) await putEntries(rows);
+  return rows;
+}
+
 // Each choice. They return the rows changed, for the open page to show.
 export async function decide(iso, path, choice, { base, title, area_id, text } = {}) {
   const review = (await getReview(iso))?.fields.review;
@@ -261,7 +275,9 @@ export async function decide(iso, path, choice, { base, title, area_id, text } =
     rows.push(await saveChoice(iso, path, { choice }));
   } else if (choice === 'mull') {
     rows.push(...await addMulling(iso, path, it, text));
-    rows.push(await saveChoice(iso, path, { choice, mulling: rows[rows.length - 1]?.id || null }));
+    const mulling = rows[rows.length - 1]?.id || null;
+    rows.push(...await markSorted(it.lines, true));
+    rows.push(await saveChoice(iso, path, { choice, mulling }));
   } else if (choice === 'let_go' && still) {
     if (mulled) { const r = { ...mulled, fields: { ...mulled.fields, done: true }, updated_at: Date.now() }; await putEntries([r]); rows.push(r); }
     rows.push(await saveChoice(iso, path, { choice }));
@@ -270,6 +286,7 @@ export async function decide(iso, path, choice, { base, title, area_id, text } =
     for (const id of it.lines || []) rows.push(...await intoDrawer(id));
     rows.push(await saveChoice(iso, path, { choice }));
   } else if (choice === 'let_go' || choice === 'split') {
+    if (choice === 'let_go') rows.push(...await markSorted(it.lines, true));
     rows.push(await saveChoice(iso, path, { choice }));
   }
   return rows.filter(Boolean);
@@ -291,6 +308,7 @@ export async function undo(iso, path) {
     const m = await getEntry(it.mulling);
     if (m && !m.deleted) { const r = { ...m, deleted: true, updated_at: Date.now() }; await putEntries([r]); rows.push(r); }
   }
+  if (path[0] !== 'still' && (it.choice === 'mull' || it.choice === 'let_go')) rows.push(...await markSorted(it.lines, false));
   rows.push(await saveChoice(iso, path, { choice: null, mulling: null }));
   return rows.filter(Boolean);
 }

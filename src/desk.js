@@ -22,7 +22,7 @@ const KIND = { decision: 'Decide', blocked: 'Do', review: 'Try' };
 // A rough guess at what a call costs you, so the total means something.
 const MINUTES = { decision: 2, blocked: 5, review: 10 };
 const SPANS = { today: 'Today', two: 'Since yesterday', week: 'This week' };
-const STAGES = { on: 'On stage', wings: 'In the wings', back: 'Backstage' };
+export const STAGES = { on: 'On stage', wings: 'In the wings', back: 'Backstage' };
 const FILTERS = [['all', 'Everything'], ['waiting', 'Waiting on you'], ['working', 'Working'], ['quiet', 'Gone quiet'], ['finished', 'Finished']];
 const STATUS = { waiting: 'Waiting on you', working: 'Working', quiet: 'Gone quiet', finished: 'Finished' };
 const PACIFIC = 'America/Los_Angeles';
@@ -52,7 +52,7 @@ const low = (s) => String(s || '').trim().toLowerCase();
 const tz = () => (globalThis.__deskTz || Intl.DateTimeFormat().resolvedOptions().timeZone || PACIFIC);
 const clock = (ms) => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz() }).toLowerCase().replace(/\s/g, ' ');
 const dayLabel = (ms) => new Date(ms).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: tz() });
-const shortDay = (ms) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: tz() });
+export const shortDay = (ms) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: tz() });
 const localDate = (ms) => new Date(ms).toLocaleDateString('en-CA', { timeZone: tz() });
 // Midnight where the person is, n days back, as a time.
 function midnight(now, daysBack = 0) {
@@ -73,7 +73,7 @@ const waited = (ms, now) => {
   return days >= 1 ? (days === 1 ? '1 day' : `${days} days`) : 'today';
 };
 // "12 min ago", "3 h ago", "yesterday", "Nov 5".
-function when(ms, now) {
+export function when(ms, now) {
   const mins = Math.round((now - ms) / 6e4);
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins} min ago`;
@@ -94,7 +94,7 @@ function placeName(url) {
   } catch { return 'Open'; }
 }
 // Only ever a web address: what a thread logged is data, not something to run.
-const web = (url) => (/^https?:\/\//i.test(String(url || '')) ? url : '#');
+export const web = (url) => (/^https?:\/\//i.test(String(url || '')) ? url : '#');
 const linksIn = (text) => [...new Set((text || '').match(/https?:\/\/[^\s)>\]]+/g) || [])];
 
 // ---------- working it out (no page, so it can be checked on its own) ----------
@@ -108,7 +108,7 @@ export async function deskSettings() {
 }
 export async function saveDeskSettings(next) {
   const prev = await getEntry(DESK_ID);
-  const row = { ...(prev || entry('settings', { id: DESK_ID, title: 'Desk' })), fields: { ...(prev?.fields || {}), ...next }, deleted: false, updated_at: Date.now() };
+  const row = { ...(prev || entry('settings', { id: DESK_ID, title: 'Desk' })), fields: { ...((!prev?.deleted && prev?.fields) || {}), ...next }, deleted: false, updated_at: Date.now() };
   await putEntries([row]);
   return row;
 }
@@ -126,7 +126,7 @@ export function seatsFor({ worlds, needs, updates, settings, now }) {
   const seats = new Map();
   const byTitle = new Map(worlds.map((w) => [low(w.title), w]));
   const byId = new Map(worlds.map((w) => [w.id, w]));
-  const blank = (key) => ({ key, world: null, name: '', color: '', claude: [], link: '', calls: [], later: [], crew: [], finished: 0, last: null, at: 0 });
+  const blank = (key) => ({ key, world: null, name: '', color: '', claude: [], link: '', calls: [], later: [], crew: [], turns: [], finished: 0, last: null, at: 0 });
   for (const w of worlds) seats.set(`w:${w.id}`, { ...blank(`w:${w.id}`), world: w, name: w.title || 'Untitled', color: w.color, at: w.edited || 0 });
   // The seat a Claude project's things go to.
   const seatOf = (project, link) => {
@@ -152,11 +152,14 @@ export function seatsFor({ worlds, needs, updates, settings, now }) {
     if (last.state === 'working') seat.crew.push({ link, title: last.thread || last.text, at: last.at, quiet: now - last.at > QUIET_AFTER });
     else if (now - last.at < 7 * DAY) seat.finished += 1;
     if (!seat.last || last.at > seat.last.at) seat.last = last;
+    // Turns: what got finished or went live, for the project's own page.
+    for (const u of lines) if (u.state !== 'working') seat.turns.push(u);
   }
   const out = [];
   for (const seat of seats.values()) {
     seat.calls.sort((a, b) => (a.kind === 'review') - (b.kind === 'review') || a.at - b.at);
     seat.crew.sort((a, b) => b.at - a.at);
+    seat.turns.sort((a, b) => b.at - a.at);
     seat.at = Math.max(seat.at, seat.last?.at || 0, ...seat.calls.map((c) => c.at));
     const busy = seat.calls.length > 0 || seat.crew.some((c) => !c.quiet) || (seat.last && now - seat.last.at < 3 * DAY);
     // Where it sits unless you've said: busy things on stage, things touched this month in the wings.
@@ -324,11 +327,39 @@ export class DeskPage {
 
   // ---- On stage ----
 
-  async stageParts({ now, failed }) {
+  // Your projects as the Desk seats them, and how you've arranged it.
+  async seating() {
     const [list, all, settings] = [await byKind('world'), await areas(), await deskSettings()];
     const areaById = new Map(all.map((a) => [a.id, a]));
     const worlds = list.filter((w) => !w.deleted && !w.fields?.trashed)
       .map((w) => ({ id: w.id, title: w.title, color: areaColor(areaById.get(w.area_id)), edited: editedAt(w), star: w.fields?.star || '' }));
+    return { worlds, settings };
+  }
+
+  // The calls waiting right now, for "Go through": decisions first, then
+  // things to do, then things to try, the longest wait first in each. null
+  // when they can't be read (signed out, offline).
+  async waiting() {
+    const now = Date.now();
+    const data = await this.fetch(new Date(midnight(now, WINDOW_DAYS - 1)).toISOString());
+    if (!data) return null;
+    const { worlds, settings } = await this.seating();
+    const seats = seatsFor({ worlds, needs: data.needs || [], updates: [], settings, now });
+    const rank = { decision: 0, blocked: 1, review: 2 };
+    return seats.flatMap((s) => s.calls.map((c) => ({ c, seat: s })))
+      .sort((a, b) => (rank[a.c.kind] ?? 3) - (rank[b.c.kind] ?? 3) || a.c.at - b.c.at)
+      .map(({ c, seat }) => {
+        const w = waited(c.at, now);
+        const why = String(c.body || '').replace(/https?:\/\/\S+/g, '').replace(/\b(Guide|Thread|Link)s?:\s*/gi, '').split('\n').map((x) => x.trim()).find(Boolean) || '';
+        return { id: c.id, title: c.title, kind: KIND[c.kind] || 'Look', project: seat.name, mins: MINUTES[c.kind] || 5, waited: w === 'today' ? 'since today' : w, link: web(c.link) !== '#' ? c.link : '', why: why.length > 180 ? `${why.slice(0, 178)}…` : why };
+      });
+  }
+  // An answer given in "Go through": off the list, or back tomorrow morning.
+  async callDone(id) { await this.done(id); if (this.showing()) this.load({ quiet: true }); }
+  async callLater(id) { await this.later(id, new Date(tomorrowMorning(Date.now())).toISOString()); if (this.showing()) this.load({ quiet: true }); }
+
+  async stageParts({ now, failed }) {
+    const { worlds, settings } = await this.seating();
     const data = this.data || { needs: [], updates: [] };
     const seats = seatsFor({ worlds, needs: data.needs, updates: data.updates, settings, now });
     this.settings = settings;
@@ -340,6 +371,21 @@ export class DeskPage {
     const sum = make('div', 'dk-calls');
     if (calls.length) sum.append(make('i', 'dk-sig'), document.createTextNode(`${calls.length === 1 ? '1 call' : `${calls.length} calls`} waiting · about ${minutes(calls.reduce((m, c) => m + (MINUTES[c.kind] || 5), 0))}`));
     else if (this.data) sum.textContent = 'Nothing needs you';
+    // More than one: walk them one at a time.
+    if (calls.length > 1 && this.through) {
+      const b = make('button', 'dk-through', 'Go through them');
+      b.type = 'button';
+      b.addEventListener('click', () => this.through());
+      sum.append(b);
+    }
+    // Beside the count: talk the whole stage through with Claude.
+    const say = this.talk?.();
+    if (say) {
+      const b = make('button', 'dk-talk', '✦ Talk it through');
+      b.title = 'Talk it through with Claude, beside the Desk (Alt + T)';
+      b.addEventListener('click', say);
+      sum.append(b);
+    }
     const parts = [this.head(dayLabel(now), 'Desk', sum)];
 
     if (this.data) {
@@ -494,7 +540,9 @@ export class DeskPage {
   async act(row, fn, said) {
     row.classList.add('going');
     try { await fn(); this.toast?.(said); } catch (e) { console.warn(e); row.classList.remove('going'); this.toast?.('Couldn’t reach your list just now. Try again.'); return; }
-    this.load({ quiet: true });
+    // Answered from somewhere else (a project's own page): only the count needs to keep up.
+    if (this.showing()) this.load({ quiet: true }); else this.peek();
+    this.acted?.();
   }
 
   // The ⋯ beside a project: where it sits, and which Claude project it belongs with.

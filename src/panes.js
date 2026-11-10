@@ -7,9 +7,13 @@
 // so each one refreshes what it shows the same way it does for changes made
 // on another device.
 //
-// On a computer the panes stand in a row on the right (three at most; more
-// fold into thin spines). On a phone they open one at a time in a sheet over
-// what you're doing.
+// Beside is one pane by default: opening something else beside takes its
+// place (the pane's own Back returns to what was there). Ctrl + \ puts it
+// away and brings it back, and its head has two shortcuts: Plan (today's
+// plan) and Notes (the notes on the draft in the main window). With "More
+// than one pane beside" switched on under Look, panes stand in a row on the
+// right (three at most; more fold into thin spines). On a phone a pane opens
+// in a sheet over what you're doing.
 //
 // The main window keeps the panes (PaneHost, window.__panes). Each window,
 // the main one included, answers the host about drops (window.__pane).
@@ -22,6 +26,7 @@ export const inPane = !!PANE_ID && window.parent !== window;
 export const walKey = (id) => (inPane ? `wal:${PANE_ID}:${id}` : `wal:${id}`);
 
 const MAX_SHOWN = 3;
+const ALONE = 0.62;
 const SPINE = 38;
 const LAYOUT = 'panes';
 const make = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; };
@@ -64,16 +69,27 @@ export function kindOf(place, names = []) {
     case 'grid': return 'Grid';
     case 'drawer': return 'Drawer';
     case 'compare': return 'Compare';
+    case 'plan': return 'Plan';
+    case 'sidenotes': return 'Notes';
+    case 'talk': return 'Claude';
     default: return names.length ? '' : 'Pane';
   }
 }
 
+// The places the pane's own switch leads to, and which one a place is.
+export const BESIDE_PLACES = { plan: { view: 'plan', tab: 'day' }, claude: { view: 'talk' }, notes: { view: 'sidenotes' } };
+export const tabOf = (place) => (place?.view === 'plan' ? 'plan' : place?.view === 'talk' ? 'claude' : place?.view === 'sidenotes' ? 'notes' : '');
+// These only make sense beside something, so they never trade places with it.
+const stays = (place) => place?.view === 'sidenotes' || place?.view === 'talk' || (place?.view === 'plan' && place.tab === 'day');
+
 // ---------- the host, in the main window ----------
 
 export class PaneHost {
-  // hooks: mainPlace(), goMain(place), focusMain(), isOff(), toast(text), changed()
+  // hooks: mainPlace(), goMain(place), focusMain(), isOff(), many() → more
+  // than one pane allowed, focus() → Focus is on, toast(text), changed()
   constructor(hooks) {
     this.hooks = hooks;
+    this.away = false; // put away with Ctrl + \, still there
     this.family = Math.random().toString(36).slice(2);
     this.panes = [];
     this.focusedId = '';
@@ -98,6 +114,49 @@ export class PaneHost {
 
   get count() { return this.panes.length; }
   get sheet() { return this.narrow.matches; }
+  // Is something beside in view right now?
+  get showing() { return !!this.panes.length && !this.hooks.isOff() && (this.sheet ? this.sheetOpen : !this.away && !this.hooks.focus?.()); }
+
+  // Ctrl + \: puts what's beside away, or brings it back. False when there's nothing beside.
+  toggle() {
+    if (!this.panes.length || this.hooks.isOff()) return false;
+    if (this.sheet) { if (this.sheetOpen) this.hideSheet(); else this.showSheet(); return true; }
+    this.away = !this.away;
+    this.layout();
+    this.save();
+    if (this.away) { this.focused(''); this.hooks.focusMain(); }
+    this.hooks.changed?.();
+    return true;
+  }
+
+  // Plan, Claude or Notes in a pane's head: the pane goes there.
+  async tab(id, which) {
+    const pane = this.get(id) || this.panes[this.sheetAt];
+    const place = BESIDE_PLACES[which];
+    if (!pane || !place || tabOf(pane.place) === which) return;
+    await pane.ready;
+    try { await pane.frame.contentWindow.__pane.go(place); } catch { /* the pane went away */ }
+  }
+  tabs(run) {
+    const el = make('span', 'pane-tabs');
+    el.setAttribute('role', 'group');
+    el.setAttribute('aria-label', 'What is beside');
+    for (const [which, label, title] of [['plan', 'Plan', 'Today’s plan beside'], ['claude', 'Claude', 'Talk it through with Claude (Alt + T)'], ['notes', 'Notes', 'The notes on the draft in the main view']]) {
+      const b = make('button', 'pane-tab', label);
+      b.type = 'button';
+      b.dataset.tab = which;
+      b.title = title;
+      b.addEventListener('click', () => run(which));
+      el.append(b);
+    }
+    return el;
+  }
+  lightTabs(el, place) { for (const b of el.children) b.setAttribute('aria-pressed', String(tabOf(place) === b.dataset.tab)); }
+
+  // The main window went somewhere: a pane that follows it (Notes) hears.
+  mainMoved(place) {
+    for (const p of this.panes) { try { p.frame.contentWindow?.__pane?.mainMoved?.(place); } catch { /* still starting */ } }
+  }
 
   build() {
     // One set of frames for both layouts (a frame moved in the page would
@@ -116,7 +175,8 @@ export class PaneHost {
     this.sheetSize = this.sheetBtn('⤢', 'Full height', () => { this.sheetFull = !this.sheetFull; this.fitSheet(); });
     const close = this.sheetBtn('×', 'Close this pane', () => this.close(this.panes[this.sheetAt]?.id));
     this.sheetNav = [prev, this.sheetCount, next];
-    head.append(this.sheetTitle, make('span', 'ps-space'), prev, this.sheetCount, next, this.sheetSize, close);
+    this.sheetTabs = this.tabs((which) => this.tab(this.panes[this.sheetAt]?.id, which));
+    head.append(this.sheetTabs, this.sheetTitle, make('span', 'ps-space'), prev, this.sheetCount, next, this.sheetSize, close);
     this.sheetEl.append(grab, head, this.row);
     // Swipe the sheet down to put it away (the panes stay; ⋯ brings them back).
     let y0 = null;
@@ -143,7 +203,7 @@ export class PaneHost {
   }
 
   save() {
-    try { localStorage.setItem(LAYOUT, JSON.stringify({ main: this.mainWeight, panes: this.panes.map((p) => ({ id: p.id, place: p.place, w: p.w, title: p.title, spine: p.spine })) })); } catch { /* full */ }
+    try { localStorage.setItem(LAYOUT, JSON.stringify({ main: this.mainWeight, away: this.away, panes: this.panes.map((p) => ({ id: p.id, place: p.place, w: p.w, title: p.title, spine: p.spine })) })); } catch { /* full */ }
   }
 
   // Panes open when the app last closed come back (on a computer; on a phone
@@ -153,7 +213,8 @@ export class PaneHost {
     try { saved = JSON.parse(localStorage.getItem(LAYOUT) || 'null'); } catch { /* ignore */ }
     if (!saved?.panes?.length || this.hooks.isOff()) return;
     this.mainWeight = saved.main || 1.5;
-    for (const p of saved.panes.slice(-6)) if (p.place?.view) this.add(p.place, { w: p.w, title: p.title, spine: p.spine, quiet: true, show: false });
+    this.away = !!saved.away;
+    for (const p of saved.panes.slice(this.hooks.many?.() ? -6 : -1)) if (p.place?.view) this.add(p.place, { w: p.w, title: p.title, spine: p.spine, quiet: true, show: false });
     this.layout();
   }
 
@@ -162,7 +223,23 @@ export class PaneHost {
     if (!place?.view) return null;
     if (this.hooks.isOff()) { this.hooks.toast('Panes are switched off (Aa → Panes)'); return null; }
     const keep = document.activeElement;
-    const pane = this.add(place, { after: from, show: true });
+    this.away = false;
+    const one = this.hooks.many?.() ? null : this.panes.at(-1);
+    if (one) {
+      // One pane beside: what's there makes way (the pane's Back returns to it).
+      for (const p of this.panes.slice(0, -1)) this.close(p.id);
+      one.spine = false;
+      this.layout();
+      if (this.sheet) this.showSheet(this.panes.indexOf(one));
+      await one.ready;
+      try { await one.frame.contentWindow.__pane.go(place); } catch { /* the pane went away */ }
+      if (focus || this.sheet) one.frame.contentWindow?.focus();
+      this.save();
+      this.hooks.changed?.();
+      return one;
+    }
+    // On its own the pane is a narrow column; in a row they share the room evenly.
+    const pane = this.add(place, { after: from, show: true, w: this.hooks.many?.() ? 1 : ALONE });
     this.layout();
     if (this.sheet) this.showSheet(this.panes.indexOf(pane));
     pane.ready.then(() => {
@@ -192,7 +269,10 @@ export class PaneHost {
     close.title = 'Close this pane (Ctrl + Alt + W)';
     close.setAttribute('aria-label', 'Close this pane');
     close.addEventListener('click', () => this.close(id));
-    head.append(kind, name, make('span', 'pane-space'), swap, close);
+    const tabs = this.tabs((which) => this.tab(id, which));
+    this.lightTabs(tabs, place);
+    el.classList.toggle('stays', stays(place));
+    head.append(tabs, kind, name, make('span', 'pane-space'), swap, close);
     const frame = document.createElement('iframe');
     frame.className = 'pane-frame';
     frame.title = 'Pane';
@@ -209,7 +289,7 @@ export class PaneHost {
     spineEl.type = 'button';
     spineEl.addEventListener('click', () => this.unfold(id));
     el.append(divider, head, frame, spineEl);
-    Object.assign(pane, { el, frame, kindEl: kind, nameEl: name, spineEl });
+    Object.assign(pane, { el, frame, kindEl: kind, nameEl: name, spineEl, tabsEl: tabs });
     const at = after ? this.panes.findIndex((p) => p.id === after) + 1 : this.panes.length;
     this.panes.splice(at || this.panes.length, 0, pane);
     this.row.append(el);
@@ -259,6 +339,9 @@ export class PaneHost {
     pane.names = names || [];
     pane.title = (names || []).at(-1) || '';
     pane.kindEl.textContent = kindOf(place, names);
+    this.lightTabs(pane.tabsEl, place);
+    pane.el.classList.toggle('stays', stays(place));
+    if (this.panes[this.sheetAt] === pane) this.lightTabs(this.sheetTabs, place);
     pane.nameEl.textContent = pane.title;
     pane.nameEl.title = (names || []).join(' › ');
     pane.spineEl.textContent = pane.title || kindOf(place) || 'Pane';
@@ -283,6 +366,7 @@ export class PaneHost {
     try { pane.frame.contentWindow?.__pane?.closing?.(); } catch { /* gone */ }
     pane.el.remove();
     this.panes.splice(i, 1);
+    if (!this.panes.length) this.away = false;
     // A folded pane comes back into the room the closed one leaves.
     const folded = this.panes.filter((p) => p.spine);
     if (folded.length && this.panes.filter((p) => !p.spine).length < MAX_SHOWN) folded.at(-1).spine = false;
@@ -303,7 +387,7 @@ export class PaneHost {
   // Main and the pane trade places.
   async swap(id) {
     const pane = this.get(id || this.focusedId);
-    if (!pane) return;
+    if (!pane || stays(pane.place)) return;
     const mine = this.hooks.mainPlace();
     const theirs = pane.place;
     try { await pane.frame.contentWindow.__pane.go(mine); } catch { /* the pane was still starting */ }
@@ -333,12 +417,15 @@ export class PaneHost {
     const off = this.hooks.isOff();
     const none = off || !this.panes.length;
     root.classList.toggle('panes-sheet', this.sheet && !none);
-    root.classList.toggle('has-panes', !this.sheet && !none);
-    if (this.sheet || none) {
+    // Put away with Ctrl + \, or out of the way while Focus is on.
+    const put = (this.away || !!this.hooks.focus?.()) && !this.sheet;
+    root.classList.toggle('has-panes', !this.sheet && !none && !put);
+    if (this.sheet || none || put) {
+      root.classList.remove('beside-tight');
       root.style.setProperty('--panes-w', '0px');
       for (const p of this.panes) p.el.classList.remove('spine');
       if (none) this.hideSheet();
-      else this.showSheet(this.sheetAt, { open: this.sheetOpen });
+      else if (!put) this.showSheet(this.sheetAt, { open: this.sheetOpen });
       return;
     }
     this.sheetOpen = false;
@@ -350,9 +437,12 @@ export class PaneHost {
     const room = window.innerWidth - spines * SPINE;
     const panesW = Math.round(room * (1 - this.mainWeight / total) + spines * SPINE);
     root.style.setProperty('--panes-w', `${panesW}px`);
+    // Little room left for the main view: its top bar drops what it can spare.
+    root.classList.toggle('beside-tight', window.innerWidth - panesW < 1010);
     for (const p of this.panes) {
       p.el.classList.toggle('spine', p.spine);
-      p.el.style.flex = p.spine ? `0 0 ${SPINE}px` : `${p.w} 1 0`;
+      // Times ten, so a pane on its own (a weight under 1) still fills the room it was given.
+      p.el.style.flex = p.spine ? `0 0 ${SPINE}px` : `${p.w * 10} 1 0`;
     }
   }
 
@@ -392,6 +482,7 @@ export class PaneHost {
     this.panes.forEach((p, j) => p.el.classList.toggle('off', j !== this.sheetAt));
     const pane = this.panes[this.sheetAt];
     this.sheetTitle.textContent = pane.title || kindOf(pane.place);
+    this.lightTabs(this.sheetTabs, pane.place);
     this.sheetCount.textContent = `${this.sheetAt + 1} of ${this.panes.length}`;
     for (const b of this.sheetNav) b.hidden = this.panes.length < 2;
     document.documentElement.classList.toggle('sheet-peek', open);

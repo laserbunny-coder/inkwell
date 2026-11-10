@@ -107,7 +107,7 @@ try {
     assert.equal(ep.title, 'Episode 1');
     assert.equal(ep.fields.label, 'Episode');
     assert.equal(ep.fields.type, 'screenplay');
-    assert.match(await page.locator('#wh-kind').innerText(), /^Show/);
+    assert.match(await page.locator('#wh-kind').innerText(), /^Show$/i);
     assert.equal(await page.locator('#wh-new-piece').innerText(), '+ Season');
     await shot(page, 'shapes-show');
   });
@@ -184,7 +184,7 @@ try {
     await sleep(300);
     const after = JSON.stringify(live(await all(page)).filter((r) => r.kind === 'project').map((r) => [r.id, r.parent_id, r.title, r.fields.label || '']).sort());
     assert.equal(after, before);
-    assert.match(await page.locator('#wh-kind').innerText(), /^Show/);
+    assert.match(await page.locator('#wh-kind').innerText(), /^Show$/i);
     assert.equal(await page.locator('#wh-new-piece').innerText(), '+ Season');
     await shot(page, 'shapes-change');
   });

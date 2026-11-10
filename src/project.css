@@ -1,0 +1,104 @@
+/* A project's page: what it's for, where it stands, its pieces by status,
+   its steps, who's on it and how it got here. One reading column, plain text
+   on hairlines, no boxes in boxes. Amber is still only "needs you". */
+
+.wp-sheet { max-width: 860px; font-family: var(--ui); color: var(--ink); }
+.wp-sheet a { color: inherit; text-decoration: none; }
+.wp-sheet .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ---------- the head ---------- */
+.wp-eyebrow { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: 0 0 6px; font: 500 11px var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.wp-eyebrow .dk-dot { margin-right: 2px; }
+.wp-area { display: inline-flex; min-width: 0; }
+.wp-area select { appearance: none; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; padding: 0; margin: 0; cursor: pointer; max-width: 46vw; text-overflow: ellipsis; }
+.wp-area select option { background: var(--bg); color: var(--ink); text-transform: none; letter-spacing: 0; }
+.wp-seat { border: 0; background: none; padding: 0; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.wp-area select:hover, .wp-seat:hover, .wp-area select:focus-visible { color: var(--ink); }
+#wh-kind:not(:empty)::before, .wp-seat:not(:empty)::before { content: '·'; margin-right: 8px; color: var(--faint); }
+.wp-seat:empty { display: none; }
+.wp-head { align-items: flex-start; justify-content: space-between; gap: 12px 24px; }
+.wp-head .pill { margin-top: 6px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.wp-sheet .wh-logline { margin: 14px 0 0; max-width: 60ch; text-wrap: pretty; }
+
+/* ---------- north star, now, next date ---------- */
+.wp-two { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 8px 20px; margin: 30px 0 0; align-items: baseline; }
+.wp-two dt { font: 500 10.5px var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+.wp-two dd { margin: 0; font-family: var(--prose); font-size: 17px; line-height: 1.5; max-width: 62ch; min-width: 0; overflow-wrap: anywhere; text-wrap: pretty; }
+.wp-edit { outline: none; cursor: text; border-radius: 3px; }
+.wp-edit:empty::before { content: attr(data-ph); color: var(--faint); }
+.wp-edit[data-field="back"] { color: var(--soft); }
+.wp-claude { color: var(--muted); font-size: .78em; margin-right: 8px; }
+a.wp-when:hover, .wp-inline:hover { color: var(--accent); }
+.wp-sheet a.wp-when { color: var(--faint); }
+.wp-sheet a.wp-when:hover { color: var(--accent); }
+a.wp-when { text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 3px; }
+span.wp-edit:empty { display: inline-block; min-width: 12ch; }
+.wp-when { font: 12px var(--ui); color: var(--faint); white-space: nowrap; }
+.wp-inline { border: 0; background: none; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+
+/* ---------- the parts ---------- */
+.wp-part { margin-top: 40px; min-width: 0; }
+.wp-part[hidden] { display: none; }
+.wp-sec { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 0; font: 500 11px var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.wp-more { letter-spacing: 0; text-transform: none; font-weight: 400; font-size: 12.5px; color: var(--faint); }
+.wp-r { margin-left: auto; display: flex; gap: 16px; }
+.wp-link { border: 0; background: none; padding: 0; color: var(--muted); font: 400 12.5px var(--ui); letter-spacing: 0; text-transform: none; text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 3px; cursor: pointer; white-space: nowrap; }
+.wp-link:hover { color: var(--ink); }
+.wp-link[hidden] { display: none; }
+.wp-rows { margin-top: 8px; }
+
+/* Pieces by where they stand: words under one hairline. */
+.wp-sheet #wh-status .stage-board { margin: 14px 0 0; gap: 0 14px; border-top: 1px solid var(--line); }
+.wp-sheet .sb-col { border: 0; background: none; padding: 12px 0 6px; min-height: 64px; gap: 3px; border-radius: 0; }
+.wp-sheet .sb-col.drop { background: var(--tint); box-shadow: 0 -1px 0 var(--accent); }
+.wp-sheet .sb-head { justify-content: flex-start; gap: 7px; padding: 0 0 8px; font: 500 10.5px var(--ui); letter-spacing: .12em; }
+.wp-sheet .sb-card { background: transparent; border: 0; border-radius: var(--r, 6px); padding: 5px 6px; margin: 0 -6px; }
+.wp-sheet .sb-card:hover, .wp-sheet .sb-card:focus-visible { background: var(--raise); }
+.wp-sheet .sb-title { font-size: 15.5px; line-height: 1.3; }
+.wp-sheet .sb-kind { font-size: 11.5px; color: var(--muted); }
+.wp-sheet .sb-next { display: none; border: 0; padding: 0; margin-top: 3px; color: var(--accent); font-size: 11.5px; }
+.wp-sheet .sb-next::after { content: ' →'; }
+.wp-sheet .sb-card:hover .sb-next, .wp-sheet .sb-card:focus-within .sb-next { display: block; }
+@media (hover: none) { .wp-sheet .sb-next { display: block; } }
+.wp-sheet #wh-pieces { margin-top: 10px; }
+.wp-sheet #wh-pieces[hidden] { display: none; }
+.wp-sheet #wh-pieces-empty { margin-top: 10px; }
+
+/* Steps: the project's tasks, drawn by the plan. */
+#wh-steps .pl-list { margin-top: 8px; }
+.hide-projsteps #wh-steps { display: none; }
+.pl-when { border: 0; background: none; padding: 2px 6px; border-radius: var(--r, 6px); color: var(--muted); font: 12px var(--ui); cursor: pointer; white-space: nowrap; }
+.pl-when:hover { color: var(--ink); background: var(--line); }
+.pl-when.late { color: var(--ink); }
+.pl-when.unset { color: var(--faint); opacity: 0; }
+.pl-task:hover .pl-when.unset, .pl-when.unset:focus-visible { opacity: 1; }
+@media (hover: none) { .pl-when.unset { opacity: 1; } }
+.pl-alldone { align-self: flex-start; margin: 6px 0 0 32px; }
+.wp-daybook { margin-top: 14px; max-width: 520px; }
+.wp-daybook[hidden], .hide-projdaybook .wp-daybook { display: none; }
+
+/* Crew and turns. */
+.hide-projcrew :is(#wh-crew, #wh-turns) { display: none; }
+.wp-turn { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 16px; align-items: baseline; padding: 8px 0; font-size: 13.5px; color: var(--soft); line-height: 1.5; }
+a.wp-turn:hover { color: var(--ink); }
+.wp-why { display: block; color: var(--muted); font-size: 12.5px; font-style: italic; margin-top: 2px; }
+.wp-date { font: 11.5px var(--mono); color: var(--muted); white-space: nowrap; }
+.wp-live { font: 500 10px var(--ui); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.hide-projrecent #wh-recent-box { display: none; }
+.wp-sheet .wh-next, .wp-sheet .wh-recent { margin-top: 6px; }
+/* What's waiting in its pages: the page's name, then the thing, on one line. */
+.wp-sheet .wh-next button { flex-direction: row; align-items: baseline; gap: 12px; padding: 7px 8px; margin: 0 -8px; width: calc(100% + 16px); border-radius: var(--r, 6px); }
+.wp-sheet .wh-next button:hover { background: var(--raise); }
+.wp-sheet .wh-next .from { font: 500 10px var(--ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); min-width: 56px; flex: none; }
+.wp-sheet .wh-next .line { font-size: 15.5px; line-height: 1.4; min-width: 0; }
+.wp-sheet .wh-recent li { border-bottom: 0; padding: 5px 0; }
+.wp-sheet .wh-recent .loose-title { font-size: 15.5px; }
+
+@media (max-width: 640px) {
+  .wp-two { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .wp-two dd { margin-bottom: 14px; }
+  .wp-two dd:last-child { margin-bottom: 0; }
+  .wp-part { margin-top: 34px; }
+  .wp-turn { grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; }
+  .wp-r { gap: 12px; }
+}
