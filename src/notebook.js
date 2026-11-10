@@ -15,6 +15,8 @@ import { VoiceChip } from './voice.js';
 import { MAX_BYTES } from './files.js';
 import { toast } from './menu.js';
 import { SlashMenu } from './slash.js';
+import { TaskLine, redrawTasks } from './taskline.js';
+import { taskOf, chipLabel, setTask, unTask, isoOf } from './tasks.js';
 
 // The notebook: a page for every day, plus named pages, all written as nested
 // lines. Lines can link to pages, days and chapters with [[, carry #tags, and
@@ -101,8 +103,9 @@ export function mirrorEid(gatherer, source) {
 const EMPTY = { type: 'doc', content: [{ type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }] }] };
 
 export class Notebook {
-  constructor({ onPick, onOpen, onStatus, onChange, onPlace, onZoom, onSources, onLink }) {
+  constructor({ onPick, onOpen, onStatus, onChange, onPlace, onZoom, onSources, onLink, onTaskChip, onTasks }) {
     this.onZoom = onZoom || (() => {});
+    this.onTasks = onTasks || (() => {});
     this.origins = new Map();
     this.onOpen = onOpen;
     this.onChange = onChange || (() => {});
@@ -122,6 +125,12 @@ export class Notebook {
         OutlineFold.configure({ onZoom: (eid) => this.zoomed(eid) }),
         FileEmbed.configure({ onTooBig: (f) => toast(`“${f.name}” is too big to add (the limit is ${Math.round(MAX_BYTES / 1048576)} MB)`) }),
         VoiceChip, SlashMenu,
+        TaskLine.configure({
+          task: (eid) => taskOf(this.store.cache.get(eid)),
+          label: (t, done) => chipLabel(t, done),
+          onChip: (eid, el) => onTaskChip?.(eid, el),
+          onToggle: (eid) => this.toggleTask(eid)
+        }),
         LinkCatch.configure({ onCatch: (eid, url) => this.caughtLink(eid, url) })
       ],
       content: EMPTY,
@@ -157,6 +166,37 @@ export class Notebook {
       this.store.cache.set(row.id, row);
       this.onLink(row);
     }).catch((e) => console.error(e));
+  }
+
+  // Ctrl + Shift + Enter: the line becomes a task, planned for today (or for
+  // the day whose page it's on, if that's still to come). Again, and it's a
+  // plain line once more. Its words aren't touched either way.
+  async toggleTask(eid = this.currentLine()) {
+    if (!eid || !this.page) return null;
+    await this.store.flush(this.editor.state.doc);
+    const row = this.store.cache.get(eid);
+    if (!row || row.deleted || row.fields?.mirror) return null;
+    const today = isoOf();
+    const was = taskOf(row);
+    const next = was ? await unTask(eid) : await setTask(eid, { day: this.isDay && this.page.title > today ? this.page.title : today, order: Date.now() / 1000 });
+    if (!next) return null;
+    this.store.cache.set(eid, next);
+    this.taskChanged(next);
+    this.onTasks();
+    return next;
+  }
+
+  // A task on this page changed outside its words (its day, its box): show it.
+  taskChanged(row) {
+    const ed = this.editor;
+    if (row && taskOf(row)) {
+      ed.state.doc.descendants((node, pos) => {
+        if (node.type.name !== 'listItem' || node.attrs.eid !== row.id) return true;
+        if (node.attrs.box !== true) ed.view.dispatch(ed.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, box: true }).setMeta('addToHistory', false));
+        return false;
+      });
+    }
+    redrawTasks(ed);
   }
 
   // Words on this page that aren't saved yet, and the line is on it.
@@ -574,7 +614,7 @@ export class Notebook {
     if (page) { this.store.page = this.page = page; this.renderHead(); }
     const doc = await this.store.refresh();
     const ed = this.editor;
-    if (JSON.stringify(doc) === JSON.stringify(ed.state.doc.toJSON())) return;
+    if (JSON.stringify(doc) === JSON.stringify(ed.state.doc.toJSON())) { redrawTasks(ed); return; }
     const { $from } = ed.state.selection;
     let anchor = null;
     for (let d = $from.depth; d > 0; d--) {

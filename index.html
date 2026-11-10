@@ -139,6 +139,10 @@
     <div class="lib-sheet dk-sheet" id="desk-sheet"></div>
   </main>
 
+  <main class="plan-home" aria-label="Week and pace">
+    <div class="lib-sheet pl-sheet" id="plan-sheet"></div>
+  </main>
+
   <main class="project-home" aria-label="Book">
     <div class="lib-sheet">
       <div class="ph-head">
@@ -233,6 +237,7 @@
       </div>
       <button type="button" class="links-chip" id="nb-links" hidden></button>
       <nav id="nb-zoom" class="nb-zoom" aria-label="Zoomed in from" hidden></nav>
+      <section class="plan" id="plan" aria-label="Plan" hidden></section>
       <div class="evening-card" role="note" hidden>
         <span class="ec-text">It’s after 9. Look back over today?</span>
         <span class="ec-do">
@@ -367,6 +372,9 @@
     <label class="switch"><input type="checkbox" data-show="nudge"> After 9 pm, a reminder on today to review it</label>
     <label class="switch"><input type="checkbox" data-show="marks"> Link and tag ideas in the day review</label>
     <label class="switch"><input type="checkbox" data-show="tidy"> Tidy pass reminder on Today</label>
+    <label class="switch"><input type="checkbox" data-show="plan"> The plan on top of a day’s page</label>
+    <label class="switch"><input type="checkbox" data-show="took"> “How long did it take?” when you tick a task</label>
+    <label class="switch"><input type="checkbox" data-show="taskchips"> A task’s day and length after its words</label>
     <label class="switch"><input type="checkbox" data-show="deskread"> Claude’s one-line read on the Desk</label>
     <label class="switch"><input type="checkbox" data-show="deskcount"> How many things need you, beside Desk</label>
     <label class="switch"><input type="checkbox" data-show="dots"> Note dots in the margin</label>
@@ -459,6 +467,7 @@
       <dt>⌥C</dt><dd>Talk: it lands where you are, in the draft, on the page or on today (again to keep it, Esc to throw it away)</dd>
       <dt>⌘⇧O</dt><dd>Library</dd>
       <dt>⌘⇧U</dt><dd>Desk: every project, what needs you, who’s working on it</dd>
+      <dt>⌘⇧↵</dt><dd>Make this line a task, planned for today (again: a plain line)</dd>
       <dt>⌘⌥↓ ⌘⌥↑</dt><dd>Next or previous chapter (or day)</dd>
       <dt>⌘[ ⌘]</dt><dd>Back and forward</dd>
       <dt>⌘/</dt><dd>This list</dd>

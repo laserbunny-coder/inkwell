@@ -1,6 +1,7 @@
 import './style.css';
 import './frame.css';
 import './desk.css';
+import './plan.css';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { EntryIds, SceneBreak, sectionName, SECTION_NAMES } from './schema.js';
@@ -54,6 +55,8 @@ import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker
 import { DayReview, getReview } from './review.js';
 import { TagsPage, tagIndex, statsOf } from './tags.js';
 import { DeskPage, DESK_ID } from './desk.js';
+import { Plan } from './plan.js';
+import { PLAN_ID } from './tasks.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { pieceDoc, pageDoc, startDraft, draftHolding } from './drafts.js';
 import { printPiece } from './print.js';
@@ -312,14 +315,17 @@ window.visualViewport?.addEventListener('scroll', placeScriptBar);
 let railTimer;
 let tagsPage = null; // the Tags page (set up with capture, below)
 let deskPage = null; // the Desk: every project, what needs you (below)
+let plan = null; // the plan: tasks by day, on a day's page and as Week and Pace (below)
 let dayReview = null; // the day review under a day page (set up with capture, below)
 const notebook = new Notebook({
   onPick: openPicker,
   onOpen: openEntry,
   onStatus: (s) => {
     if (inNotebook()) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved';
-    if (s === 'saved') { listSoon(); if (notebook?.isDay) dayReview?.soon(); }
+    if (s === 'saved') { listSoon(); if (notebook?.isDay) dayReview?.soon(); plan?.soon(); }
   },
+  onTaskChip: (eid, el) => plan?.chipMenu(eid, el),
+  onTasks: () => plan?.soon(),
   onChange: () => { clearTimeout(railTimer); railTimer = setTimeout(renderRail, 100); },
   // A mirror edited a paragraph of the chapter that's open behind the notebook.
   onSources: (rows) => { if (rows.some((r) => r.parent_id === state.chapterId)) applyRemoteChapter(); },
@@ -329,6 +335,7 @@ const notebook = new Notebook({
     if (!inNotebook()) return;
     remember({ view: 'notebook', pageId: page.id, ...(notebook?.zoom ? { zoom: notebook.zoom } : {}) });
     dayReview?.show(page);
+    plan?.showDay(page);
     tidyNudge();
     $('#nb-more').replaceChildren(...(page.kind === 'page' ? [menuButton(() => pageMenu(page), 'More for this page')] : []));
     renderCrumb();
@@ -586,7 +593,7 @@ async function go(place) {
   if (['grid', 'production', 'deliver', 'compare', 'stage'].includes(place.view)) await store.close(editor.state.doc);
   if (place.view !== 'write') { if (beside.isOpen) beside.close(); if (talk.isOpen) talk.close(); }
   if (from === 'notebook' && place.view !== 'notebook') notebook.close();
-  frame.turn(from, place.view, pageOfPlace(place), place.view === 'desk' ? place.tab || 'stage' : null);
+  frame.turn(from, place.view, pageOfPlace(place), place.view === 'desk' ? place.tab || 'stage' : place.view === 'plan' ? place.tab || 'week' : null);
   if (place.view === 'write') delete root.dataset.view;
   else root.dataset.view = place.view;
   body.classList.remove('show-outline');
@@ -638,6 +645,9 @@ async function go(place) {
   } else if (place.view === 'tags') {
     remember(place);
     await tagsPage?.show(place);
+  } else if (place.view === 'plan') {
+    remember({ view: 'plan', tab: place.tab === 'pace' ? 'pace' : 'week', ...(place.week ? { week: place.week } : {}) });
+    await plan?.showPage(place);
   } else if (place.view === 'desk') {
     remember({ view: 'desk', ...(place.tab === 'history' ? { tab: 'history' } : {}) });
     await deskPage?.show(place);
@@ -891,6 +901,7 @@ async function applyRemote(rows) {
   if (rows.some((r) => r.kind === 'tidy' || r.kind === 'change')) { redrawTidy(); tidyNudge(); }
   if (view() === 'tags' && tagsPage && rows.some((r) => r.tags?.length || r.id === 'settings-tag-groups')) tagsPage.refresh();
   if (view() === 'desk' && rows.some((r) => r.kind === 'world' || r.kind === 'area' || r.id === DESK_ID)) deskPage?.refresh();
+  if (rows.some((r) => r.kind === 'line' || r.id === PLAN_ID)) plan?.soon();
   if (rows.some((r) => r.kind === 'settings')) await notes.reloadTypes();
   if (rows.some((r) => r.kind === 'workflow')) setOwnWorkflows(await byKind('workflow'));
   if (state.chapterId && rows.some((r) => r.links?.includes(state.chapterId))) renderChapterLinks();
@@ -1536,6 +1547,8 @@ async function drawCrumb() {
     parts.push(link(PAGE_NAMES[state.stage.page] || '', () => {}, 'here'));
   } else if (view() === 'drawer') {
     parts.push(lib, link('Drawer', () => {}, 'here'));
+  } else if (view() === 'plan') {
+    parts.push(link('Today', () => go({ view: 'notebook', pageId: dayId(isoToday()) }), ''), link(lastPlace?.tab === 'pace' ? 'Pace' : 'Week', () => {}, 'here'));
   } else if (view() === 'desk') {
     const history = lastPlace?.tab === 'history';
     parts.push(link('Desk', () => go({ view: 'desk' }), history ? '' : 'here'));
@@ -1579,7 +1592,7 @@ async function drawCrumb() {
   await renderStrip();
   const isToday = lastPlace?.view === 'notebook' && lastPlace.pageId === dayId(isoToday());
   // The top bar's buttons stay put; the one for where you are is lit.
-  const here = { 'view-toggle': inNotebook() && !!notebook.page && notebook.page.kind === 'day', 'library-toggle': view() === 'library', 'drawer-toggle': view() === 'drawer', 'tags-toggle': view() === 'tags', 'desk-toggle': view() === 'desk' };
+  const here = { 'view-toggle': view() === 'plan' || (inNotebook() && !!notebook.page && notebook.page.kind === 'day'), 'library-toggle': view() === 'library', 'drawer-toggle': view() === 'drawer', 'tags-toggle': view() === 'tags', 'desk-toggle': view() === 'desk' };
   for (const [id, on] of Object.entries(here)) { const b = document.getElementById(id); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
   const names = isToday ? ['Today'] : parts.map((p) => p.textContent.replace(/\s*▾\s*$/, '').trim()).filter(Boolean);
   // A pane's name shows in its header; the main window's in the place bar and recent places.
@@ -3109,7 +3122,7 @@ async function toggleGrid() {
 
 const PAGE_NAMES = { gather: 'Gather', shape: 'Shape', write: 'Write', revise: 'Revise', make: 'Make', deliver: 'Deliver', notes: 'Notes' };
 // Views you look at rather than type in: the tabs sit faintly at the top there.
-const LOOKING = ['library', 'tags', 'desk', 'world', 'project', 'grid', 'production', 'deliver', 'compare', 'stage', 'drawer'];
+const LOOKING = ['library', 'tags', 'desk', 'plan', 'world', 'project', 'grid', 'production', 'deliver', 'compare', 'stage', 'drawer'];
 const strip = new PageStrip($('#page-tabs'), { pick: (id) => goPage(id) });
 const nav = new Nav({
   go: (place) => go(place),
@@ -3152,7 +3165,8 @@ const frame = new Frame({
   openProject: (id) => go({ view: 'world', id }),
   contents: () => body.classList.toggle('pin-outline'),
   hasContents: () => writing() && !!state.project,
-  page: () => strip.ctx?.active || null
+  page: () => strip.ctx?.active || null,
+  onDay: () => inNotebook() && !!notebook.page && notebook.page.kind === 'day'
 });
 lookPicker($('.page-settings'));
 // A phone has no keys, so the menu button says what it is.
@@ -3170,6 +3184,7 @@ async function pageContext() {
   if (v === 'tags') return { scope: 'desk', active: 'tags' };
   if (v === 'drawer') return { scope: 'desk', active: 'drawer' };
   if (v === 'desk') return { scope: 'desk', active: 'desk' };
+  if (v === 'plan') return { scope: 'desk', active: 'today' };
   if (v === 'notebook') {
     const p = notebook.page;
     if (!p || p.kind === 'day') return { scope: 'desk', active: 'today' };
@@ -3203,6 +3218,8 @@ async function goPage(id) {
   if (id === 'drawer') return go({ view: 'drawer' });
   if (id === 'library') return go({ view: 'library', area: null });
   if (id === 'tags') return go({ view: 'tags' });
+  if (id === 'week') return go({ view: 'plan', tab: 'week' });
+  if (id === 'pace') return go({ view: 'plan', tab: 'pace' });
   if (id === 'desk') return go({ view: 'desk' });
   if (id === 'desk-history') return go({ view: 'desk', tab: 'history' });
   const ctx = await pageContext();
@@ -3865,6 +3882,8 @@ const commands = [
   { group: 'go', label: 'Search inside all your writing', keys: `${mod}⇧F`, run: () => openPalette('search') },
   { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
   { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
+  { group: 'go', label: 'Week: seven days of tasks, and what isn’t on a day yet', keys: '', words: ['plan', 'tasks', 'schedule', 'calendar', 'hours', 'tray'], run: () => go({ view: 'plan', tab: 'week' }) },
+  { group: 'go', label: 'Pace: what you planned against what it really took', keys: '', words: ['plan', 'tasks', 'time', 'estimate', 'looking back', 'hours'], run: () => go({ view: 'plan', tab: 'pace' }) },
   { group: 'go', label: 'Desk: every project, what needs you and who’s working on it', keys: `${mod}⇧U`, words: ['claude', 'threads', 'needs you', 'calls', 'catch-up', 'catchup', 'updates', 'projects', 'stage'], run: () => go({ view: 'desk' }) },
   { group: 'go', label: 'History: every Claude thread, newest first', keys: '', words: ['threads', 'closed', 'finished', 'desk', 'search threads'], run: () => go({ view: 'desk', tab: 'history' }) },
   { group: 'go', label: 'Today’s page', keys: `${mod}J`, run: () => go({ view: 'notebook', pageId: dayId(isoToday()) }) },
@@ -3930,6 +3949,7 @@ const commands = [
   { group: 'write', label: 'Gather a #tag onto this page…', keys: '', run: gatherTagHere, when: inNotebook },
   { group: 'write', label: 'Bring back gathered lines I deleted', keys: '', run: () => notebook.regather(), when: () => inNotebook() && !!notebook.gatherLine() },
   { group: 'write', label: 'Stop gathering on this line', keys: '', run: () => notebook.stopGather(), when: () => inNotebook() && !!notebook.gatherLine() },
+  { group: 'write', label: 'Task: put this line on a day’s plan (again: a plain line)', keys: `${mod}⇧↵`, words: ['todo', 'to-do', 'plan', 'schedule', 'today'], run: () => notebook.toggleTask(), when: inNotebook },
   { group: 'write', label: 'Done: strike this line through', keys: `${mod}↵`, run: () => toggleDone(notebook.editor), when: inNotebook },
   { group: 'write', label: 'Checklist: tick boxes on the lines under this one', keys: '', words: ['todo', 'to-do', 'list', 'checkbox', 'tick'], run: () => toggleChecklist(notebook.editor), when: () => inNotebook() && !lineChecks(notebook.editor.state)?.checklist },
   { group: 'write', label: 'Not a checklist (take the boxes off the lines under this one)', keys: '', words: ['checklist', 'checkbox'], run: () => toggleChecklist(notebook.editor), when: () => inNotebook() && !!lineChecks(notebook.editor.state)?.checklist },
@@ -4482,6 +4502,8 @@ document.addEventListener('click', (e) => {
   if (cmd === 'mic') captureHere({ start: true });
   if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
   if (cmd === 'tags') go({ view: 'tags' });
+  if (cmd === 'week') go({ view: 'plan', tab: 'week' });
+  if (cmd === 'pace') go({ view: 'plan', tab: 'pace' });
   if (cmd === 'desk') go({ view: 'desk' });
   if (cmd === 'desk-history') go({ view: 'desk', tab: 'history' });
   if (cmd === 'close-tag') { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
@@ -4886,6 +4908,22 @@ deskPage = new DeskPage({
   onCount: (n) => { frame.count(n); nav.count(n); },
   toast
 });
+// The plan: tasks gathered by day (plan.js). On a day's page it sits on top;
+// Week and Pace are their own page.
+plan = new Plan({
+  box: $('#plan'),
+  sheet: $('#plan-sheet'),
+  hooks: {
+    view,
+    changed: (rows) => applyRemote(rows),
+    openEntry: (id) => openEntry(id),
+    go: (place) => go(place),
+    off: (name) => hidden().has(name),
+    toast
+  }
+});
+if (inNotebook() && notebook.page) plan.showDay(notebook.page);
+
 // The number beside Desk keeps up without the Desk being open.
 let deskPeeked = 0;
 const peekDesk = () => { if (inPane || document.hidden || Date.now() - deskPeeked < 120000) return; deskPeeked = Date.now(); deskPage.peek(); };

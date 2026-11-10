@@ -7,7 +7,7 @@
 import { bySort } from './order.js';
 
 const DB_NAME = 'writing';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 let dbPromise;
 
@@ -47,6 +47,11 @@ function open() {
       if (e.oldVersion < 4) {
         // One row per #tag, so a tag's lines are a lookup, not a scan.
         req.transaction.objectStore('entries').createIndex('tags', 'tags', { multiEntry: true });
+      }
+      if (e.oldVersion < 5) {
+        // Only lines that are tasks have this mark, so the day's plan is a
+        // lookup of a few rows, however many lines there are.
+        req.transaction.objectStore('entries').createIndex('task', 'fields.task.v');
       }
     };
     // An older copy of the app, open in another window or tab, is holding the
@@ -176,6 +181,13 @@ export async function byKind(kind, { withTrash = false } = {}) {
   const db = await open();
   const rows = await result(db.transaction('entries').objectStore('entries').index('kind').getAll(kind));
   return rows.filter((r) => !r.deleted && (withTrash || !isTrashed(r)));
+}
+
+// Every line that is a task (see tasks.js), wherever it lives.
+export async function tasked() {
+  const db = await open();
+  const rows = await result(db.transaction('entries').objectStore('entries').index('task').getAll());
+  return rows.filter(live);
 }
 
 let onLocalWrite = () => {};

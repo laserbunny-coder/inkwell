@@ -1268,7 +1268,7 @@ export class OutlineStore {
         if (!same) {
           rows.push({
             ...(prev || { id, created_at: now, type: null, fields: {}, area_id: null, title: '' }),
-            kind: 'line', parent_id: parentId, sort, text, content, fields: checkFields({ ...(prev?.fields || {}), done, gather, gathered, mirror }, checklist, box),
+            kind: 'line', parent_id: parentId, sort, text, content, fields: taskDone(checkFields({ ...(prev?.fields || {}), done, gather, gathered, mirror }, checklist, box), now),
             // A mirror keeps a copy of its words (for search and exports) but
             // not its tags, so the line isn't found twice under its #tag.
             tags: mirror ? [] : tagsIn(text), links: refsIn(content), deleted: false, updated_at: now
@@ -1286,7 +1286,13 @@ export class OutlineStore {
       const was = this.cache.get(r.id);
       if (!was || r.deleted) continue;
       const now = await getEntry(r.id);
-      if (now && !now.deleted && (now.updated_at || 0) > (was.updated_at || 0)) r.fields = { ...now.fields, done: r.fields.done, gather: r.fields.gather, gathered: r.fields.gathered, mirror: r.fields.mirror };
+      if (now && !now.deleted && (now.updated_at || 0) > (was.updated_at || 0)) {
+        // Ticked somewhere else (the plan, Claude) while this page had it open:
+        // the tick stands unless it was changed here too.
+        const done = r.fields.done === !!was.fields?.done ? !!now.fields?.done : r.fields.done;
+        const f = { ...now.fields, done, gather: r.fields.gather, gathered: r.fields.gathered, mirror: r.fields.mirror };
+        r.fields = taskDone(f, Date.now());
+      }
     }
     for (const [id, prev] of this.cache) {
       if (!present.has(id) && !prev.deleted) rows.push({ ...prev, deleted: true, updated_at: now });
@@ -1357,6 +1363,16 @@ function withSources(doc, sources, shown) {
     return node.content ? { ...node, content: node.content.map(walk) } : node;
   };
   return walk(doc);
+}
+
+// A task ticked here, in its words, is done now; unticked, it's open again
+// (and whatever timer was running on it stops). See tasks.js.
+function taskDone(fields, now) {
+  const t = fields.task;
+  if (!t?.v) return fields;
+  if (fields.done && !t.done_at) return { ...fields, task: { ...t, done_at: now, run: null, log: t.run ? [...(t.log || []), [t.run, now]] : t.log || [] } };
+  if (!fields.done && t.done_at) return { ...fields, task: { ...t, done_at: null, actual: null } };
+  return fields;
 }
 
 // Checklist marks are kept only where set, so other lines' rows don't change.

@@ -133,7 +133,7 @@ try {
     assert.deepEqual(onLibrary.map((t) => t.replace('*', '')), onToday.map((t) => t.replace('*', '')), 'nothing moved');
     await pillOn('#library-toggle');
     // Inside the Library, the switch at the top centre has its three views; the Library stays lit in the rail.
-    assert.deepEqual(await p.locator('.place-switch:not(.desk-switch) button').allInnerTexts(), ['Shelves', 'Drawer', 'Tags']);
+    assert.deepEqual(await p.locator('.place-switch:not(.desk-switch):not(.today-switch) button').allInnerTexts(), ['Shelves', 'Drawer', 'Tags']);
     assert.equal(await p.locator('#shelves-toggle').getAttribute('aria-current'), 'page');
     await p.locator('#tags-toggle').click();
     await p.waitForFunction(() => document.documentElement.dataset.view === 'tags');
@@ -142,7 +142,8 @@ try {
     assert.equal(await p.locator('#library-toggle').getAttribute('aria-current'), 'page');
     await toToday(p);
     await sleep(300);
-    assert.equal(await p.locator('.place-switch:not(.desk-switch)').isVisible(), false, 'no switch on Today yet');
+    assert.equal(await p.locator('.place-switch:not(.desk-switch):not(.today-switch)').isVisible(), false, 'the Library’s switch is away on Today');
+    assert.deepEqual(await p.locator('.today-switch button').allInnerTexts(), ['Day', 'Week', 'Pace']);
   });
 
   await check('the five looks: one tap changes the whole app, and it sticks after a reload', async () => {
