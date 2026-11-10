@@ -73,6 +73,7 @@ import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
 import { openBringIn } from './bringin.js';
+import { openDaybookIn } from './daybookin.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, nextLabel, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, dropOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
 
@@ -4096,6 +4097,7 @@ const commands = [
   { group: 'view', label: 'Close all the panes beside', words: ['pane', 'side by side', 'close'], when: () => !!panes?.count, run: () => panes.closeAll() },
   { group: 'new', label: 'Save links from your browser (Save to Inkwell button)…', keys: '', words: ['bookmark', 'bookmarklet', 'share', 'save link', 'twitter', 'x', 'web page', 'computer', 'desktop'], run: () => showSaveButton(), when: () => !matchMedia('(pointer: coarse)').matches },
   { group: 'new', label: 'Bring in old notes (from Thymer, Tana, Workflowy, OneNote)…', keys: '', words: ['import', 'paste', 'opml', 'markdown', 'migrate', 'old apps'], run: () => bringInOld() },
+  { group: 'new', label: 'Bring in Daybook (its projects, tasks and repeats)…', keys: '', words: ['import', 'migrate', 'tasks', 'move over'], run: () => bringInDaybook() },
   { group: 'sync', label: 'Connect Scribe, the dictation keyboard…', keys: '', run: () => connectScribe() },
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
   ...Object.entries(LISTS).map(([list, name]) => ({ group: 'page', label: `Make this page a ${name.toLowerCase()} (Claude links each title)`, keys: '', run: () => makeList(list), when: () => inNotebook() && notebook.page?.kind === 'page' && listOf(notebook.page) !== list })),
@@ -4232,6 +4234,13 @@ async function bringInOld() {
     tags: async () => statsOf(await tagIndex()).sort((a, b) => b.count - a.count).map((t) => t.tag)
   });
 }
+// Bring in Daybook: its projects, steps, tasks, repeats and done history
+// become Inkwell's own (src/daybookin.js). Daybook is only read.
+const bringInDaybook = () => openDaybookIn({
+  read: () => (window.__daybookItems ? window.__daybookItems() : sync.user && navigator.onLine && sync.backend?.daybookItems ? sync.backend.daybookItems() : null),
+  applied: async (rows) => { if (rows.length) await applyRemote(rows); await refreshViews(); },
+  toast
+});
 const showClaudeKnows = async (thing) => openClaudeKnows(thing === undefined ? await knowsThing() : thing, { toast });
 
 // Claude's tidy pass (src/tidypass.js): its suggestions to tick yes or no, and

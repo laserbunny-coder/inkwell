@@ -108,6 +108,16 @@ function supabaseBackend() {
       if (error) throw error;
       return data.map(({ id, title }) => ({ id, title }));
     },
+    // Everything in Daybook, for bringing it in. Only ever read.
+    async daybookItems() {
+      const out = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await sb.from('items').select('*').order('id').range(from, from + 999);
+        if (error) throw error;
+        out.push(...data);
+        if (data.length < 1000) return out;
+      }
+    },
     // The Desk: Needs you items and the updates Claude threads logged. Both
     // are Daybook's tables, read-only here except a Needs you item's cleared
     // and set-aside times.
