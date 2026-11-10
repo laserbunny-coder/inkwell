@@ -350,6 +350,18 @@ export class Plan {
       a.title = 'Open it where it’s written';
       meta.append(a);
     }
+    // A task kept in step with the Acro HQ board: whose it is (when it isn't
+    // yours), and a way to its card there.
+    if (t.owner && t.owner !== 'me') meta.append(make('span', 'pl-owner', String(t.owner)));
+    const hq = i.row.fields?.hq;
+    if (hq?.link && /^https:\/\//.test(hq.link)) {
+      const a = make('a', 'pl-hq', 'HQ');
+      a.href = hq.link;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.title = 'Open it on the Acro HQ board';
+      meta.append(a);
+    }
     // On a project's page a step says its day; click to move it.
     if (when && !done) {
       const stretch = isStretch(t);
@@ -807,6 +819,10 @@ export class Plan {
         { label: 'A date to hit', current: !!t.mark, run: async () => this.wrote(await setTask(i.row.id, { mark: t.mark ? null : 'date' })) },
         ...(t.mark ? [{ label: 'This date can’t move', current: t.mark === 'hard', run: async () => this.wrote(await setTask(i.row.id, { mark: t.mark === 'hard' ? 'date' : 'hard' })) }] : [])
       ] : []),
+      // On the Acro HQ board: hand it to Nate (it leaves your day, stays on the plan) or take it back.
+      ...(i.row.fields?.hq && !done ? [t.owner && t.owner !== 'me'
+        ? { label: 'Make it mine', run: async () => { await this.wrote(await setTask(i.row.id, { owner: null })); this.hooks.toast?.('Yours again: it’s on your day, and on the board as yours'); } }
+        : { label: 'Hand to Nate', run: async () => { await this.wrote(await setTask(i.row.id, { owner: 'Nate' })); this.hooks.toast?.('Handed to Nate: it goes on the board as his and leaves your day'); } }] : []),
       'sep',
       { label: 'Open it where it’s written', run: () => this.hooks.openEntry(i.row.id) },
       ...(this.hooks.beside?.(i.row.id) ? [{ label: 'Open it beside', run: this.hooks.beside(i.row.id) }] : []),
