@@ -63,7 +63,10 @@ async function check(name, fn) {
 try {
   await page.goto(URL);
   for (let i = 0; i < 40 && !(await get(page, 'ab-pg_kenji')); i++) await sleep(250);
-  // Open the page the about describes.
+  // Open the page the about describes. The app must have settled where it
+  // starts first, or it writes its own place over this one on a slow machine.
+  await page.waitForFunction(() => !!document.documentElement.dataset.view && !!localStorage.getItem('place'), null, { timeout: 20000 }).catch(() => {});
+  await sleep(500);
   await page.evaluate(() => localStorage.setItem('place', JSON.stringify({ view: 'notebook', pageId: 'pg_kenji' })));
   await page.reload();
   await page.waitForSelector('#outline-editor .ProseMirror');
