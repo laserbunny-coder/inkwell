@@ -1957,3 +1957,12 @@ html.panes-sheet .panes { position: static; width: auto; flex: 1; min-height: 0;
 html.panes-sheet .pane { flex: 1 1 auto !important; border-left: 0; background: var(--panel); }
 html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
 .dbin-undo { background: none; border: 0; padding: 0; color: var(--muted); font: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+
+/* Phone alerts (src/alerts.js) */
+.al-panel .al-on { margin: 0 0 6px; }
+.al-panel .al-msg { min-height: 1.2em; margin: 6px 0 10px; font-size: 14px; }
+.al-kinds { display: grid; gap: 10px; margin: 0 0 16px; }
+.al-kind { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.al-kind input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.al-words { display: grid; gap: 2px; }
+.al-words small { color: var(--muted); line-height: 1.4; }

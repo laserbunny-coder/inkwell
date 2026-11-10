@@ -241,12 +241,37 @@ export async function undoChange(id, hooks) {
   const c = cx?.fields?.change;
   if (!c || c.undone_at) return [];
   await hooks.flush?.();
+  // A day Claude put in order: each task goes back to where it was, unless
+  // you've moved it since.
+  if (c.type === 'order') {
+    const rows = [];
+    for (const [id, was] of Object.entries(c.before.order || {})) {
+      const r = await getEntry(id);
+      const t = r?.fields?.task;
+      if (gone(r) || !t || (t.order || 0) !== c.after.order?.[id]) continue;
+      rows.push({ ...r, fields: { ...r.fields, task: { ...t, order: was } }, updated_at: Date.now() });
+    }
+    if (rows.length) await putEntries(rows);
+    const mark = { ...cx, fields: { ...cx.fields, change: { ...c, undone_at: new Date().toISOString(), undone_by: 'me' } }, updated_at: Date.now() };
+    await putEntries([mark]);
+    return [...rows, mark];
+  }
   const r = await getEntry(c.target);
   if (gone(r)) throw fail('What it changed is in the Trash now.');
   const rows = [];
   if (c.type === 'done') {
     if (!!r.fields?.done !== !!c.after.done) throw fail('You’ve changed it since, so it stays as you have it.');
-    rows.push({ ...r, fields: { ...r.fields, done: !!c.before.done }, updated_at: Date.now() });
+    // A task ticked by Claude also gets back its day and history (a repeating
+    // one had moved on to its next day).
+    rows.push({ ...r, fields: { ...r.fields, done: !!c.before.done, ...(c.before.task ? { task: c.before.task } : {}) }, updated_at: Date.now() });
+  } else if (c.type === 'task') {
+    const t = r.fields?.task || {};
+    const same = Object.entries(c.after.task || {}).every(([k, v]) => JSON.stringify(t[k] ?? null) === JSON.stringify(v ?? null));
+    if (!same) throw fail('You’ve changed it since, so it stays as you have it.');
+    const fields = { ...r.fields };
+    if (c.before.task === null) { delete fields.task; if (c.before.box === null || c.before.box === undefined) delete fields.box; else fields.box = c.before.box; }
+    else fields.task = { ...t, ...c.before.task };
+    rows.push({ ...r, fields, updated_at: Date.now() });
   } else if (c.type === 'move') {
     if (r.parent_id !== c.after.parent_id) throw fail('You’ve moved it since, so it stays where it is.');
     const home = await getEntry(c.before.parent_id);

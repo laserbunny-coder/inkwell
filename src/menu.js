@@ -3,7 +3,7 @@
 // a question to answer before anything big happens, and a note at the bottom
 // of the screen with an Undo.
 
-const make = (tag, cls, text) => {
+export const make = (tag, cls, text) => {
   const el = document.createElement(tag);
   if (cls) el.className = cls;
   if (text !== undefined) el.textContent = text;

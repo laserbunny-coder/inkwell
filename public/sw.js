@@ -56,3 +56,26 @@ self.addEventListener('fetch', (e) => {
     })));
   }
 });
+
+// Phone alerts (src/alerts.js): the server pushes a title, a line and where
+// tapping goes. Do Not Disturb lets them through when Inkwell is an allowed app.
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data?.text() }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'Inkwell', {
+    body: d.body || '', tag: d.tag || undefined, renotify: !!d.tag, icon: 'icon-192.png', badge: 'badge-96.png',
+    vibrate: [180, 80, 180], data: { url: d.url || './' }
+  }));
+});
+// Tapping one: Inkwell's own links bring the open window there; a Claude
+// thread opens on its own.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = new URL(e.notification.data?.url || './', self.registration.scope);
+  const own = url.href.startsWith(self.registration.scope);
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((ws) => {
+    const w = own && ws.find((c) => c.url.startsWith(self.registration.scope));
+    if (w && 'navigate' in w) return w.focus().then(() => w.navigate(url.href)).catch(() => self.clients.openWindow(url.href));
+    return self.clients.openWindow(url.href);
+  }));
+});

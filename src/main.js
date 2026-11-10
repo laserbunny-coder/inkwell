@@ -38,6 +38,7 @@ import { applyLook, renderLook, cleanLook, DEFAULT_LOOK } from './wovenlook.js';
 import { prepareForShoot } from './wovenprep.js';
 import { elementsIn, plainPages, newElement } from './production.js';
 import { openHandleMenu } from './handlemenu.js';
+import { openAlerts } from './alerts.js';
 import { showSaveButton } from './savebutton.js';
 import { openPicker } from './picker.js';
 import { PlotGrid, threadsOf, worldPromises } from './grid.js';
@@ -68,7 +69,7 @@ import { inPane, PANE_ID, PaneHost, host as paneHost, sendChanged, onChanged, BE
 import { SideNotes } from './sidenotes.js';
 import { Talk } from './talk.js';
 import { aheadSource } from './ahead.js';
-import { events as calendarEvents } from './calendar.js';
+import { events as calendarEvents, forgetCalendar } from './calendar.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
@@ -534,6 +535,26 @@ const currentEditor = () => (inNotebook() ? notebook.editor : editor);
 
 // ---------- getting around ----------
 
+// The phone opens on Today when you've been away a while (see the start).
+const PHONE = matchMedia('(hover: none) and (pointer: coarse)');
+const AWAY = 3 * 60 * 60 * 1000;
+function phoneAway(now = Date.now()) {
+  if (!PHONE.matches || inPane) return false;
+  let at = 0;
+  try { at = Number(localStorage.getItem('placeAt')) || 0; } catch { /* ignore */ }
+  if (!at) return false;
+  return now - at > AWAY || isoToday() !== isoOf(new Date(at));
+}
+// The app left open in the background counts too: it comes back on Today.
+if (!inPane) {
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { try { localStorage.setItem('placeAt', String(Date.now())); } catch { /* full */ } return; }
+    if (!root.dataset.started || !phoneAway() || document.querySelector('dialog[open], .ask-backdrop')) return;
+    if (lastPlace?.view === 'notebook' && lastPlace.pageId === dayId(isoToday())) return;
+    go({ view: 'notebook', pageId: dayId(isoToday()) });
+  });
+}
+
 // Where you are, kept per device so the app opens back there.
 // Each place also goes in the browser's history, so Back and Forward (mouse
 // buttons, Alt+← →, ⌘[ ]) step through where you've been.
@@ -542,7 +563,7 @@ let lastPlace = null; // where you are, for the place bar (named once the crumb 
 function remember(place) {
   lastPlace = place;
   if (inPane) { paneTrailAdd(place); return; }
-  try { localStorage.setItem('place', JSON.stringify(place)); } catch { /* full */ }
+  try { localStorage.setItem('place', JSON.stringify(place)); localStorage.setItem('placeAt', String(Date.now())); } catch { /* full */ }
   if (JSON.stringify(history.state) === JSON.stringify(place)) return;
   if (historyMode === 'push') history.pushState(place, '');
   else history.replaceState(place, '');
@@ -4087,6 +4108,8 @@ const commands = [
   { group: 'revise', label: 'Share a link to read and comment…', keys: '', words: ['share', 'feedback', 'reader', 'link'], run: () => openShare(), when: () => !!currentBookId() || (inNotebook() && notebook.page?.kind === 'page') },
   { group: 'page', label: 'Name the section levels (Act, Sequence, Scene…)', keys: '', run: nameSectionLevels, when: () => writing() && isScript() },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
+  { group: 'sync', label: 'Phone alerts (day review, Needs you, your week and month)…', keys: '', run: () => openAlerts({ backend: sync.backend, signedIn: !!sync.user, toast }) },
+  { group: 'sync', label: 'Google Calendar: show your events on Today and the week…', keys: '', words: ['calendar', 'google', 'connect', 'events'], run: () => connectCalendar() },
   { group: 'view', label: 'What Claude knows: its one-line note on this, and weekly summaries', keys: '', words: ['about', 'summary', 'second brain', 'memory', 'digest', 'weekly'], run: () => showClaudeKnows() },
   { group: 'view', label: 'Beside: today’s plan next to this page (again: put it away)', keys: `${mod}\\`, words: ['pane', 'side by side', 'split', 'beside', 'plan', 'tasks', 'today'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => toggleBesidePane() },
   { group: 'view', label: 'Talk it through with Claude, beside where you are', keys: '⌥T', words: ['claude', 'talk', 'think', 'plan', 'week', 'moves', 'ask', 'beside', 'overwhelmed', 'too much'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => openTalk() },
@@ -5095,6 +5118,23 @@ plan = new Plan({
 });
 if (inNotebook() && notebook.page) plan.showDay(notebook.page);
 
+// Google Calendar, connected from Inkwell itself (it used to borrow Daybook's sign-in).
+async function connectCalendar() {
+  const b = sync.backend;
+  if (!b?.connectCalendar || !sync.user) { toast('Sign in first (Ctrl + K, “Sign in”), then connect your calendar.'); return; }
+  let has = null;
+  try { has = await b.hasCalendar(); } catch {}
+  const yes = await ask(has
+    ? { title: 'Your Google Calendar is connected', body: 'Its events show on Today and the week. Connect again if they stopped showing, or to use another Google account.', ok: 'Connect again' }
+    : { title: 'Connect your Google Calendar', body: 'Your events show on Today and the week, and “left today” counts them. Inkwell only reads your calendar and never changes it. Google asks you to allow this.', ok: 'Connect' });
+  if (yes) b.connectCalendar();
+}
+window.addEventListener('calendar-connected', (e) => {
+  forgetCalendar();
+  toast(e.detail?.ok ? 'Your Google Calendar is connected. Its events show on Today and the week.' : 'Google said yes, but the calendar couldn’t be saved. Try again from Ctrl + K, “Google Calendar”.');
+  plan.refresh?.();
+});
+
 // The number beside Desk keeps up without the Desk being open.
 let deskPeeked = 0;
 const peekDesk = () => { if (inPane || document.hidden || Date.now() - deskPeeked < 120000) return; deskPeeked = Date.now(); deskPage.peek(); };
@@ -5465,6 +5505,9 @@ async function start() {
   setTimeout(migrateOnce, 6000);
   let place = null;
   try { place = JSON.parse(localStorage.getItem('place') || 'null'); } catch { /* ignore */ }
+  // On the phone, coming back on a new day or after a few hours away opens
+  // on Today (the day's plan on top); a quick look away keeps your place.
+  if (place?.view && phoneAway()) place = { view: 'notebook', pageId: dayId(isoToday()) };
   // A first run opens in the novel to write in, or on today's page while
   // there's nothing of yours here yet (signed out, or still catching up).
   if (!place?.view) place = (await lastChapterAnywhere()) ? { view: 'write' } : { view: 'notebook', pageId: dayId(isoToday()) };
@@ -5516,6 +5559,8 @@ async function start() {
   // The monthly note in Daybook links to ?summaries: What Claude knows, with the weekly and monthly summaries.
   if (asked.has('summaries')) showClaudeKnows(null).catch((e) => console.error(e));
   if (asked.get('open')) { asking = asked.get('open'); await openAsked(); }
+  // A phone alert for Needs you or a note from Claude opens the Desk, where they're listed.
+  if (asked.has('desk')) await go({ view: 'desk' });
   // Shared from another app (or shared earlier and not yet placed).
   await landShares();
   tidyShareBlanks().then((rows) => rows.length && applyRemote(rows)).catch((e) => console.error(e));
