@@ -73,7 +73,10 @@ const clickOn = async (text) => {
 };
 const run = async (label) => {
   // Wait for the palette to have focus and fill it whole, so no typed letters
-  // are lost on a slow machine, then choose the command by its name.
+  // are lost on a slow machine, then choose the command by its name. A panel
+  // that was just closed hands the caret back to the text on the next frame;
+  // let that happen first, or it lands after the palette has opened.
+  await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await p.keyboard.press('Control+K');
   await p.waitForFunction(() => document.activeElement?.id === 'palette-input');
   await p.locator('#palette-input').fill(label);

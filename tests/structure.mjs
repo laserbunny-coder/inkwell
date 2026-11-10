@@ -501,6 +501,8 @@ try {
     const idea = await laptop.locator('.sb-col[data-stage="New idea"] .sb-title').allInnerTexts();
     assert.ok(['Monks vs. Zombies', 'Pilot', 'Season One', 'Pilot', 'The Hive', 'Siege'].every((t) => idea.includes(t)), idea.join(', '));
     await shot(laptop, 'stage-board');
+    // The page slides in; pick the card up once it has landed.
+    await laptop.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {}))));
     await laptop.locator('.sb-card[data-id="pr_e1"]').dragTo(laptop.locator('.sb-col[data-stage="Writing"]'), { targetPosition: { x: 60, y: 30 } });
     await sleep(500);
     await settle(laptop);

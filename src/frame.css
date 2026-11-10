@@ -1,0 +1,234 @@
+/* The frame (frame.js): looks, the rail of rooms, the switch at the top centre,
+   and motion. Loaded after style.css, so what's here wins. */
+
+/* ---------- Looks: a set of colours and typefaces each ---------- */
+
+:root {
+  --rail-w: 0px;
+  --r: 7px;
+  --raise: #252320;
+  --soft: #CBC2B4;
+  --line2: #4A453E;
+  --signal: #F0BE55;
+  --title: var(--prose);
+  --title-w: 500;
+  --title-ls: -.01em;
+  --mono: 'Geist Mono', 'Cascadia Code', ui-monospace, Consolas, monospace;
+  /* One easing and three speeds for everything that moves. */
+  --e: cubic-bezier(.2, .75, .2, 1);
+  --t1: .12s; --t2: .24s; --t3: .36s;
+}
+:root[data-look="midnight"] {
+  color-scheme: dark;
+  --bg: #0E1117; --panel: #10141B; --raise: #171C26; --line: #1D222C; --line2: #2B323F;
+  --ink: #E9E6DF; --soft: #BEC0C7; --muted: #959CA9; --faint: #667080;
+  --accent: #9FB6F2; --tint: rgba(159, 182, 242, .09); --signal: #F0BE55; --wv-blue: #9FB6F2;
+  --ui: 'Geist', 'Inter', system-ui, sans-serif;
+  --title: 'Instrument Serif', 'Newsreader', Georgia, serif; --title-w: 400; --title-ls: 0;
+}
+:root[data-look="lamplight"] {
+  color-scheme: dark;
+  --bg: #171412; --panel: #1A1714; --raise: #231F1B; --line: #2A2521; --line2: #3B352F;
+  --ink: #EEE7DB; --soft: #CBC2B4; --muted: #A1988B; --faint: #736B60;
+  --accent: #DDA98E; --tint: rgba(221, 169, 142, .10); --signal: #F6D469; --wv-blue: #86aee6;
+  --ui: 'Geist', 'Inter', system-ui, sans-serif;
+  --title: 'Newsreader', Georgia, serif; --title-w: 500; --title-ls: -.02em;
+}
+:root[data-look="graphite"] {
+  color-scheme: dark;
+  --bg: #0F0F10; --panel: #131314; --raise: #1B1B1D; --line: #222224; --line2: #343437;
+  --ink: #EEEEEC; --soft: #C3C3C0; --muted: #9A9A97; --faint: #6B6B69;
+  --accent: #EEEEEC; --tint: rgba(255, 255, 255, .07); --signal: #FFC94A; --wv-blue: #C3C3C0;
+  --ui: 'Geist', 'Inter', system-ui, sans-serif;
+  --title: 'Geist', 'Inter', system-ui, sans-serif; --title-w: 600; --title-ls: -.035em; --r: 5px;
+}
+:root[data-look="typewriter"] {
+  color-scheme: dark;
+  --bg: #0F1315; --panel: #11171A; --raise: #182126; --line: #1C2529; --line2: #2C393F;
+  --ink: #DCE3E5; --soft: #AFBABF; --muted: #8A989F; --faint: #62717A;
+  --accent: #7FD1C3; --tint: rgba(127, 209, 195, .09); --signal: #F2C14E; --wv-blue: #7FD1C3;
+  --ui: 'Cascadia Code', 'Cascadia Mono', Consolas, monospace;
+  --title: 'Cascadia Code', 'Cascadia Mono', Consolas, monospace; --title-w: 600; --title-ls: -.02em; --r: 3px;
+  --mono: 'Cascadia Code', 'Cascadia Mono', Consolas, monospace;
+}
+:root[data-look="paper"] {
+  color-scheme: light;
+  --bg: #F3F3EF; --panel: #ECECE7; --raise: #FFFFFF; --line: #DCDCD6; --line2: #C4C5C2;
+  --ink: #1B1F28; --soft: #444A57; --muted: #5E6470; --faint: #8A8F99;
+  --accent: #2C4DA8; --tint: rgba(44, 77, 168, .08); --signal: #B4740A; --wv-blue: #2C4DA8;
+  --ui: 'Geist', 'Inter', system-ui, sans-serif;
+  --title: 'Instrument Serif', 'Newsreader', Georgia, serif; --title-w: 400; --title-ls: 0;
+}
+html, body { -webkit-font-smoothing: antialiased; }
+::selection { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+
+/* Titles of places wear the look's title face. */
+:is(#nb-title, #wh-title, #ph-title, .lib-head h1, .st-title, .tg-head h1, .tags-home h1) {
+  font-family: var(--title); font-weight: var(--title-w); letter-spacing: var(--title-ls);
+}
+:root:is([data-look="midnight"], [data-look="paper"]) :is(#nb-title, #wh-title, #ph-title, .lib-head h1, .tags-home h1) { font-size: 44px; line-height: 1.08; }
+:root:is([data-look="midnight"], [data-look="paper"]) .st-title { font-size: 36px; line-height: 1.1; }
+
+/* ---------- The rail: the rooms, as words ---------- */
+
+.rail { display: none; }
+@media (min-width: 701px) {
+  /* Anything scrolled into view lands below the bar, not under it. */
+  html.has-rail { --rail-w: 208px; scroll-padding-top: 60px; }
+  html.has-rail body { margin-left: var(--rail-w); }
+  html.has-rail .rail {
+    display: flex; flex-direction: column; gap: 1px;
+    position: fixed; left: 0; top: 0; bottom: 0; width: var(--rail-w); z-index: 42;
+    padding: 20px 12px 14px; background: var(--panel); border-right: 1px solid var(--line);
+    overflow-y: auto; scrollbar-width: none; font-family: var(--ui);
+  }
+  .rail::-webkit-scrollbar { display: none; }
+  .rail-brand { font-family: var(--title); font-size: 22px; font-style: italic; font-weight: var(--title-w); color: var(--soft); padding: 0 10px 18px; letter-spacing: .01em; user-select: none; }
+  :root:is([data-look="graphite"], [data-look="typewriter"]) .rail-brand { font-style: normal; font-size: 15px; font-weight: 600; }
+  .rail-rooms, .rail-projects, .rail-tools { display: flex; flex-direction: column; gap: 1px; }
+  .rail-label { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); padding: 22px 10px 6px; }
+  .rail-grow { flex: 1; min-height: 18px; }
+  .rail .tb-btn, .rail .pill, .rail-item {
+    position: relative; z-index: 1; display: flex; align-items: center; gap: 9px; width: 100%; min-width: 0;
+    border: 0; border-radius: var(--r); background: transparent; box-shadow: none;
+    padding: 7px 10px; color: var(--soft); font: 400 13.5px var(--ui); text-align: left; white-space: nowrap;
+  }
+  .rail .tb-btn:hover, .rail .pill:hover, .rail-item:hover, .rail .tb-btn:focus-visible, .rail-item:focus-visible { background: var(--raise); color: var(--ink); filter: none; }
+  .rail .tb-btn[aria-current="page"], .rail-item[aria-current="page"] { color: var(--ink); background: transparent; box-shadow: none; }
+  /* The lit word's highlight slides from one to the next. */
+  .rail-pill { position: absolute; left: 0; top: 0; z-index: 0; border-radius: var(--r); background: var(--raise); pointer-events: none; opacity: 0; }
+  .rail-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .rail-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .rail-contents { color: var(--muted); margin-top: 10px; }
+  .rail-tools .tb-btn, .rail-tools .pill { color: var(--muted); }
+  .rail-tools [data-keys]::after { content: attr(data-keys); margin-left: auto; font: 10.5px var(--mono); color: var(--faint); letter-spacing: 0; }
+  .rail .tb-btn.mic { font-weight: 400; }
+  .rail .tb-btn.mic::before { content: ''; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+  /* The left edge no longer opens the contents; the rail's own word does. */
+  html.has-rail .edge-left { display: none; }
+  html.has-rail .edge-top { left: var(--rail-w); }
+  html.has-rail .outline { left: var(--rail-w); z-index: 41; padding-top: 22px; }
+  html.has-rail body.show-outline .outline, html.has-rail body.pin-outline .outline { box-shadow: 14px 0 40px rgba(0, 0, 0, .28); }
+  :root[data-look="paper"].has-rail body.show-outline .outline, :root[data-look="paper"].has-rail body.pin-outline .outline { box-shadow: 14px 0 40px rgba(40, 36, 28, .12); }
+
+  /* ---------- The bar: where you are, the switch, how it's saved ---------- */
+
+  html.has-rail .topbar {
+    left: var(--rail-w); display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr); align-items: center; gap: 14px;
+    height: 48px; padding: 0 18px; background: var(--bg); border-bottom: 0; font-size: 12.5px;
+    transform: none !important; opacity: 1 !important;
+  }
+  /* A soft edge under the bar instead of a line, so pages slide beneath it quietly. */
+  html.has-rail .topbar::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 14px; background: linear-gradient(var(--bg), transparent); pointer-events: none; }
+  html.has-rail .topbar .tb-row { display: none; }
+  .tb-l, .tb-m, .tb-r { display: flex; align-items: center; min-width: 0; }
+  .tb-l { gap: 8px; overflow: hidden; }
+  .tb-m { position: relative; justify-self: center; gap: 2px; }
+  /* The right side always gets the room its words need; the path on the left gives way first. */
+  .tb-r { justify-self: end; gap: 6px; white-space: nowrap; }
+  .tb-r > * { flex: none; }
+  html.has-rail .topbar .crumb { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; color: var(--muted); justify-content: flex-end; padding-left: 18px; mask-image: linear-gradient(270deg, #000 calc(100% - 18px), transparent); }
+  html.has-rail .topbar .crumb .crumb-part { color: inherit; }
+  html.has-rail .topbar .crumb .crumb-part:hover, html.has-rail .topbar .crumb .crumb-part.here { color: var(--ink); }
+  html.has-rail .tb-back { height: 26px; border-radius: 99px; background: var(--raise); color: var(--soft); padding: 0 11px 0 9px; }
+  html.has-rail .tb-back:hover { color: var(--ink); }
+  html.has-rail .tb-r .tb-btn { color: var(--muted); padding: 5px 9px; }
+  html.has-rail .tb-r #words { color: var(--faint); }
+
+  .place-switch { position: relative; display: flex; gap: 2px; }
+  .place-switch .tb-btn, html.has-rail .tb-m .pt-tab { position: relative; z-index: 1; background: transparent; box-shadow: none; color: var(--muted); padding: 5px 12px; border-radius: 99px; font-size: 13px; }
+  .place-switch .tb-btn:hover, html.has-rail .tb-m .pt-tab:hover { color: var(--ink); background: transparent; }
+  .place-switch .tb-btn[aria-current="page"], html.has-rail .tb-m .pt-tab.on { color: var(--ink); background: transparent; box-shadow: none; }
+  .switch-pill, .tabs-pill { position: absolute; left: 0; top: 0; z-index: 0; border-radius: 99px; background: var(--raise); pointer-events: none; opacity: 0; }
+  html.has-rail .tb-m .page-tabs { gap: 2px; }
+  html.has-rail .page-tabs[data-scope] .pt-tab[data-page="overview"] { margin-right: 0; }
+
+  /* Focus: only the text. The rail steps off to the left and the page takes its room. */
+  html.has-rail .rail { transition: transform var(--t3) var(--e), opacity var(--t2) ease, visibility 0s; }
+  html.has-rail body { transition: margin-left var(--t3) var(--e); }
+  html.has-rail .topbar { transition: left var(--t3) var(--e), opacity var(--t2) ease, visibility 0s; }
+  /* Hidden for real once it has slid away, so Tab can't wander into it. */
+  :root.focus.has-rail .rail { transform: translateX(-100%); opacity: 0; pointer-events: none; visibility: hidden; transition: transform var(--t3) var(--e), opacity var(--t2) ease, visibility 0s var(--t3); }
+  :root.focus.has-rail body { margin-left: 0; }
+  :root.focus.has-rail .topbar { left: 0; opacity: 0 !important; pointer-events: none; visibility: hidden; transition: left var(--t3) var(--e), opacity var(--t2) ease, visibility 0s var(--t2); }
+  :root.focus.has-rail body.show-top .topbar, :root.focus.has-rail body.alt-held .topbar { opacity: 1 !important; pointer-events: auto; visibility: visible; transition: left var(--t3) var(--e), opacity var(--t2) ease, visibility 0s; }
+  :root.focus.has-rail .outline { left: 0; }
+}
+
+/* ---------- The Look part of the Aa panel ---------- */
+
+.look-pick { display: flex; flex-direction: column; gap: 8px; margin-bottom: 6px; }
+.look-list { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.look-opt { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 11px; text-align: center; }
+.look-swatch { position: relative; display: flex; align-items: center; justify-content: center; height: 40px; border-radius: 8px; border: 1px solid var(--line2); font: 400 17px 'Newsreader', Georgia, serif; }
+.look-swatch i { position: absolute; right: 6px; bottom: 6px; width: 6px; height: 6px; border-radius: 50%; }
+.look-opt[aria-checked="true"] { color: var(--ink); }
+.look-opt[aria-checked="true"] .look-swatch { outline: 1.5px solid var(--accent); outline-offset: 2px; }
+.look-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.motion-list { display: flex; gap: 4px; padding: 3px; border-radius: 99px; background: var(--bg); border: 1px solid var(--line); align-self: flex-start; }
+.motion-opt { border: 0; background: transparent; color: var(--muted); padding: 4px 12px; border-radius: 99px; font-size: 12.5px; }
+.motion-opt[aria-checked="true"] { background: var(--raise); color: var(--ink); }
+
+/* ---------- Motion: it shows where things went, then gets out of the way ---------- */
+
+@keyframes v-rise { from { opacity: 0; translate: 0 10px; } }
+@keyframes v-fwd { from { opacity: 0; translate: 32px 0; } }
+@keyframes v-back { from { opacity: 0; translate: -32px 0; } }
+@keyframes v-in { from { opacity: 0; scale: .985; } }
+@keyframes v-out { from { opacity: 0; scale: 1.012; } }
+@keyframes v-fade { from { opacity: 0; } }
+@keyframes pop-in { from { opacity: 0; translate: 0 6px; scale: .985; } }
+@keyframes side-in { from { opacity: 0; translate: 26px 0; } }
+@keyframes sheet-in { from { opacity: 0; translate: 0 26px; } }
+
+/* A place arrives from the side it lies on: later rooms from the right, earlier
+   from the left, a project by stepping in, back out by stepping out. */
+:root:not([data-motion="off"]) body > main > :first-child { animation: v-rise var(--t2) var(--e); }
+:root[data-turn="fwd"]:not([data-motion="off"]) body > main > :first-child { animation-name: v-fwd; }
+:root[data-turn="back"]:not([data-motion="off"]) body > main > :first-child { animation-name: v-back; }
+:root[data-turn="in"]:not([data-motion="off"]) body > main > :first-child { animation-name: v-in; animation-duration: var(--t3); }
+:root[data-turn="out"]:not([data-motion="off"]) body > main > :first-child { animation-name: v-out; animation-duration: var(--t3); }
+/* The same kind of place opening again (another world, another page) still arrives. */
+:root.turned:not([data-motion="off"]) body > main > :first-child { animation-name: v-rise; }
+:root.turned[data-turn="fwd"]:not([data-motion="off"]) body > main > :first-child { animation-name: v-fwd; }
+:root.turned[data-turn="back"]:not([data-motion="off"]) body > main > :first-child { animation-name: v-back; }
+:root[data-motion="gentle"] body > main > :first-child { animation-name: v-fade !important; }
+
+:root:not([data-motion="off"]) :is(.palette, .go-panel, .page-settings, .shortcuts, .stats, .pop-menu, .handle-menu, .picker, .slash, .note-types):not([hidden]) { animation: pop-in var(--t1) var(--e); }
+:root:not([data-motion="off"]) :is(.today-panel, .history, .beside, .talk, .tag-results, .versions):not([hidden]) { animation: side-in var(--t2) var(--e); }
+:root:not([data-motion="off"]) .palette-backdrop:not([hidden]) { animation: v-fade var(--t2) ease; }
+:root[data-motion="gentle"] :is(.palette, .go-panel, .page-settings, .shortcuts, .stats, .pop-menu, .handle-menu, .picker, .slash, .note-types, .today-panel, .history, .beside, .talk, .tag-results, .versions):not([hidden]) { animation-name: v-fade; }
+
+:root:not([data-motion="off"]) :is(.rail-pill, .switch-pill, .tabs-pill) { transition: transform var(--t2) var(--e), width var(--t2) var(--e), height var(--t2) var(--e), opacity var(--t1) ease; }
+:root[data-motion="gentle"] :is(.rail-pill, .switch-pill, .tabs-pill) { transition: opacity var(--t1) ease; }
+:root[data-motion="full"] :is(.pill, .tb-btn, .rail-item, .pt-tab, .ghost-btn, .look-opt, .motion-opt):active { scale: .97; }
+:root:not([data-motion="off"]) :is(.pill, .tb-btn, .rail-item, .pt-tab, .ghost-btn) { transition: color var(--t1) ease, background-color var(--t1) ease, scale .08s ease; }
+:root[data-motion="off"] :is(.rail, .topbar, body) { transition: none !important; }
+:root[data-motion="gentle"].has-rail :is(.rail, body) { transition: opacity var(--t2) ease; }
+
+/* ---------- Quiet by default ---------- */
+
+/* Tags read as part of the line; colour is kept for links and for what needs you. */
+.tag { color: var(--muted); }
+.tag:hover { color: var(--ink); }
+/* No boxes inside boxes: a column is a hairline and a label, a card a soft lift. */
+.sb-col { background: transparent; border: 0; border-top: 1px solid var(--line2); border-radius: 0; padding: 10px 0 0; }
+.sb-col.drop { background: var(--tint); border-top-color: var(--accent); }
+.sb-card { background: var(--raise); border-color: transparent; border-radius: var(--r); }
+.sb-card:hover { border-color: var(--line2); }
+.card, .st-card { border-radius: 10px; }
+/* Cards answer the pointer with colour only: they are dragged, and a card that
+   lifts under the pointer loses the drag. */
+:root:not([data-motion="off"]) :is(.card, .sb-card, .st-card) { transition: border-color var(--t1) ease, background-color var(--t1) ease; }
+@media (min-width: 701px) {
+  /* The switch at the top has Tags now. */
+  html.has-rail .lib-tags { display: none; }
+}
+@media (max-width: 700px) {
+  :root:is([data-look="midnight"], [data-look="paper"]) :is(#nb-title, #wh-title, #ph-title, .lib-head h1, .tags-home h1) { font-size: 34px; }
+  :root:is([data-look="midnight"], [data-look="paper"]) .st-title { font-size: 30px; }
+}
+/* A ticked box pops and settles. */
+@keyframes tick-pop { 0% { scale: .7; } 55% { scale: 1.18; } 100% { scale: 1; } }
+:root[data-motion="full"] #outline-editor .line-box[aria-checked="true"] { animation: tick-pop var(--t2) var(--e); }
