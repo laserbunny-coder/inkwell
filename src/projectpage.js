@@ -225,20 +225,30 @@ export class ProjectPage {
     el.replaceChildren(this.head('Crew', 'Claude threads working on it'), box);
   }
 
+  // What threads finished or took live, and what you changed by talking it
+  // through (those carry your words as the reason), newest first.
   drawTurns(seat) {
     const el = this.els.turns;
-    el.hidden = !seat.turns.length;
+    const own = (this.world.fields?.turns || []).filter((t) => t && t.text).map((t) => ({ at: t.at || 0, text: t.text, why: t.why || '', own: true }));
+    const list = [...seat.turns, ...own].sort((a, b) => b.at - a.at);
+    el.hidden = !list.length;
     if (el.hidden) { el.replaceChildren(); return; }
     const h = this.head('Turns', 'how this project got here');
-    const all = make('button', 'wp-link wp-r', 'All in History');
-    all.addEventListener('click', () => this.hooks.history(seat.claude[0] || seat.name));
-    h.append(all);
+    if (seat.turns.length) {
+      const all = make('button', 'wp-link wp-r', 'All in History');
+      all.addEventListener('click', () => this.hooks.history(seat.claude[0] || seat.name));
+      h.append(all);
+    }
     const box = make('div', 'wp-rows');
-    for (const u of seat.turns.slice(0, TURNS)) {
-      const row = make('a', 'wp-turn');
-      row.href = web(u.link); row.target = '_blank'; row.rel = 'noopener';
-      row.title = u.thread ? `Open “${u.thread}” in Claude` : 'Open the thread in Claude';
-      row.append(make('span', 'wp-date', shortDay(u.at)), make('span', '', u.text));
+    for (const u of list.slice(0, TURNS)) {
+      const row = make(u.own ? 'div' : 'a', `wp-turn${u.own ? ' own' : ''}`);
+      if (!u.own) {
+        row.href = web(u.link); row.target = '_blank'; row.rel = 'noopener';
+        row.title = u.thread ? `Open “${u.thread}” in Claude` : 'Open the thread in Claude';
+      }
+      const text = make('span', '', u.text);
+      if (u.why) text.append(make('small', 'wp-why', `“${u.why}”`));
+      row.append(make('span', 'wp-date', shortDay(u.at)), text);
       if (u.state === 'live') row.append(make('span', 'wp-live', 'Live'));
       box.append(row);
     }

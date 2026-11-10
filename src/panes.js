@@ -71,15 +71,16 @@ export function kindOf(place, names = []) {
     case 'compare': return 'Compare';
     case 'plan': return 'Plan';
     case 'sidenotes': return 'Notes';
+    case 'talk': return 'Claude';
     default: return names.length ? '' : 'Pane';
   }
 }
 
-// The two places the pane's own switch leads to, and which one a place is.
-export const BESIDE_PLACES = { plan: { view: 'plan', tab: 'day' }, notes: { view: 'sidenotes' } };
-export const tabOf = (place) => (place?.view === 'plan' ? 'plan' : place?.view === 'sidenotes' ? 'notes' : '');
+// The places the pane's own switch leads to, and which one a place is.
+export const BESIDE_PLACES = { plan: { view: 'plan', tab: 'day' }, claude: { view: 'talk' }, notes: { view: 'sidenotes' } };
+export const tabOf = (place) => (place?.view === 'plan' ? 'plan' : place?.view === 'talk' ? 'claude' : place?.view === 'sidenotes' ? 'notes' : '');
 // These only make sense beside something, so they never trade places with it.
-const stays = (place) => place?.view === 'sidenotes' || (place?.view === 'plan' && place.tab === 'day');
+const stays = (place) => place?.view === 'sidenotes' || place?.view === 'talk' || (place?.view === 'plan' && place.tab === 'day');
 
 // ---------- the host, in the main window ----------
 
@@ -128,7 +129,7 @@ export class PaneHost {
     return true;
   }
 
-  // Plan or Notes in a pane's head: the pane goes there.
+  // Plan, Claude or Notes in a pane's head: the pane goes there.
   async tab(id, which) {
     const pane = this.get(id) || this.panes[this.sheetAt];
     const place = BESIDE_PLACES[which];
@@ -140,7 +141,7 @@ export class PaneHost {
     const el = make('span', 'pane-tabs');
     el.setAttribute('role', 'group');
     el.setAttribute('aria-label', 'What is beside');
-    for (const [which, label, title] of [['plan', 'Plan', 'Today’s plan beside'], ['notes', 'Notes', 'The notes on the draft in the main view']]) {
+    for (const [which, label, title] of [['plan', 'Plan', 'Today’s plan beside'], ['claude', 'Claude', 'Talk it through with Claude (Alt + T)'], ['notes', 'Notes', 'The notes on the draft in the main view']]) {
       const b = make('button', 'pane-tab', label);
       b.type = 'button';
       b.dataset.tab = which;

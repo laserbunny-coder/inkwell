@@ -66,6 +66,7 @@ import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
 import { inPane, PANE_ID, PaneHost, host as paneHost, sendChanged, onChanged, BESIDE_PLACES } from './panes.js';
 import { SideNotes } from './sidenotes.js';
+import { Talk } from './talk.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
@@ -598,7 +599,7 @@ async function go(place) {
   if (place.view === 'notebook' && !place.pageId && notebook.page && !notebook.isDay && gone(await getEntry(notebook.page.id))) place = { view: 'notebook', pageId: dayId(isoToday()) };
   // Today's plan on its own, and the notes of the draft next door, only live
   // beside something: in the main window they'd be the day's page.
-  if (!inPane && ((place.view === 'plan' && place.tab === 'day') || place.view === 'sidenotes')) place = { view: 'notebook', pageId: dayId(isoToday()) };
+  if (!inPane && ((place.view === 'plan' && place.tab === 'day') || place.view === 'sidenotes' || place.view === 'talk')) place = { view: 'notebook', pageId: dayId(isoToday()) };
   const from = view();
   // Switch at once so the next keystroke lands in the right place; saving catches up.
   if (from === 'write' && place.view !== 'write') store.close(editor.state.doc);
@@ -609,6 +610,9 @@ async function go(place) {
   frame.turn(from, place.view, pageOfPlace(place), place.view === 'desk' ? place.tab || 'stage' : place.view === 'plan' ? place.tab || 'week' : null);
   if (place.view === 'write') delete root.dataset.view;
   else root.dataset.view = place.view;
+  // Which project, in the same breath as the view: anything that looks in
+  // between (the rail, the project page's Desk data) must see both.
+  if (place.view === 'world') state.worldId = place.id;
   body.classList.remove('show-outline');
   // Notes beside the text belong to a draft: elsewhere the button stays in its
   // place, dimmed.
@@ -666,6 +670,9 @@ async function go(place) {
   } else if (place.view === 'sidenotes') {
     remember({ view: 'sidenotes' });
     await sideNotes.show();
+  } else if (place.view === 'talk') {
+    remember({ view: 'talk' });
+    await talkThrough.show();
   } else if (place.view === 'desk') {
     remember({ view: 'desk', ...(place.tab === 'history' ? { tab: 'history' } : {}) });
     await deskPage?.show(place);
@@ -921,6 +928,8 @@ async function applyRemote(rows) {
   if (rows.some((r) => r.kind === 'tidy' || r.kind === 'change')) { redrawTidy(); tidyNudge(); }
   if (view() === 'tags' && tagsPage && rows.some((r) => r.tags?.length || r.id === 'settings-tag-groups')) tagsPage.refresh();
   if (view() === 'desk' && rows.some((r) => r.kind === 'world' || r.kind === 'area' || r.id === DESK_ID)) deskPage?.refresh();
+  // Where a project sits changed somewhere else (the Desk beside, a talk with Claude).
+  if (view() === 'world' && rows.some((r) => r.id === DESK_ID) && !rows.some((r) => r.kind === 'world')) renderWorld();
   if (rows.some((r) => r.kind === 'line' || r.id === PLAN_ID)) { plan?.soon(); looseSoon(); }
   if (rows.some((r) => r.kind === 'settings')) await notes.reloadTypes();
   if (rows.some((r) => r.kind === 'workflow')) setOwnWorkflows(await byKind('workflow'));
@@ -1377,8 +1386,11 @@ async function drawRail() {
   else if (piece) world = await worldOf(piece);
   else if (inNotebook() && notebook.page && !notebook.isDay) world = await worldOf(notebook.page);
   const pageId = inNotebook() ? notebook.page?.id : null;
-  // The world you're in, for the commands that act on it.
-  state.worldId = world?.id || null;
+  // The world you're in, for the commands that act on it. On a project's own
+  // page go() has already said which one: a rail drawn a moment too early
+  // mustn't take that away.
+  if (view() !== 'world') state.worldId = world?.id || null;
+  else if (state.worldId && world?.id !== state.worldId) world = await getEntry(state.worldId);
 
   const tree = $('#outline-tree');
   const out = [];
@@ -1573,6 +1585,8 @@ async function drawCrumb() {
     else parts.push(link('Today', () => go({ view: 'notebook', pageId: dayId(isoToday()) }), ''), link(lastPlace?.tab === 'pace' ? 'Pace' : 'Week', () => {}, 'here'));
   } else if (view() === 'sidenotes') {
     parts.push(link(sideNotes.title || 'No draft open', () => {}, 'here'));
+  } else if (view() === 'talk') {
+    parts.push(link('Talk it through', () => {}, 'here'));
   } else if (view() === 'desk') {
     const history = lastPlace?.tab === 'history';
     parts.push(link('Desk', () => go({ view: 'desk' }), history ? '' : 'here'));
@@ -1889,6 +1903,7 @@ async function worldMenu(world) {
     { label: 'Rename…', run: () => rename(w) },
     { label: 'New piece…', run: () => addPiece(w.id) },
     { label: 'What Claude knows about this world…', run: () => showClaudeKnows(w) },
+    ...(!inPane && paneHost() && !root.classList.contains('hide-panes') && view() === 'world' && state.worldId === w.id ? [{ label: 'Talk it through with Claude', keys: '⌥T', run: () => openTalk() }] : []),
     { label: 'New page in its bible', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(w.id); } },
     { label: 'Move to area', sub: (await areaOptions(all)).map(([id, label]) => ({ label: label.trim(), current: w.area_id === id, run: () => moveBookToArea(w, id) })) },
     ...(!isLife(w) ? [{ label: 'Workflow…', run: () => openStages(w) }] : []),
@@ -4069,6 +4084,7 @@ const commands = [
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
   { group: 'view', label: 'What Claude knows: its one-line note on this, and weekly summaries', keys: '', words: ['about', 'summary', 'second brain', 'memory', 'digest', 'weekly'], run: () => showClaudeKnows() },
   { group: 'view', label: 'Beside: today’s plan next to this page (again: put it away)', keys: `${mod}\\`, words: ['pane', 'side by side', 'split', 'beside', 'plan', 'tasks', 'today'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => toggleBesidePane() },
+  { group: 'view', label: 'Talk it through with Claude, beside where you are', keys: '⌥T', words: ['claude', 'talk', 'think', 'plan', 'week', 'moves', 'ask', 'beside', 'overwhelmed', 'too much'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => openTalk() },
   { group: 'view', label: 'In the Beside pane: this draft’s notes, listed next to it', words: ['pane', 'side by side', 'beside', 'notes', 'margin', 'comments'], when: () => !inPane && !!panes && writing() && !root.classList.contains('hide-panes'), run: () => openBeside(BESIDE_PLACES.notes) },
   { group: 'view', label: 'Open where you are in a pane beside (middle-click opens anything beside)', words: ['pane', 'side by side', 'split', 'beside', 'two', 'compare'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => openBeside(lastPlace) },
   { group: 'view', label: 'Show the panes beside', words: ['pane', 'peek', 'side by side'], when: () => !!panes?.count && panes.sheet && !panes.sheetOpen, run: () => panes.showSheet() },
@@ -4568,6 +4584,7 @@ document.addEventListener('click', (e) => {
   // Beside, the plan's own Day is today's plan alone, not the whole page.
   if (cmd === 'today') go(inPane && view() === 'plan' ? BESIDE_PLACES.plan : { view: 'notebook', pageId: dayId(isoToday()) });
   if (cmd === 'beside') toggleBesidePane();
+  if (cmd === 'talk') openTalk();
   if (cmd === 'drawer') go({ view: 'drawer' });
   if (cmd === 'go') nav.toggle();
   if (cmd === 'mic') captureHere({ start: true });
@@ -4588,6 +4605,8 @@ document.addEventListener('keydown', (e) => {
   else if (m && e.shiftKey && !e.altKey && e.code === 'Period') { e.preventDefault(); toggleSections(); }
   else if (m && e.key === '.') { e.preventDefault(); toggleFocus(); }
   else if (m && !e.shiftKey && !e.altKey && e.code === 'Backslash') { e.preventDefault(); toggleBesidePane(); }
+  // Alt + T: talk it through with Claude, beside where you are.
+  else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyT') { e.preventDefault(); openTalk(); }
   else if (m && e.shiftKey && k === 'f') { e.preventDefault(); openPalette('search'); }
   else if (m && e.shiftKey && k === 'o') { e.preventDefault(); go({ view: 'library', area: null }); }
   else if (m && k === 'o') { e.preventDefault(); if (!$('.palette').hidden) closePalette(false); nav.toggle(true); }
@@ -4981,8 +5000,18 @@ deskPage = new DeskPage({
   through: () => through.open('calls'),
   // A call answered from a project's own page: that page looks again.
   acted: () => { projectPage?.stale(); if (view() === 'world') renderWorld(); },
+  // ✦ Talk it through, from the Desk's head (not from inside a pane, and not with Beside off).
+  talk: () => (inPane || !paneHost() || root.classList.contains('hide-panes') ? null : () => openTalk()),
   toast
 });
+// A call was answered or set aside, here or in a pane: whatever shows calls looks again.
+function callsChanged() {
+  projectPage?.stale();
+  if (view() === 'world') renderWorld();
+  else if (view() === 'desk') deskPage.load({ quiet: true });
+  else deskPage.peek();
+}
+if (!inPane) window.__callsChanged = callsChanged;
 // A project's own page borrows the Desk: its seat, north star, calls, crew
 // and turns (projectpage.js).
 projectPage = new ProjectPage({ seat: $('#wh-seat'), facts: $('#wh-facts'), calls: $('#wh-calls'), crew: $('#wh-crew'), turns: $('#wh-turns') }, {
@@ -5121,6 +5150,26 @@ function syncBeside() {
   b.setAttribute('aria-pressed', String(panes.showing));
   b.title = panes.count ? (panes.showing ? 'Put away what’s beside (⌘\\)' : 'Bring back what’s beside (⌘\\)') : 'Beside: today’s plan, notes or another page next to this one (⌘\\)';
 }
+// Talk it through (Alt + T): Claude beside where you are, about the project
+// you're in, or everything on stage from anywhere else.
+function openTalk() {
+  const h = paneHost();
+  if (!h) return;
+  if (h.hooks.isOff()) { toast('Beside is switched off (Look → Beside)'); return; }
+  if (inPane) { go(BESIDE_PLACES.claude); return; }
+  if (root.classList.contains('focus') && !h.sheet) { toast('Focus is only the words. Leave it (⌘.) to talk it through.'); return; }
+  openBeside(BESIDE_PLACES.claude, { focus: true });
+}
+// The project a place belongs to, if any: { id, title }.
+async function projectOfPlace(place) {
+  const id = !place ? null
+    : place.view === 'write' ? place.chapterId
+      : place.view === 'notebook' ? (place.pageId && !place.pageId.startsWith('day-') ? place.pageId : null)
+        : ['world', 'stage', 'project', 'grid', 'production', 'deliver'].includes(place.view) ? place.id : null;
+  const row = id ? await getEntry(id) : null;
+  const w = row && !gone(row) ? await worldOf(row) : null;
+  return w && !gone(w) ? { id: w.id, title: w.title || 'Untitled' } : null;
+}
 // From a pane: somewhere opens in the main window, and the pane stays as it is.
 async function openInMain(id) {
   const place = await placeOf(id);
@@ -5133,6 +5182,20 @@ const sideNotes = new SideNotes($('#side-notes'), {
   skip: (n) => notes.skip(n),
   shown: () => view() === 'sidenotes',
   named: () => { if (view() === 'sidenotes') renderCrumb(); }
+});
+
+// Talk it through (talk.js), in the Beside pane.
+const talkThrough = new Talk($('#talk-sheet'), {
+  scope: () => projectOfPlace(paneHost()?.hooks.mainPlace() || null),
+  fetch: (since) => { const b = deskBackend(); return b ? b.desk(since) : null; },
+  ask: (body) => askServer(body),
+  canAsk: () => canAskServer(),
+  later: (id, until) => deskBackend().laterNeed(id, until),
+  // What it changed shows wherever it's open, here and in the main window.
+  changed: async (rows, { calls = false } = {}) => { await applyRemote(rows); if (calls) { try { window.parent.__callsChanged?.(); } catch { /* on its own */ } } },
+  shown: () => view() === 'talk',
+  named: () => { if (view() === 'talk') renderCrumb(); },
+  toast
 });
 
 async function openBeside(place, opts = {}) {
@@ -5342,7 +5405,7 @@ async function settleAt(eid, spot) {
 }
 window.__pane = {
   go: (place) => go(place),
-  mainMoved: () => { if (view() === 'sidenotes') sideNotes.soon(); },
+  mainMoved: () => { if (view() === 'sidenotes') sideNotes.soon(); if (view() === 'talk') talkThrough.mainMoved(); },
   focus: () => { try { currentEditor().commands.focus(); } catch { /* nothing to type in */ } },
   closing: () => { store.close(editor.state.doc); notebook.close(); },
   dropOver: (x, y) => showDrop(dropSpotAt(x, y)),

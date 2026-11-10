@@ -108,7 +108,7 @@ export async function deskSettings() {
 }
 export async function saveDeskSettings(next) {
   const prev = await getEntry(DESK_ID);
-  const row = { ...(prev || entry('settings', { id: DESK_ID, title: 'Desk' })), fields: { ...(prev?.fields || {}), ...next }, deleted: false, updated_at: Date.now() };
+  const row = { ...(prev || entry('settings', { id: DESK_ID, title: 'Desk' })), fields: { ...((!prev?.deleted && prev?.fields) || {}), ...next }, deleted: false, updated_at: Date.now() };
   await putEntries([row]);
   return row;
 }
@@ -376,6 +376,14 @@ export class DeskPage {
       const b = make('button', 'dk-through', 'Go through them');
       b.type = 'button';
       b.addEventListener('click', () => this.through());
+      sum.append(b);
+    }
+    // Beside the count: talk the whole stage through with Claude.
+    const say = this.talk?.();
+    if (say) {
+      const b = make('button', 'dk-talk', '✦ Talk it through');
+      b.title = 'Talk it through with Claude, beside the Desk (Alt + T)';
+      b.addEventListener('click', say);
       sum.append(b);
     }
     const parts = [this.head(dayLabel(now), 'Desk', sum)];

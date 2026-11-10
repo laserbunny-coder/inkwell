@@ -80,7 +80,8 @@ span.wp-edit:empty { display: inline-block; min-width: 12ch; }
 /* Crew and turns. */
 .hide-projcrew :is(#wh-crew, #wh-turns) { display: none; }
 .wp-turn { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 16px; align-items: baseline; padding: 8px 0; font-size: 13.5px; color: var(--soft); line-height: 1.5; }
-.wp-turn:hover { color: var(--ink); }
+a.wp-turn:hover { color: var(--ink); }
+.wp-why { display: block; color: var(--muted); font-size: 12.5px; font-style: italic; margin-top: 2px; }
 .wp-date { font: 11.5px var(--mono); color: var(--muted); white-space: nowrap; }
 .wp-live { font: 500 10px var(--ui); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
 .hide-projrecent #wh-recent-box { display: none; }
