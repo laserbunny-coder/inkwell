@@ -219,3 +219,24 @@ html.hide-panes .ah-talk { display: none; }
   .ah-p { font-size: 15px; padding-right: 8px; }
   .ah-bar, .ah-dia, .ah-add input { font-size: 13.5px; }
 }
+
+/* ---------- repeats and habits ---------- */
+.pl-rep { border: 0; background: none; padding: 0 4px; margin-left: 2px; color: var(--faint); font: 12px var(--ui); cursor: pointer; border-radius: 4px; flex: none; }
+.pl-rep:hover, .pl-rep:focus-visible { color: var(--ink); background: var(--raise); outline: none; }
+.pl-task.ghost { opacity: .5; }
+.pl-task.ghost .pl-check { border-style: dashed; cursor: default; }
+.pw-task.ghost { opacity: .5; }
+.pw-rep { font-size: 11px; color: var(--faint); }
+.hide-repeatmark :is(.pl-rep, .pw-rep) { display: none; }
+.hide-repeatahead :is(.pl-task.ghost, .pw-task.ghost) { display: none; }
+/* How a repeating task is going: four weeks of small squares. */
+.hb { display: grid; gap: 4px; padding: 6px 10px 10px; width: max-content; }
+.hb-row { display: grid; grid-template-columns: repeat(7, 14px); gap: 4px; }
+.hb-head span { font: 10px var(--ui); color: var(--faint); text-align: center; }
+.hb-row i { width: 14px; height: 14px; border-radius: 3px; box-sizing: border-box; }
+.hb-off { background: transparent; box-shadow: inset 0 0 0 1px var(--line); opacity: .5; }
+.hb-ahead { box-shadow: inset 0 0 0 1px var(--line); }
+.hb-done { background: var(--accent); }
+.hb-missed { box-shadow: inset 0 0 0 1.5px var(--faint); }
+.hb-open { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.hb-row i.today { outline: 1px solid var(--muted); outline-offset: 1px; }

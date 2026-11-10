@@ -13,7 +13,7 @@ import './talk.css';
 import { getEntry, putEntries, byKind, isTrashed } from './db.js';
 import { editedAt } from './library.js';
 import { seatsFor, deskSettings, saveDeskSettings, DESK_ID, STAGES, tomorrowMorning } from './desk.js';
-import { loadTasks, planSettings, moveTask, addTask, stepsHome, isStretch, stretchWord, aheadPlan, isoOf, addDays, dateOf, dayWord } from './tasks.js';
+import { loadTasks, planSettings, moveTask, addTask, stepsHome, isStretch, stretchWord, aheadPlan, isoOf, addDays, dateOf, dayWord, isRepeat, repeatWord } from './tasks.js';
 
 const DAY = 864e5;
 const KEEP = 30; // messages kept for each conversation
@@ -55,7 +55,7 @@ export async function talkContext({ scope = null, data = null, now = Date.now(),
   // A stretch of work says its last day too; a date to hit says whether it can move.
   const step = (i) => {
     known.tasks.set(i.row.id, i);
-    return { id: i.row.id, text: clip(i.row.text, 140), day: i.task.day || '', minutes: i.task.est || 0, ...(isStretch(i.task) ? { until: i.task.until } : {}), ...(i.task.mark ? { date_to_hit: i.task.mark === 'hard' ? 'cannot move' : 'can move' } : {}) };
+    return { id: i.row.id, text: clip(i.row.text, 140), day: i.task.day || '', minutes: i.task.est || 0, ...(isStretch(i.task) ? { until: i.task.until } : {}), ...(i.task.mark ? { date_to_hit: i.task.mark === 'hard' ? 'cannot move' : 'can move' } : {}), ...(isRepeat(i.task) ? { repeats: repeatWord(i.task.repeat), ...(i.task.habit ? { habit: true } : {}) } : {}) };
   };
   const projects = mine.map((seat) => {
     const w = seat.world ? byId.get(seat.world.id) : null;
@@ -84,7 +84,7 @@ export async function talkContext({ scope = null, data = null, now = Date.now(),
   for (let n = 0; n < 7; n++) {
     const day = addDays(today, n);
     const on = open.filter((i) => i.task.day === day && !isStretch(i.task));
-    week.push({ day, weekday: dateOf(day).toLocaleDateString('en-US', { weekday: 'long' }), planned_minutes: on.reduce((m, i) => m + (i.task.est || 0), 0), tasks: on.length });
+    week.push({ day, weekday: dateOf(day).toLocaleDateString('en-US', { weekday: 'long' }), planned_minutes: on.reduce((m, i) => m + (i.task.habit ? 0 : i.task.est || 0), 0), tasks: on.length });
   }
   const overdue = open.filter((i) => i.task.day && i.task.day < today && !isStretch(i.task)).length;
   // The six weeks Weeks ahead shows, with the hours planned in each.

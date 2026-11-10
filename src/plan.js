@@ -9,7 +9,7 @@ import { popMenu, askText } from './menu.js';
 import {
   loadTasks, dayPlan, weekPlan, pace, planSettings, savePlanSettings, setTask, unTask, tickTask, tookTask, startTimer, stopTimer,
   addTask, renameTask, arrange, plainLine, parseEst, readSpan, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE, stepsPage, stepsHome,
-  moveTask, isStretch, stretchWord
+  moveTask, isStretch, stretchWord, isRepeat, repeatWord, readDays, parseAdd, history, occItem, setRepeat, skipTask, rollTicked, dow
 } from './tasks.js';
 import { drawAhead, aheadClick, aheadContext, aheadDrags } from './ahead.js';
 
@@ -123,6 +123,11 @@ export class Plan {
   }
 
   async refresh() {
+    // A repeating task ticked in its words on a page moves on to its next day.
+    if (!this.rolling) {
+      this.rolling = true;
+      try { const rolled = await rollTicked(); if (rolled.length) await this.hooks.changed?.(rolled); } catch (e) { console.warn(e); } finally { this.rolling = false; }
+    }
     if (!this.dayShown && !this.pageShown && !this.stepsShown) return;
     const turn = (this.turn = (this.turn || 0) + 1);
     const [items, settings, src] = await Promise.all([loadTasks(), planSettings(), this.pageShown && this.tab === 'ahead' ? this.hooks.ahead?.() : null]);
@@ -250,20 +255,32 @@ export class Plan {
     const t = i.task;
     const id = i.row.id;
     const done = !!i.row.fields?.done;
-    const row = make('div', `pl-task${done ? ' done' : ''}${next ? ' next' : ''}${t.run ? ' timing' : ''}${carried ? ' carried' : ''}${this.just === id ? ' justdone' : ''}`);
+    const rep = isRepeat(t);
+    const ghost = !!i.ghost;
+    const row = make('div', `pl-task${done ? ' done' : ''}${next ? ' next' : ''}${t.run ? ' timing' : ''}${carried ? ' carried' : ''}${this.just === id && !ghost ? ' justdone' : ''}${ghost ? ' ghost' : ''}${t.habit ? ' habit' : ''}`);
     row.dataset.task = id;
-    if (!done && drag && hover.matches) row.draggable = true;
+    if (i.occ) row.dataset.occ = i.occ;
+    if (ghost) row.dataset.ghost = i.ghost;
+    if (!done && !ghost && drag && hover.matches) row.draggable = true;
     const check = make('button', 'pl-check');
     check.innerHTML = ICON.check;
     check.dataset.act = 'tick';
     check.setAttribute('role', 'checkbox');
     check.setAttribute('aria-checked', String(done));
-    check.setAttribute('aria-label', done ? 'Done; click to untick' : 'Tick when done');
+    check.setAttribute('aria-label', done ? 'Done; click to untick' : ghost ? 'It comes round on this day' : 'Tick when done');
+    if (ghost) check.setAttribute('aria-disabled', 'true');
     const title = make('div', 'pl-title');
     const words = make('button', 'pl-words', i.row.text || 'Untitled');
-    words.dataset.act = 'words';
-    words.title = plainLine(i.row) ? 'Click to change the words' : 'Open it where it’s written';
+    words.dataset.act = t.habit ? 'history' : 'words';
+    words.title = t.habit ? 'A habit: click for how it’s going' : plainLine(i.row) ? 'Click to change the words' : 'Open it where it’s written';
     title.append(words);
+    if (rep) {
+      const mark = make('button', 'pl-rep', '↻');
+      mark.dataset.act = 'history';
+      mark.title = `${repeatWord(t.repeat)}${t.habit ? ' · a habit' : ''}`;
+      mark.setAttribute('aria-label', `${repeatWord(t.repeat)}${t.habit ? ', a habit' : ''}: how it’s going`);
+      title.append(mark);
+    }
     if (carried) title.append(make('span', 'pl-from', `from ${dayWord(t.day, this.today)}`));
     const meta = make('div', 'pl-meta');
     const where = place ?? this.placeOf(i);
@@ -278,12 +295,13 @@ export class Plan {
       const stretch = isStretch(t);
       const late = stretch ? t.until < this.today : t.day && t.day < this.today;
       const word = stretch ? stretchWord(t) : `${t.mark ? '◆ ' : ''}${dayWord(t.day, this.today)}`;
+      if (rep) row.dataset.repeat = repeatWord(t.repeat);
       const d = make('button', `pl-when${t.day ? (late ? ' late' : '') : ' unset'}${t.mark === 'hard' ? ' hard' : ''}`, word);
       d.dataset.act = 'day';
       d.setAttribute('aria-label', stretch ? `From ${word}; click to move it` : t.day ? `${t.mark ? 'A date to hit: ' : 'Planned for '}${dayWord(t.day, this.today)}${t.mark === 'hard' ? ', and it can’t move' : ''}; click to move it` : 'Not on a day yet; click to pick one');
       meta.append(d);
     }
-    if (!done) {
+    if (!done && !ghost && !t.habit) {
       const play = make('button', 'pl-play');
       play.innerHTML = t.run ? ICON.pause : ICON.play;
       play.dataset.act = 'timer';
@@ -295,6 +313,8 @@ export class Plan {
     if (t.run) { est.textContent = clock(t, Date.now()); est.dataset.timer = id; est.classList.add('live'); est.setAttribute('aria-label', 'Time on the clock'); }
     else if (done) { est.textContent = t.actual && t.est && t.actual !== t.est ? `${span(t.est)} → ${span(t.actual)}` : t.actual || t.est ? span(t.actual || t.est) : ''; est.setAttribute('aria-label', 'How long it took'); }
     else { est.textContent = t.est ? span(t.est) : 'how long?'; if (!t.est) est.classList.add('unset'); est.setAttribute('aria-label', t.est ? `Takes about ${span(t.est)}; click to change` : 'Say how long it takes'); }
+    // A habit has no hours: nothing to guess, nothing to say afterwards.
+    if (t.habit) est.hidden = true;
     const more = make('button', 'pl-more', '⋯');
     more.dataset.act = 'more';
     more.setAttribute('aria-label', 'More for this task');
@@ -393,13 +413,16 @@ export class Plan {
 
   chip(i) {
     const done = !!i.row.fields?.done;
-    const b = make('button', `pw-task${done ? ' done' : ''}${i.task.run ? ' timing' : ''}`);
+    const b = make('button', `pw-task${done ? ' done' : ''}${i.task.run ? ' timing' : ''}${i.ghost ? ' ghost' : ''}${i.task.habit ? ' habit' : ''}`);
     b.dataset.task = i.row.id;
     b.dataset.act = 'more';
-    if (!done && hover.matches) b.draggable = true;
+    if (i.occ) b.dataset.occ = i.occ;
+    if (i.ghost) { b.dataset.ghost = i.ghost; b.title = `${repeatWord(i.task.repeat)}: it comes round on this day`; }
+    if (!done && !i.ghost && hover.matches) b.draggable = true;
     b.append(make('span', 'pw-t', i.row.text || 'Untitled'));
-    const mins = done ? i.task.actual || i.task.est : i.task.est;
+    const mins = i.task.habit ? 0 : done ? i.task.actual || i.task.est : i.task.est;
     if (mins) b.append(make('small', '', span(mins)));
+    else if (isRepeat(i.task) && !done) b.append(make('small', 'pw-rep', '↻'));
     return b;
   }
 
@@ -490,7 +513,10 @@ export class Plan {
     const act = el.dataset.act;
     if (act.startsWith('ahead-')) return aheadClick(this, act, el);
     const row = el.closest('[data-task], [data-took]');
-    const i = row ? this.item(row.dataset.task || row.dataset.took) : null;
+    let i = row ? this.item(row.dataset.task || row.dataset.took) : null;
+    // One time a repeating task was done, or a later day it comes round on.
+    if (i && row.dataset.occ) i = occItem(i, row.dataset.occ);
+    if (i && row.dataset.ghost) i = { ...i, ghost: row.dataset.ghost };
     if (act === 'week-prev' || act === 'week-next') return this.hooks.go({ view: 'plan', tab: 'week', week: addDays(weekOf(this.week || this.today)[0], act === 'week-prev' ? -7 : 7) });
     if (act === 'week-now') return this.hooks.go({ view: 'plan', tab: 'week' });
     if (act === 'open-day') return this.hooks.go({ view: 'notebook', pageId: `day-${el.closest('[data-day]').dataset.day}` });
@@ -498,6 +524,8 @@ export class Plan {
     if (act === 'all-done') { this.allDone = !this.allDone; return this.drawSteps(); }
     if (!i) return;
     if (act === 'day') return popMenu(el, this.dayItems(i));
+    if (act === 'history') return popMenu(el, this.historyItems(i));
+    if (act === 'tick' && i.ghost) return this.hooks.toast?.(`It comes round on ${long(i.ghost, { weekday: 'long' })}. Tick it then, or tick the one that’s due.`);
     if (act === 'tick') return this.tick(i, !i.row.fields?.done);
     if (act === 'timer') return this.timerFor(i);
     if (act === 'est') return i.row.fields?.done ? this.askTook(i) : popMenu(el, this.estItems(i));
@@ -514,19 +542,24 @@ export class Plan {
     if (e.key === 'Escape') { input.value = ''; input.blur(); return; }
     if (e.key !== 'Enter' || !input.value.trim()) return;
     e.preventDefault();
-    const { title, est } = parseEst(input.value);
+    const { title, est, repeat } = parseAdd(input.value);
     const steps = input.dataset.add === 'steps' && this.world;
     const day = steps || input.dataset.add === 'tray' ? null : input.dataset.add;
     input.value = '';
-    addTask({ text: title, day, est, order: this.lastOrder(day), home: steps ? stepsHome(this.world) : null }).then((rows) => this.wrote(rows));
+    addTask({ text: title, day, est, repeat, order: this.lastOrder(day), home: steps ? stepsHome(this.world) : null }).then(async (rows) => {
+      await this.wrote(rows);
+      // One that repeats starts on the first day it lands on: say so when that isn't here.
+      const made = rows.at(-1)?.fields?.task;
+      if (repeat && made && made.day !== (day || this.today)) this.hooks.toast?.(`${repeatWord(made.repeat)}: the first one is ${dayWord(made.day, this.today) === 'Tomorrow' ? 'tomorrow' : `on ${long(made.day, { weekday: 'long', month: 'short', day: 'numeric' })}`}`);
+    });
   }
 
   async tick(i, done) {
-    const row = await tickTask(i.row.id, done);
+    const row = await tickTask(i.row.id, done, Date.now(), i.occ || null);
     const id = i.row.id;
     this.just = done ? id : null;
     this.took = null;
-    if (done) {
+    if (done && row && !row.fields.task.habit) {
       // With the question switched off, a timed task still keeps its time.
       if (this.hooks.off?.('took')) { const on = timed(row.fields.task); if (on) await tookTask(id, on); }
       else if (this.dayShown) this.took = id;
@@ -536,7 +569,7 @@ export class Plan {
 
   async tookFor(i, minutes) {
     this.took = null;
-    await this.wrote(await tookTask(i.row.id, minutes));
+    await this.wrote(await tookTask(i.row.id, minutes, i.occ || null));
   }
 
   async askTook(i) {
@@ -609,15 +642,31 @@ export class Plan {
     const t = i.task;
     const done = !!i.row.fields?.done;
     const items = [];
+    const rep = isRepeat(t);
+    // One time a repeating task was done: take it back, or say how long it took.
+    if (i.occ) {
+      items.push({ label: 'Not done after all', run: () => this.tick(i, false) });
+      if (!t.habit) items.push({ label: t.actual ? `It took ${span(t.actual)}` : 'How long it took…', run: () => this.askTook(i) });
+      items.push('sep', { label: 'How it’s going', sub: this.historyItems(i) }, { label: 'Open it where it’s written', run: () => this.hooks.openEntry(i.row.id) });
+      return popMenu(anchor, items, at);
+    }
     if (done) items.push({ label: 'Not done after all', run: () => this.tick(i, false) }, { label: t.actual ? `It took ${span(t.actual)}` : 'How long it took…', run: () => this.askTook(i) });
     else {
       items.push({ label: 'Done', run: () => this.tick(i, true) });
       items.push({ label: t.run ? 'Stop the timer' : 'Start the timer', run: () => this.timerFor(i) });
     }
     items.push('sep', ...this.dayItems(i), 'sep',
-      { label: t.est ? `Takes ${span(t.est)}` : 'How long it takes', sub: this.estItems(i) },
+      ...(t.habit ? [] : [{ label: t.est ? `Takes ${span(t.est)}` : 'How long it takes', sub: this.estItems(i) }]),
+      // It can come round again; one that does can be a habit, with no hours.
+      ...(!done && !isStretch(t) && !t.mark ? [{ label: rep ? repeatWord(t.repeat) : 'Repeat', sub: this.repeatItems(i) }] : []),
+      ...(!done && rep ? [
+        { label: 'A habit', current: !!t.habit, run: async () => { await this.wrote(await setTask(i.row.id, { habit: !t.habit })); if (!t.habit) this.hooks.toast?.('A habit now: no hours, and a click on it shows how it’s going'); } },
+        { label: 'Skip this one', run: async () => this.wrote(await skipTask(i.row.id)) },
+        { label: 'How it’s going', sub: this.historyItems(i) },
+        ...(t.habit && plainLine(i.row) ? [{ label: 'Change the words…', run: async () => { const v = await askText({ title: 'Its words', value: i.row.text || '', ok: 'Save' }); if (v && String(v).trim() && String(v).trim() !== i.row.text) await this.wrote(await renameTask(i.row.id, String(v))); } }] : [])
+      ] : []),
       // With a day, it can be a date to hit: a diamond in Weeks ahead.
-      ...(!done && t.day && !isStretch(t) ? [
+      ...(!done && t.day && !isStretch(t) && !rep ? [
         { label: 'A date to hit', current: !!t.mark, run: async () => this.wrote(await setTask(i.row.id, { mark: t.mark ? null : 'date' })) },
         ...(t.mark ? [{ label: 'This date can’t move', current: t.mark === 'hard', run: async () => this.wrote(await setTask(i.row.id, { mark: t.mark === 'hard' ? 'date' : 'hard' })) }] : [])
       ] : []),
@@ -627,6 +676,61 @@ export class Plan {
       { label: 'Not a task any more', run: async () => { await this.wrote(await unTask(i.row.id)); this.hooks.toast?.('It’s a plain line again, still where it was written'); } }
     );
     popMenu(anchor, items, at);
+  }
+
+  // How often it comes round. It starts from the day it's on (or today).
+  repeatItems(i) {
+    const t = i.task;
+    const r = t.repeat || null;
+    const base = t.day && t.day > this.today ? t.day : this.today;
+    const day = long(base, { weekday: 'long' });
+    const d = dow(base);
+    const n = dateOf(base).getDate();
+    const is = (every, k = 1, days = null) => !!r && r.every === every && (r.n || 1) === k && (!days || JSON.stringify(r.days?.length ? r.days : [dow(r.from)]) === JSON.stringify(days));
+    const set = (rule) => async () => this.wrote(await setRepeat(i.row.id, rule));
+    return [
+      { label: 'Doesn’t repeat', current: !r, run: set(null) },
+      { label: 'Every day', current: is('day'), run: set({ every: 'day' }) },
+      { label: 'Weekdays', current: is('weekdays'), run: set({ every: 'weekdays' }) },
+      { label: `Every ${day}`, current: is('week', 1, [d]), run: set({ every: 'week', days: [d] }) },
+      { label: `Every other ${day}`, current: is('week', 2, [d]), run: set({ every: 'week', n: 2, days: [d] }) },
+      { label: `Every month on the ${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th'}`, current: is('month'), run: set({ every: 'month' }) },
+      { label: 'Pick the days…', run: async () => {
+        const v = await askText({ title: 'Which days of the week?', value: r?.every === 'week' && r.days?.length ? r.days.map((x) => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][x - 1]).join(', ') : '', placeholder: 'Mon, Wed, Fri', ok: 'Save' });
+        if (v === null || v === undefined || v === false || !String(v).trim()) return;
+        const days = readDays(String(v));
+        if (!days) { this.hooks.toast?.('Didn’t catch that. Try Mon, Wed, Fri.'); return; }
+        await set({ every: 'week', days })();
+      } }
+    ];
+  }
+
+  // How a repeating task is going: in a row, and the last four weeks.
+  historyItems(i) {
+    const t = i.task;
+    const h = history(this.item(i.row.id)?.row.fields.task || t, this.today);
+    const grid = make('div', 'hb');
+    grid.setAttribute('role', 'img');
+    const head = make('div', 'hb-row hb-head');
+    for (const d of ['M', 'T', 'W', 'T', 'F', 'S', 'S']) head.append(make('span', '', d));
+    grid.append(head);
+    for (const week of h.weeks) {
+      const row = make('div', 'hb-row');
+      for (const d of week) {
+        const c = make('i', `hb-${d.state}${d.iso === this.today ? ' today' : ''}`);
+        c.title = `${long(d.iso, { weekday: 'short', month: 'short', day: 'numeric' })}${d.state === 'done' ? ': done' : d.state === 'missed' ? ': missed' : d.state === 'open' ? ': still open' : ''}`;
+        row.append(c);
+      }
+      grid.append(row);
+    }
+    const said = h.streak > 1 ? `${h.streak} in a row` : h.streak === 1 ? 'Done the last time' : h.done ? 'Not the last time' : 'Not done yet';
+    const count = h.due ? ` · ${h.done} of the last ${h.due}` : '';
+    grid.setAttribute('aria-label', `${said}${count}. The last four weeks, day by day.`);
+    return [
+      { note: `${repeatWord(t.repeat)}${t.habit ? ' · a habit' : ''}`, plain: true },
+      { note: `${said}${count}`, plain: true },
+      { el: grid }
+    ];
   }
 
   // The label after a task's words on a page was clicked.
@@ -674,7 +778,7 @@ export class Plan {
       if (zone) return { zone };
       const list = e.target.closest?.('.pl-list');
       if (!list) return null;
-      const rows = [...list.querySelectorAll('.pl-task:not(.done):not(.carried)')].filter((r) => r.dataset.task !== id);
+      const rows = [...list.querySelectorAll('.pl-task:not(.done):not(.carried):not(.ghost)')].filter((r) => r.dataset.task !== id);
       let after = null;
       for (const r of rows) { const b = r.getBoundingClientRect(); if (e.clientY > b.top + b.height / 2) after = r; }
       return { list, rows, after };

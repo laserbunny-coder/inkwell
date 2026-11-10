@@ -13,6 +13,12 @@
 // day: a bar in Weeks ahead, not something on one day's plan. A task with a
 // "mark" is a date to hit (hard: it can't move): a diamond in Weeks ahead,
 // and still a task on its day.
+// A task with a "repeat" comes round again: it stays ONE line, and ticking it
+// writes the day into "did" and moves it on to the next day it lands on.
+//   repeat: { every: 'day' | 'weekdays' | 'week' | 'month', n: every n-th,
+//             days: [1..7] (Monday = 1; for 'week'), from: first day }
+//   did: [[day, minutes | null, when ticked (ms)], …], habit: true | false
+// A habit is a repeat that's kept up rather than planned: it has no hours.
 
 import { getEntry, putEntries, tasked, children, isTrashed } from './db.js';
 import { entry, newId, tagsIn } from './model.js';
@@ -72,7 +78,7 @@ export function dayWord(iso, today = isoOf()) {
 // The quiet label after a task's words where it's written.
 export function chipLabel(task, done = false, today = isoOf()) {
   if (done) return task.actual ? `Done · ${span(task.actual)}` : 'Done';
-  return [isStretch(task) ? stretchWord(task) : dayWord(task.day, today), task.est ? span(task.est) : null, task.run ? 'timing' : null].filter(Boolean).join(' · ');
+  return [isStretch(task) ? stretchWord(task) : `${isRepeat(task) ? '↻ ' : ''}${dayWord(dueDay(task, today), today)}`, task.est && !task.habit ? span(task.est) : null, task.run ? 'timing' : null].filter(Boolean).join(' · ');
 }
 
 const blank = () => ({ v: 1, day: null, est: null, done_at: null, actual: null, log: [], run: null, order: 0 });
@@ -88,6 +94,164 @@ export function stretchWord(task) {
   return `${short(task.day)} to ${a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear() ? b.getDate() : short(task.until)}`;
 }
 
+// ---------- repeating ----------
+
+const DAY = 864e5;
+const NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const between = (a, b) => Math.round((dateOf(b) - dateOf(a)) / DAY);
+// Monday = 1 … Sunday = 7.
+export const dow = (iso) => ((dateOf(iso).getDay() + 6) % 7) + 1;
+export const isRepeat = (task) => !!task?.repeat?.every;
+const nth = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th'}`;
+const listed = (words) => (words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`);
+
+// Does this rule land on that day?
+export function lands(rule, iso) {
+  if (!rule?.every || !rule.from || iso < rule.from || (rule.until && iso > rule.until)) return false;
+  const n = Math.max(1, Number(rule.n) || 1);
+  if (rule.every === 'day') return between(rule.from, iso) % n === 0;
+  if (rule.every === 'weekdays') return dow(iso) <= 5;
+  if (rule.every === 'week') {
+    const days = rule.days?.length ? rule.days : [dow(rule.from)];
+    if (!days.includes(dow(iso))) return false;
+    return (between(weekOf(rule.from)[0], weekOf(iso)[0]) / 7) % n === 0;
+  }
+  if (rule.every === 'month') {
+    const [a, d] = [dateOf(rule.from), dateOf(iso)];
+    // The 31st lands on the last day of a shorter month.
+    const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    if (d.getDate() !== Math.min(a.getDate(), last)) return false;
+    return ((d.getFullYear() - a.getFullYear()) * 12 + d.getMonth() - a.getMonth()) % n === 0;
+  }
+  return false;
+}
+// The next day it lands on after that one (null: it has run out).
+export function nextOn(rule, after) {
+  for (let k = 1; k <= 800; k++) {
+    const iso = addDays(after, k);
+    if (rule?.until && iso > rule.until) return null;
+    if (lands(rule, iso)) return iso;
+  }
+  return null;
+}
+const firstOn = (rule, day) => (lands(rule, day) ? day : nextOn(rule, day));
+// "Every day", "Weekdays", "Every Monday", "Monday, Wednesday and Friday",
+// "Every other week on Monday", "Every month on the 14th".
+export function repeatWord(rule) {
+  if (!rule?.every) return '';
+  const n = Math.max(1, Number(rule.n) || 1);
+  if (rule.every === 'day') return n === 1 ? 'Every day' : n === 2 ? 'Every other day' : `Every ${n} days`;
+  if (rule.every === 'weekdays') return 'Weekdays';
+  if (rule.every === 'week') {
+    const days = (rule.days?.length ? [...rule.days].sort((a, b) => a - b) : [dow(rule.from)]).map((d) => NAMES[d - 1]);
+    if (n > 1) return `Every ${n === 2 ? 'other week' : `${n} weeks`} on ${listed(days)}`;
+    return days.length === 1 ? `Every ${days[0]}` : listed(days);
+  }
+  if (rule.every === 'month') return `${n === 1 ? 'Every month' : `Every ${n} months`} on the ${nth(dateOf(rule.from).getDate())}`;
+  return '';
+}
+// "Mon, Wed and Fri" → [1, 3, 5] (null when a word isn't a day).
+export function readDays(text) {
+  const words = String(text || '').toLowerCase().split(/\s*,\s*|\s+and\s+|\s*&\s*|\s+/).filter(Boolean);
+  const out = words.map((w) => NAMES.findIndex((n) => w.length >= 3 && (n.toLowerCase().startsWith(w) || `${n.toLowerCase()}s` === w)) + 1);
+  return words.length && out.every(Boolean) ? [...new Set(out)].sort((a, b) => a - b) : null;
+}
+// "Stretch every day" → the words and a rule. Said at the end of what you
+// type: every day, daily, weekdays, every week, weekly, every other week,
+// every 3 days, every month, monthly, every Mon and Thu.
+const D = '(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*';
+const SAYS = [
+  [/\s+(?:every\s*day|each\s+day|daily)$/i, () => ({ every: 'day' })],
+  [/\s+every\s+other\s+day$/i, () => ({ every: 'day', n: 2 })],
+  [/\s+every\s+(\d+)\s+days$/i, (m) => ({ every: 'day', n: Number(m[1]) })],
+  [/\s+(?:every\s+weekday|(?:on\s+)?weekdays)$/i, () => ({ every: 'weekdays' })],
+  [/\s+(?:every\s+other\s+week|biweekly)$/i, () => ({ every: 'week', n: 2 })],
+  [/\s+every\s+(\d+)\s+weeks$/i, (m) => ({ every: 'week', n: Number(m[1]) })],
+  [/\s+(?:every\s+week|weekly)$/i, () => ({ every: 'week' })],
+  [/\s+(?:every\s+month|monthly)$/i, () => ({ every: 'month' })],
+  [new RegExp(`\\s+every\\s+(${D}(?:(?:\\s*,\\s*|\\s+and\\s+|\\s*&\\s*|\\s+)${D})*)$`, 'i'), (m) => { const days = readDays(m[1]); return days ? { every: 'week', days } : null; }]
+];
+export function parseRepeat(text) {
+  const t = (text || '').trim();
+  for (const [re, make] of SAYS) {
+    const m = t.match(re);
+    if (!m) continue;
+    const rule = make(m);
+    const title = t.slice(0, m.index).trim();
+    if (rule && title && (!rule.n || (rule.n >= 1 && rule.n <= 52))) return { title, rule };
+  }
+  return { title: t, rule: null };
+}
+// What's typed into an "add" box: the words, how long, and whether it repeats.
+export function parseAdd(text) {
+  let { title, est } = parseEst(text);
+  const r = parseRepeat(title);
+  if (r.rule) {
+    title = r.title;
+    if (est == null) { const again = parseEst(title); if (again.est) { title = again.title; est = again.est; } }
+  }
+  return { title, est, repeat: r.rule };
+}
+
+// The day a task is due. One that repeats and was missed moves up to the
+// latest day it has come round since, so a daily one is always today's.
+export function dueDay(task, today = isoOf()) {
+  if (!isRepeat(task) || !task.day || task.day >= today) return task?.day || null;
+  for (let iso = today; iso > task.day; iso = addDays(iso, -1)) if (lands(task.repeat, iso)) return iso;
+  return task.day;
+}
+// The days after its due day that a repeating task comes round on, in a range.
+export function comingOn(task, from, to, today = isoOf()) {
+  if (!isRepeat(task) || !task.day) return [];
+  const out = [];
+  const due = dueDay(task, today);
+  const after = due > today ? due : today;
+  for (let iso = from > after ? from : addDays(after, 1); iso <= to; iso = addDays(iso, 1)) if (lands(task.repeat, iso)) out.push(iso);
+  return out;
+}
+// Looking back at one that repeats: how many in a row, and the last four
+// weeks day by day. → { streak, done, due, weeks: [[{ iso, state }] × 7] × 4 }
+// state: 'done' | 'missed' | 'open' (due and not ticked yet) | 'ahead' | 'off'.
+export function history(task, today = isoOf()) {
+  const did = new Set((task.did || []).map((d) => d[0]));
+  const rule = task.repeat;
+  // Each day it came round, with whether it was ticked before the next one.
+  const start = rule?.from && rule.from > addDays(today, -400) ? rule.from : addDays(today, -400);
+  const came = [];
+  for (let iso = start; iso <= today; iso = addDays(iso, 1)) if (lands(rule, iso)) came.push({ iso, done: false });
+  came.forEach((c, n) => {
+    const until = came[n + 1]?.iso || addDays(today, 1);
+    for (let iso = c.iso; iso < until; iso = addDays(iso, 1)) if (did.has(iso)) { c.done = true; break; }
+  });
+  // The latest one may still be open: that doesn't break a run.
+  const run = came.length && !came.at(-1).done ? came.slice(0, -1) : came;
+  let streak = 0;
+  for (let n = run.length - 1; n >= 0 && run[n].done; n--) streak += 1;
+  const by = new Map(came.map((c) => [c.iso, c]));
+  const first = addDays(weekOf(today)[0], -21);
+  const weeks = [];
+  let [done, due] = [0, 0];
+  for (let w = 0; w < 4; w++) {
+    const row = [];
+    for (let d = 0; d < 7; d++) {
+      const iso = addDays(first, w * 7 + d);
+      const c = by.get(iso);
+      const state = did.has(iso) ? 'done' : iso > today ? (lands(rule, iso) ? 'ahead' : 'off') : c && !c.done ? (c === came.at(-1) ? 'open' : 'missed') : 'off';
+      if (iso <= today && c && !(c === came.at(-1) && !c.done)) { due += 1; if (c.done) done += 1; }
+      row.push({ iso, state });
+    }
+    weeks.push(row);
+  }
+  return { streak, done, due, weeks };
+}
+// A done time of a repeating task, shaped like any finished task.
+export function occItem(i, day) {
+  const d = [...(i.task.did || [])].reverse().find((x) => x[0] === day);
+  if (!d) return null;
+  return { ...i, occ: day, row: { ...i.row, fields: { ...i.row.fields, done: true } }, task: { ...i.task, day, done_at: d[2] || dateOf(day).getTime(), actual: d[1] ?? null, run: null, log: [] } };
+}
+const didOn = (items, day) => items.filter((i) => isRepeat(i.task) && (i.task.did || []).some((d) => d[0] === day && d[2] !== i.task.done_at)).map((i) => occItem(i, day));
+
 // Minutes on the clock for a task: what the timer has recorded, and what it's
 // recording now.
 export function timed(task, now = Date.now()) {
@@ -100,7 +264,7 @@ export function timed(task, now = Date.now()) {
 // Every task with where it lives: { row, task, root (its page, day or piece),
 // world (the project it's in, if any), mine }. Tasks inside something in the
 // Trash are left out.
-export async function loadTasks() {
+export async function loadTasks(today = isoOf()) {
   const rows = (await tasked()).filter((r) => r.kind === 'line' && !r.fields?.mirror);
   const seen = new Map();
   const get = async (id) => {
@@ -121,7 +285,8 @@ export async function loadTasks() {
       at = await get(at.parent_id);
     }
     if (!ok || !root) continue;
-    const task = row.fields.task;
+    // One that repeats shows on the day it's due now (see dueDay).
+    const task = isRepeat(row.fields.task) ? { ...row.fields.task, day: dueDay(row.fields.task, today) } : row.fields.task;
     out.push({ row, task, root, world, mine: !task.owner || task.owner === 'me' });
   }
   return out;
@@ -146,26 +311,30 @@ const byOrder = (a, b) => (a.task.order || 0) - (b.task.order || 0) || (a.row.cr
 const isDone = (i) => !!i.row.fields?.done;
 // A finished task belongs to the day it was finished.
 const doneDay = (i) => (i.task.done_at ? isoOf(i.task.done_at) : i.task.day);
-const est = (i) => i.task.est || 0;
-const real = (i) => i.task.actual ?? i.task.est ?? 0;
+// A habit has no hours.
+const est = (i) => (i.task.habit ? 0 : i.task.est || 0);
+const real = (i) => (i.task.habit ? 0 : i.task.actual ?? i.task.est ?? 0);
+// A repeating task on a later day it comes round on: shown, not yet tickable.
+const ghosts = (items, day, today) => items.filter((i) => !isDone(i) && isRepeat(i.task) && i.task.day && day > i.task.day && day > today && lands(i.task.repeat, day)).map((i) => ({ ...i, ghost: day }));
 
 // One day's plan: what's still open (things carried over from earlier days
 // first, on today's plan only), then what's done.
 export function dayPlan(items, day, today = isoOf()) {
   const mine = items.filter((i) => i.mine && !isStretch(i.task));
-  const open = mine.filter((i) => !isDone(i) && i.task.day === day).sort(byOrder);
+  const open = [...mine.filter((i) => !isDone(i) && i.task.day === day), ...ghosts(mine, day, today)].sort(byOrder);
   const carried = day === today ? mine.filter((i) => !isDone(i) && i.task.day && i.task.day < today).sort((a, b) => (a.task.day < b.task.day ? -1 : a.task.day > b.task.day ? 1 : byOrder(a, b))) : [];
-  const done = mine.filter((i) => isDone(i) && doneDay(i) === day).sort((a, b) => (a.task.done_at || 0) - (b.task.done_at || 0));
+  const done = [...mine.filter((i) => isDone(i) && doneDay(i) === day), ...didOn(mine, day)].sort((a, b) => (a.task.done_at || 0) - (b.task.done_at || 0));
   const todo = [...carried, ...open];
-  return { open, carried, done, todo, next: todo[0] || null, left: todo.reduce((a, i) => a + est(i), 0), spent: done.reduce((a, i) => a + real(i), 0) };
+  return { open, carried, done, todo, next: todo.find((i) => !i.ghost) || null, left: todo.reduce((a, i) => a + est(i), 0), spent: done.reduce((a, i) => a + real(i), 0) };
 }
 
 // A week: seven days, and the tray of open tasks not on a day yet.
 export function weekPlan(items, anyDay, today = isoOf()) {
   const mine = items.filter((i) => i.mine && !isStretch(i.task));
   const days = weekOf(anyDay).map((iso) => {
-    const open = mine.filter((i) => !isDone(i) && i.task.day === iso).sort(byOrder);
-    const done = mine.filter((i) => isDone(i) && doneDay(i) === iso).sort((a, b) => (a.task.done_at || 0) - (b.task.done_at || 0));
+    // A habit shows on the day it's due, not all along the week.
+    const open = [...mine.filter((i) => !isDone(i) && i.task.day === iso), ...ghosts(mine, iso, today).filter((i) => !i.task.habit)].sort(byOrder);
+    const done = [...mine.filter((i) => isDone(i) && doneDay(i) === iso), ...didOn(mine, iso)].sort((a, b) => (a.task.done_at || 0) - (b.task.done_at || 0));
     return { iso, today: iso === today, open, done, min: open.reduce((a, i) => a + est(i), 0) + done.reduce((a, i) => a + real(i), 0) };
   });
   const tray = mine.filter((i) => !isDone(i) && !i.task.day).sort(byOrder);
@@ -198,6 +367,12 @@ export function aheadPlan(items, { today = isoOf(), weeks = 6, free = FREE_HOURS
     if (!day || day < first || day > end) continue;
     cols[colOf(day) - 1].min += isDone(i) ? real(i) : est(i);
   }
+  // One that repeats: the times it's been done, and the days it comes round.
+  for (const i of items) {
+    if (!i.mine || !isRepeat(i.task) || i.task.habit) continue;
+    for (const d of i.task.did || []) if (d[0] >= first && d[0] <= end && d[2] !== i.task.done_at) cols[colOf(d[0]) - 1].min += d[1] ?? (i.task.est || 0);
+    if (!isDone(i)) for (const iso of comingOn(i.task, first, end, today)) cols[colOf(iso) - 1].min += est(i);
+  }
   for (const c of cols) c.over = c.min > free * 60;
   const out = lanes.map((lane) => {
     const mine = items.filter((i) => i.world?.id === lane.id && !isDone(i));
@@ -219,7 +394,10 @@ export function aheadPlan(items, { today = isoOf(), weeks = 6, free = FREE_HOURS
 // Looking back: what was ticked off in the last days, planned against real.
 export function pace(items, now = Date.now(), days = 7) {
   const since = now - days * 864e5;
-  const done = items.filter((i) => i.mine && isDone(i) && (i.task.done_at || 0) >= since).sort((a, b) => b.task.done_at - a.task.done_at);
+  // Each time a repeating task was done counts on its own; habits have no hours.
+  const again = items.filter((i) => i.mine && isRepeat(i.task) && !i.task.habit)
+    .flatMap((i) => (i.task.did || []).filter((d) => (d[2] || 0) >= since && d[2] !== i.task.done_at).map((d) => ({ ...i, task: { ...i.task, done_at: d[2], actual: d[1] ?? null, log: [], run: null } })));
+  const done = [...items.filter((i) => i.mine && !i.task.habit && isDone(i) && (i.task.done_at || 0) >= since), ...again].sort((a, b) => b.task.done_at - a.task.done_at);
   const rows = done.map((i) => ({ id: i.row.id, title: i.row.text || 'Untitled', est: i.task.est, real: i.task.actual ?? (timed(i.task) || null), item: i }));
   const both = rows.filter((r) => r.est && r.real);
   const sum = (list, k) => list.reduce((a, r) => a + (r[k] || 0), 0);
@@ -260,6 +438,8 @@ export const moveTask = (id, day, order) => change(id, (r) => {
   const t = taskOf(r);
   const patch = { day, ...(order ? { order } : {}) };
   if (t && isStretch(t)) patch.until = day ? addDays(day, Math.round((dateOf(t.until) - dateOf(t.day)) / 864e5)) : null;
+  // Only this time moves; off its day altogether, it no longer repeats.
+  if (t && isRepeat(t) && !day) { patch.repeat = null; patch.habit = false; }
   withTask(r, patch);
   if (r.fields.box !== true) r.fields.box = true;
 });
@@ -268,16 +448,95 @@ export const unTask = (id) => change(id, (r) => { if (!r.fields.task) return fal
 
 const stop = (task, now) => { if (task.run) { task.log = [...(task.log || []), [task.run, now]]; task.run = null; } };
 
-// Done (or not after all). A running timer stops with the tick.
-export const tickTask = (id, done, now = Date.now()) => change(id, (r) => {
+// A repeating task that's been ticked: the day goes into its history and the
+// line opens again on the next day it lands on. With none left it stays done.
+function roll(r, now) {
+  const t = r.fields.task;
+  const at = t.done_at || now;
+  const day = isoOf(at);
+  const min = t.actual ?? (timed({ log: t.log }) || null);
+  t.did = [...(t.did || []), [day, min, at]].slice(-400);
+  const next = nextOn(t.repeat, t.day && t.day > day ? t.day : day);
+  if (!next) return;
+  Object.assign(t, { day: next, done_at: null, actual: null, log: [], run: null });
+  r.fields.done = false;
+}
+
+// Done (or not after all). A running timer stops with the tick. occ: the day
+// of a repeating task's done time to take back.
+export const tickTask = (id, done, now = Date.now(), occ = null) => change(id, (r) => {
   withTask(r, {});
   const t = r.fields.task;
   stop(t, now);
+  if (isRepeat(t) && !done) {
+    // Take back the last time it was done (that day's, when one is named).
+    const did = [...(t.did || [])];
+    const n = occ ? did.map((d) => d[0]).lastIndexOf(occ) : did.length - 1;
+    if (n < 0) return false;
+    const [day] = did.splice(n, 1)[0];
+    t.did = did;
+    if (r.fields.done) { r.fields.done = false; t.done_at = null; t.actual = null; }
+    else if (!t.day || day < t.day) t.day = lands(t.repeat, day) ? day : dueDay({ ...t, day }, isoOf(now));
+    return undefined;
+  }
   r.fields.done = !!done;
   t.done_at = done ? now : null;
   if (!done) t.actual = null;
+  if (done && isRepeat(t)) roll(r, now);
+  return undefined;
 }, now);
-export const tookTask = (id, minutes) => change(id, (r) => { withTask(r, { actual: minutes > 0 ? Math.round(minutes) : null }); });
+// How long it took. For a repeating task: that time it was done (the last).
+export const tookTask = (id, minutes, occ = null) => change(id, (r) => {
+  const m = minutes > 0 ? Math.round(minutes) : null;
+  const t = taskOf(r);
+  if (t && isRepeat(t) && (t.did || []).length) {
+    const did = t.did.map((d) => [...d]);
+    const n = occ ? did.map((d) => d[0]).lastIndexOf(occ) : did.length - 1;
+    if (n < 0) return false;
+    did[n][1] = m;
+    withTask(r, { did, ...(r.fields.done ? { actual: m } : {}) });
+    return undefined;
+  }
+  withTask(r, { actual: m });
+  return undefined;
+});
+// Ticked somewhere that doesn't know about repeating (in its words on a page,
+// by Claude, on a device with an older copy): move those on. → rows written.
+export async function rollTicked(now = Date.now()) {
+  const out = [];
+  for (const row of await tasked()) {
+    const t = taskOf(row);
+    if (row.kind !== 'line' || !row.fields?.done || !isRepeat(t)) continue;
+    const at = t.done_at || now;
+    if ((t.did || []).some((d) => d[2] === at) || !nextOn(t.repeat, t.day && t.day > isoOf(at) ? t.day : isoOf(at))) continue;
+    out.push(await change(row.id, (r) => { withTask(r, { done_at: at }); roll(r, now); }, now));
+  }
+  return out.filter(Boolean);
+}
+// Makes a task repeat (rule without "from"), or stop (null). It starts on the
+// first day the rule lands on, from the day it's on.
+export const setRepeat = (id, rule, today = isoOf()) => change(id, (r) => {
+  withTask(r, {});
+  const t = r.fields.task;
+  if (!rule) { t.repeat = null; t.habit = false; }
+  else {
+    const base = t.day && t.day > today ? t.day : today;
+    const full = { n: 1, ...rule, from: base };
+    full.from = firstOn(full, base) || base;
+    Object.assign(t, { repeat: full, day: full.from, until: null, mark: null });
+  }
+  if (r.fields.box !== true) r.fields.box = true;
+});
+// Not this time: on to the next day it lands on, with nothing written down.
+export const skipTask = (id, today = isoOf()) => change(id, (r) => {
+  const t = taskOf(r);
+  if (!t || !isRepeat(t)) return false;
+  const due = dueDay(t, today);
+  const next = nextOn(t.repeat, due && due > today ? due : today);
+  if (!next) return false;
+  withTask(r, { day: next });
+  return undefined;
+});
 
 // One timer at a time: starting one stops whichever was going.
 export async function startTimer(id, now = Date.now()) {
@@ -295,8 +554,15 @@ export const stopTimer = (id, now = Date.now()) => change(id, (r) => { withTask(
 // A step added on a project's page lives on that project's Steps page (home).
 export const stepsPage = (worldId) => `steps-${worldId}`;
 export const stepsHome = (world) => ({ id: stepsPage(world.id), title: 'Steps', parent_id: world.id });
-export async function addTask({ text, day = null, est = null, order = 0, home = null, until = null, mark = null }) {
+export async function addTask({ text, day = null, est = null, order = 0, home = null, until = null, mark = null, repeat = null }) {
   const now = Date.now();
+  if (repeat) {
+    const base = day && day > isoOf(now) ? day : isoOf(now);
+    repeat = { n: 1, ...repeat, from: base };
+    repeat.from = firstOn(repeat, base) || base;
+    day = repeat.from;
+    until = mark = null;
+  }
   const rows = [];
   const at = home || { id: TASKS_PAGE, title: 'Tasks', parent_id: null };
   let page = await getEntry(at.id);
@@ -309,7 +575,7 @@ export async function addTask({ text, day = null, est = null, order = 0, home = 
   const last = (await children(at.id)).filter((r) => r.kind === 'line').at(-1);
   const line = entry('line', {
     id: newId('li'), parent_id: at.id, sort: (last?.sort || 0) + GAP, text, content: text ? [{ type: 'text', text }] : null, tags: tagsIn(text), links: [],
-    fields: { done: false, gather: null, gathered: null, mirror: null, box: true, task: { ...blank(), day, est, order, ...(until ? { until } : {}), ...(mark ? { mark } : {}) } }
+    fields: { done: false, gather: null, gathered: null, mirror: null, box: true, task: { ...blank(), day, est, order, ...(until ? { until } : {}), ...(mark ? { mark } : {}), ...(repeat ? { repeat } : {}) } }
   });
   rows.push(line);
   await putEntries(rows);
