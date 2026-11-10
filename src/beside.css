@@ -1,0 +1,45 @@
+/* Beside: one pane next to the page. Its head has a small switch (Plan,
+   Notes); the top bar's Beside button puts it away and brings it back. */
+#beside-toggle[aria-pressed="true"] { color: var(--accent); }
+html.hide-panes #beside-toggle, html.hide-panes label:has(#many-panes) { display: none; }
+@media (max-width: 899px), (hover: none) { #beside-toggle { display: none; } }
+
+.pane-tabs { flex: none; display: flex; gap: 2px; margin-left: -8px; }
+.pane-tab { border: 0; background: none; color: var(--faint); font: 12px var(--ui); padding: 4px 9px; border-radius: 99px; cursor: pointer; }
+.pane-tab:hover, .pane-tab:focus-visible { color: var(--ink); }
+.pane-tab[aria-pressed="true"] { background: var(--raise, var(--tint)); color: var(--ink); }
+/* Plan and Notes say what they are in the switch; and they stay beside. */
+.pane.stays .pane-kind, .pane.stays .pane-swap { display: none; }
+.pane-tabs + .pane-kind { margin-left: 4px; }
+html.panes-sheet .ps-head .pane-tabs { margin: 0 10px 0 -8px; }
+html.panes-sheet .ps-head .pane-tab { font-size: 14px; padding: 7px 11px; }
+
+/* Inside the pane: the plan keeps its own Day / Week / Pace, and sits close. */
+html.in-pane .pl-switch { display: flex; }
+html.in-pane .plan-home, html.in-pane .notes-home { padding: 22px 22px 20vh; }
+html.in-pane .pl-sheet[data-tab="day"] { max-width: 560px; }
+
+/* Notes beside: plain cards on hairlines, in the order of the text. */
+:root[data-view="sidenotes"] .notes-home { display: flex; }
+.notes-home { display: none; justify-content: center; padding: 72px 32px 20vh; }
+.sn-sheet { max-width: 560px; width: 100%; font-family: var(--ui); color: var(--ink); }
+.sn-head { margin-bottom: 14px; }
+.sn-eyebrow { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+.sn-head h1 { margin: 4px 0 0; font-family: var(--title); font-weight: var(--title-w); letter-spacing: var(--title-ls); font-size: 26px; line-height: 1.15; text-wrap: balance; }
+.sn-list { display: flex; flex-direction: column; }
+.sn-empty { color: var(--muted); font-size: 14px; line-height: 1.5; margin: 6px 0; }
+.sn-card { display: flex; flex-direction: column; gap: 4px; text-align: left; border: 0; border-top: 1px solid var(--line); background: none; color: inherit; font: inherit; padding: 12px 2px; cursor: pointer; min-width: 0; }
+.sn-card:hover .sn-text, .sn-card:focus-visible .sn-text { color: var(--accent); }
+.sn-kind { display: flex; align-items: center; gap: 7px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.sn-kind::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--dot, var(--faint)); flex: none; }
+.sn-quote { font-size: 13px; color: var(--muted); font-style: italic; overflow-wrap: anywhere; }
+.sn-text { font-size: 14.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sn-on { font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* With little room left, the main view's top bar keeps its buttons and lets
+   the word count go; the tabs in the middle are cut short rather than run
+   into them. */
+html.beside-tight .tb-r #words { display: none; }
+html.beside-tight.has-rail .topbar { grid-template-columns: minmax(0, 1fr) max-content; }
+html.beside-tight .tb-m { justify-self: stretch; overflow: hidden; mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
+html.beside-tight .tb-l { display: none; }

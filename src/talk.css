@@ -1,0 +1,44 @@
+/* Talk it through, in the Beside pane: what you said, what Claude said, and
+   moves to tick. Plain text; the only button with weight is Apply. */
+:root[data-view="talk"] .talk-home { display: flex; }
+.talk-home { display: none; justify-content: center; padding: 72px 32px 20vh; }
+html.in-pane .talk-home { padding: 22px 22px 0; }
+.tt-sheet { display: flex; flex-direction: column; min-height: 100%; }
+.tt-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.tt-over { margin-bottom: 4px; }
+.tt-thread { display: flex; flex-direction: column; gap: 14px; margin-top: 6px; }
+.tt-hint { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; max-width: 46ch; }
+.tt-starts { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.tt-start { border: 0; background: none; padding: 5px 8px; margin: 0 -8px; border-radius: var(--r, 6px); color: var(--soft); font: 15.5px/1.4 var(--prose); text-align: left; cursor: pointer; }
+.tt-start:hover, .tt-start:focus-visible { background: var(--raise); color: var(--ink); }
+.tt-me { margin: 0; padding-left: 14px; border-left: 2px solid var(--line2); color: var(--soft); font: 15.5px/1.5 var(--prose); white-space: pre-wrap; overflow-wrap: anywhere; }
+.tt-cl { margin: 0; color: var(--ink); font: 16px/1.55 var(--prose); white-space: pre-wrap; overflow-wrap: anywhere; text-wrap: pretty; }
+.tt-wait, .tt-fail { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+:root:not([data-motion="off"]) .tt-wait { animation: dk-pulse 2.4s infinite; }
+
+.tt-moves { display: flex; flex-direction: column; margin-top: -4px; }
+.tt-move { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; align-items: start; padding: 7px 8px; margin: 0 -8px; border-radius: var(--r, 6px); cursor: pointer; }
+.tt-move:hover { background: var(--raise); }
+.tt-move input { appearance: none; width: 16px; height: 16px; margin: 3px 0 0; border: 1.5px solid var(--muted); border-radius: 4px; background: transparent; display: grid; place-content: center; cursor: pointer; }
+.tt-move input::after { content: ''; width: 8px; height: 4px; border-left: 2px solid var(--bg); border-bottom: 2px solid var(--bg); transform: rotate(-45deg) translateY(-1px); opacity: 0; }
+.tt-move input:checked { background: var(--accent); border-color: var(--accent); }
+.tt-move input:checked::after { opacity: 1; }
+.tt-move input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tt-move input:disabled { cursor: default; }
+.tt-move-t { font: 15px/1.4 var(--prose); color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+.tt-move-t small { display: block; margin-top: 2px; font: 12.5px/1.4 var(--ui); color: var(--muted); }
+.tt-move:has(input:not(:checked)) .tt-move-t { color: var(--muted); }
+.tt-move.applied { cursor: default; }
+.tt-move.applied:hover { background: none; }
+.tt-apply { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; }
+.tt-go { padding: 6px 14px; font-size: 13px; }
+.tt-go:disabled { opacity: .4; cursor: default; }
+.tt-note { font-size: 12px; color: var(--muted); }
+
+.tt-ask { position: sticky; bottom: 0; margin-top: auto; padding: 18px 0 14px; background: linear-gradient(to bottom, transparent, var(--bg) 14px); }
+.tt-ask textarea { display: block; width: 100%; resize: none; border: 0; border-top: 1px solid var(--line2); background: transparent; color: var(--ink); font: 16px/1.5 var(--prose); padding: 12px 2px 4px; outline: none; max-height: 160px; }
+.tt-ask textarea::placeholder { color: var(--faint); }
+.tt-ask textarea:focus { border-top-color: var(--accent); }
+.dk-talk { border: 0; background: none; padding: 2px 4px; margin: -2px 0 -2px 10px; font: inherit; font-size: 12.5px; color: var(--muted); cursor: pointer; border-radius: 4px; }
+.dk-talk:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+html.hide-panes .dk-talk { display: none; }

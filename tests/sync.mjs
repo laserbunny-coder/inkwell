@@ -182,6 +182,40 @@ try {
     assert.match(await laptop.locator('#outline-editor .ProseMirror').innerText(), /Idea from the laptop[\s\S]*Phone line|Phone line[\s\S]*Idea from the laptop/);
   });
 
+  await check('a task added on one device is on the other’s plan, and ticks there come back', async () => {
+    const input = laptop.locator('#plan input[data-add]');
+    await input.fill('Call Dana 30m');
+    await input.press('Enter');
+    await sleep(500);
+    // And a line made a task where it's written.
+    await laptop.evaluate(() => window.__outline.commands.focus('end'));
+    await laptop.keyboard.press('Control+Shift+Enter');
+    await sleep(700);
+    assert.equal(await laptop.locator('#outline-editor .task-chip').count(), 1);
+    await syncNow(laptop);
+    await syncNow(phone);
+    await sleep(800);
+    assert.ok((await phone.locator('#plan .pl-task .pl-words').allInnerTexts()).includes('Call Dana'));
+    assert.equal(await phone.locator('#plan .pl-task').count(), 2);
+    assert.equal(await phone.locator('#outline-editor .task-chip').innerText(), 'Today');
+    await phone.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-check').click();
+    await sleep(400);
+    await phone.locator('#plan .pl-took button', { hasText: 'as planned' }).click();
+    await sleep(400);
+    await phone.locator('#outline-editor li.is-task .line-box').click();
+    await sleep(900);
+    await syncNow(phone);
+    await syncNow(laptop);
+    await sleep(800);
+    assert.equal(await laptop.locator('#plan .pl-task.done').count(), 2);
+    assert.equal(await laptop.locator('#plan .pl-task.done', { hasText: 'Call Dana' }).locator('.pl-est').innerText(), '30 min');
+    assert.equal(await laptop.locator('#outline-editor li.is-task .line-box').getAttribute('aria-checked'), 'true');
+    assert.equal(await laptop.locator('#outline-editor .task-chip').innerText(), 'Done');
+    const t = [...table.values()].find((r) => r.text === 'Call Dana');
+    assert.equal(t.fields.task.actual, 30);
+    assert.ok(t.fields.task.done_at > 0);
+  });
+
   // Gathering a #tag onto a page, with mirrors edited on either device.
   const mirrorTexts = (p) => p.evaluate(() => [...document.querySelectorAll('#outline-editor li.mirror > p')].map((x) => x.textContent));
   const outlineHas = (p, re) => p.waitForFunction((src) => new RegExp(src).test(document.querySelector('#outline-editor .ProseMirror').innerText), re.source, { timeout: 5000 });

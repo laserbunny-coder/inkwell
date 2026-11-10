@@ -79,7 +79,7 @@ export function setMotion(m, { keep = true } = {}) {
 const moves = () => currentMotion() === 'full';
 
 // The order rooms sit in, so going "forward" slides one way and back the other.
-const TIME = ['notebook'];
+const TIME = ['notebook', 'plan'];
 const LIBRARY = ['library', 'drawer', 'tags'];
 const PAGES = ['overview', 'gather', 'shape', 'write', 'revise', 'make', 'deliver', 'notes', 'meetings'];
 const roomOf = (v) => (TIME.includes(v) ? 'today' : v === 'desk' ? 'desk' : LIBRARY.includes(v) ? 'library' : 'project');
@@ -147,6 +147,26 @@ export class Frame {
     this.history.title = 'History: every Claude thread, newest first';
     this.deskSwitch.append(this.dkPill, this.onStage, this.history);
     this.deskSwitch.hidden = true;
+    // Today from four distances: the day, the week, the weeks ahead, and looking back.
+    this.todaySwitch = make('div', 'place-switch today-switch');
+    this.todaySwitch.setAttribute('role', 'group');
+    this.todaySwitch.setAttribute('aria-label', 'Views of Today');
+    this.tdPill = make('span', 'switch-pill');
+    this.tdPill.setAttribute('aria-hidden', 'true');
+    this.dayBtn = make('button', 'tb-btn', 'Day');
+    this.dayBtn.dataset.cmd = 'today';
+    this.dayBtn.title = 'Day: today’s plan on top of today’s page';
+    this.weekBtn = make('button', 'tb-btn', 'Week');
+    this.weekBtn.dataset.cmd = 'week';
+    this.weekBtn.title = 'Week: seven days, and what isn’t on a day yet';
+    this.aheadBtn = make('button', 'tb-btn', 'Weeks ahead');
+    this.aheadBtn.dataset.cmd = 'ahead';
+    this.aheadBtn.title = 'Weeks ahead: six weeks, a lane for each project';
+    this.paceBtn = make('button', 'tb-btn', 'Pace');
+    this.paceBtn.dataset.cmd = 'pace';
+    this.paceBtn.title = 'Pace: what you planned against what it really took';
+    this.todaySwitch.append(this.tdPill, this.dayBtn, this.weekBtn, this.aheadBtn, this.paceBtn);
+    this.todaySwitch.hidden = true;
     // Page tabs are redrawn each time, so their highlight lives beside them and slides.
     this.tabsPill = make('span', 'tabs-pill');
     this.tabsPill.setAttribute('aria-hidden', 'true');
@@ -182,11 +202,11 @@ export class Frame {
       this.switch.append(this.swPill, this.shelves);
       this.move($('#drawer-toggle'), this.switch);
       this.move($('#tags-toggle'), this.switch);
-      this.mid.append(this.tabsPill, this.switch, this.deskSwitch);
+      this.mid.append(this.tabsPill, this.switch, this.deskSwitch, this.todaySwitch);
       this.move($('#page-tabs'), this.mid);
       this.move($('#tb-back'), this.left);
       this.move($('#crumb'), this.left);
-      for (const id of ['chapter-links-chip', 'words', 'status', 'versions', 'sync', 'notes-toggle', 'focus-toggle']) this.move(document.getElementById(id), this.right);
+      for (const id of ['chapter-links-chip', 'words', 'status', 'versions', 'sync', 'notes-toggle', 'focus-toggle', 'beside-toggle']) this.move(document.getElementById(id), this.right);
       bar.append(this.left, this.mid, this.right);
       document.body.prepend(this.rail);
       root.classList.add('has-rail');
@@ -212,7 +232,10 @@ export class Frame {
     const a = roomOf(from);
     const b = roomOf(to);
     let turn = 'rise';
-    if (a === b && a === 'desk') turn = tab === 'history' ? 'fwd' : this.lastTab === 'history' ? 'back' : 'rise';
+    // Day, Week, Weeks ahead and Pace are one room from further and further back.
+    const far = (v, t) => (v === 'plan' ? (t === 'pace' ? 3 : t === 'ahead' ? 2 : 1) : 0);
+    if (a === b && a === 'today' && far(from, this.lastTab) !== far(to, tab)) turn = far(to, tab) > far(from, this.lastTab) ? 'out' : 'in';
+    else if (a === b && a === 'desk') turn = tab === 'history' ? 'fwd' : this.lastTab === 'history' ? 'back' : 'rise';
     else if (a === b && a === 'library') turn = LIBRARY.indexOf(to) > LIBRARY.indexOf(from) ? 'fwd' : LIBRARY.indexOf(to) < LIBRARY.indexOf(from) ? 'back' : 'rise';
     else if (a === b && a === 'project' && page && this.lastPage && page !== this.lastPage) turn = PAGES.indexOf(page) > PAGES.indexOf(this.lastPage) ? 'fwd' : 'back';
     else if (a !== b && b === 'project') turn = 'in';
@@ -240,6 +263,12 @@ export class Frame {
     if (v === 'desk') {
       const at = this.last?.tab === 'history' ? this.history : this.onStage;
       for (const b of [this.onStage, this.history]) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
+    }
+    const day = v === 'plan' || (v === 'notebook' && !!this.hooks.onDay?.());
+    this.todaySwitch.hidden = !day;
+    if (day) {
+      const at = v === 'plan' ? (this.last?.tab === 'pace' ? this.paceBtn : this.last?.tab === 'ahead' ? this.aheadBtn : this.weekBtn) : this.dayBtn;
+      for (const b of [this.dayBtn, this.weekBtn, this.aheadBtn, this.paceBtn]) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
     }
     // The Library is one room: its word in the rail stays lit on the Drawer and Tags too.
     const libBtn = document.getElementById('library-toggle');
@@ -304,6 +333,7 @@ export class Frame {
       }
       put(this.swPill, this.switch, this.switch.querySelector('[aria-current="page"]'));
       put(this.dkPill, this.deskSwitch, this.deskSwitch.querySelector('[aria-current="page"]'));
+      put(this.tdPill, this.todaySwitch, this.todaySwitch.querySelector('[aria-current="page"]'));
       const tabs = document.getElementById('page-tabs');
       put(this.tabsPill, this.mid, tabs && !tabs.hidden ? tabs.querySelector('.pt-tab.on') : null);
     });

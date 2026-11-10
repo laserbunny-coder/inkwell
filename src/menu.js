@@ -14,7 +14,7 @@ const make = (tag, cls, text) => {
 let openMenu = null;
 export function closeMenu() { openMenu?.remove(); openMenu = null; }
 
-// items: [{ label, run, danger, sub: [...items] }] or 'sep'.
+// items: [{ label, run, danger, sub: [...items] }], { note }, { el } or 'sep'.
 export function popMenu(anchor, items, at) {
   closeMenu();
   const menu = make('div', 'pop-menu');
@@ -29,6 +29,8 @@ export function popMenu(anchor, items, at) {
     for (const it of list) {
       if (it === 'sep') { menu.append(make('div', 'pop-sep')); continue; }
       if (it.note) { menu.append(make('div', 'pop-note' + (it.plain ? ' plain' : ''), it.note)); continue; }
+      // Something drawn by whoever opened the menu (a habit's last weeks).
+      if (it.el) { menu.append(it.el); continue; }
       const b = make('button', 'pop-item' + (it.danger ? ' danger' : '') + (it.current ? ' current' : ''), it.label);
       b.setAttribute('role', 'menuitem');
       if (it.sub) b.append(make('span', 'pop-more', '›'));
@@ -137,6 +139,8 @@ export function askText({ title, value = '', ok = 'Save', placeholder = '', body
     box.setAttribute('aria-modal', 'true');
     const input = make('input', 'ask-input');
     input.type = type;
+    // Half hours are numbers too.
+    if (type === 'number') input.step = 'any';
     input.value = value;
     input.placeholder = placeholder;
     input.setAttribute('aria-label', title);

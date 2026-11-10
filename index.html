@@ -77,6 +77,7 @@
         <span class="tb-group tb-view">
           <button type="button" class="tb-btn" data-cmd="notes" id="notes-toggle" title="Notes beside the text (⌘2)">Notes</button>
           <button type="button" class="tb-btn" data-cmd="focus" id="focus-toggle" title="Focus: just the text (⌘.)">Focus</button>
+          <button type="button" class="tb-btn" data-cmd="beside" id="beside-toggle" aria-pressed="false" title="Beside: today’s plan, notes or another page next to this one (⌘\)">Beside</button>
           <button type="button" class="tb-btn" data-cmd="page" aria-label="Page width and text size" title="Page width, text size, what to show">Aa</button>
         </span>
         <button type="button" class="pill" data-cmd="palette" id="palette-toggle" title="Everything you can do (⌘K). Shortcuts: ⌘/">⌘K</button>
@@ -139,6 +140,18 @@
     <div class="lib-sheet dk-sheet" id="desk-sheet"></div>
   </main>
 
+  <main class="plan-home" aria-label="Week, weeks ahead and pace">
+    <div class="lib-sheet pl-sheet" id="plan-sheet"></div>
+  </main>
+
+  <main class="notes-home" aria-label="Notes beside">
+    <div class="lib-sheet sn-sheet" id="side-notes"></div>
+  </main>
+
+  <main class="talk-home" aria-label="Talk it through">
+    <div class="lib-sheet sn-sheet tt-sheet" id="talk-sheet"></div>
+  </main>
+
   <main class="project-home" aria-label="Book">
     <div class="lib-sheet">
       <div class="ph-head">
@@ -167,39 +180,49 @@
   </main>
 
   <main class="world-home" aria-label="World">
-    <div class="lib-sheet">
-      <div class="ph-head">
+    <div class="lib-sheet wp-sheet">
+      <div class="wp-eyebrow">
+        <i class="dk-dot" id="wh-dot"></i>
+        <label class="wp-area"><span class="sr-only">Area</span><select id="wh-area" title="The area this is kept in"></select></label>
+        <span id="wh-kind"></span>
+        <button type="button" id="wh-seat" class="wp-seat"></button>
+      </div>
+      <div class="ph-head wp-head">
         <h1 id="wh-title" spellcheck="false"></h1>
         <button type="button" class="pill" id="wh-continue" hidden>Continue writing</button>
         <span id="wh-more"></span>
       </div>
-      <div class="ph-meta"><span id="wh-kind"></span><span id="wh-stats"></span> · <label>Area <select id="wh-area"></select></label></div>
       <p id="wh-logline" class="wh-logline" spellcheck="true"></p>
+      <dl class="wp-two" id="wh-facts"></dl>
+      <section class="wp-part" id="wh-calls" hidden></section>
       <div id="wh-stagebar" class="wh-stagebar" hidden></div>
-      <div id="wh-status" hidden>
-        <div class="ph-row"><span class="panel-label">Where everything is</span><button type="button" class="ghost-btn" id="wh-workflow">Workflow…</button></div>
-        <div id="wh-board" class="stage-board"></div>
+      <section class="wp-part" id="wh-pieces-box">
+        <h2 class="wp-sec">Pieces <span class="wp-more" id="wh-stats"></span>
+          <span class="wp-r">
+            <button type="button" class="wp-link" id="wh-as" hidden>As a list</button>
+            <button type="button" class="wp-link" id="wh-workflow">Workflow</button>
+            <button type="button" class="wp-link" id="wh-new-piece">+ Piece</button>
+          </span>
+        </h2>
+        <div id="wh-status" hidden><div id="wh-board" class="stage-board"></div></div>
+        <ul id="wh-pieces" class="loose-list tree-list"></ul>
+        <div class="hint" id="wh-pieces-empty">Anything you make in this world, at any size: a gag, a short, an episode, a novel, a film.</div>
+      </section>
+      <section class="wp-part" id="wh-steps"></section>
+      <div class="wp-daybook" id="wh-task-box" hidden>
+        <input type="text" id="wh-task" class="st-input wh-task" placeholder="Call the contractor about the cabinets" aria-label="A task for Daybook">
+        <div class="hint">Enter sends this one to your Daybook inbox, with a link back here.</div>
       </div>
-      <div class="ph-grid">
-        <section>
-          <div id="wh-pieces-box">
-            <div class="ph-row"><span class="panel-label">Pieces</span><button type="button" class="ghost-btn" id="wh-new-piece">+ Piece</button></div>
-            <ul id="wh-pieces" class="loose-list tree-list"></ul>
-            <div class="hint" id="wh-pieces-empty">Anything you make in this world, at any size: a gag, a short, an episode, a novel, a film.</div>
-          </div>
-          <div id="wh-task-box" hidden>
-            <div class="panel-label">A task for Daybook</div>
-            <input type="text" id="wh-task" class="st-input wh-task" placeholder="Call the contractor about the cabinets" aria-label="A task for Daybook">
-            <div class="hint">Goes to your Daybook inbox, with a link back here.</div>
-          </div>
-        </section>
-        <section>
-          <div class="panel-label">Next</div>
-          <ul id="wh-next" class="ref-list wh-next"></ul>
-          <div class="panel-label ph-gap">Recently</div>
-          <ul id="wh-recent" class="loose-list wh-recent"></ul>
-        </section>
-      </div>
+      <section class="wp-part" id="wh-next-box" hidden>
+        <h2 class="wp-sec">Next <span class="wp-more">waiting in its pages</span></h2>
+        <ul id="wh-next" class="ref-list wh-next"></ul>
+      </section>
+      <section class="wp-part" id="wh-crew" hidden></section>
+      <section class="wp-part" id="wh-turns" hidden></section>
+      <section class="wp-part" id="wh-recent-box" hidden>
+        <h2 class="wp-sec">Recently <span class="wp-more">last written in</span></h2>
+        <ul id="wh-recent" class="loose-list wh-recent"></ul>
+      </section>
     </div>
   </main>
 
@@ -233,6 +256,7 @@
       </div>
       <button type="button" class="links-chip" id="nb-links" hidden></button>
       <nav id="nb-zoom" class="nb-zoom" aria-label="Zoomed in from" hidden></nav>
+      <section class="plan" id="plan" aria-label="Plan" hidden></section>
       <div class="evening-card" role="note" hidden>
         <span class="ec-text">It’s after 9. Look back over today?</span>
         <span class="ec-do">
@@ -241,6 +265,7 @@
         </span>
       </div>
       <article id="outline-editor" aria-label="Lines"></article>
+      <div class="loose-foot" id="loose-foot" hidden></div>
       <button type="button" class="tidy-nudge" hidden></button>
       <section class="day-review" aria-label="Day review" hidden>
         <button type="button" class="dr-start" hidden>Review the day</button>
@@ -367,12 +392,27 @@
     <label class="switch"><input type="checkbox" data-show="nudge"> After 9 pm, a reminder on today to review it</label>
     <label class="switch"><input type="checkbox" data-show="marks"> Link and tag ideas in the day review</label>
     <label class="switch"><input type="checkbox" data-show="tidy"> Tidy pass reminder on Today</label>
+    <label class="switch"><input type="checkbox" data-show="plan"> The plan on top of a day’s page</label>
+    <label class="switch"><input type="checkbox" data-show="took"> “How long did it take?” when you tick a task</label>
+    <label class="switch"><input type="checkbox" data-show="taskchips"> A task’s day and length after its words</label>
+    <label class="switch"><input type="checkbox" data-show="loose"> A ring on lines you haven’t filed, and their count under the day</label>
     <label class="switch"><input type="checkbox" data-show="deskread"> Claude’s one-line read on the Desk</label>
     <label class="switch"><input type="checkbox" data-show="deskcount"> How many things need you, beside Desk</label>
+    <label class="switch"><input type="checkbox" data-show="aheadhours"> Each week’s hours at the top of Weeks ahead</label>
+    <label class="switch"><input type="checkbox" data-show="areahours"> Each area’s hours under the week</label>
+    <label class="switch"><input type="checkbox" data-show="calendar"> Your Google Calendar’s events in the plan</label>
+    <label class="switch"><input type="checkbox" data-show="hoursleft"> “Left today” beside today’s plan</label>
+    <label class="switch"><input type="checkbox" data-show="repeatmark"> The ↻ after a task that repeats</label>
+    <label class="switch"><input type="checkbox" data-show="repeatahead"> A repeating task on the later days it comes round on</label>
+    <label class="switch"><input type="checkbox" data-show="projsteps"> Steps on a project’s page</label>
+    <label class="switch"><input type="checkbox" data-show="projcrew"> Crew and Turns on a project’s page</label>
+    <label class="switch"><input type="checkbox" data-show="projrecent"> “Recently” on a project’s page</label>
+    <label class="switch"><input type="checkbox" data-show="projdaybook"> On a life project, a box that sends a task to Daybook</label>
     <label class="switch"><input type="checkbox" data-show="dots"> Note dots in the margin</label>
     <label class="switch"><input type="checkbox" data-show="handle"> Six-dot handle</label>
     <label class="switch"><input type="checkbox" data-show="bullets"> Bullets on notebook lines</label>
-    <label class="switch"><input type="checkbox" data-show="panes"> Panes: middle-click opens things side by side</label>
+    <label class="switch"><input type="checkbox" data-show="panes"> Beside: a pane next to the page <span class="keys">⌘\</span>, and middle-click opens things there</label>
+    <label class="switch"><input type="checkbox" id="many-panes"> More than one pane beside (up to three in a row)</label>
     <label class="switch"><input type="checkbox" data-show="alts"> Marks on words and paragraphs with alternates</label>
     <label class="switch"><input type="checkbox" data-show="voice"> Mode chips on voice captures</label>
     <label class="switch"><input type="checkbox" data-show="linkpics"> Pictures on shared links</label>
@@ -457,8 +497,10 @@
       <dt>⌥1 – ⌥6</dt><dd>Pages: Gather, Shape, Write, Revise, Make, Deliver (hold ⌥ to see the numbers)</dd>
       <dt>⌥0</dt><dd>Overview of the world or piece you’re in</dd>
       <dt>⌥C</dt><dd>Talk: it lands where you are, in the draft, on the page or on today (again to keep it, Esc to throw it away)</dd>
+      <dt>⌥T</dt><dd>Talk it through with Claude, beside where you are: about the project you’re in, or everything on stage. It answers with moves you tick and apply</dd>
       <dt>⌘⇧O</dt><dd>Library</dd>
       <dt>⌘⇧U</dt><dd>Desk: every project, what needs you, who’s working on it</dd>
+      <dt>⌘⇧↵</dt><dd>Make this line a task, planned for today (again: a plain line)</dd>
       <dt>⌘⌥↓ ⌘⌥↑</dt><dd>Next or previous chapter (or day)</dd>
       <dt>⌘[ ⌘]</dt><dd>Back and forward</dd>
       <dt>⌘/</dt><dd>This list</dd>
@@ -470,6 +512,7 @@
     <h3>What shows</h3>
     <dl>
       <dt>⌘.</dt><dd>Focus: just the text</dd>
+      <dt>⌘\</dt><dd>Beside: today’s plan next to the page; again puts it away</dd>
       <dt>⌘⇧.</dt><dd>Script section titles and summaries, on or off</dd>
       <dt>⌘1</dt><dd>Keep the sidebar open</dd>
       <dt>⌘2</dt><dd>Notes beside the text</dd>
