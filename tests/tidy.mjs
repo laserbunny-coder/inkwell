@@ -43,6 +43,8 @@ async function device({ synced = true } = {}) {
   await ctx.exposeFunction('__remote', remote);
   // Not synced: a device without sync (as when the app has no Supabase settings).
   await ctx.addInitScript(synced ? fake : () => { window.__syncBackend = null; });
+  // These checks work a world's pieces as a list (the other way to see them is by status).
+  await ctx.addInitScript(() => { try { localStorage.setItem('piecesAs', 'list'); } catch { /* no storage */ } });
   const page = await ctx.newPage();
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));

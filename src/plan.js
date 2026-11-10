@@ -7,7 +7,7 @@
 import { popMenu, askText } from './menu.js';
 import {
   loadTasks, dayPlan, weekPlan, pace, planSettings, savePlanSettings, setTask, unTask, tickTask, tookTask, startTimer, stopTimer,
-  addTask, renameTask, arrange, plainLine, parseEst, readSpan, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE
+  addTask, renameTask, arrange, plainLine, parseEst, readSpan, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE, stepsPage, stepsHome
 } from './tasks.js';
 
 const make = (tag, cls, text) => {
@@ -36,20 +36,24 @@ const clock = (task, now) => {
 // hooks: view() → the view showing, changed(rows) (rows this wrote, for the
 // page that may have them open), openEntry(id), go(place), toast(text),
 // off(name) → is that part switched off under Look, beside(id) → a way to
-// open that entry beside (null when there's none).
+// open that entry beside (null when there's none). steps is where a project's
+// own tasks show on its page.
 export class Plan {
-  constructor({ box, sheet, hooks }) {
+  constructor({ box, sheet, steps = null, hooks }) {
     this.box = box;
     this.sheet = sheet;
+    this.steps = steps;
     this.hooks = hooks;
     this.day = null; // the day whose plan sits on the day page
+    this.world = null; // the project whose steps show on its page
+    this.allDone = false;
     this.tab = 'week';
     this.week = null; // any day of the week shown (null: this week)
     this.items = [];
     this.free = 45;
     this.took = null; // the task just ticked, asked how long it took
     this.just = null;
-    for (const el of [box, sheet]) {
+    for (const el of [box, sheet, steps].filter(Boolean)) {
       el.addEventListener('click', (e) => this.click(e));
       el.addEventListener('keydown', (e) => this.key(e));
       el.addEventListener('contextmenu', (e) => {
@@ -58,7 +62,7 @@ export class Plan {
         e.preventDefault();
         this.menu(this.item(row.dataset.task), row, { left: e.clientX, top: e.clientY });
       });
-      this.drags(el);
+      if (el !== steps) this.drags(el);
     }
   }
 
@@ -66,6 +70,7 @@ export class Plan {
   get today() { return isoOf(); }
   get dayShown() { return !!this.day && this.hooks.view() === 'notebook'; }
   get pageShown() { return this.hooks.view() === 'plan'; }
+  get stepsShown() { return !!this.world && !!this.steps && this.hooks.view() === 'world'; }
 
   // The end of a day's list (or of the tray): where something new goes.
   lastOrder(day) {
@@ -81,6 +86,15 @@ export class Plan {
     this.box.hidden = !this.day;
     if (this.day) await this.refresh();
     else this.box.replaceChildren();
+  }
+
+  // A project's page calls this when it opens: its own tasks, wherever in
+  // the project they're written.
+  async showSteps(world) {
+    if (this.world?.id !== world?.id) this.allDone = false;
+    this.world = world || null;
+    if (this.world) await this.refresh();
+    else this.steps?.replaceChildren();
   }
 
   async showPage(place) {
@@ -99,7 +113,7 @@ export class Plan {
   }
 
   async refresh() {
-    if (!this.dayShown && !this.pageShown) return;
+    if (!this.dayShown && !this.pageShown && !this.stepsShown) return;
     const turn = (this.turn = (this.turn || 0) + 1);
     const [items, settings] = await Promise.all([loadTasks(), planSettings()]);
     if (turn !== this.turn) return;
@@ -107,6 +121,7 @@ export class Plan {
     this.free = settings.free;
     if (this.renaming) return;
     if (this.dayShown) this.drawDay();
+    if (this.stepsShown) this.drawSteps();
     if (this.pageShown) { if (this.tab === 'pace') this.drawPace(); else if (this.tab === 'day') this.drawDay(this.sheet, this.today); else this.drawWeek(); }
     this.tickClock();
   }
@@ -170,6 +185,42 @@ export class Plan {
     this.just = null;
   }
 
+  // ---------- Steps: a project's tasks on its page ----------
+
+  drawSteps() {
+    const box = this.steps;
+    const w = this.world;
+    const today = this.today;
+    const mine = this.items.filter((i) => i.world?.id === w.id);
+    const at = (i) => i.task.day || '9999';
+    const open = mine.filter((i) => !i.row.fields?.done).sort((a, b) => at(a).localeCompare(at(b)) || (a.task.order || 0) - (b.task.order || 0) || (a.row.created_at || 0) - (b.row.created_at || 0));
+    const done = mine.filter((i) => i.row.fields?.done).sort((a, b) => (b.task.done_at || 0) - (a.task.done_at || 0));
+    const held = this.held(box);
+    const head = make('h2', 'wp-sec', 'Steps');
+    if (mine.length) head.append(make('span', 'wp-more', `${done.length} of ${mine.length} done`));
+    const list = make('div', 'pl-list');
+    // Where a step is written, unless it's the project's own Steps page.
+    const place = (i) => (i.root.id === stepsPage(w.id) ? '' : i.root.title || 'Untitled');
+    for (const i of open) list.append(...this.taskRow(i, { when: true, drag: false, place: place(i) }));
+    const add = this.addRow(null, 'Add a step');
+    add.querySelector('input').dataset.add = 'steps';
+    add.querySelector('input').setAttribute('aria-label', `Add a step to ${w.title || 'this project'}`);
+    list.append(add);
+    const few = 3;
+    for (const i of this.allDone ? done : done.slice(0, few)) list.append(...this.taskRow(i, { when: true, drag: false, place: place(i) }));
+    if (done.length > few) {
+      const b = make('button', 'wp-link pl-alldone', this.allDone ? 'Fewer' : `${done.length - few} more done`);
+      b.dataset.act = 'all-done';
+      list.append(b);
+    }
+    box.replaceChildren(head, list);
+    box.dataset.n = String(mine.length);
+    box.dataset.today = today;
+    this.restore(box, held);
+    this.just = null;
+    this.hooks.steps?.();
+  }
+
   addRow(day, placeholder) {
     const row = make('label', 'pl-add');
     const ring = make('span', 'pl-check ghost');
@@ -184,13 +235,13 @@ export class Plan {
     return row;
   }
 
-  taskRow(i, { carried = false, next = false }) {
+  taskRow(i, { carried = false, next = false, when = false, drag = true, place = null }) {
     const t = i.task;
     const id = i.row.id;
     const done = !!i.row.fields?.done;
     const row = make('div', `pl-task${done ? ' done' : ''}${next ? ' next' : ''}${t.run ? ' timing' : ''}${carried ? ' carried' : ''}${this.just === id ? ' justdone' : ''}`);
     row.dataset.task = id;
-    if (!done && hover.matches) row.draggable = true;
+    if (!done && drag && hover.matches) row.draggable = true;
     const check = make('button', 'pl-check');
     check.innerHTML = ICON.check;
     check.dataset.act = 'tick';
@@ -204,12 +255,19 @@ export class Plan {
     title.append(words);
     if (carried) title.append(make('span', 'pl-from', `from ${dayWord(t.day, this.today)}`));
     const meta = make('div', 'pl-meta');
-    const place = this.placeOf(i);
-    if (place) {
-      const a = make('button', 'pl-place', place);
+    const where = place ?? this.placeOf(i);
+    if (where) {
+      const a = make('button', 'pl-place', where);
       a.dataset.act = 'open';
       a.title = 'Open it where it’s written';
       meta.append(a);
+    }
+    // On a project's page a step says its day; click to move it.
+    if (when && !done) {
+      const d = make('button', `pl-when${t.day ? (t.day < this.today ? ' late' : '') : ' unset'}`, dayWord(t.day, this.today));
+      d.dataset.act = 'day';
+      d.setAttribute('aria-label', t.day ? `Planned for ${dayWord(t.day, this.today)}; click to move it` : 'Not on a day yet; click to pick one');
+      meta.append(d);
     }
     if (!done) {
       const play = make('button', 'pl-play');
@@ -422,7 +480,9 @@ export class Plan {
     if (act === 'week-now') return this.hooks.go({ view: 'plan', tab: 'week' });
     if (act === 'open-day') return this.hooks.go({ view: 'notebook', pageId: `day-${el.closest('[data-day]').dataset.day}` });
     if (act === 'free') return this.askFree();
+    if (act === 'all-done') { this.allDone = !this.allDone; return this.drawSteps(); }
     if (!i) return;
+    if (act === 'day') return popMenu(el, this.dayItems(i));
     if (act === 'tick') return this.tick(i, !i.row.fields?.done);
     if (act === 'timer') return this.timerFor(i);
     if (act === 'est') return i.row.fields?.done ? this.askTook(i) : popMenu(el, this.estItems(i));
@@ -440,9 +500,10 @@ export class Plan {
     if (e.key !== 'Enter' || !input.value.trim()) return;
     e.preventDefault();
     const { title, est } = parseEst(input.value);
-    const day = input.dataset.add === 'tray' ? null : input.dataset.add;
+    const steps = input.dataset.add === 'steps' && this.world;
+    const day = steps || input.dataset.add === 'tray' ? null : input.dataset.add;
     input.value = '';
-    addTask({ text: title, day, est, order: this.lastOrder(day) }).then((rows) => this.wrote(rows));
+    addTask({ text: title, day, est, order: this.lastOrder(day), home: steps ? stepsHome(this.world) : null }).then((rows) => this.wrote(rows));
   }
 
   async tick(i, done) {
@@ -507,31 +568,37 @@ export class Plan {
     ];
   }
 
-  // The menu for a task, the same wherever the task shows (the plan, a week,
-  // the label after its words on a page).
-  menu(i, anchor, at) {
-    if (!i) return;
+  // Which day: today, tomorrow, another, or none.
+  dayItems(i) {
     const t = i.task;
     const today = this.today;
-    const done = !!i.row.fields?.done;
     const days = [];
     for (let n = 2; n <= 7; n++) {
       const iso = addDays(today, n);
       days.push({ label: long(iso, { weekday: 'long', month: 'short', day: 'numeric' }), current: t.day === iso, run: () => this.move(i, iso) });
     }
     days.push({ label: 'Pick a date…', run: async () => { const v = await askText({ title: 'Which day?', type: 'date', value: '', ok: 'Move' }); if (v && /^\d{4}-\d\d-\d\d$/.test(String(v))) this.move(i, String(v)); } });
+    return [
+      { label: 'Today', current: t.day === today, run: () => this.move(i, today) },
+      { label: 'Tomorrow', current: t.day === addDays(today, 1), run: () => this.move(i, addDays(today, 1)) },
+      { label: 'Another day', sub: days },
+      { label: 'Not on a day yet', current: !t.day, run: () => this.move(i, null) }
+    ];
+  }
+
+  // The menu for a task, the same wherever the task shows (the plan, a week,
+  // the label after its words on a page).
+  menu(i, anchor, at) {
+    if (!i) return;
+    const t = i.task;
+    const done = !!i.row.fields?.done;
     const items = [];
     if (done) items.push({ label: 'Not done after all', run: () => this.tick(i, false) }, { label: t.actual ? `It took ${span(t.actual)}` : 'How long it took…', run: () => this.askTook(i) });
     else {
       items.push({ label: 'Done', run: () => this.tick(i, true) });
       items.push({ label: t.run ? 'Stop the timer' : 'Start the timer', run: () => this.timerFor(i) });
     }
-    items.push('sep',
-      { label: 'Today', current: t.day === today, run: () => this.move(i, today) },
-      { label: 'Tomorrow', current: t.day === addDays(today, 1), run: () => this.move(i, addDays(today, 1)) },
-      { label: 'Another day', sub: days },
-      { label: 'Not on a day yet', current: !t.day, run: () => this.move(i, null) },
-      'sep',
+    items.push('sep', ...this.dayItems(i), 'sep',
       { label: t.est ? `Takes ${span(t.est)}` : 'How long it takes', sub: this.estItems(i) },
       'sep',
       { label: 'Open it where it’s written', run: () => this.hooks.openEntry(i.row.id) },
@@ -637,7 +704,7 @@ export class Plan {
     const running = this.items.filter((i) => i.task.run);
     if (!running.length) return;
     this.clockTimer = setInterval(() => {
-      if (!this.dayShown && !this.pageShown) { clearInterval(this.clockTimer); return; }
+      if (!this.dayShown && !this.pageShown && !this.stepsShown) { clearInterval(this.clockTimer); return; }
       for (const el of document.querySelectorAll('[data-timer]')) {
         const i = this.item(el.dataset.timer);
         if (i) el.textContent = clock(i.task, Date.now());

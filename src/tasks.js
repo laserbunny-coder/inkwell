@@ -226,15 +226,23 @@ export const stopTimer = (id, now = Date.now()) => change(id, (r) => { withTask(
 
 // A task added straight to a plan lives on the Tasks page, a page like any
 // other: open it to add notes under a task, or move the line into a project.
-export async function addTask({ text, day = null, est = null, order = 0 }) {
+// A step added on a project's page lives on that project's Steps page (home).
+export const stepsPage = (worldId) => `steps-${worldId}`;
+export const stepsHome = (world) => ({ id: stepsPage(world.id), title: 'Steps', parent_id: world.id });
+export async function addTask({ text, day = null, est = null, order = 0, home = null }) {
   const now = Date.now();
   const rows = [];
-  let page = await getEntry(TASKS_PAGE);
-  if (!page || page.deleted) { page = entry('page', { id: TASKS_PAGE, title: 'Tasks' }); rows.push(page); }
-  else if (isTrashed(page)) { page = { ...page, fields: { ...page.fields, trashed: null }, updated_at: now }; rows.push(page); }
-  const last = (await children(TASKS_PAGE)).filter((r) => r.kind === 'line').at(-1);
+  const at = home || { id: TASKS_PAGE, title: 'Tasks', parent_id: null };
+  let page = await getEntry(at.id);
+  if (!page || page.deleted) {
+    // A project's Steps page goes after its other pages.
+    const after = at.parent_id ? Math.max(0, ...(await children(at.parent_id)).filter((r) => r.kind === 'page').map((r) => r.sort || 0)) + GAP : 0;
+    page = entry('page', { id: at.id, title: at.title, parent_id: at.parent_id || null, sort: after });
+    rows.push(page);
+  } else if (isTrashed(page)) { page = { ...page, fields: { ...page.fields, trashed: null }, updated_at: now }; rows.push(page); }
+  const last = (await children(at.id)).filter((r) => r.kind === 'line').at(-1);
   const line = entry('line', {
-    id: newId('li'), parent_id: TASKS_PAGE, sort: (last?.sort || 0) + GAP, text, content: text ? [{ type: 'text', text }] : null, tags: tagsIn(text), links: [],
+    id: newId('li'), parent_id: at.id, sort: (last?.sort || 0) + GAP, text, content: text ? [{ type: 'text', text }] : null, tags: tagsIn(text), links: [],
     fields: { done: false, gather: null, gathered: null, mirror: null, box: true, task: { ...blank(), day, est, order } }
   });
   rows.push(line);

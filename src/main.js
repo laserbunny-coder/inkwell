@@ -55,10 +55,11 @@ import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker
 import { DayReview, getReview } from './review.js';
 import { TagsPage, tagIndex, statsOf } from './tags.js';
 import { DeskPage, DESK_ID } from './desk.js';
+import { ProjectPage } from './projectpage.js';
 import { Plan } from './plan.js';
 import { Through } from './through.js';
 import { looseOn } from './loose.js';
-import { PLAN_ID } from './tasks.js';
+import { PLAN_ID, dayWord } from './tasks.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { pieceDoc, pageDoc, startDraft, draftHolding } from './drafts.js';
 import { printPiece } from './print.js';
@@ -319,6 +320,8 @@ let railTimer;
 let tagsPage = null; // the Tags page (set up with capture, below)
 let deskPage = null; // the Desk: every project, what needs you (below)
 let plan = null; // the plan: tasks by day, on a day's page and as Week and Pace (below)
+let projectPage = null; // what a project's page borrows from the Desk (below)
+let worldDates = []; // the open project's dated things besides its steps (shoot days)
 let through = null; // Go through: loose lines and the Desk's calls, one at a time (below)
 let dayReview = null; // the day review under a day page (set up with capture, below)
 const notebook = new Notebook({
@@ -2668,27 +2671,29 @@ async function renderWorld() {
   title.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); title.blur(); } if (e.key === 'Escape') { e.preventDefault(); title.textContent = w.title; title.blur(); } };
   $('#wh-more').replaceChildren(menuButton(() => worldMenu(w), 'More for this world'));
   const n = (x, word) => `${x.toLocaleString()} ${word}${x === 1 ? '' : 's'}`;
-  $('#wh-stats').textContent = (isLife(w) ? [n(s.pages.length, 'page')] : [n(s.pieces.length, 'piece'), s.words && n(s.words, 'word'), n(s.pages.length, 'page')]).filter(Boolean).join(' · ');
+  $('#wh-stats').textContent = (isLife(w) ? [n(s.pieces.length, 'piece')] : [n(s.pieces.length, 'piece'), s.words && n(s.words, 'word'), n(s.pages.length, 'page')]).filter(Boolean).join(' · ');
   const areaSel = $('#wh-area');
   areaSel.replaceChildren(...(await areaOptions(allAreas)).map(([id, label]) => Object.assign(make('option', '', label), { value: id })));
   areaSel.value = w.area_id || '';
   areaSel.onchange = () => moveBookToArea(w, areaSel.value);
+  const color = areaColor(allAreas.find((a) => a.id === w.area_id));
+  $('#wh-dot').style.background = w.area_id ? color : '';
 
   // Carry on with the piece you were last writing in this world.
   const cont = $('#wh-continue');
   const last = await getMeta('lastChapter');
   const lastCh = last && (await getEntry(last));
   const lastPiece = lastCh && !gone(lastCh) ? await bookOf(lastCh) : null;
-  const here = lastPiece && s.pieces.some((p) => p.row.id === lastPiece.id) ? lastPiece : s.pieces.find((p) => hasManuscript(p.row))?.row;
+  const here = lastPiece && s.pieces.some((p) => p.row.id === lastPiece.id) ? lastPiece : s.pieces.filter((p) => hasManuscript(p.row)).sort((a, b) => editedAt(b.row) - editedAt(a.row))[0]?.row;
   cont.hidden = !here;
   if (here) {
-    cont.textContent = s.pieces.length > 1 ? `Continue writing · ${here.title || 'Untitled'}` : 'Continue writing';
+    cont.textContent = s.pieces.length > 1 ? `Continue · ${here.title || 'Untitled'}` : 'Continue writing';
     cont.onclick = () => openBook(here.id);
   }
 
   const life = isLife(w);
   const shape = shapeOf(w, s.pieces.filter((p) => p.depth === 0).length);
-  $('#wh-kind').textContent = shape.id === 'one' ? '' : `${shape.name} · `;
+  $('#wh-kind').textContent = shape.id === 'one' ? '' : shape.name;
   // What it is, in a sentence: type over it.
   const log = $('#wh-logline');
   log.textContent = w.fields?.logline || '';
@@ -2702,22 +2707,33 @@ async function renderWorld() {
   };
   log.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); log.blur(); } if (e.key === 'Escape') { e.preventDefault(); log.textContent = w.fields?.logline || ''; log.blur(); } };
 
-  // Where every piece is, from new idea to out in the world: the status
-  // board lives here on the project's home, and the tabs are just rooms.
+  // Where every piece is, from new idea to out in the world: by status on
+  // one hairline, or as a list (how they nest) when you'd rather.
   $('#wh-stagebar').hidden = true;
   const status = $('#wh-status');
-  status.hidden = life || !s.pieces.length;
-  if (!status.hidden) renderBoard(w, s.pieces);
+  const canBoard = !life && s.pieces.length > 0;
+  const asList = !canBoard || localStorage.getItem('piecesAs') === 'list';
+  status.hidden = asList;
+  if (canBoard) renderBoard(w, s.pieces);
   $('#wh-workflow').onclick = () => openStages(w);
+  $('#wh-workflow').hidden = !canBoard;
+  const as = $('#wh-as');
+  as.hidden = !canBoard;
+  as.textContent = asList ? 'By status' : 'As a list';
+  as.onclick = () => { localStorage.setItem('piecesAs', asList ? 'board' : 'list'); renderWorld(); };
 
   $('#wh-pieces-box').hidden = life && !s.pieces.length;
+  $('#wh-pieces').hidden = !asList;
   $('#wh-pieces').replaceChildren(...s.pieces.map(({ row, depth }) => pieceRow(row, depth, w)));
   $('#wh-pieces-empty').hidden = s.pieces.length > 0;
   $('#wh-new-piece').onclick = () => addPiece(w.id);
   const nextHere = await nextLevel(w);
   $('#wh-new-piece').textContent = `+ ${nextHere ? nextHere.label : 'Piece'}`;
 
-  // A life project's tasks go to Daybook, linked back here.
+  // Steps: the project's own tasks, wherever in it they're written.
+  await plan?.showSteps(w);
+
+  // Until Daybook is retired, a life project can still send it a task.
   $('#wh-task-box').hidden = !life;
   const task = $('#wh-task');
   task.placeholder = taskHint(w);
@@ -2736,6 +2752,7 @@ async function renderWorld() {
   const items = await gatherItems(w);
   const open = items.filter(({ row }) => !(row.fields?.filed || []).length && !row.fields?.letgo).length;
   if (open) next.push({ from: 'Gather', text: `${plural(open, 'thing')} in to file`, run: () => go({ view: 'stage', id: w.id, page: 'gather' }) });
+  const dates = [];
   if (!life) {
     const promises = await worldPromises(w);
     const unpaid = promises.filter((p) => !p.paid).length;
@@ -2743,6 +2760,7 @@ async function renderWorld() {
     const days = [];
     for (const { row } of s.pieces) for (const d of (await children(row.id)).filter((r) => r.kind === 'shootday' && (r.fields?.date || '') >= isoToday())) days.push({ d, p: row });
     days.sort((a, b) => a.d.fields.date.localeCompare(b.d.fields.date));
+    if (days[0]) dates.push({ iso: days[0].d.fields.date, text: `Shoot day · ${days[0].p.title || 'Untitled'}`, run: () => go({ view: 'production', id: days[0].p.id, day: days[0].d.id }) });
     if (days[0]) { const { d, p } = days[0]; next.push({ from: 'Make', text: `Shoot day ${new Date(`${d.fields.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${p.title || 'Untitled'}`, run: () => go({ view: 'production', id: p.id, day: d.id }) }); }
     const written = s.pieces.filter(({ row }) => stageSetOf(row, w).id === 'ai' && stageOf(row, w) === stagesOf(row, w)[1] && bookType(row) === 'screenplay').map(({ row }) => row);
     if (written[0]) next.push({ from: 'Make', text: `Board ${written[0].title || 'Untitled'}${written.length > 1 ? ` and ${plural(written.length - 1, 'other')}` : ''}`, run: () => go({ view: 'production', id: written[0].id }) });
@@ -2757,7 +2775,7 @@ async function renderWorld() {
     li.append(b);
     return li;
   }));
-  if (!next.length) $('#wh-next').append(make('li', 'hint', life ? 'Nothing waiting. Link a line on any day to this with [[ and it shows up in Gather.' : 'Nothing waiting. Start a piece, or link a line on any day to this world with [[.'));
+  $('#wh-next-box').hidden = !next.length;
 
   // Recently: the pieces and pages last written in.
   const { pages } = await worldTree(w.id);
@@ -2770,6 +2788,24 @@ async function renderWorld() {
     li.append(open, make('span', 'when', ago(editedAt(r))));
     return li;
   }));
+  $('#wh-recent-box').hidden = !recent.length;
+
+  // From the Desk: where it sits, its north star, where it stands, what
+  // needs you, the crew and the turns. The next date is the soonest dated
+  // step or shoot day.
+  worldDates = dates;
+  const lately = recent[0] && editedAt(recent[0]) ? { title: recent[0].title || 'Untitled', at: editedAt(recent[0]), run: () => (recent[0].kind === 'page' ? go({ view: 'notebook', pageId: recent[0].id }) : go({ view: 'project', id: recent[0].id })) } : null;
+  // The same clock the Desk seats it by, so the two never disagree.
+  await projectPage?.show(w, { color, edited: editedAt(w), last: lately, date: nextDate(w.id) });
+}
+// A project's next date: its soonest dated step, or its next shoot day.
+function nextDate(worldId) {
+  const dates = [...worldDates];
+  for (const i of plan?.items || []) {
+    if (i.world?.id === worldId && !i.row.fields?.done && i.task.day && i.task.day >= isoToday()) dates.push({ iso: i.task.day, text: i.row.text || 'Untitled', run: () => openEntry(i.row.id) });
+  }
+  dates.sort((a, b) => a.iso.localeCompare(b.iso));
+  return dates[0] ? { ...dates[0], word: dayWord(dates[0].iso, isoToday()) } : null;
 }
 
 // ---------- the plot grid: the manuscript as a table ----------
@@ -4943,7 +4979,20 @@ deskPage = new DeskPage({
   changed: (rows) => applyRemote(rows),
   onCount: (n) => { frame.count(n); nav.count(n); },
   through: () => through.open('calls'),
+  // A call answered from a project's own page: that page looks again.
+  acted: () => { projectPage?.stale(); if (view() === 'world') renderWorld(); },
   toast
+});
+// A project's own page borrows the Desk: its seat, north star, calls, crew
+// and turns (projectpage.js).
+projectPage = new ProjectPage({ seat: $('#wh-seat'), facts: $('#wh-facts'), calls: $('#wh-calls'), crew: $('#wh-crew'), turns: $('#wh-turns') }, {
+  fetch: (since) => { const b = deskBackend(); return b ? b.desk(since) : null; },
+  // Answering a call here is the Desk answering it; then both look again.
+  call: (c, now) => deskPage.call(c, now, () => false),
+  go: (place) => go(place),
+  history: (name) => { deskPage.filter = 'all'; deskPage.query = name; go({ view: 'desk', tab: 'history' }); },
+  changed: (rows) => applyRemote(rows),
+  showing: (id) => view() === 'world' && state.worldId === id
 });
 // Go through (through.js): the last week's loose lines, or the Desk's calls,
 // one card at a time.
@@ -4982,6 +5031,7 @@ async function looseFoot() {
 plan = new Plan({
   box: $('#plan'),
   sheet: $('#plan-sheet'),
+  steps: $('#wh-steps'),
   hooks: {
     view,
     changed: (rows) => applyRemote(rows),
@@ -4990,6 +5040,8 @@ plan = new Plan({
     beside: (id) => (inPane || root.classList.contains('hide-panes') || !paneHost() ? null : () => openEntryBeside(id)),
     go: (place) => go(place),
     off: (name) => hidden().has(name),
+    // A project's steps were drawn again: its next date may have moved.
+    steps: () => { if (view() === 'world' && state.worldId) projectPage?.setDate(nextDate(state.worldId)); },
     toast
   }
 });
