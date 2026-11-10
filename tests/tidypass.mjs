@@ -72,6 +72,11 @@ serverWrite([
   row({ id: 'cx_2', kind: 'change', title: 'Moved “Wrap them on the 20th” to Gifts', fields: { by: 'claude', change: { type: 'move', target: 'li_moved', title: 'Moved “Wrap them on the 20th” to Gifts', before: { parent_id: DAY, sort: 8192 }, after: { parent_id: 'pg_gifts', sort: 9000 }, at: new Date(Date.now() + 1000).toISOString() } } }),
   line('li_changed', DAY, 'Call the venue', { sort: 10000, fields: { done: false } }),
   row({ id: 'cx_3', kind: 'change', title: 'Ticked “Call the venue”', fields: { by: 'claude', change: { type: 'done', target: 'li_changed', title: 'Ticked “Call the venue”', before: { done: false }, after: { done: true }, at: new Date(Date.now() + 2000).toISOString() } } }),
+  // A task Claude moved to another day, and a day it put in order.
+  line('li_task', 'pg_gifts', 'Book the movers', { sort: 9500, fields: { done: false, box: true, task: { v: 1, day: '2026-11-12', est: 60, done_at: null, actual: null, log: [], run: null, order: 4 }, claude: { change: 'cx_4' } } }),
+  row({ id: 'cx_4', kind: 'change', title: 'Changed “Book the movers”: to 2026-11-12, 60 min', fields: { by: 'claude', change: { type: 'task', target: 'li_task', title: 'Changed “Book the movers”: to 2026-11-12, 60 min', before: { task: { day: '2026-11-10', est: 30, order: 1 }, box: true }, after: { task: { day: '2026-11-12', est: 60, order: 4 } }, at: new Date(Date.now() + 3000).toISOString() } } }),
+  line('li_t2', 'pg_gifts', 'Pack the books', { sort: 9600, fields: { done: false, box: true, task: { v: 1, day: '2026-11-10', est: null, done_at: null, actual: null, log: [], run: null, order: 1 } } }),
+  row({ id: 'cx_5', kind: 'change', title: 'Reordered today: “Pack the books”', fields: { by: 'claude', change: { type: 'order', target: '2026-11-10', title: 'Reordered today: “Pack the books”', before: { order: { li_t2: 2 } }, after: { order: { li_t2: 1 } }, at: new Date(Date.now() + 4000).toISOString() } } }),
 ]);
 
 const fake = () => {
@@ -144,7 +149,7 @@ try {
 
   await check('today shows a quiet tidy line, which can be switched off', async () => {
     await a.waitForSelector('.tidy-nudge:not([hidden])');
-    assert.match(await a.locator('.tidy-nudge').innerText(), /tidy pass · 7 to look at · claude changed 3 things/i);
+    assert.match(await a.locator('.tidy-nudge').innerText(), /tidy pass · 7 to look at · claude changed 5 things/i);
     await a.evaluate(() => document.documentElement.classList.add('hide-tidy'));
     assert.equal(await a.locator('.tidy-nudge').isVisible(), false);
     await a.evaluate(() => document.documentElement.classList.remove('hide-tidy'));
@@ -156,7 +161,7 @@ try {
     assert.equal(await a.locator('.tp-card').count(), 7);
     assert.match(await a.locator('.tp .ck-lead').innerText(), /7 tidy-ups/);
     assert.match(await card(a, 'Fold #ai').innerText(), /Why: Fold/);
-    assert.equal(await a.locator('.tp-change').count(), 3);
+    assert.equal(await a.locator('.tp-change').count(), 5);
     // Nothing changed just by looking.
     assert.equal((await get(a, 'wd_x1')).fields.trashed, undefined);
   });
@@ -251,6 +256,18 @@ try {
     await sleep(600);
     assert.equal((await get(a, 'li_moved')).parent_id, DAY);
     assert.equal((await get(a, 'cx_2')).fields.change.undone_by, 'me');
+  });
+
+  await check('Claude’s task changes can be undone: the day and estimate, and a day’s order', async () => {
+    const ch = (t) => a.locator('.tp-change', { hasText: t });
+    await ch('Book the movers').locator('.tp-undo').click();
+    await sleep(600);
+    const t = (await get(a, 'li_task')).fields.task;
+    assert.deepEqual([t.day, t.est, t.order], ['2026-11-10', 30, 1]);
+    await ch('Reordered today').locator('.tp-undo').click();
+    await sleep(600);
+    assert.equal((await get(a, 'li_t2')).fields.task.order, 2);
+    assert.match(await ch('Reordered today').innerText(), /Undone/);
   });
 
   await check('undo of a change is refused when the thing was changed since', async () => {
