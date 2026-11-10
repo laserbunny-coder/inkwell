@@ -38,6 +38,7 @@ import { applyLook, renderLook, cleanLook, DEFAULT_LOOK } from './wovenlook.js';
 import { prepareForShoot } from './wovenprep.js';
 import { elementsIn, plainPages, newElement } from './production.js';
 import { openHandleMenu } from './handlemenu.js';
+import { openAlerts } from './alerts.js';
 import { showSaveButton } from './savebutton.js';
 import { openPicker } from './picker.js';
 import { PlotGrid, threadsOf, worldPromises } from './grid.js';
@@ -548,7 +549,7 @@ function phoneAway(now = Date.now()) {
 if (!inPane) {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { try { localStorage.setItem('placeAt', String(Date.now())); } catch { /* full */ } return; }
-    if (!root.dataset.started || !phoneAway() || document.querySelector('dialog[open]')) return;
+    if (!root.dataset.started || !phoneAway() || document.querySelector('dialog[open], .ask-backdrop')) return;
     if (lastPlace?.view === 'notebook' && lastPlace.pageId === dayId(isoToday())) return;
     go({ view: 'notebook', pageId: dayId(isoToday()) });
   });
@@ -4107,6 +4108,7 @@ const commands = [
   { group: 'revise', label: 'Share a link to read and comment…', keys: '', words: ['share', 'feedback', 'reader', 'link'], run: () => openShare(), when: () => !!currentBookId() || (inNotebook() && notebook.page?.kind === 'page') },
   { group: 'page', label: 'Name the section levels (Act, Sequence, Scene…)', keys: '', run: nameSectionLevels, when: () => writing() && isScript() },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
+  { group: 'sync', label: 'Phone alerts (day review, Needs you, your week and month)…', keys: '', run: () => openAlerts({ backend: sync.backend, signedIn: !!sync.user, toast }) },
   { group: 'view', label: 'What Claude knows: its one-line note on this, and weekly summaries', keys: '', words: ['about', 'summary', 'second brain', 'memory', 'digest', 'weekly'], run: () => showClaudeKnows() },
   { group: 'view', label: 'Beside: today’s plan next to this page (again: put it away)', keys: `${mod}\\`, words: ['pane', 'side by side', 'split', 'beside', 'plan', 'tasks', 'today'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => toggleBesidePane() },
   { group: 'view', label: 'Talk it through with Claude, beside where you are', keys: '⌥T', words: ['claude', 'talk', 'think', 'plan', 'week', 'moves', 'ask', 'beside', 'overwhelmed', 'too much'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => openTalk() },
@@ -5539,6 +5541,8 @@ async function start() {
   // The monthly note in Daybook links to ?summaries: What Claude knows, with the weekly and monthly summaries.
   if (asked.has('summaries')) showClaudeKnows(null).catch((e) => console.error(e));
   if (asked.get('open')) { asking = asked.get('open'); await openAsked(); }
+  // A phone alert for Needs you or a note from Claude opens the Desk, where they're listed.
+  if (asked.has('desk')) await go({ view: 'desk' });
   // Shared from another app (or shared earlier and not yet placed).
   await landShares();
   tidyShareBlanks().then((rows) => rows.length && applyRemote(rows)).catch((e) => console.error(e));

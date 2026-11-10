@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import config from './config.js';
 import { getEntry, putEntries, outboxIds, clearOutbox, addConflict, getMeta, setMeta, setWriter } from './db.js';
 import { setFileBackend, uploadPending } from './files.js';
+import { renewAlerts } from './alerts.js';
 
 // Keeps this device's entries in step with the cloud (the Supabase project
 // shared with Daybook). The device is always the first copy: writing works
@@ -140,6 +141,26 @@ function supabaseBackend() {
       if (updates.error) console.warn(updates.error);
       return { needs: needs.data || [], updates: updates.error ? [] : updates.data || [] };
     },
+    // Phone alerts: this device's Web Push sign-up, and the switches (one set
+    // for the account, shared with Daybook while it's still around).
+    async savePushSub(row) {
+      const { error } = await sb.from('push_subs').upsert(row);
+      if (error) throw error;
+    },
+    async dropPushSub(endpoint) {
+      const { error } = await sb.from('push_subs').delete().eq('endpoint', endpoint);
+      if (error) throw error;
+    },
+    async alertPrefs() {
+      const { data, error } = await sb.from('alert_prefs').select('review,needs,notes,week,month').maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    async saveAlertPrefs(p) {
+      const { data: auth } = await sb.auth.getSession();
+      const { error } = await sb.from('alert_prefs').upsert({ user_id: auth.session?.user?.id, review: p.review, needs: p.needs, notes: !!p.notes, week: p.week, month: p.month, updated_at: new Date().toISOString() });
+      if (error) throw error;
+    },
     async doneNeed(id) {
       const { error } = await sb.from('notes').update({ resolved_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
@@ -243,6 +264,7 @@ export class Sync {
     window.addEventListener('online', () => this.soon(0));
     clearInterval(this.poll);
     this.poll = setInterval(() => this.soon(0), 60000);
+    renewAlerts(this.backend);
     await this.run();
   }
 
