@@ -88,11 +88,18 @@ const all = (p) => p.evaluate(() => new Promise((res) => {
   r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').getAll(); q.onsuccess = () => res(q.result); };
 }));
 const live = async (p) => (await all(p)).filter((r) => !r.deleted && r.kind !== 'version');
+// Runs a command by name. It waits for the command list, writes straight into
+// its box (so nothing else can take the keys on a slow machine) and waits for
+// the list to narrow to the command before Enter.
+const pick = async (p, name) => {
+  await p.waitForSelector('#palette-list li');
+  await p.locator('#palette-input').fill(name);
+  await p.waitForFunction((n) => document.querySelector('#palette-list li')?.textContent.includes(n), name);
+  await p.locator('#palette-input').press('Enter');
+};
 const command = async (p, name) => {
-  await p.keyboard.press('Control+K');
-  await p.keyboard.type(name);
-  await sleep(300);
-  await p.keyboard.press('Enter');
+  if (!(await p.locator('#palette-input').isVisible())) await p.keyboard.press('Control+K');
+  await pick(p, name);
 };
 // Opens the box and waits until it has read Daybook.
 const box = async (p) => {
@@ -233,7 +240,7 @@ try {
       r.onsuccess = () => {
         const tx = r.result.transaction('entries', 'readwrite');
         const q = tx.objectStore('entries').get('li-db-t1');
-        q.onsuccess = () => tx.objectStore('entries').put({ ...q.result, deleted: true, updated_at: Date.now() });
+        q.onsuccess = () => { if (q.result) tx.objectStore('entries').put({ ...q.result, deleted: true, updated_at: Date.now() }); };
         tx.oncomplete = () => res();
       };
     }));
@@ -293,9 +300,7 @@ try {
   await check('on a phone the box fits, and nothing broke', async () => {
     const phone = await open(null, { ...devices['Pixel 7'] });
     await phone.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true })));
-    await phone.keyboard.type('Bring in Daybook');
-    await sleep(300);
-    await phone.keyboard.press('Enter');
+    await pick(phone, 'Bring in Daybook');
     await phone.waitForSelector('.dbin-box');
     await phone.waitForFunction(() => { const t = document.querySelector('.dbin-body')?.textContent || ''; return t && !t.startsWith('Reading'); });
     const wide = await phone.evaluate(() => document.documentElement.scrollWidth - innerWidth);
