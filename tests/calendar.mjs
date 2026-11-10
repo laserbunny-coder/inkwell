@@ -252,7 +252,8 @@ try {
     // The week before: its own hours; an area with a target shows even at nothing.
     await p.locator('#plan-sheet [data-act="week-prev"]').click();
     await p.waitForFunction(() => history.state?.week === '2026-11-02');
-    await p.waitForFunction(() => document.querySelector('.pa-row[data-area="ar_ai"] .pl-meter-v')?.textContent === '2 h of 10 h');
+    // AI video reads the same in both weeks, so wait for Business (no hours that week) to go.
+    await p.waitForFunction(() => !document.querySelector('.pa-row[data-area="area-business"]') && document.querySelector('.pa-row[data-area="ar_ai"] .pl-meter-v')?.textContent === '2 h of 10 h');
     assert.deepEqual(await rows(), ['Filmmaking: 2 h of 1.5 h', 'AI video: 2 h of 10 h']);
     // 0 takes a target away.
     await p.locator('.pa-row[data-area="area-filmmaking"] .pl-meter-v').click();
