@@ -830,8 +830,11 @@ try {
     ph.on('pageerror', (e) => errors.push(e.message));
     await ph.goto(URL);
     await ph.waitForSelector('#editor .ProseMirror');
+    // The app must have finished starting, or the keys land before it listens (slow machines).
+    await ph.waitForFunction(() => document.documentElement.dataset.started === '1', null, { timeout: 20000 }).catch(() => {});
     await sleep(500);
     await ph.keyboard.press('Control+K');
+    await ph.waitForSelector('#palette-list li');
     await ph.keyboard.type('New screenplay');
     await ph.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('New screenplay'));
     await ph.keyboard.press('Enter');

@@ -890,6 +890,15 @@ body.line-dragging, body.line-dragging * { user-select: none; }
 .ask-input { width: 100%; box-sizing: border-box; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 10px 12px; font: inherit; font-size: 16px; margin-bottom: 16px; outline: none; }
 .ask-input:focus { border-color: var(--accent); }
 .ask-actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* Bring in Daybook: what would come in, said in a few lines. */
+.ask.dbin-box { width: min(520px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }
+.dbin-body { margin-bottom: 16px; }
+.ask .dbin-body p { margin: 0 0 8px; color: var(--ink); }
+.ask .dbin-body p:last-of-type { color: var(--muted); }
+.dbin-list { margin: 4px 0 10px; color: var(--muted); }
+.dbin-list summary { cursor: pointer; }
+.dbin-list ul { margin: 6px 0 0; padding-left: 18px; max-height: 220px; overflow-y: auto; line-height: 1.5; }
+.dbin-undo { display: block; margin-top: 4px; }
 .pill.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .pill.danger { background: #B3412E; color: #fff; border-color: #B3412E; }
 .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 65; display: flex; align-items: center; gap: 14px; background: var(--ink); color: var(--bg); border-radius: 10px; padding: 10px 14px 10px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.2); max-width: calc(100vw - 32px); }
@@ -1947,3 +1956,4 @@ html.panes-sheet .ps-head { display: flex; flex: none; align-items: center; gap:
 html.panes-sheet .panes { position: static; width: auto; flex: 1; min-height: 0; background: var(--panel); }
 html.panes-sheet .pane { flex: 1 1 auto !important; border-left: 0; background: var(--panel); }
 html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
+.dbin-undo { background: none; border: 0; padding: 0; color: var(--muted); font: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
