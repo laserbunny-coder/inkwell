@@ -16,6 +16,7 @@ import { MAX_BYTES } from './files.js';
 import { toast } from './menu.js';
 import { SlashMenu } from './slash.js';
 import { TaskLine, redrawTasks } from './taskline.js';
+import { isLoose, inWindow } from './loosemark.js';
 import { taskOf, chipLabel, setTask, unTask, isoOf } from './tasks.js';
 
 // The notebook: a page for every day, plus named pages, all written as nested
@@ -129,7 +130,8 @@ export class Notebook {
           task: (eid) => taskOf(this.store.cache.get(eid)),
           label: (t, done) => chipLabel(t, done),
           onChip: (eid, el) => onTaskChip?.(eid, el),
-          onToggle: (eid) => this.toggleTask(eid)
+          onToggle: (eid) => this.toggleTask(eid),
+          loose: (eid) => this.looseDay && isLoose(this.store.cache.get(eid))
         }),
         LinkCatch.configure({ onCatch: (eid, url) => this.caughtLink(eid, url) })
       ],
@@ -203,6 +205,10 @@ export class Notebook {
   typingOn(id) { return !!this.page && !this.store.idle && this.store.ids().has(id); }
 
   get isDay() { return this.page?.kind === 'day'; }
+  // A day recent enough that its unfiled lines still carry a ring.
+  get looseDay() { return this.isDay && inWindow(this.page.title); }
+  // Rings and task labels follow what was just saved.
+  redrawMarks() { if (this.page) redrawTasks(this.editor); }
 
   get zoom() { return foldKey.getState(this.editor.state)?.zoom || null; }
 

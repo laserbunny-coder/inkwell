@@ -324,11 +324,39 @@ export class DeskPage {
 
   // ---- On stage ----
 
-  async stageParts({ now, failed }) {
+  // Your projects as the Desk seats them, and how you've arranged it.
+  async seating() {
     const [list, all, settings] = [await byKind('world'), await areas(), await deskSettings()];
     const areaById = new Map(all.map((a) => [a.id, a]));
     const worlds = list.filter((w) => !w.deleted && !w.fields?.trashed)
       .map((w) => ({ id: w.id, title: w.title, color: areaColor(areaById.get(w.area_id)), edited: editedAt(w), star: w.fields?.star || '' }));
+    return { worlds, settings };
+  }
+
+  // The calls waiting right now, for "Go through": decisions first, then
+  // things to do, then things to try, the longest wait first in each. null
+  // when they can't be read (signed out, offline).
+  async waiting() {
+    const now = Date.now();
+    const data = await this.fetch(new Date(midnight(now, WINDOW_DAYS - 1)).toISOString());
+    if (!data) return null;
+    const { worlds, settings } = await this.seating();
+    const seats = seatsFor({ worlds, needs: data.needs || [], updates: [], settings, now });
+    const rank = { decision: 0, blocked: 1, review: 2 };
+    return seats.flatMap((s) => s.calls.map((c) => ({ c, seat: s })))
+      .sort((a, b) => (rank[a.c.kind] ?? 3) - (rank[b.c.kind] ?? 3) || a.c.at - b.c.at)
+      .map(({ c, seat }) => {
+        const w = waited(c.at, now);
+        const why = String(c.body || '').replace(/https?:\/\/\S+/g, '').replace(/\b(Guide|Thread|Link)s?:\s*/gi, '').split('\n').map((x) => x.trim()).find(Boolean) || '';
+        return { id: c.id, title: c.title, kind: KIND[c.kind] || 'Look', project: seat.name, mins: MINUTES[c.kind] || 5, waited: w === 'today' ? 'since today' : w, link: web(c.link) !== '#' ? c.link : '', why: why.length > 180 ? `${why.slice(0, 178)}…` : why };
+      });
+  }
+  // An answer given in "Go through": off the list, or back tomorrow morning.
+  async callDone(id) { await this.done(id); if (this.showing()) this.load({ quiet: true }); }
+  async callLater(id) { await this.later(id, new Date(tomorrowMorning(Date.now())).toISOString()); if (this.showing()) this.load({ quiet: true }); }
+
+  async stageParts({ now, failed }) {
+    const { worlds, settings } = await this.seating();
     const data = this.data || { needs: [], updates: [] };
     const seats = seatsFor({ worlds, needs: data.needs, updates: data.updates, settings, now });
     this.settings = settings;
@@ -340,6 +368,13 @@ export class DeskPage {
     const sum = make('div', 'dk-calls');
     if (calls.length) sum.append(make('i', 'dk-sig'), document.createTextNode(`${calls.length === 1 ? '1 call' : `${calls.length} calls`} waiting · about ${minutes(calls.reduce((m, c) => m + (MINUTES[c.kind] || 5), 0))}`));
     else if (this.data) sum.textContent = 'Nothing needs you';
+    // More than one: walk them one at a time.
+    if (calls.length > 1 && this.through) {
+      const b = make('button', 'dk-through', 'Go through them');
+      b.type = 'button';
+      b.addEventListener('click', () => this.through());
+      sum.append(b);
+    }
     const parts = [this.head(dayLabel(now), 'Desk', sum)];
 
     if (this.data) {

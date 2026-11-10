@@ -56,6 +56,8 @@ import { DayReview, getReview } from './review.js';
 import { TagsPage, tagIndex, statsOf } from './tags.js';
 import { DeskPage, DESK_ID } from './desk.js';
 import { Plan } from './plan.js';
+import { Through } from './through.js';
+import { looseOn } from './loose.js';
 import { PLAN_ID } from './tasks.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { pieceDoc, pageDoc, startDraft, draftHolding } from './drafts.js';
@@ -316,13 +318,14 @@ let railTimer;
 let tagsPage = null; // the Tags page (set up with capture, below)
 let deskPage = null; // the Desk: every project, what needs you (below)
 let plan = null; // the plan: tasks by day, on a day's page and as Week and Pace (below)
+let through = null; // Go through: loose lines and the Desk's calls, one at a time (below)
 let dayReview = null; // the day review under a day page (set up with capture, below)
 const notebook = new Notebook({
   onPick: openPicker,
   onOpen: openEntry,
   onStatus: (s) => {
     if (inNotebook()) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved';
-    if (s === 'saved') { listSoon(); if (notebook?.isDay) dayReview?.soon(); plan?.soon(); }
+    if (s === 'saved') { listSoon(); if (notebook?.isDay) dayReview?.soon(); plan?.soon(); if (notebook?.looseDay) { notebook.redrawMarks(); looseSoon(); } }
   },
   onTaskChip: (eid, el) => plan?.chipMenu(eid, el),
   onTasks: () => plan?.soon(),
@@ -336,6 +339,7 @@ const notebook = new Notebook({
     remember({ view: 'notebook', pageId: page.id, ...(notebook?.zoom ? { zoom: notebook.zoom } : {}) });
     dayReview?.show(page);
     plan?.showDay(page);
+    looseFoot();
     tidyNudge();
     $('#nb-more').replaceChildren(...(page.kind === 'page' ? [menuButton(() => pageMenu(page), 'More for this page')] : []));
     renderCrumb();
@@ -623,6 +627,8 @@ async function go(place) {
     else {
       if (place.line) notebook.focusLine(place.line);
       remember({ view: 'notebook', pageId: notebook.page.id });
+      // Back on a page that stayed open: its count may have been put away meanwhile.
+      looseFoot();
     }
     if ((place.zoom || null) !== notebook.zoom) {
       const mode = historyMode;
@@ -901,7 +907,7 @@ async function applyRemote(rows) {
   if (rows.some((r) => r.kind === 'tidy' || r.kind === 'change')) { redrawTidy(); tidyNudge(); }
   if (view() === 'tags' && tagsPage && rows.some((r) => r.tags?.length || r.id === 'settings-tag-groups')) tagsPage.refresh();
   if (view() === 'desk' && rows.some((r) => r.kind === 'world' || r.kind === 'area' || r.id === DESK_ID)) deskPage?.refresh();
-  if (rows.some((r) => r.kind === 'line' || r.id === PLAN_ID)) plan?.soon();
+  if (rows.some((r) => r.kind === 'line' || r.id === PLAN_ID)) { plan?.soon(); looseSoon(); }
   if (rows.some((r) => r.kind === 'settings')) await notes.reloadTypes();
   if (rows.some((r) => r.kind === 'workflow')) setOwnWorkflows(await byKind('workflow'));
   if (state.chapterId && rows.some((r) => r.links?.includes(state.chapterId))) renderChapterLinks();
@@ -3950,6 +3956,8 @@ const commands = [
   { group: 'write', label: 'Bring back gathered lines I deleted', keys: '', run: () => notebook.regather(), when: () => inNotebook() && !!notebook.gatherLine() },
   { group: 'write', label: 'Stop gathering on this line', keys: '', run: () => notebook.stopGather(), when: () => inNotebook() && !!notebook.gatherLine() },
   { group: 'write', label: 'Task: put this line on a day’s plan (again: a plain line)', keys: `${mod}⇧↵`, words: ['todo', 'to-do', 'plan', 'schedule', 'today'], run: () => notebook.toggleTask(), when: inNotebook },
+  { group: 'go', label: 'Go through loose lines: the last week’s unfiled lines, one at a time', words: ['sort', 'file', 'loose', 'triage', 'review', 'inbox', 'tidy'], run: () => through.open('loose') },
+  { group: 'go', label: 'Go through what needs you: the Desk’s calls, one at a time', words: ['calls', 'needs you', 'decide', 'desk', 'triage', 'waiting'], run: () => through.open('calls') },
   { group: 'write', label: 'Done: strike this line through', keys: `${mod}↵`, run: () => toggleDone(notebook.editor), when: inNotebook },
   { group: 'write', label: 'Checklist: tick boxes on the lines under this one', keys: '', words: ['todo', 'to-do', 'list', 'checkbox', 'tick'], run: () => toggleChecklist(notebook.editor), when: () => inNotebook() && !lineChecks(notebook.editor.state)?.checklist },
   { group: 'write', label: 'Not a checklist (take the boxes off the lines under this one)', keys: '', words: ['checklist', 'checkbox'], run: () => toggleChecklist(notebook.editor), when: () => inNotebook() && !!lineChecks(notebook.editor.state)?.checklist },
@@ -4906,8 +4914,41 @@ deskPage = new DeskPage({
   base: () => location.origin + location.pathname,
   changed: (rows) => applyRemote(rows),
   onCount: (n) => { frame.count(n); nav.count(n); },
+  through: () => through.open('calls'),
   toast
 });
+// Go through (through.js): the last week's loose lines, or the Desk's calls,
+// one card at a time.
+through = new Through({
+  toast,
+  changed: (rows) => applyRemote(rows),
+  worlds: async () => (await byKind('world')).filter((w) => !w.deleted && !isTrashed(w)).sort((a, b) => b.updated_at - a.updated_at).map((w) => ({ id: w.id, title: w.title || 'Untitled' })),
+  calls: { list: () => deskPage.waiting(), done: (id) => deskPage.callDone(id), later: (id) => deskPage.callLater(id) },
+  onClose: () => { looseFoot(); plan?.soon(); }
+});
+// Under a recent day's lines: how many are still loose, and the way in.
+let looseTimer = 0;
+function looseSoon() { clearTimeout(looseTimer); looseTimer = setTimeout(looseFoot, 250); }
+async function looseFoot() {
+  const foot = $('#loose-foot');
+  if (!foot) return;
+  const page = inNotebook() && notebook.looseDay ? notebook.page : null;
+  const n = page ? (await looseOn(page.title)).length : 0;
+  // The page changed while counting: the newer count wins.
+  if ((inNotebook() && notebook.looseDay ? notebook.page.id : null) !== (page?.id || null)) return looseFoot();
+  foot.hidden = !n;
+  if (!n) { foot.replaceChildren(); return; }
+  if (foot.dataset.n === String(n) && foot.firstChild) return;
+  foot.dataset.n = String(n);
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = n === 1 ? 'Go through it' : 'Go through them';
+  b.title = 'One at a time: a task, a project, the Drawer, or just a note for the day';
+  b.addEventListener('click', () => through.open('loose'));
+  const words = document.createElement('span');
+  words.textContent = n === 1 ? '1 loose line' : `${n} loose lines`;
+  foot.replaceChildren(document.createElement('i'), words, b);
+}
 // The plan: tasks gathered by day (plan.js). On a day's page it sits on top;
 // Week and Pace are their own page.
 plan = new Plan({
