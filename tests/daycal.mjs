@@ -173,13 +173,11 @@ try {
     assert.ok((await chips(page)).includes('Email Dana the boards'));
   });
 
-  await check('a click on a block opens the task beside', async () => {
+  await check('a click on a block zooms into the task, and Alt + Left comes back to the calendar', async () => {
     await blk(page, 'Call the print shop').click();
-    await page.waitForFunction(() => {
-      const d = [...document.querySelectorAll('.pane-frame')].at(-1)?.contentDocument;
-      return d?.documentElement?.dataset.started === '1' && /Call the print shop/.test(d.querySelector('#outline-editor li.zoom-root')?.textContent || '');
-    }, null, { timeout: 15000 });
-    await page.evaluate(() => window.__panes.closeAll());
+    await page.waitForFunction(() => /Call the print shop/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''), null, { timeout: 15000 });
+    await page.keyboard.press('Alt+ArrowLeft');
+    await page.waitForFunction(() => !document.querySelector('#outline-editor li.zoom-root') && !!document.querySelector('#plan .dc-grid'));
   });
 
   await check('it’s remembered on this device; Look can hide the switch, which leaves the list', async () => {

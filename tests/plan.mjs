@@ -250,13 +250,19 @@ try {
     await page.evaluate(() => document.documentElement.classList.remove('hide-taskgrip'));
   });
 
-  await check('a click on a task opens it beside, zoomed in on its line', async () => {
+  await check('a click on a task zooms into it, Alt + Left zooms back out to the plan, Ctrl + click opens it beside', async () => {
     await row(page, 'Order the 8 TB').locator('.pl-words').click();
+    await page.waitForFunction(() => /Order the 8 TB/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''));
+    assert.equal(await viewOf(page), 'notebook');
+    assert.equal(await page.locator('.pane-frame').count(), 0, 'nothing opened beside');
+    await page.keyboard.press('Alt+ArrowLeft');
+    await page.waitForFunction(() => !document.querySelector('#outline-editor li.zoom-root') && document.querySelectorAll('#plan .pl-task').length >= 2);
+    await row(page, 'Order the 8 TB').locator('.pl-words').click({ modifiers: ['Control'] });
     await page.waitForFunction(() => {
       const d = [...document.querySelectorAll('.pane-frame')].at(-1)?.contentDocument;
       return d?.documentElement?.dataset.started === '1' && /Order the 8 TB/.test(d.querySelector('#outline-editor li.zoom-root')?.textContent || '');
     }, null, { timeout: 15000 });
-    assert.equal(await viewOf(page), 'notebook', 'today stays where it was');
+    assert.equal(await page.evaluate(() => !!document.querySelector('#outline-editor li.zoom-root')), false, 'the main view stays on the day');
     await page.evaluate(() => window.__panes.closeAll());
     await page.waitForFunction(() => !document.querySelector('.pane'));
   });

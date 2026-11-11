@@ -219,20 +219,25 @@ try {
     assert.equal((await beside(page)).pressed, 'true');
   });
 
-  await check('a click on a task on the day’s page opens it beside, zoomed in on its line; “≡ notes” says it has notes', async () => {
+  await check('a triangle shows a task’s lines in the plan; a click on one zooms into the task there, and Alt + Left comes back', async () => {
     const r = page.locator('#plan .pl-task', { hasText: 'second verse' });
-    assert.equal(await r.locator('.pl-notes').innerText(), '≡ notes');
-    assert.equal(await page.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-notes').count(), 0, 'none without lines under it');
-    await r.locator('.pl-words').click();
-    f = await pane(page, 'notebook');
-    await f.waitForFunction(() => /second verse/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''));
-    assert.ok(await f.locator('#outline-editor li[data-eid="ln_song_n"]').isVisible());
-    assert.equal(await page.evaluate(() => document.documentElement.dataset.view), 'notebook', 'the day stays in the main view');
-    assert.equal(await count(page), 1);
-    // Under Look the mark can go.
+    assert.equal(await r.locator('.pl-fold').count(), 1);
+    assert.equal(await page.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-fold').count(), 0, 'none without lines under it');
+    await r.locator('.pl-fold').click();
+    await page.waitForFunction(() => /Rhymes with katana/.test(document.querySelector('#plan .pl-kids')?.textContent || ''));
+    assert.equal(await page.locator('#plan .pl-task', { hasText: 'second verse' }).locator('.pl-fold').getAttribute('aria-expanded'), 'true');
+    await page.locator('#plan .pl-kid-text', { hasText: 'Rhymes with katana' }).click();
+    await page.waitForFunction(() => /second verse/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''));
+    assert.ok(await page.locator('#outline-editor li[data-eid="ln_song_n"]').isVisible());
+    assert.equal(await count(page), 1, 'Beside is as it was');
+    await page.keyboard.press('Alt+ArrowLeft');
+    await page.waitForFunction(() => !document.querySelector('#outline-editor li.zoom-root') && /Rhymes with katana/.test(document.querySelector('#plan .pl-kids')?.textContent || ''));
+    // Under Look the triangle (and the lines it shows) can go.
     await page.evaluate(() => document.documentElement.classList.add('hide-tasknotes'));
-    assert.equal(await r.locator('.pl-notes').isVisible(), false);
+    assert.equal(await page.locator('#plan .pl-task', { hasText: 'second verse' }).locator('.pl-fold').isVisible(), false);
     await page.evaluate(() => document.documentElement.classList.remove('hide-tasknotes'));
+    await page.locator('#plan .pl-task', { hasText: 'second verse' }).locator('.pl-fold').click();
+    await page.waitForFunction(() => !document.querySelector('#plan .pl-kids'));
   });
 
   await check('a task’s menu on the day’s page has Open it beside; the plan beside has no such line', async () => {

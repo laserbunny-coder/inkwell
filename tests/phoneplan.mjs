@@ -86,18 +86,16 @@ try {
     assert.deepEqual(await words(phone), ['Board reel 2', 'Call Dana', 'Order the storage drive']);
   });
 
-  await check('phone: six dots show on every task that can move, and a tap opens the task in a sheet, zoomed in on it', async () => {
+  await check('phone: six dots show on every task that can move, and a tap zooms into the task and Back comes out again', async () => {
     assert.equal(await phone.locator('#plan .pl-task[data-move] .pl-grip').count(), 3);
     assert.ok(Number(await phone.locator('#plan .pl-grip').first().evaluate((g) => getComputedStyle(g).opacity)) > 0.5, 'no hover on a phone: always there');
     assert.equal(await phone.locator('.pane-frame').count(), 0, 'sliding a task opened nothing');
     assert.ok(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'nothing spills');
     await phone.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-words').tap();
-    await phone.waitForFunction(() => {
-      const d = [...document.querySelectorAll('.pane-frame')].at(-1)?.contentDocument;
-      return d?.documentElement?.dataset.started === '1' && /Call Dana/.test(d.querySelector('#outline-editor li.zoom-root')?.textContent || '');
-    }, null, { timeout: 15000 });
-    await phone.evaluate(() => window.__panes.closeAll());
-    await phone.waitForFunction(() => !document.querySelector('.pane-frame'));
+    await phone.waitForFunction(() => /Call Dana/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''));
+    assert.equal(await phone.locator('.pane-frame').count(), 0, 'it opens in place, as a page');
+    await phone.goBack();
+    await phone.waitForFunction(() => !document.querySelector('#outline-editor li.zoom-root') && document.querySelectorAll('#plan .pl-task').length === 3);
   });
 
   await check('phone: the new order is kept', async () => {

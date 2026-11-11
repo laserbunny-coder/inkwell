@@ -15,6 +15,7 @@ import { areas, areaColor } from './library.js';
 import { drawAhead, aheadClick, aheadContext, aheadDrags } from './ahead.js';
 import { clockWord, freeLeft } from './calendar.js';
 import { drawCalendar } from './plancal.js';
+import { children } from './db.js';
 
 const make = (tag, cls, text) => {
   const el = document.createElement(tag);
@@ -327,6 +328,17 @@ export class Plan {
     }
     box.dataset.n = String(p.todo.length + p.done.length);
     this.just = null;
+    if (box === this.box) this.backAgain();
+  }
+
+  // Back out of a task zoomed into from here: the page is where it was.
+  backAgain() {
+    const b = this.leftAt;
+    if (!b || Date.now() - b.at > 30 * 60000 || !this.box.querySelector(`[data-task="${CSS.escape(b.id)}"]`)) return;
+    this.leftAt = null;
+    const put = () => { const el = document.scrollingElement; if (el && Math.abs(el.scrollTop - b.y) > 4) el.scrollTop = b.y; };
+    requestAnimationFrame(put);
+    setTimeout(put, 250);
   }
 
   // ---------- Steps: a project's tasks on its page ----------
@@ -424,12 +436,15 @@ export class Plan {
     words.dataset.act = t.habit ? 'history' : 'words';
     words.title = t.habit ? 'A habit: click for how it’s going' : hover.matches && plainLine(i.row) ? 'Click to open it, double-click to change the words' : 'Open it';
     title.append(words);
-    // Lines written under a task are its notes: a quiet mark says there are some.
+    // Lines written under a task are its notes. As in an outliner, a small
+    // triangle shows them right here, under the task, and hides them again.
+    const open = !!i.notes && !ghost && this.unfolded(id);
     if (i.notes) {
-      const n = make('button', 'pl-notes', '≡ notes');
-      n.dataset.act = 'notes';
-      n.title = i.notes === 1 ? 'One line of notes: click to open it' : `${i.notes} lines of notes: click to open them`;
+      const n = make('button', `pl-fold${open ? ' open' : ''}`, open ? '▾' : '▸');
+      n.dataset.act = 'fold';
+      n.title = `${open ? 'Hide' : 'Show'} ${i.notes === 1 ? 'the line' : `the ${i.notes} lines`} under it`;
       n.setAttribute('aria-label', n.title);
+      n.setAttribute('aria-expanded', String(open));
       title.append(n);
     }
     if (rep) {
@@ -494,7 +509,51 @@ export class Plan {
     more.setAttribute('aria-haspopup', 'menu');
     meta.append(est, more);
     row.append(check, title, meta);
-    return this.took === id && done ? [row, this.tookRow(i)] : [row];
+    const out = [row];
+    if (open) out.push(this.kidsBox(id));
+    if (this.took === id && done) out.push(this.tookRow(i));
+    return out;
+  }
+
+  // ---------- a task's lines, shown under it ----------
+
+  unfolded(id) { return this.folds().includes(id); }
+  folds() { try { return JSON.parse(localStorage.getItem('planOpen') || '[]'); } catch { return []; } }
+  fold(id, open) {
+    const all = this.folds().filter((x) => x !== id);
+    if (open) all.push(id);
+    try { localStorage.setItem('planOpen', JSON.stringify(all.slice(-200))); } catch { /* no storage here */ }
+  }
+
+  // The lines under a task, nested as they're written. A click on one opens
+  // the task as a page with the cursor on that line, to write there; a link
+  // in one opens as a link does anywhere.
+  kidsBox(id) {
+    const box = make('div', 'pl-kids');
+    box.dataset.kidsOf = id;
+    const fill = async (parent, ul, depth, left) => {
+      for (const r of await children(parent)) {
+        if (r.kind !== 'line' || left.n <= 0) continue;
+        left.n -= 1;
+        const li = make('li', `pl-kid${r.fields?.done ? ' done' : ''}`);
+        const p = make('div', 'pl-kid-text');
+        p.dataset.act = 'kid';
+        p.dataset.line = r.id;
+        p.append(...lineBits(r));
+        if (!p.textContent.trim()) continue;
+        li.append(p);
+        ul.append(li);
+        if (depth < 4) {
+          const sub = make('ul');
+          await fill(r.id, sub, depth + 1, left);
+          if (sub.childElementCount) li.append(sub);
+        }
+      }
+    };
+    const ul = make('ul');
+    box.append(ul);
+    fill(id, ul, 1, { n: 80 }).catch((e) => console.error(e));
+    return box;
   }
 
   // "How long did it take?", right under the task just ticked.
@@ -763,6 +822,12 @@ export class Plan {
       return popMenu(el, (this.areaList || []).filter((a) => !shown.has(a.id)).map((a) => ({ label: a.title || 'Untitled', run: () => this.askTarget(a.id) })));
     }
     if (act === 'all-done') { this.allDone = !this.allDone; return this.drawSteps(); }
+    if (act === 'kid') {
+      if (e.target.closest('a[href]')) return;
+      const of = el.closest('[data-kids-of]')?.dataset.kidsOf;
+      if (of) this.left(of);
+      return of && this.hooks.openTask?.(of, el.dataset.line);
+    }
     if (!i) return;
     if (act === 'day') return popMenu(el, this.dayItems(i));
     if (act === 'history') return popMenu(el, this.historyItems(i));
@@ -772,8 +837,10 @@ export class Plan {
     if (act === 'est') return i.row.fields?.done ? this.askTook(i) : popMenu(el, this.estItems(i));
     if (act === 'more') return this.menu(i, el);
     if (act === 'open') return this.hooks.openEntry(i.row.id);
-    if (act === 'notes') return this.open(i);
+    if (act === 'fold') { this.fold(i.row.id, !this.unfolded(i.row.id)); return this.redraw(); }
     if (act === 'words') {
+      // Ctrl + click: beside, as before.
+      if ((e.ctrlKey || e.metaKey) && this.hooks.beside?.(i.row.id)) { clearTimeout(this.opening); return this.hooks.openTask(i.row.id, null, { beside: true }); }
       // A double-click changes the words, so wait a moment before opening.
       if (!hover.matches || !plainLine(i.row)) return this.open(i);
       clearTimeout(this.opening);
@@ -784,12 +851,15 @@ export class Plan {
     if (act === 'took-other') return this.askTook(i);
   }
 
-  // Open a task: beside the plan (a sheet on a phone), zoomed in on its line
-  // so its notes, the lines under it, are right there to read and add to.
+  // Open a task the way an outliner zooms into a line: it becomes the page,
+  // its lines under it, and Back (Alt + Left) comes out to the plan again.
   open(i) {
     clearTimeout(this.opening);
+    this.left(i.row.id);
     return (this.hooks.openTask || this.hooks.openEntry)(i.row.id);
   }
+
+  left(id) { if (this.box?.contains(document.activeElement) || this.box?.querySelector(`[data-task="${CSS.escape(id)}"]`)) this.leftAt = { id, y: document.scrollingElement?.scrollTop || 0, at: Date.now() }; }
 
   dblclick(e) {
     const el = e.target.closest('.pl-words[data-act="words"]');
@@ -1236,4 +1306,27 @@ export class Plan {
       }
     }, 1000);
   }
+}
+
+// A line's words as written: its links as links, its [[links]] as names.
+function lineBits(r) {
+  const nodes = Array.isArray(r.content) ? r.content : Array.isArray(r.content?.content) ? r.content.content : null;
+  if (!nodes) return [document.createTextNode(String(r.text || ''))];
+  const out = [];
+  for (const n of nodes) {
+    if (n.type === 'text') {
+      const href = n.marks?.find((m) => m.type === 'link')?.attrs?.href;
+      if (href && /^https?:\/\//i.test(href)) {
+        const a = make('a', 'pl-kid-link', n.text || href);
+        a.href = href;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        out.push(a);
+      } else out.push(document.createTextNode(n.text || ''));
+    } else if (n.type === 'entryRef') {
+      const a = make('span', 'pl-kid-ref', n.attrs?.title || 'Untitled');
+      out.push(a);
+    } else if (n.type === 'hardBreak') out.push(document.createTextNode(' '));
+  }
+  return out.length ? out : [document.createTextNode(String(r.text || ''))];
 }
