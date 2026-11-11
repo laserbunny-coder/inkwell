@@ -192,6 +192,37 @@ try {
     assert.equal((await readOutline(ph)).replace(/\|/g, ''), START.trim());
   });
 
+  await check('after a move it stays a move: no cursor or keyboard, nothing picked, and the next line can be held straight away', async () => {
+    await setOutline(ph, START);
+    // Typing in “Call Dana” first, keyboard up.
+    const c = await centre(words('Call Dana'));
+    await ph.touchscreen.tap(c.x, c.y);
+    await sleep(300);
+    assert.equal(await ph.evaluate(() => !!document.activeElement?.closest?.('.ProseMirror')), true, 'typing to begin with');
+    const from = await centre(words('Order rope'));
+    const to = await centre(words('Board reel 2'));
+    await drag(from, { x: from.x, y: to.b.y + 3 }, { wait: 500 });
+    assert.equal((await readOutline(ph)).replace(/\|/g, ''), ["Kenji's verse", '  Rhymes for the chorus', 'Order rope', 'Board reel 2', 'Call Dana'].join('\n'));
+    assert.equal(await ph.evaluate(() => !!document.activeElement?.closest?.('.ProseMirror')), false, 'out of typing: the keyboard goes down');
+    assert.equal(await ph.evaluate(() => String(getSelection())), '', 'no words picked');
+    // The line just moved can be held and moved again at once.
+    const again = await centre(words('Order rope'));
+    const top = await centre(words("Kenji's verse"));
+    await drag(again, { x: again.x, y: top.b.y + 3 }, { wait: 500 });
+    assert.equal((await readOutline(ph)).replace(/\|/g, ''), ['Order rope', "Kenji's verse", '  Rhymes for the chorus', 'Board reel 2', 'Call Dana'].join('\n'));
+    // And another one after it.
+    const next = await centre(words('Call Dana'));
+    const top2 = await centre(words('Order rope'));
+    await drag(next, { x: next.x, y: top2.b.y + 3 }, { wait: 500 });
+    assert.equal((await readOutline(ph)).replace(/\|/g, ''), ['Call Dana', 'Order rope', "Kenji's verse", '  Rhymes for the chorus', 'Board reel 2'].join('\n'));
+    assert.equal(await ph.evaluate(() => !!document.activeElement?.closest?.('.ProseMirror')), false, 'still out of typing');
+    // A tap goes back to typing.
+    const t = await centre(words('Board reel 2'));
+    await ph.touchscreen.tap(t.x, t.y);
+    await sleep(300);
+    assert.ok((await readOutline(ph)).split('\n').find((l) => l.includes('Board')).includes('|'), 'a tap puts the cursor there');
+  });
+
   await check('holding the dots still brings up the line’s menu; a tap on the dots of the line you are on zooms in', async () => {
     await setOutline(ph, START);
     await blurred();

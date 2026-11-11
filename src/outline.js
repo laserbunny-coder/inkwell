@@ -552,6 +552,7 @@ function lineDrag(view, dragged, touch) {
     mark?.remove();
     mark = null;
     document.body.classList.remove('line-dragging', 'line-drag-away');
+    if (touch) calm(view);
     if (off || !e) return;
     drop = find(e);
     // Let go over a pane beside: it moves there.
@@ -559,6 +560,23 @@ function lineDrag(view, dragged, touch) {
     dropLineAt(view, eid, drop.li.querySelector(':scope > .line-gutter')?.dataset.eid, drop.after, drop.into);
   };
   return { begin, move, end, started: () => !!mark };
+}
+
+// After a move on a phone it stays a move, as in Workflowy: no cursor, no
+// keyboard and no words picked, so the next line can be held and moved
+// straight away. A tap on a line still puts the cursor there.
+let calmTimer = 0;
+function calm(view) {
+  const html = document.documentElement;
+  html.classList.add('line-calm');
+  getSelection()?.removeAllRanges?.();
+  if (view.hasFocus()) view.dom.blur();
+  clearTimeout(calmTimer);
+  // The phone may still pick words a moment after the finger lifts.
+  calmTimer = setTimeout(() => {
+    html.classList.remove('line-calm');
+    if (!view.hasFocus()) getSelection()?.removeAllRanges?.();
+  }, 400);
 }
 
 // The dots under a mouse or finger: a click or tap zooms in, a slide moves

@@ -85,6 +85,7 @@ html.has-rail .pl-switch { display: none; }
 .pl-task.dragging { opacity: .35; }
 .pl-task.pl-armed, .pw-task.pl-armed { background: var(--tint); transition: background .15s; }
 .pl-touchdrag, .pl-touchdrag body { overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+.pl-calm .pl-task, .pl-calm .pl-task * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .pl-task[data-move], .pw-task[data-move] { -webkit-touch-callout: none; }
 .pl-task.drop-before, .pl-add.drop-before { box-shadow: 0 -2px 0 var(--accent); }
 .pl-task.drop-after { box-shadow: 0 2px 0 var(--accent); }
