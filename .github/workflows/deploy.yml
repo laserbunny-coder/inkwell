@@ -3,6 +3,8 @@ name: Publish Inkwell
 on:
   push:
     branches: [main]
+    # The server (supabase/) has its own workflow, server.yml.
+    paths-ignore: ['supabase/**', '.github/workflows/server.yml']
   # A pull request runs the same tests first; only main is published.
   pull_request:
   workflow_dispatch:
@@ -62,7 +64,7 @@ jobs:
       - name: New cache name so phones pick up the update
         if: matrix.share == 1 && github.ref == 'refs/heads/main'
         run: |
-          sed -i "s/inkwell-v2/inkwell-${GITHUB_SHA::8}/" dist/sw.js
+          sed -i "s/inkwell-v[0-9]*/inkwell-${GITHUB_SHA::8}/" dist/sw.js
           touch dist/.nojekyll
       - if: matrix.share == 1 && github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v5

@@ -1,0 +1,88 @@
+name: Publish the server
+
+# The server half of Inkwell (Supabase: the database and its functions) lives in
+# supabase/ since Nov 2026; it moved here from the Daybook repository. A pull
+# request that touches it runs the server checks; main publishes it.
+on:
+  push:
+    branches: [main]
+    paths: ['supabase/**', '.github/workflows/server.yml']
+  pull_request:
+    paths: ['supabase/**', '.github/workflows/server.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Server checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run each server check
+        run: |
+          set -e
+          for f in $(find supabase/functions -name '*.test.ts' | sort); do
+            echo "== $f"
+            node --experimental-strip-types "$f"
+          done
+
+  publish:
+    name: Update database and server functions
+    needs: check
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip until Supabase is set up here
+        id: ready
+        run: |
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$PROJECT_REF" ] && [ -n "$SUPABASE_DB_PASSWORD" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "::warning::Supabase secrets not set in this repository yet; nothing published."; fi
+      - uses: supabase/setup-cli@v1
+        if: steps.ready.outputs.ok == 'true'
+        with:
+          version: latest
+      - name: Update database
+        if: steps.ready.outputs.ok == 'true'
+        run: |
+          supabase link --project-ref "$PROJECT_REF"
+          # Newer CLIs want the linked project named outright (--linked, or --remote in the newest); try both
+          supabase db push --yes --linked --password "$SUPABASE_DB_PASSWORD" || supabase db push --yes --remote --password "$SUPABASE_DB_PASSWORD"
+      - name: Save server secrets
+        # Only the ones set in this repository are sent; the rest stay as Supabase has them.
+        if: steps.ready.outputs.ok == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ACRO_CONNECTOR_URL: ${{ secrets.ACRO_CONNECTOR_URL }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          args=()
+          [ -n "$ANTHROPIC_API_KEY" ] && args+=("ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
+          [ -n "$OPENAI_API_KEY" ] && args+=("OPENAI_API_KEY=$OPENAI_API_KEY")
+          [ -n "$ELEVENLABS_API_KEY" ] && args+=("ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY")
+          [ -n "$ACRO_CONNECTOR_URL" ] && args+=("ACRO_CONNECTOR_URL=$ACRO_CONNECTOR_URL")
+          [ -n "$GOOGLE_CLIENT_ID" ] && args+=("GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID")
+          [ -n "$GOOGLE_CLIENT_SECRET" ] && args+=("GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET")
+          if [ ${#args[@]} -gt 0 ]; then supabase secrets set --yes --project-ref "$PROJECT_REF" "${args[@]}"; fi
+      - name: Deploy server functions
+        if: steps.ready.outputs.ok == 'true'
+        # Every folder in supabase/functions except _shared is a function.
+        run: |
+          fns=$(cd supabase/functions && ls -d */ | tr -d / | grep -v '^_')
+          echo "Deploying: $fns"
+          supabase functions deploy $fns --project-ref "$PROJECT_REF" --use-api --yes
