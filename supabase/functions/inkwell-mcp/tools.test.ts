@@ -87,6 +87,12 @@ const db: Db = {
     Object.assign(r, patch, { updated_at: new Date(Date.parse(r.updated_at!) + 1000).toISOString() });
     return true;
   },
+  reword: async (id, was, patch) => {
+    const r = rows.find((x) => x.id === id && x.kind === "line");
+    if (!r || (was && r.updated_at !== was)) return false;
+    Object.assign(r, patch, { updated_at: new Date(Date.parse(r.updated_at!) + 1000).toISOString() });
+    return true;
+  },
   markChange: async (id, fields) => { const r = rows.find((x) => x.id === id && x.kind === "change"); if (r) r.fields = fields; },
 };
 

@@ -3,7 +3,7 @@
 // and how it reads in words. A task is a line with fields.task:
 //   { v: 1, day, est, done_at (ms), actual, log, run, order, owner,
 //     until, mark: 'date' | 'hard', repeat: { every, n, days, from, until },
-//     did: [[day, minutes, ms]], habit }
+//     did: [[day, minutes, ms]], habit, on: { day, at (minutes from midnight) }, len }
 // Days are the person's local dates, YYYY-MM-DD.
 
 export type RepeatRule = { every: "day" | "weekdays" | "week" | "month"; n?: number; days?: number[]; from: string; until?: string | null };
@@ -12,6 +12,8 @@ export type Task = {
   log: [number, number][]; run: number | null; order: number; owner?: string | null;
   until?: string | null; mark?: "date" | "hard" | null; repeat?: RepeatRule | null;
   did?: [string, number | null, number][]; habit?: boolean;
+  /** Where it sits on the day's Calendar (minutes from midnight), and how long its block is. */
+  on?: { day: string; at: number } | null; len?: number | null;
 };
 
 export const blank = (): Task => ({ v: 1, day: null, est: null, done_at: null, actual: null, log: [], run: null, order: 0 });

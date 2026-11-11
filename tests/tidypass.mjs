@@ -76,7 +76,12 @@ serverWrite([
   line('li_task', 'pg_gifts', 'Book the movers', { sort: 9500, fields: { done: false, box: true, task: { v: 1, day: '2026-11-12', est: 60, done_at: null, actual: null, log: [], run: null, order: 4 }, claude: { change: 'cx_4' } } }),
   row({ id: 'cx_4', kind: 'change', title: 'Changed “Book the movers”: to 2026-11-12, 60 min', fields: { by: 'claude', change: { type: 'task', target: 'li_task', title: 'Changed “Book the movers”: to 2026-11-12, 60 min', before: { task: { day: '2026-11-10', est: 30, order: 1 }, box: true }, after: { task: { day: '2026-11-12', est: 60, order: 4 } }, at: new Date(Date.now() + 3000).toISOString() } } }),
   line('li_t2', 'pg_gifts', 'Pack the books', { sort: 9600, fields: { done: false, box: true, task: { v: 1, day: '2026-11-10', est: null, done_at: null, actual: null, log: [], run: null, order: 1 } } }),
-  row({ id: 'cx_5', kind: 'change', title: 'Reordered today: “Pack the books”', fields: { by: 'claude', change: { type: 'order', target: '2026-11-10', title: 'Reordered today: “Pack the books”', before: { order: { li_t2: 2 } }, after: { order: { li_t2: 1 } }, at: new Date(Date.now() + 4000).toISOString() } } }),
+  row({ id: 'cx_5', kind: 'change', title: 'Reordered today: “Pack the books”', fields: { by: 'claude', change: { type: 'order', target: '2026-11-10', title: 'Reordered today: “Pack the books”', before: { order: { li_t2: 2 } }, after: { order: { li_t2: 1 } }, at: new Date(Date.now() + 4000).toISOString() } } }),  // A task Claude deleted (with the line under it), and one it renamed.
+  line('li_del', 'pg_gifts', 'Buy tape', { sort: 9700, fields: { done: false, box: true, trashed: 1794400000000, trashedWith: 'li_del', claude: { change: 'cx_6' }, task: { v: 1, day: '2026-11-10', est: null, done_at: null, actual: null, log: [], run: null, order: 3 } } }),
+  line('li_del_kid', 'li_del', 'The wide kind', { sort: 1024, fields: { done: false, trashed: 1794400000000, trashedWith: 'li_del' } }),
+  row({ id: 'cx_6', kind: 'change', title: 'Deleted “Buy tape” and the line under it', fields: { by: 'claude', change: { type: 'trash', target: 'li_del', title: 'Deleted “Buy tape” and the line under it', before: {}, after: { trashed: 1794400000000 }, at: new Date(Date.now() + 5000).toISOString() } } }),
+  line('li_named', 'pg_gifts', 'Label the boxes #move', { sort: 9800, tags: ['move'], fields: { done: false, claude: { change: 'cx_7' } } }),
+  row({ id: 'cx_7', kind: 'change', title: 'Renamed “Boxes” to “Label the boxes #move”', fields: { by: 'claude', change: { type: 'words', target: 'li_named', title: 'Renamed “Boxes” to “Label the boxes #move”', before: { text: 'Boxes', content: null, tags: [], links: [] }, after: { text: 'Label the boxes #move' }, at: new Date(Date.now() + 6000).toISOString() } } }),
 ]);
 
 const fake = () => {
@@ -149,7 +154,7 @@ try {
 
   await check('today shows a quiet tidy line, which can be switched off', async () => {
     await a.waitForSelector('.tidy-nudge:not([hidden])');
-    assert.match(await a.locator('.tidy-nudge').innerText(), /tidy pass · 7 to look at · claude changed 5 things/i);
+    assert.match(await a.locator('.tidy-nudge').innerText(), /tidy pass · 7 to look at · claude changed 7 things/i);
     await a.evaluate(() => document.documentElement.classList.add('hide-tidy'));
     assert.equal(await a.locator('.tidy-nudge').isVisible(), false);
     await a.evaluate(() => document.documentElement.classList.remove('hide-tidy'));
@@ -161,7 +166,7 @@ try {
     assert.equal(await a.locator('.tp-card').count(), 7);
     assert.match(await a.locator('.tp .ck-lead').innerText(), /7 tidy-ups/);
     assert.match(await card(a, 'Fold #ai').innerText(), /Why: Fold/);
-    assert.equal(await a.locator('.tp-change').count(), 5);
+    assert.equal(await a.locator('.tp-change').count(), 7);
     // Nothing changed just by looking.
     assert.equal((await get(a, 'wd_x1')).fields.trashed, undefined);
   });
@@ -270,6 +275,19 @@ try {
     assert.match(await ch('Reordered today').innerText(), /Undone/);
   });
 
+  await check('Claude’s delete and rename can be undone: the line comes back with what was under it, and its words go back', async () => {
+    const ch = (t) => a.locator('.tp-change', { hasText: t });
+    await ch('Deleted “Buy tape”').locator('.tp-undo').click();
+    await sleep(600);
+    assert.equal((await get(a, 'li_del')).fields.trashed, undefined);
+    assert.equal((await get(a, 'li_del_kid')).fields.trashedWith, undefined);
+    assert.match(await ch('Deleted “Buy tape”').innerText(), /Undone/);
+    await ch('Renamed “Boxes”').locator('.tp-undo').click();
+    await sleep(600);
+    const r = await get(a, 'li_named');
+    assert.deepEqual([r.text, r.tags], ['Boxes', []]);
+  });
+
   await check('undo of a change is refused when the thing was changed since', async () => {
     // cx_3 says it ticked "Call the venue", but the line isn't ticked now.
     await a.locator('.tp-change', { hasText: 'Call the venue' }).locator('.tp-undo').click();
@@ -291,7 +309,9 @@ try {
   await check('no yes or undo removed any writing', async () => {
     await both(a, b);
     const after = await words(a);
-    for (const w of before) assert.ok(after.includes(w), `“${w}” is still there`);
+    // Claude's own rename (cx_7) was undone, so its words give way to the person's.
+    for (const w of before.filter((x) => x !== 'Label the boxes')) assert.ok(after.includes(w), `“${w}” is still there`);
+    assert.ok(after.includes('Boxes'), 'the person’s own words came back');
     for (const r of (await all(b)).filter((x) => x.kind === 'line')) assert.equal(r.deleted && !r.fields?.mirror, false, `${r.text} still there`);
   });
 

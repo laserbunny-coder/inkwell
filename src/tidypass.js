@@ -257,8 +257,22 @@ export async function undoChange(id, hooks) {
     return [...rows, mark];
   }
   const r = await getEntry(c.target);
+  // A line Claude put in the Trash comes back with everything that went with it.
+  if (c.type === 'trash') {
+    if (!r || r.deleted) throw fail('It was deleted from the Trash for good.');
+    if (r.fields?.trashedWith !== r.id || r.fields?.trashed !== c.after?.trashed) throw fail('It isn’t in the Trash the way Claude put it there.');
+    await restore(r.id);
+    const mark = { ...cx, fields: { ...cx.fields, change: { ...c, undone_at: new Date().toISOString(), undone_by: 'me' } }, updated_at: Date.now() };
+    await putEntries([mark]);
+    return [await getEntry(r.id), mark];
+  }
   if (gone(r)) throw fail('What it changed is in the Trash now.');
   const rows = [];
+  if (c.type === 'words') {
+    if (r.text !== c.after?.text) throw fail('You’ve changed it since, so it stays as you have it.');
+    const b = c.before || {};
+    rows.push({ ...r, text: b.text ?? r.text, content: b.content ?? null, tags: b.tags || [], links: b.links || [], updated_at: Date.now() });
+  }
   if (c.type === 'done') {
     if (!!r.fields?.done !== !!c.after.done) throw fail('You’ve changed it since, so it stays as you have it.');
     // A task ticked by Claude also gets back its day and history (a repeating
