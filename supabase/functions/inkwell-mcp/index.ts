@@ -133,6 +133,15 @@ function dbFor(userId: string): Db {
       if (error) throw error;
       return (data ?? []).length > 0;
     },
+    async reword(id, was, patch) {
+      // A line's words only (rename_line and its undo), never anything else.
+      const { text, content, tags, links } = patch;
+      let q = sb.from("writing_entries").update({ text, content, tags, links }).eq("user_id", userId).eq("id", id).eq("kind", "line");
+      if (was) q = q.eq("updated_at", was);
+      const { data, error } = await q.select("id");
+      if (error) throw error;
+      return (data ?? []).length > 0;
+    },
     async markChange(id, fields) {
       const { error } = await sb.from("writing_entries").update({ fields }).eq("user_id", userId).eq("id", id).eq("kind", "change");
       if (error) throw error;

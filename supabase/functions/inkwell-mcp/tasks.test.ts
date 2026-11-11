@@ -45,6 +45,12 @@ const db: Db = {
     Object.assign(r, patch, { updated_at: new Date(Date.parse(r.updated_at!) + 1000).toISOString() });
     return true;
   },
+  reword: async (id, was, patch) => {
+    const r = rows.find((x) => x.id === id && x.kind === "line");
+    if (!r || (was && r.updated_at !== was)) return false;
+    Object.assign(r, patch, { updated_at: new Date(Date.parse(r.updated_at!) + 1000).toISOString() });
+    return true;
+  },
   markChange: async (id, fields) => { const r = rows.find((x) => x.id === id && x.kind === "change"); if (r) r.fields = fields; },
   fileLinks: async (ids) => ids.map(() => null), keepFile: async () => {}, fetchFile: async () => null,
   tasks: async () => rows.filter((r) => r.kind === "line" && !r.deleted && (r.fields as any)?.task),
@@ -189,5 +195,44 @@ assert.ok((await call("raise_needs_you", { kind: "nope", title: "x", project: "I
 const lu = await call("log_update", { text: "Phone drag is live", state: "live", project: "Inkwell", thread: "Finish moving off Daybook", link });
 assert.equal(lu.logged.state, "live");
 assert.equal((await call("list_updates")).updates.length, 1);
+
+// The Calendar: a time on its day, off again, and moving its day takes it off.
+let tm = await call("update_task", { id: "li-a1", time: "14:30", length_minutes: 90 });
+assert.deepEqual(get("li-a1").fields.task.on, { day: get("li-a1").fields.task.day, at: 870 });
+assert.equal(get("li-a1").fields.task.len, 90);
+assert.ok(tm.changed.some((b: string) => /14:30/.test(b)));
+assert.ok((await call("list_tasks", { from: get("li-a1").fields.task.day, query: "QuickBooks", include_done: true })).tasks.some((x: any) => x.time === "14:30" && x.length_minutes === 90));
+await call("undo_change", { change_id: tm.change_id });
+assert.equal(get("li-a1").fields.task.on ?? null, null);
+assert.ok((await call("update_task", { id: "li-a1", time: "25:00" })).error);
+assert.ok((await call("update_task", { id: "li-plain", time: "09:00" })).error, "no day, no time");
+tm = await call("update_task", { id: "li-a1", time: "09:00" });
+assert.equal(get("li-a1").fields.task.len, 30);
+await call("update_task", { id: "li-a1", day: addDays(TODAY, 3) });
+assert.equal(get("li-a1").fields.task.on, null, "a new day takes it off the old day's Calendar");
+const at = await call("add_task", { text: "Call Dana", day: "tomorrow", time: "10:15" });
+assert.equal(rows.find((r) => r.text === "Call Dana")!.fields.task.on.at, 615);
+assert.ok(at.task || at.added || at.id || at.line, "added");
+
+// Rename: the words change (tags too), and Undo puts them back.
+const rn = await call("rename_line", { line_id: "li-a2", text: "Order the NAS #gear" });
+assert.equal(get("li-a2").text, "Order the NAS #gear");
+assert.deepEqual(get("li-a2").tags, ["gear"]);
+assert.ok((await call("rename_line", { line_id: "li-a2", text: "  " })).error);
+await call("undo_change", { change_id: rn.change_id });
+assert.equal(get("li-a2").text, "Order the NAS");
+assert.deepEqual(get("li-a2").tags, []);
+
+// Delete: to the Trash with what's under it; Undo brings it all back. Nate's stay his.
+assert.ok((await call("delete_line", { line_id: "li-nate" })).error);
+const del = await call("delete_line", { line_id: "li-a2" });
+assert.equal(del.lines_under_it, 1);
+assert.equal(get("li-a2").fields.trashedWith, "li-a2");
+assert.equal(get("li-a3").fields.trashedWith, "li-a2");
+assert.ok(!(await call("list_tasks", { from: TODAY })).tasks.some((x: any) => x.id === "li-a2"), "gone from the plan");
+await call("undo_change", { change_id: del.change_id });
+assert.equal(get("li-a2").fields.trashed, undefined);
+assert.equal(get("li-a3").fields.trashedWith, undefined);
+assert.ok((await call("list_tasks", { from: TODAY })).tasks.some((x: any) => x.id === "li-a2"), "back on the plan");
 
 console.log("inkwell-mcp tasks: all checks passed");
