@@ -5,7 +5,8 @@
 // ordinary lines with a day (see tasks.js), gathered here from wherever they
 // live. Plain text on hairlines; nothing is copied.
 
-import { popMenu, askText } from './menu.js';
+import { popMenu, askText, ask } from './menu.js';
+import { trash, restore } from './trash.js';
 import {
   loadTasks, dayPlan, weekPlan, pace, planSettings, savePlanSettings, setTask, unTask, tickTask, tookTask, startTimer, stopTimer,
   addTask, renameTask, arrange, weave, plainLine, parseEst, readSpan, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE, stepsPage, stepsHome,
@@ -15,7 +16,7 @@ import { areas, areaColor } from './library.js';
 import { drawAhead, aheadClick, aheadContext, aheadDrags } from './ahead.js';
 import { clockWord, freeLeft } from './calendar.js';
 import { drawCalendar } from './plancal.js';
-import { children } from './db.js';
+import { children, getEntry, isTrashed } from './db.js';
 
 const make = (tag, cls, text) => {
   const el = document.createElement(tag);
@@ -295,6 +296,13 @@ export class Plan {
     // List | Calendar: the same tasks as an order, or placed by hand on the day's hours.
     const asCal = this.dayView === 'cal' && !this.hooks.off?.('planview');
     head.append(this.viewSwitch(asCal), this.switchRow('day'));
+    // A pile left from earlier days: go through it one at a time.
+    if (day === today && p.carried.length >= 5 && this.hooks.goThrough && box === this.box) {
+      const b = make('button', 'pl-thru', `${p.carried.length} from earlier days · Go through`);
+      b.dataset.act = 'thru-carried';
+      b.title = 'One at a time: keep it for today, take it off the day, or delete it';
+      head.append(b);
+    }
     // Woven: timed events sit among the tasks, at their place in the day; all-day
     // ones (and every event, with "Events among the tasks" off) stay on top.
     const woven = !this.hooks.off?.('woven');
@@ -413,6 +421,7 @@ export class Plan {
     const ghost = !!i.ghost;
     const row = make('div', `pl-task${done ? ' done' : ''}${next ? ' next' : ''}${t.run ? ' timing' : ''}${carried ? ' carried' : ''}${this.just === id && !ghost ? ' justdone' : ''}${ghost ? ' ghost' : ''}${t.habit ? ' habit' : ''}`);
     row.dataset.task = id;
+    if (this.sel?.has(id)) row.classList.add('sel');
     if (i.occ) row.dataset.occ = i.occ;
     if (ghost) row.dataset.ghost = i.ghost;
     if (!done && !ghost && drag) {
@@ -814,6 +823,7 @@ export class Plan {
     if (act === 'week-now') return this.hooks.go({ view: 'plan', tab: 'week' });
     if (act === 'open-day') return this.hooks.go({ view: 'notebook', pageId: `day-${el.closest('[data-day]').dataset.day}` });
     if (act === 'view-list' || act === 'view-cal') { this.dayView = act.slice(5); return this.redraw(); }
+    if (act === 'thru-carried') return this.hooks.goThrough?.();
     if (act === 'free') return this.askFree();
     if (act === 'dayend') return this.askDayEnd();
     if (act === 'area-target') return this.askTarget(el.closest('[data-area]').dataset.area);
@@ -838,6 +848,7 @@ export class Plan {
     if (act === 'more') return this.menu(i, el);
     if (act === 'open') return this.hooks.openEntry(i.row.id);
     if (act === 'fold') { this.fold(i.row.id, !this.unfolded(i.row.id)); return this.redraw(); }
+    if (act === 'words' && e.shiftKey && !i.ghost && !i.occ) { clearTimeout(this.opening); return this.select(i.row.id, row); }
     if (act === 'words') {
       // Ctrl + click: beside, as before.
       if ((e.ctrlKey || e.metaKey) && this.hooks.beside?.(i.row.id)) { clearTimeout(this.opening); return this.hooks.openTask(i.row.id, null, { beside: true }); }
@@ -857,6 +868,96 @@ export class Plan {
     clearTimeout(this.opening);
     this.left(i.row.id);
     return (this.hooks.openTask || this.hooks.openEntry)(i.row.id);
+  }
+
+  // ---------- Go through what's left from earlier days ----------
+
+  async carriedList() {
+    if (!this.items) await this.refresh();
+    const p = dayPlan(this.items || [], this.today, this.today);
+    return p.carried.filter((i) => !i.ghost && !i.occ && !isRepeat(i.task)).map((i) => ({
+      id: i.row.id, text: (i.row.text || 'Untitled').trim(), day: i.task.day, hq: !!i.row.fields?.hq,
+      where: i.world?.title || (i.root?.kind === 'page' ? i.root.title : ''), canDelete: this.canRemove(i)
+    }));
+  }
+
+  // One answer from Go through; gives back how to take it back.
+  async carriedAnswer(it, how) {
+    const was = (await getEntry(it.id))?.fields?.task?.day ?? it.day;
+    if (how === 'keep' || how === 'notoday') {
+      await this.wrote(await setTask(it.id, { day: how === 'keep' ? this.today : null }));
+      return async () => this.wrote(await setTask(it.id, { day: was }));
+    }
+    if (how === 'delete') {
+      const row = await getEntry(it.id);
+      if (!row || isTrashed(row)) return null;
+      await trash(row);
+      await this.wrote([await getEntry(it.id)]);
+      return async () => { await restore(it.id); await this.wrote([await getEntry(it.id)]); };
+    }
+    return null;
+  }
+
+  // ---------- picking several, and deleting ----------
+
+  select(id, row, on = !this.sel?.has(id)) {
+    this.sel ||= new Set();
+    if (on) this.sel.add(id); else this.sel.delete(id);
+    (row || this.box.querySelector(`[data-task="${CSS.escape(id)}"]`))?.classList.toggle('sel', on);
+    if (this.sel.size) this.hooks.toast?.(`${this.sel.size} picked · Ctrl + Shift + Backspace deletes, Esc lets go`);
+  }
+  unselect() {
+    for (const id of this.sel || []) for (const r of document.querySelectorAll(`[data-task="${CSS.escape(id)}"]`)) r.classList.remove('sel');
+    this.sel = new Set();
+  }
+
+  // Nate's tasks are his to finish or remove on the board; a repeat's single day isn't a line.
+  canRemove(i) { return !!i && !i.ghost && !i.occ && !(i.task?.owner && i.task.owner !== 'me'); }
+
+  // Delete: the real line and everything under it go to the Trash, wherever
+  // it's written, with Undo (the toast, or Ctrl + Z here). Only a task kept in
+  // step with the Acro HQ board asks first, since the board keeps its own.
+  async remove(items) {
+    const theirs = items.filter((i) => i?.task?.owner && i.task.owner !== 'me');
+    const list = items.filter((i) => this.canRemove(i));
+    if (theirs.length && !list.length) { this.hooks.toast?.('That’s Nate’s task: it stays on the board for him'); return false; }
+    if (!list.length) return false;
+    const hq = list.filter((i) => i.row.fields?.hq);
+    if (hq.length) {
+      const yes = await ask({
+        title: hq.length === 1 ? 'This task is on the Acro HQ board' : `${hq.length} of these are on the Acro HQ board`,
+        body: 'Deleting here takes it out of Inkwell only. It stays on the board, where you or Nate can remove it.',
+        ok: 'Delete from Inkwell', danger: true
+      });
+      if (!yes) return false;
+    }
+    const gone = [];
+    let lines = 0;
+    for (const i of list) {
+      const row = await getEntry(i.row.id);
+      if (!row || row.deleted || isTrashed(row)) continue;
+      const n = await trash(row);
+      lines += n - 1;
+      gone.push({ id: row.id, text: row.text || 'Untitled', from: i.world?.title || (i.root?.kind === 'page' ? i.root.title : '') });
+    }
+    if (!gone.length) return false;
+    this.unselect();
+    this.lastGone = gone.map((g) => g.id);
+    await this.wrote(await Promise.all(this.lastGone.map((id) => getEntry(id))));
+    const one = gone[0];
+    const under = lines ? ` and ${lines === 1 ? 'the line' : `${lines} lines`} under it` : '';
+    const said = gone.length === 1 ? `Deleted “${one.text}”${under}${one.from ? `, from ${one.from}` : ''}` : `Deleted ${gone.length} tasks${theirs.length ? ` (Nate’s ${theirs.length === 1 ? 'one stays' : 'stay'})` : ''}`;
+    this.hooks.toast?.(said, { label: 'Undo', run: () => this.undoRemove() });
+    return true;
+  }
+
+  async undoRemove() {
+    const ids = this.lastGone;
+    if (!ids?.length) return;
+    this.lastGone = null;
+    for (const id of ids) await restore(id);
+    await this.wrote(await Promise.all(ids.map((id) => getEntry(id))));
+    this.hooks.toast?.(ids.length === 1 ? 'It’s back' : `${ids.length} tasks are back`);
   }
 
   left(id) { if (this.box?.contains(document.activeElement) || this.box?.querySelector(`[data-task="${CSS.escape(id)}"]`)) this.leftAt = { id, y: document.scrollingElement?.scrollTop || 0, at: Date.now() }; }
@@ -912,6 +1013,33 @@ export class Plan {
 
   key(e) {
     if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && this.nudge(e)) return;
+    const onTask = !e.target.closest?.('input, textarea, [contenteditable="true"]') && e.target.closest?.('[data-task]');
+    // Ctrl + Shift + Backspace, as in the outline: the task (or the ones picked) to the Trash.
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'Backspace' || e.key === 'Delete') && (onTask || this.sel?.size)) {
+      e.preventDefault();
+      const ids = this.sel?.size ? [...this.sel] : [onTask.dataset.task];
+      this.remove(ids.map((x) => this.item(x)).filter(Boolean));
+      return;
+    }
+    // Shift + Down / Up on a task picks it and the next one, for a group delete.
+    if (onTask && e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      const rows = [...onTask.closest('.pl-list, .pl-steps, .pl-sheet, #plan')?.querySelectorAll('.pl-task[data-move]') || []];
+      const at = rows.indexOf(onTask);
+      const next = rows[at + (e.key === 'ArrowDown' ? 1 : -1)];
+      if (at < 0 || !next) return;
+      e.preventDefault();
+      if (!this.sel?.has(onTask.dataset.task)) this.select(onTask.dataset.task, onTask);
+      this.select(next.dataset.task, next, true);
+      next.querySelector('.pl-words')?.focus();
+      return;
+    }
+    if (e.key === 'Escape' && this.sel?.size && !e.target.closest?.('input')) { this.unselect(); return; }
+    // Ctrl + Z right after a delete here brings it back.
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && this.lastGone && !e.target.closest?.('input, textarea, [contenteditable="true"]')) {
+      e.preventDefault();
+      this.undoRemove();
+      return;
+    }
     const input = e.target.closest?.('input[data-add]');
     if (!input) return;
     if (e.key === 'Escape') { input.value = ''; input.blur(); return; }
@@ -1068,7 +1196,8 @@ export class Plan {
       'sep',
       { label: 'Open it where it’s written', run: () => this.hooks.openEntry(i.row.id) },
       ...(this.hooks.beside?.(i.row.id) ? [{ label: 'Open it beside', run: this.hooks.beside(i.row.id) }] : []),
-      { label: 'Not a task any more', run: async () => { await this.wrote(await unTask(i.row.id)); this.hooks.toast?.('It’s a plain line again, still where it was written'); } }
+      { label: 'Not a task any more', run: async () => { await this.wrote(await unTask(i.row.id)); this.hooks.toast?.('It’s a plain line again, still where it was written'); } },
+      ...(this.canRemove(i) ? ['sep', { label: this.sel?.size > 1 && this.sel.has(i.row.id) ? `Delete ${this.sel.size} tasks` : 'Delete', danger: true, run: () => this.remove(this.sel?.size > 1 && this.sel.has(i.row.id) ? [...this.sel].map((x) => this.item(x)).filter(Boolean) : [i]) }] : [])
     );
     popMenu(anchor, items, at);
   }
