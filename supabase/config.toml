@@ -1,0 +1,61 @@
+# Supabase project settings used by the Supabase CLI when deploying.
+project_id = "daybook"
+
+[functions.ask]
+verify_jwt = true
+
+[functions.calendar]
+verify_jwt = true
+
+# Inkwell, the writing app, asks Claude for alternates here.
+[functions.inkwell]
+verify_jwt = true
+
+# The Claude connector checks its own secret address instead of a sign-in.
+[functions.mcp]
+verify_jwt = false
+
+# Inkwell's Claude connector, which also checks its own secret address.
+[functions.inkwell-mcp]
+verify_jwt = false
+
+# Scribe, the dictation app, checks its own device secret instead of a sign-in.
+[functions.scribe]
+verify_jwt = false
+
+# Inkwell's weekly and monthly summaries: woken by the database job; checks its own secret.
+[functions.inkwell-digest]
+verify_jwt = false
+
+# Inkwell's share links: readers open them without signing in; the link's own secret is checked.
+[functions.inkwell-share]
+verify_jwt = false
+
+[functions.quest]
+verify_jwt = true
+
+[functions.push]
+verify_jwt = true
+
+# Woken by the database job every minute; checks its own secret
+[functions.remind]
+verify_jwt = false
+
+[functions.routine]
+verify_jwt = true
+
+# Gristlemaw's voice: checks the sign-in itself, or the server's own secret for making tryouts.
+[functions.voice]
+verify_jwt = false
+
+# Acro HQ's meeting recordings: woken by HQ and by the database job; it only looks, through HQ's connector.
+[functions.acro-meetings]
+verify_jwt = false
+
+# Acro HQ tasks <-> Daybook: woken by the database job every 2 minutes; it only looks, through HQ's connector.
+[functions.acro-tasks]
+verify_jwt = false
+
+# Phone alerts: the app signs in, the database trigger shows its own secret instead.
+[functions.alerts]
+verify_jwt = false

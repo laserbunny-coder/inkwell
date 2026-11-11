@@ -37,3 +37,12 @@ Michael's desktop PC, and he has to give the go while that session is running.
 The code must never live only on GitHub. After each batch of work, save a copy
 (a tar of the working folder with its .git, or a git bundle) to the project's
 shared files under `code-backup/`.
+
+## The server lives here now
+
+Since Nov 2026 the server half of Inkwell (Supabase migrations and functions,
+including Scribe's and Acro HQ's) is in `supabase/` in this repository, not in
+the Daybook repo. Server changes go here; `server.yml` runs the server checks
+on a pull request and publishes from main once the Supabase secrets are set in
+this repository. A pull request that only touches `supabase/` does not
+republish the app.
