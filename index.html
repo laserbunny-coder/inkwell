@@ -36,6 +36,8 @@
       // Outlines start without bullets (once per device; the Aa panel brings them back).
       if (!localStorage.getItem('bulletsOff')) { hide.push('bullets'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('bulletsOff', '1'); }
       if (!localStorage.getItem('linkPicsOff')) { hide.push('linkpics'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('linkPicsOff', '1'); }
+      // Time estimates start off (Nov 2026): the plan is the order you'll do things in.
+      if (!localStorage.getItem('estimatesOff')) { hide.push('estimates'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('estimatesOff', '1'); }
       for (const h of hide) d.classList.add('hide-' + h);
       if (localStorage.getItem('focus') === '1') d.classList.add('focus');
       if (localStorage.getItem('focusSections') === '1') d.classList.add('focus-sections');
@@ -395,6 +397,8 @@
     <label class="switch"><input type="checkbox" data-show="plan"> The plan on top of a day’s page</label>
     <label class="switch"><input type="checkbox" data-show="took"> “How long did it take?” when you tick a task</label>
     <label class="switch"><input type="checkbox" data-show="taskchips"> A task’s day and length after its words</label>
+    <label class="switch"><input type="checkbox" data-show="taskgrip"> Six dots on a task in the plan, to show it can be moved</label>
+    <label class="switch"><input type="checkbox" data-show="tasknotes"> A triangle on a task with lines under it, to show them right in the plan</label>
     <label class="switch"><input type="checkbox" data-show="loose"> A ring on lines you haven’t filed, and their count under the day</label>
     <label class="switch"><input type="checkbox" data-show="deskread"> Claude’s one-line read on the Desk</label>
     <label class="switch"><input type="checkbox" data-show="deskcount"> How many things need you, beside Desk</label>
@@ -402,6 +406,9 @@
     <label class="switch"><input type="checkbox" data-show="aheadhours"> Each week’s hours at the top of Weeks ahead</label>
     <label class="switch"><input type="checkbox" data-show="areahours"> Each area’s hours under the week</label>
     <label class="switch"><input type="checkbox" data-show="calendar"> Your Google Calendar’s events in the plan</label>
+    <label class="switch"><input type="checkbox" data-show="woven"> Calendar events among the tasks, at their place in the day (off: apart, on top)</label>
+    <label class="switch"><input type="checkbox" data-show="planview"> List | Calendar beside the plan’s name</label>
+    <label class="switch"><input type="checkbox" data-show="estimates"> Time estimates: how long each task takes, and the hours left today</label>
     <label class="switch"><input type="checkbox" data-show="hoursleft"> “Left today” beside today’s plan</label>
     <label class="switch"><input type="checkbox" data-show="repeatmark"> The ↻ after a task that repeats</label>
     <label class="switch"><input type="checkbox" data-show="repeatahead"> A repeating task on the later days it comes round on</label>

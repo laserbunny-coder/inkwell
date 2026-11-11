@@ -3786,6 +3786,7 @@ function setShown(name, on) {
   if (name === 'linkpics') resetLinkPics();
   if (name === 'panes') { if (!on) panes?.closeAll(); panes?.layout(); }
   if (name === 'closedtag' && deskPage?.showing() && deskPage.now) deskPage.render({ now: deskPage.now, failed: false });
+  if (name === 'estimates' || name === 'woven' || name === 'planview') plan?.refresh();
   syncSwitches();
 }
 // Reading a script through: only the script pages, no sections, notes or tools.
@@ -4645,6 +4646,9 @@ document.addEventListener('keydown', (e) => {
   else if (m && !e.shiftKey && !e.altKey && e.code === 'Backslash') { e.preventDefault(); toggleBesidePane(); }
   // Alt + T: talk it through with Claude, beside where you are.
   else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyT') { e.preventDefault(); openTalk(); }
+  // Alt + Left / Right: Back and Forward, everywhere (in a line too), so a task
+  // zoomed into from the plan zooms back out the way an outliner does.
+  else if (e.altKey && !m && !e.shiftKey && !inPane && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); if (e.key === 'ArrowLeft') history.back(); else history.forward(); }
   else if (m && e.shiftKey && k === 'f') { e.preventDefault(); openPalette('search'); }
   else if (m && e.shiftKey && k === 'o') { e.preventDefault(); go({ view: 'library', area: null }); }
   else if (m && k === 'o') { e.preventDefault(); if (!$('.palette').hidden) closePalette(false); nav.toggle(true); }
@@ -5105,6 +5109,17 @@ plan = new Plan({
     // Beside, a task's place opens in the main window and the plan stays.
     openEntry: (id) => (inPane && view() === 'plan' ? openInMain(id) : openEntry(id)),
     beside: (id) => (inPane || root.classList.contains('hide-panes') || !paneHost() ? null : () => openEntryBeside(id)),
+    // A click on a task zooms into it, as an outliner does: the task becomes
+    // the page, its lines under it (the cursor on `line`, if given), and Back
+    // (Alt + Left) comes out to the plan. Ctrl + click and the menu open it beside.
+    openTask: async (id, line = null, { beside = false } = {}) => {
+      const at = await placeOf(id);
+      if (!at) return;
+      const place = at.view === 'notebook' && at.line ? { view: 'notebook', pageId: at.pageId, zoom: at.line, ...(line ? { line } : {}) } : at;
+      if (beside && !inPane && !root.classList.contains('hide-panes') && paneHost()) return openBeside(place);
+      if (inPane && view() === 'plan') return paneHost()?.hooks.goMain(place);
+      return go(place);
+    },
     go: (place) => go(place),
     off: (name) => hidden().has(name),
     // A project's steps were drawn again: its next date may have moved.

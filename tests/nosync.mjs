@@ -4,9 +4,13 @@
 // with window.__syncBackend = null, unless the test sets its own stand-in.
 export function withoutSync(browser) {
   const open = browser.newContext.bind(browser);
-  browser.newContext = async (opts) => {
-    const ctx = await open(opts);
+  browser.newContext = async (opts = {}) => {
+    // Time estimates start off on a new device; most tests were written with them
+    // showing, so they're on unless a test asks for a fresh device ({ estimates: false }).
+    const { estimates = true, ...rest } = opts;
+    const ctx = await open(rest);
     await ctx.addInitScript(() => { if (!('__syncBackend' in window)) window.__syncBackend = null; });
+    if (estimates) await ctx.addInitScript(() => { try { if (!localStorage.getItem('estimatesOff')) localStorage.setItem('estimatesOff', '1'); } catch { /* no storage here */ } });
     return ctx;
   };
   return browser;

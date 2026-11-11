@@ -75,9 +75,13 @@ try {
   });
 
   await check('a task typed into the plan lands on today, and a time at the end is how long it takes', async () => {
+    // The very same box stays (a phone keyboard closes if the focused box is swapped for a new one).
+    await page.evaluate(() => { document.querySelector('#plan input[data-add]').__kept = true; });
+    assert.equal(await page.locator('#plan input[data-add]').getAttribute('enterkeyhint'), 'enter', 'a phone keyboard shows Enter, not Done');
     await add(page, 'Call Dana about the storyboards 30m');
     await add(page, 'Board Reel 2 1h 30m');
     await add(page, 'Order the storage drive');
+    assert.equal(await page.evaluate(() => document.activeElement?.__kept === true), true, 'the same box, still with the caret');
     assert.deepEqual(await words(page), ['Call Dana about the storyboards', 'Board Reel 2', 'Order the storage drive']);
     assert.equal(await page.locator('#plan .pl-sum').innerText(), '2 h to do');
     assert.equal(await row(page, 'Call Dana').locator('.pl-est').innerText(), '30 min');
@@ -206,8 +210,8 @@ try {
     assert.equal(await li.locator('.task-chip').innerText(), 'Tomorrow · 45 min');
   });
 
-  await check('a click on a task’s words changes them in place', async () => {
-    await row(page, 'Order the storage drive').locator('.pl-words').click();
+  await check('a double-click on a task’s words changes them in place', async () => {
+    await row(page, 'Order the storage drive').locator('.pl-words').dblclick();
     const input = page.locator('#plan .pl-rename');
     await input.fill('Order the 8 TB storage drive');
     await input.press('Enter');
@@ -216,6 +220,51 @@ try {
     const t = await taskNamed(page, 'Order the 8 TB storage drive');
     assert.deepEqual(t.content, [{ type: 'text', text: 'Order the 8 TB storage drive' }]);
     assert.equal(t.fields.task.est, 15, 'the rest of the task is as it was');
+    await sleep(400);
+    assert.equal(await page.locator('.pane').count(), 0, 'a double-click doesn’t open it as well');
+  });
+
+  await check('six dots show a task can be moved; Alt + Up and Alt + Down move it with the keyboard', async () => {
+    const r = row(page, 'Order the 8 TB');
+    const op = () => r.locator('.pl-grip').evaluate((g) => getComputedStyle(g).opacity);
+    await page.mouse.move(5, 5);
+    await sleep(200);
+    assert.equal(await op(), '0', 'quiet until the pointer is on it');
+    await r.hover();
+    await sleep(200);
+    assert.equal(await op(), '1');
+    assert.equal(await row(page, 'Call Dana').locator('.pl-grip').count(), 0, 'a done task has none');
+    assert.deepEqual((await words(page)).slice(0, 2), ['Board Reel 2', 'Order the 8 TB storage drive']);
+    await r.locator('.pl-words').focus();
+    await page.keyboard.press('Alt+ArrowUp');
+    await page.waitForFunction(() => document.querySelector('#plan .pl-task .pl-words')?.textContent === 'Order the 8 TB storage drive');
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Order the 8 TB storage drive', 'the keyboard stays on it');
+    await page.keyboard.press('Alt+ArrowUp');
+    await sleep(300);
+    assert.equal((await words(page))[0], 'Order the 8 TB storage drive', 'the top is the top');
+    await page.keyboard.press('Alt+ArrowDown');
+    await page.waitForFunction(() => document.querySelector('#plan .pl-task .pl-words')?.textContent === 'Board Reel 2');
+    assert.equal((await taskNamed(page, 'Board Reel 2')).fields.task.order < (await taskNamed(page, 'Order the 8 TB storage drive')).fields.task.order, true, 'the order is saved');
+    await page.evaluate(() => document.documentElement.classList.add('hide-taskgrip'));
+    assert.equal(await r.locator('.pl-grip').isVisible(), false, 'Look can switch the dots off');
+    await page.evaluate(() => document.documentElement.classList.remove('hide-taskgrip'));
+  });
+
+  await check('a click on a task zooms into it, Alt + Left zooms back out to the plan, Ctrl + click opens it beside', async () => {
+    await row(page, 'Order the 8 TB').locator('.pl-words').click();
+    await page.waitForFunction(() => /Order the 8 TB/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''));
+    assert.equal(await viewOf(page), 'notebook');
+    assert.equal(await page.locator('.pane-frame').count(), 0, 'nothing opened beside');
+    await page.keyboard.press('Alt+ArrowLeft');
+    await page.waitForFunction(() => !document.querySelector('#outline-editor li.zoom-root') && document.querySelectorAll('#plan .pl-task').length >= 2);
+    await row(page, 'Order the 8 TB').locator('.pl-words').click({ modifiers: ['Control'] });
+    await page.waitForFunction(() => {
+      const d = [...document.querySelectorAll('.pane-frame')].at(-1)?.contentDocument;
+      return d?.documentElement?.dataset.started === '1' && /Order the 8 TB/.test(d.querySelector('#outline-editor li.zoom-root')?.textContent || '');
+    }, null, { timeout: 15000 });
+    assert.equal(await page.evaluate(() => !!document.querySelector('#outline-editor li.zoom-root')), false, 'the main view stays on the day');
+    await page.evaluate(() => window.__panes.closeAll());
+    await page.waitForFunction(() => !document.querySelector('.pane'));
   });
 
   await check('dragging a task up changes the day’s order, and it holds after a reload', async () => {

@@ -287,7 +287,9 @@ export async function loadTasks(today = isoOf()) {
     if (!ok || !root) continue;
     // One that repeats shows on the day it's due now (see dueDay).
     const task = isRepeat(row.fields.task) ? { ...row.fields.task, day: dueDay(row.fields.task, today) } : row.fields.task;
-    out.push({ row, task, root, world, mine: !task.owner || task.owner === 'me' });
+    // Its notes: the lines written under it (blank ones don't count).
+    const notes = (await children(row.id)).filter((c) => c.kind === 'line' && String(c.text || '').trim()).length;
+    out.push({ row, task, root, world, mine: !task.owner || task.owner === 'me', notes });
   }
   return out;
 }
@@ -328,6 +330,28 @@ export function dayPlan(items, day, today = isoOf()) {
   const done = [...mine.filter((i) => isDone(i) && doneDay(i) === day), ...didOn(mine, day)].sort((a, b) => (a.task.done_at || 0) - (b.task.done_at || 0));
   const todo = [...carried, ...open];
   return { open, carried, done, todo, next: todo.find((i) => !i.ghost) || null, left: todo.reduce((a, i) => a + est(i), 0), spent: done.reduce((a, i) => a + real(i), 0) };
+}
+
+// Woven: a day's timed calendar events among its open tasks, as one list of
+// { event } and { item } in the order they're drawn. A task sits after the event
+// it was put after (task.at = { day, after: minutes from midnight }); one never
+// put anywhere sits after the last event that has begun by now (on another day,
+// on top). A moved or deleted event lets its tasks fall in after the one before.
+export const minutesOf = (ms) => { const d = new Date(ms); return d.getHours() * 60 + d.getMinutes(); };
+export function weave(open, events, day, now = Date.now(), today = isoOf()) {
+  const evs = events.filter((e) => !e.allDay && e.day === day).map((e) => ({ e, at: minutesOf(e.start) })).sort((a, b) => a.at - b.at || a.e.start - b.e.start);
+  const fallback = day === today ? minutesOf(now) : day < today ? 24 * 60 : -1;
+  const segment = (i) => {
+    const a = i.task.at && i.task.at.day === day && Number.isFinite(i.task.at.after) ? i.task.at.after : fallback;
+    let s = -1;
+    evs.forEach((x, n) => { if (x.at <= a) s = n; });
+    return s;
+  };
+  const by = new Map();
+  for (const i of open) { const s = segment(i); if (!by.has(s)) by.set(s, []); by.get(s).push(i); }
+  const out = (by.get(-1) || []).map((item) => ({ item }));
+  evs.forEach((x, n) => { out.push({ event: x.e, at: x.at }); for (const item of by.get(n) || []) out.push({ item }); });
+  return out;
 }
 
 // A week: seven days, and the tray of open tasks not on a day yet.
@@ -616,13 +640,16 @@ export const renameTask = (id, text) => change(id, (r) => {
 
 // A day's order after a drag: each task takes its place in the list (and the
 // day, for one dragged in from another). Only rows that change are written.
-export async function arrange(ids, day) {
+// pin: { id, after } puts that one task after the calendar event starting at
+// `after` minutes (-1: before them all) on this day, in a woven plan.
+export async function arrange(ids, day, pin = null) {
   const out = [];
   for (let n = 0; n < ids.length; n++) {
     const row = await getEntry(ids[n]);
     const t = taskOf(row);
-    if (!t || (t.order === n + 1 && t.day === day)) continue;
-    out.push(await change(ids[n], (r) => { withTask(r, { order: n + 1, day }); }));
+    const at = pin && pin.id === ids[n] ? { day, after: pin.after } : null;
+    if (!t || (t.order === n + 1 && t.day === day && (!at || (t.at?.day === day && t.at?.after === at.after)))) continue;
+    out.push(await change(ids[n], (r) => { withTask(r, { order: n + 1, day, ...(at ? { at } : {}) }); }));
   }
   return out.filter(Boolean);
 }

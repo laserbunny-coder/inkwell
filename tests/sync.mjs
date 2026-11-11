@@ -189,6 +189,8 @@ try {
     await sleep(500);
     // And a line made a task where it's written.
     await laptop.evaluate(() => window.__outline.commands.focus('end'));
+    // The editor takes the caret a frame later; the add box keeps it until then.
+    await laptop.waitForFunction(() => document.activeElement?.closest?.('#outline-editor'));
     await laptop.keyboard.press('Control+Shift+Enter');
     await sleep(700);
     assert.equal(await laptop.locator('#outline-editor .task-chip').count(), 1);
@@ -353,6 +355,32 @@ try {
       assert.deepEqual(texts, ['Scarf for Kim #gift', 'Tall Candle (vanilla) for Ana #gift'], texts.join(' | '));
     }
     assert.ok([...table.values()].some((r) => !r.deleted && r.text === 'Book for Leo #gift' && !r.fields?.mirror), 'the original Book line is still there');
+  });
+
+  await check('a task put on the day’s calendar on one device is at the same time on the other', async () => {
+    // Both on today's page.
+    for (const p of [laptop, phone]) {
+      await p.evaluate(() => { const d = new Date(); const pl = { view: 'notebook', pageId: `day-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }; history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); });
+      await p.waitForSelector('#plan input[data-add]');
+    }
+    const input = laptop.locator('#plan input[data-add]');
+    await input.fill('Pack the tripod');
+    await input.press('Enter');
+    await sleep(500);
+    await laptop.locator('#plan .pl-view button', { hasText: 'Calendar' }).click();
+    await laptop.locator('#plan .dc-chip', { hasText: 'Pack the tripod' }).click();
+    await laptop.waitForSelector('#plan .dc-blk');
+    await syncNow(laptop);
+    await syncNow(phone);
+    await sleep(800);
+    const t = [...table.values()].find((r) => r.text === 'Pack the tripod').fields.task;
+    assert.ok(t.on && Number.isFinite(t.on.at) && t.len === 30, 'the time went up with the task');
+    await phone.locator('#plan .pl-view button', { hasText: 'Calendar' }).click();
+    await phone.waitForSelector('#plan .dc-blk');
+    assert.equal(await phone.locator('#plan .dc-blk .dc-t').innerText(), await laptop.locator('#plan .dc-blk .dc-t').innerText());
+    // Back to the list on both, as the next checks expect.
+    await laptop.locator('#plan .pl-view button', { hasText: 'List' }).click();
+    await phone.locator('#plan .pl-view button', { hasText: 'List' }).click();
   });
 
 
