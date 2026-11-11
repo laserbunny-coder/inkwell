@@ -5105,6 +5105,17 @@ plan = new Plan({
     // Beside, a task's place opens in the main window and the plan stays.
     openEntry: (id) => (inPane && view() === 'plan' ? openInMain(id) : openEntry(id)),
     beside: (id) => (inPane || root.classList.contains('hide-panes') || !paneHost() ? null : () => openEntryBeside(id)),
+    // A click on a task opens it zoomed in on its line, where its notes are the
+    // lines under it: beside the plan (a sheet on a phone), or in the main view
+    // when the plan is itself beside or Beside is off.
+    openTask: async (id) => {
+      const at = await placeOf(id);
+      if (!at) return;
+      const place = at.view === 'notebook' && at.line ? { view: 'notebook', pageId: at.pageId, zoom: at.line } : at;
+      if (inPane) return view() === 'plan' ? paneHost()?.hooks.goMain(place) : go(place);
+      if (!root.classList.contains('hide-panes') && paneHost()) return openBeside(place);
+      return go(place);
+    },
     go: (place) => go(place),
     off: (name) => hidden().has(name),
     // A project's steps were drawn again: its next date may have moved.

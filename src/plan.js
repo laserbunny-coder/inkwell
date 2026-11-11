@@ -65,6 +65,7 @@ export class Plan {
     for (const el of [box, sheet, steps].filter(Boolean)) {
       el.addEventListener('click', (e) => this.click(e));
       el.addEventListener('keydown', (e) => this.key(e));
+      el.addEventListener('dblclick', (e) => this.dblclick(e));
       el.addEventListener('contextmenu', (e) => {
         if (el === sheet && aheadContext(this, e)) return;
         const row = e.target.closest('[data-task]');
@@ -207,6 +208,23 @@ export class Plan {
     el.value = held.value;
     el.focus({ preventScroll: true });
   }
+  // The add box being typed in, if it's in this list: kept in place through a
+  // redraw rather than drawn anew, because a phone's keyboard closes when the
+  // box it types into is taken away (and focusing a new one doesn't reopen it).
+  typingIn(box, key) {
+    const el = document.activeElement;
+    if (!el?.matches?.('input[data-add]') || el.dataset.add !== key || !box.contains(el)) return null;
+    const row = el.closest('.pl-add');
+    const list = row?.parentElement;
+    return list?.classList.contains('pl-list') ? { row, list } : null;
+  }
+  // Fills a list around its add row: `before` above it, `after` below. The
+  // row itself never leaves the page, so the caret and the keyboard stay.
+  fillAround(list, row, before, after) {
+    for (const el of [...list.children]) if (el !== row) el.remove();
+    row.before(...before);
+    row.after(...after);
+  }
 
   switchRow(current) {
     const row = make('div', 'pl-switch');
@@ -249,15 +267,26 @@ export class Plan {
     cal.setAttribute('aria-label', 'On your calendar');
     for (const e of evs) cal.append(this.eventLine(e, 'pl-ev'));
     cal.hidden = !evs.length;
-    const list = make('div', 'pl-list');
-    list.dataset.day = day;
-    for (const i of p.carried) list.append(...this.taskRow(i, { carried: true, next: day === today && i === p.next }));
-    for (const i of p.open) list.append(...this.taskRow(i, { next: day === today && i === p.next }));
-    list.append(this.addRow(day, 'Add a task'));
-    for (const i of p.done) list.append(...this.taskRow(i, {}));
-    box.replaceChildren(head, cal, list);
+    const above = [
+      ...p.carried.flatMap((i) => this.taskRow(i, { carried: true, next: day === today && i === p.next })),
+      ...p.open.flatMap((i) => this.taskRow(i, { next: day === today && i === p.next }))
+    ];
+    const below = p.done.flatMap((i) => this.taskRow(i, {}));
+    const typing = this.typingIn(box, day);
+    if (typing) {
+      // Adding one after another: the box stays where it is, the rest is drawn around it.
+      for (const el of [...box.children]) if (el !== typing.list) el.remove();
+      box.prepend(head, cal);
+      typing.list.dataset.day = day;
+      this.fillAround(typing.list, typing.row, above, below);
+    } else {
+      const list = make('div', 'pl-list');
+      list.dataset.day = day;
+      list.append(...above, this.addRow(day, 'Add a task'), ...below);
+      box.replaceChildren(head, cal, list);
+      this.restore(box, held);
+    }
     box.dataset.n = String(p.todo.length + p.done.length);
-    this.restore(box, held);
     this.just = null;
   }
 
@@ -274,22 +303,29 @@ export class Plan {
     const held = this.held(box);
     const head = make('h2', 'wp-sec', 'Steps');
     if (mine.length) head.append(make('span', 'wp-more', `${done.length} of ${mine.length} done`));
-    const list = make('div', 'pl-list');
     // Where a step is written, unless it's the project's own Steps page.
     const place = (i) => (i.root.id === stepsPage(w.id) ? '' : i.root.title || 'Untitled');
-    for (const i of open) list.append(...this.taskRow(i, { when: true, drag: false, place: place(i) }));
-    const add = this.addRow(null, 'Add a step');
-    add.querySelector('input').dataset.add = 'steps';
-    add.querySelector('input').setAttribute('aria-label', `Add a step to ${w.title || 'this project'}`);
-    list.append(add);
+    const above = open.flatMap((i) => this.taskRow(i, { when: true, drag: false, place: place(i) }));
     const few = 3;
-    for (const i of this.allDone ? done : done.slice(0, few)) list.append(...this.taskRow(i, { when: true, drag: false, place: place(i) }));
+    const below = (this.allDone ? done : done.slice(0, few)).flatMap((i) => this.taskRow(i, { when: true, drag: false, place: place(i) }));
     if (done.length > few) {
       const b = make('button', 'wp-link pl-alldone', this.allDone ? 'Fewer' : `${done.length - few} more done`);
       b.dataset.act = 'all-done';
-      list.append(b);
+      below.push(b);
     }
-    box.replaceChildren(head, list);
+    const typing = this.typingIn(box, 'steps');
+    if (typing) {
+      for (const el of [...box.children]) if (el !== typing.list) el.remove();
+      box.prepend(head);
+      this.fillAround(typing.list, typing.row, above, below);
+    } else {
+      const list = make('div', 'pl-list');
+      const add = this.addRow(null, 'Add a step');
+      add.querySelector('input').dataset.add = 'steps';
+      add.querySelector('input').setAttribute('aria-label', `Add a step to ${w.title || 'this project'}`);
+      list.append(...above, add, ...below);
+      box.replaceChildren(head, list);
+    }
     box.dataset.n = String(mine.length);
     box.dataset.today = today;
     this.restore(box, held);
@@ -298,13 +334,20 @@ export class Plan {
   }
 
   addRow(day, placeholder) {
-    const row = make('label', 'pl-add');
+    // A form, so a phone keyboard's Enter (or Go) sends it like a desktop Enter does.
+    const row = make('form', 'pl-add');
+    row.noValidate = true;
+    row.addEventListener('submit', (e) => { e.preventDefault(); this.add(input); });
+    // A click anywhere on the row goes into the box, as it did when the row was a label.
+    row.addEventListener('click', (e) => { if (e.target !== input) input.focus(); });
     const ring = make('span', 'pl-check ghost');
     ring.setAttribute('aria-hidden', 'true');
     const input = make('input');
     input.type = 'text';
     input.placeholder = placeholder;
     input.autocomplete = 'off';
+    // "Enter", not "Done": the keyboard stays up for the next one.
+    input.setAttribute('enterkeyhint', 'enter');
     input.setAttribute('aria-label', day ? `Add a task for ${dayWord(day, this.today)}` : 'Add a task, not on a day yet');
     input.dataset.add = day || 'tray';
     row.append(ring, input);
@@ -321,7 +364,15 @@ export class Plan {
     row.dataset.task = id;
     if (i.occ) row.dataset.occ = i.occ;
     if (ghost) row.dataset.ghost = i.ghost;
-    if (!done && !ghost && drag) { row.dataset.move = '1'; if (hover.matches) row.draggable = true; }
+    if (!done && !ghost && drag) {
+      row.dataset.move = '1';
+      if (hover.matches) row.draggable = true;
+      // The six dots say it can be moved: drag it, or press and hold on a phone.
+      const grip = make('span', 'pl-grip', '⠿');
+      grip.setAttribute('aria-hidden', 'true');
+      grip.title = hover.matches ? 'Drag to move it (or Alt + Up / Alt + Down)' : 'Press and hold, then slide to move it';
+      row.append(grip);
+    }
     const check = make('button', 'pl-check');
     check.innerHTML = ICON.check;
     check.dataset.act = 'tick';
@@ -332,8 +383,16 @@ export class Plan {
     const title = make('div', 'pl-title');
     const words = make('button', 'pl-words', i.row.text || 'Untitled');
     words.dataset.act = t.habit ? 'history' : 'words';
-    words.title = t.habit ? 'A habit: click for how it’s going' : plainLine(i.row) ? 'Click to change the words' : 'Open it where it’s written';
+    words.title = t.habit ? 'A habit: click for how it’s going' : hover.matches && plainLine(i.row) ? 'Click to open it, double-click to change the words' : 'Open it';
     title.append(words);
+    // Lines written under a task are its notes: a quiet mark says there are some.
+    if (i.notes) {
+      const n = make('button', 'pl-notes', '≡ notes');
+      n.dataset.act = 'notes';
+      n.title = i.notes === 1 ? 'One line of notes: click to open it' : `${i.notes} lines of notes: click to open them`;
+      n.setAttribute('aria-label', n.title);
+      title.append(n);
+    }
     if (rep) {
       const mark = make('button', 'pl-rep', '↻');
       mark.dataset.act = 'history';
@@ -670,17 +729,71 @@ export class Plan {
     if (act === 'est') return i.row.fields?.done ? this.askTook(i) : popMenu(el, this.estItems(i));
     if (act === 'more') return this.menu(i, el);
     if (act === 'open') return this.hooks.openEntry(i.row.id);
-    if (act === 'words') return plainLine(i.row) ? this.rename(i, el) : this.hooks.openEntry(i.row.id);
+    if (act === 'notes') return this.open(i);
+    if (act === 'words') {
+      // A double-click changes the words, so wait a moment before opening.
+      if (!hover.matches || !plainLine(i.row)) return this.open(i);
+      clearTimeout(this.opening);
+      this.opening = setTimeout(() => this.open(i), 260);
+      return;
+    }
     if (act === 'took') return this.tookFor(i, Number(el.dataset.m));
     if (act === 'took-other') return this.askTook(i);
   }
 
+  // Open a task: beside the plan (a sheet on a phone), zoomed in on its line
+  // so its notes, the lines under it, are right there to read and add to.
+  open(i) {
+    clearTimeout(this.opening);
+    return (this.hooks.openTask || this.hooks.openEntry)(i.row.id);
+  }
+
+  dblclick(e) {
+    const el = e.target.closest('.pl-words[data-act="words"]');
+    const row = el?.closest('[data-task]');
+    const i = row && this.item(row.dataset.task);
+    if (!i || !plainLine(i.row) || row.dataset.occ || row.dataset.ghost) return;
+    clearTimeout(this.opening);
+    e.preventDefault();
+    this.rename(i, el);
+  }
+
+  // Alt + Up / Alt + Down on a task moves it one place in its day.
+  nudge(e) {
+    const row = e.target.closest?.('.pl-list [data-task][data-move]');
+    if (!row) return false;
+    const list = row.closest('.pl-list');
+    const rows = [...list.querySelectorAll('.pl-task[data-move]:not(.carried)')];
+    const ids = rows.map((r) => r.dataset.task);
+    const at = ids.indexOf(row.dataset.task);
+    const to = at + (e.key === 'ArrowUp' ? -1 : 1);
+    e.preventDefault();
+    if (at < 0 || to < 0 || to >= ids.length) return true;
+    ids.splice(to, 0, ...ids.splice(at, 1));
+    const id = row.dataset.task;
+    const which = e.target.dataset.act || 'words';
+    arrange(ids, list.dataset.day).then(async (rows) => {
+      await this.wrote(rows);
+      // Keep the keyboard on the task that moved, so it can go on moving.
+      const box = list.isConnected ? list : document;
+      (box.querySelector(`[data-task="${id}"] [data-act="${which}"]`) || box.querySelector(`[data-task="${id}"] .pl-words`))?.focus();
+    });
+    return true;
+  }
+
   key(e) {
+    if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && this.nudge(e)) return;
     const input = e.target.closest?.('input[data-add]');
     if (!input) return;
     if (e.key === 'Escape') { input.value = ''; input.blur(); return; }
-    if (e.key !== 'Enter' || !input.value.trim()) return;
+    if (e.key !== 'Enter' || e.isComposing) return;
     e.preventDefault();
+    this.add(input);
+  }
+
+  // What's in an add box becomes a task; the box empties and keeps the caret.
+  add(input) {
+    if (!input.value.trim()) return;
     const { title, est, repeat } = parseAdd(input.value);
     const steps = input.dataset.add === 'steps' && this.world;
     const day = steps || input.dataset.add === 'tray' ? null : input.dataset.add;
@@ -812,8 +925,8 @@ export class Plan {
         { label: 'A habit', current: !!t.habit, run: async () => { await this.wrote(await setTask(i.row.id, { habit: !t.habit })); if (!t.habit) this.hooks.toast?.('A habit now: no hours, and a click on it shows how it’s going'); } },
         { label: 'Skip this one', run: async () => this.wrote(await skipTask(i.row.id)) },
         { label: 'How it’s going', sub: this.historyItems(i) },
-        ...(t.habit && plainLine(i.row) ? [{ label: 'Change the words…', run: async () => { const v = await askText({ title: 'Its words', value: i.row.text || '', ok: 'Save' }); if (v && String(v).trim() && String(v).trim() !== i.row.text) await this.wrote(await renameTask(i.row.id, String(v))); } }] : [])
       ] : []),
+      ...(plainLine(i.row) ? [{ label: 'Change the words…', run: async () => { const v = await askText({ title: 'Its words', value: i.row.text || '', ok: 'Save' }); if (v && String(v).trim() && String(v).trim() !== i.row.text) await this.wrote(await renameTask(i.row.id, String(v))); } }] : []),
       // With a day, it can be a date to hit: a diamond in Weeks ahead.
       ...(!done && t.day && !isStretch(t) && !rep ? [
         { label: 'A date to hit', current: !!t.mark, run: async () => this.wrote(await setTask(i.row.id, { mark: t.mark ? null : 'date' })) },

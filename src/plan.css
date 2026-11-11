@@ -23,7 +23,17 @@ html.has-rail .pl-switch { display: none; }
 .pl-check[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .pl-check.ghost { border-style: dashed; border-color: var(--faint); cursor: text; }
 .pl-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.pl-words { border: 0; background: none; padding: 0; margin: 0; color: var(--ink); font: 15.5px/1.4 var(--prose); text-align: left; cursor: text; min-width: 0; overflow-wrap: anywhere; }
+.pl-words { border: 0; background: none; padding: 0; margin: 0; color: var(--ink); font: 15.5px/1.4 var(--prose); text-align: left; cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
+.pl-task { position: relative; }
+/* Six dots in the margin: this one can be moved (drag it, or press and hold on a phone). */
+.pl-grip { position: absolute; left: -6px; top: 50%; transform: translateY(-50%); width: 10px; text-align: center; font-size: 12px; line-height: 1; color: var(--faint); opacity: 0; pointer-events: none; user-select: none; transition: opacity .12s; }
+.pl-task:hover .pl-grip, .pl-task:focus-within .pl-grip { opacity: 1; }
+@media (hover: none) { .pl-grip { opacity: .7; } }
+.hide-taskgrip .pl-grip { display: none; }
+/* Lines written under a task: its notes. */
+.pl-notes { border: 0; background: none; padding: 0 2px; margin: 0; color: var(--faint); font: 11.5px var(--ui); white-space: nowrap; cursor: pointer; border-radius: 4px; }
+.pl-notes:hover, .pl-notes:focus-visible { color: var(--accent); }
+.hide-tasknotes .pl-notes { display: none; }
 .pl-from { font-size: 11.5px; color: var(--faint); white-space: nowrap; }
 .pl-task.next .pl-words { color: var(--ink); }
 .pl-task.next .pl-check { border-color: var(--accent); }

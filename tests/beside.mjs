@@ -86,6 +86,7 @@ async function seed(p) {
       { ...base, id: 'no_4', kind: 'note', parent_id: 'pp_4', type: 'writing', text: 'An old worry, settled', fields: { chapter_id: 'ch_r', resolved: now }, sort: 4 },
       { ...base, id: 'pg_songs', kind: 'page', parent_id: 'wd_nb', title: 'Songs' },
       line('ln_song', 'pg_songs', 'Write the second verse of Kenji’s song', task('2026-11-09', 45, 2)),
+      line('ln_song_n', 'ln_song', 'Rhymes with katana, nothing with pancake'),
       { ...base, id: 'page-tasks', kind: 'page', title: 'Tasks' },
       line('ln_call', 'page-tasks', 'Call Dana about the storyboards', task('2026-11-09', 30, 1)),
       line('ln_drive', 'page-tasks', 'Order the storage drive', task('2026-11-11', 15, 1)),
@@ -172,6 +173,14 @@ try {
     await goMain(page, { view: 'notebook', pageId: 'day-2026-11-09' });
   });
 
+  await check('a click on a task in the plan beside opens it in the main view, zoomed in on its line', async () => {
+    await f.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).locator('.pl-words').click();
+    await page.waitForFunction(() => /second verse/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''));
+    assert.ok(await page.locator('#outline-editor li[data-eid="ln_song_n"]').isVisible(), 'its notes are right there');
+    assert.equal(await f.evaluate(() => document.documentElement.dataset.view), 'plan', 'the plan stays beside');
+    await goMain(page, { view: 'notebook', pageId: 'day-2026-11-09' });
+  });
+
   await check('Ctrl + \\ puts it away and brings the same pane back; the button does the same', async () => {
     await page.click('#outline-editor .ProseMirror li:first-child p');
     await page.keyboard.press('Control+Backslash');
@@ -208,6 +217,22 @@ try {
     await page.keyboard.press('Control+Period');
     await page.waitForFunction(() => !document.documentElement.classList.contains('focus') && document.documentElement.classList.contains('has-panes'));
     assert.equal((await beside(page)).pressed, 'true');
+  });
+
+  await check('a click on a task on the day’s page opens it beside, zoomed in on its line; “≡ notes” says it has notes', async () => {
+    const r = page.locator('#plan .pl-task', { hasText: 'second verse' });
+    assert.equal(await r.locator('.pl-notes').innerText(), '≡ notes');
+    assert.equal(await page.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-notes').count(), 0, 'none without lines under it');
+    await r.locator('.pl-words').click();
+    f = await pane(page, 'notebook');
+    await f.waitForFunction(() => /second verse/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''));
+    assert.ok(await f.locator('#outline-editor li[data-eid="ln_song_n"]').isVisible());
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.view), 'notebook', 'the day stays in the main view');
+    assert.equal(await count(page), 1);
+    // Under Look the mark can go.
+    await page.evaluate(() => document.documentElement.classList.add('hide-tasknotes'));
+    assert.equal(await r.locator('.pl-notes').isVisible(), false);
+    await page.evaluate(() => document.documentElement.classList.remove('hide-tasknotes'));
   });
 
   await check('a task’s menu on the day’s page has Open it beside; the plan beside has no such line', async () => {

@@ -189,6 +189,8 @@ try {
     await sleep(500);
     // And a line made a task where it's written.
     await laptop.evaluate(() => window.__outline.commands.focus('end'));
+    // The editor takes the caret a frame later; the add box keeps it until then.
+    await laptop.waitForFunction(() => document.activeElement?.closest?.('#outline-editor'));
     await laptop.keyboard.press('Control+Shift+Enter');
     await sleep(700);
     assert.equal(await laptop.locator('#outline-editor .task-chip').count(), 1);

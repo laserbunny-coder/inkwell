@@ -287,7 +287,9 @@ export async function loadTasks(today = isoOf()) {
     if (!ok || !root) continue;
     // One that repeats shows on the day it's due now (see dueDay).
     const task = isRepeat(row.fields.task) ? { ...row.fields.task, day: dueDay(row.fields.task, today) } : row.fields.task;
-    out.push({ row, task, root, world, mine: !task.owner || task.owner === 'me' });
+    // Its notes: the lines written under it (blank ones don't count).
+    const notes = (await children(row.id)).filter((c) => c.kind === 'line' && String(c.text || '').trim()).length;
+    out.push({ row, task, root, world, mine: !task.owner || task.owner === 'me', notes });
   }
   return out;
 }
