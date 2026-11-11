@@ -22,7 +22,8 @@ jobs:
   test:
     # The tests are split in three and run on three machines at once.
     name: Test (${{ matrix.share }} of 3)
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04 in Nov 2026, which Playwright 1.56 can't install Chromium on.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: true
       matrix:
