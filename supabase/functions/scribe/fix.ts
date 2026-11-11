@@ -23,29 +23,37 @@ export const FIX_SYSTEM = `You fix text someone dictated with Scribe, their voic
 - If they spell something letter by letter, use exactly that spelling, with normal capitals for a name.
 - The text before and after is there only to help you understand. Never change it or repeat it in your answer.
 - learn: the names or unusual words whose spelling they corrected, exactly as now spelled in your text, so the speech service hears them right next time. Empty for any other kind of change (rewording, swapping a day, adding words). At most three.
+- scope: "part" almost always: text is the picked text with the change made. When the whole box is given too and they clearly mean all of it ("the whole thing", "all of it", "the whole message", "everything", "throughout", "everywhere"), scope is "whole" and text is the entire box with the change made. A change that fits inside the picked text stays "part".
 - unchanged: true, with the text exactly as it was, when what they said isn't a change to this text (silence, a stray word, talking to someone else).
 - Plain text, no Markdown, nothing added before or after it.`;
 
 export const FIX_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["text", "learn", "unchanged"],
+  required: ["scope", "text", "learn", "unchanged"],
   properties: {
-    text: { type: "string", description: "The picked text with the change made." },
+    scope: { type: "string", enum: ["part", "whole"] },
+    text: { type: "string", description: "The picked text (or, with scope whole, the whole box) with the change made." },
     learn: { type: "array", items: { type: "string" } },
     unchanged: { type: "boolean" },
   },
 };
 
-export type FixRequest = { text: string; before: string; after: string; how: string; said: string; modeName: string; modePrompt: string; app: string };
+export type FixRequest = { text: string; before: string; after: string; how: string; said: string; modeName: string; modePrompt: string; app: string; whole?: string };
 
-/** What Claude is told: the text to change, what's around it, and what they said. */
+/**
+ * What Claude is told: the text to change, what's around it, and what they
+ * said. With the whole box (when it's short enough to change in one go), the
+ * box stands in for the text around, and they can ask to change all of it.
+ */
 export function fixContent(r: FixRequest): string {
   const where = r.how === "selection" ? "They selected this text" : r.how === "last" ? "Scribe just typed this text in" : "This is the text just before their cursor";
+  const whole = r.whole?.trim() ? r.whole : "";
   const lines = [
     `${where}:\n<text>\n${r.text}\n</text>`,
-    r.before.trim() ? `Just before it (don't change):\n<before>\n${r.before}\n</before>` : "",
-    r.after.trim() ? `Just after it (don't change):\n<after>\n${r.after}\n</after>` : "",
+    whole ? `Everything in the box, the picked text included (change all of it only when they ask about the whole thing):\n<whole>\n${whole}\n</whole>` : "",
+    !whole && r.before.trim() ? `Just before it (don't change):\n<before>\n${r.before}\n</before>` : "",
+    !whole && r.after.trim() ? `Just after it (don't change):\n<after>\n${r.after}\n</after>` : "",
     r.modePrompt.trim() ? `How they usually write here (mode "${r.modeName}"): ${r.modePrompt.trim()}` : "",
     r.app ? `They're typing into: ${r.app}` : "",
     `What they said to change:\n<said>\n${r.said}\n</said>`,
@@ -80,16 +88,22 @@ export function cleanLearn(learn: unknown, before: string, after: string): strin
   return out;
 }
 
+export type FixResult = { scope: "part" | "whole"; text: string; learn: string[]; unchanged: boolean };
+
 /**
- * Claude's answer made safe to type in: the edges of what was picked stay as
+ * Claude's answer made safe to type in: the edges of what was changed stay as
  * they were (Claude tends to trim spaces and line breaks), an empty answer
- * keeps the text, and names to remember are checked.
+ * keeps the text, and names to remember are checked. Scope "whole" counts
+ * only when the whole box was sent.
  */
-export function finishFix(text: string, out: Record<string, unknown>): { text: string; learn: string[]; unchanged: boolean } {
-  const fixed = typeof out.text === "string" && out.text.trim() ? out.text.replace(/\r\n?/g, "\n").trim() : text.trim();
-  const result = text.match(/^\s*/)![0] + fixed + text.match(/\s*$/)![0];
-  const unchanged = out.unchanged === true || result === text;
-  return unchanged ? { text, learn: [], unchanged: true } : { text: result, learn: cleanLearn(out.learn, text, result), unchanged: false };
+export function finishFix(text: string, out: Record<string, unknown>, whole = ""): FixResult {
+  const scope = out.scope === "whole" && whole.trim() ? "whole" : "part";
+  const base = scope === "whole" ? whole : text;
+  const fixed = typeof out.text === "string" && out.text.trim() ? out.text.replace(/\r\n?/g, "\n").trim() : base.trim();
+  const result = base.match(/^\s*/)![0] + fixed + base.match(/\s*$/)![0];
+  const unchanged = out.unchanged === true || result === base;
+  if (unchanged) return { scope: "part", text, learn: [], unchanged: true };
+  return { scope, text: result, learn: cleanLearn(out.learn, base, result), unchanged: false };
 }
 
 /** A spelling to keep: tidied, or null if it can't be one. */

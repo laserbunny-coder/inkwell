@@ -20,9 +20,11 @@
 //   POST …/scribe  JSON { action: "redo", original, mode, app } -> { text, mode }
 //   POST …/scribe  JSON { action: "save-mode", mode: { id?, name, prompt, apps, model?, keep? } } -> { mode }
 //   POST …/scribe  JSON { action: "delete-mode", id } -> { ok }
-//   POST …/scribe  multipart: action=fix, audio, text, before, after, how (selection|last|before), mode, app
-//                                           -> { said, text, learn, unchanged }  (the words with the spoken
-//                                              change made; `learn`: names they spelled out, to remember)
+//   POST …/scribe  multipart: action=fix, audio, text, before, after, how (selection|last|before), mode, app,
+//                             whole (optional: everything in the box)
+//                                           -> { said, scope, text, learn, unchanged }  (the words with the
+//                                              spoken change made; scope "whole" = text is the whole box;
+//                                              `learn`: names they spelled out, to remember)
 //   GET  …/scribe/spellings                 -> { spellings }
 //   POST …/scribe  JSON { action: "remember", term } -> { spellings }
 //   POST …/scribe  JSON { action: "forget", term }   -> { spellings }
@@ -277,10 +279,13 @@ Deno.serve(async (req) => {
       if (!text.trim()) return reply({ error: "There's nothing to fix there. Select some words first." }, 400);
       // Cut short, the rest would be lost when the fix is typed over it.
       if (text.length > TARGET_MAX) return reply({ error: "That's too much to change at once. Select a smaller part." }, 400);
+      // The whole box, when it's short enough to change in one go ("make the whole thing friendlier").
+      const whole = nl(form.get("whole"));
+      const box = whole.length <= TARGET_MAX && whole.trim() !== text.trim() ? whole : "";
       const heard = await writeOut(form, userId, FIX_HINT);
       if (heard instanceof Response) return heard;
       const said = heard.said.trim();
-      if (!said) return reply({ said: "", text, learn: [], unchanged: true });
+      if (!said) return reply({ said: "", scope: "part", text, learn: [], unchanged: true });
       const mode = pick(form.get("mode"));
       const out = await ask(FIX_SYSTEM, fixContent({
         text,
@@ -291,8 +296,9 @@ Deno.serve(async (req) => {
         modeName: mode.name,
         modePrompt: mode.prompt,
         app: clean(form.get("app"), 100),
+        whole: box,
       }), FIX_SCHEMA, fixModel(mode.model, text.length));
-      return reply({ said, ...finishFix(text, out) });
+      return reply({ said, ...finishFix(text, out, box) });
     }
 
     if (action === "remember" && body) {

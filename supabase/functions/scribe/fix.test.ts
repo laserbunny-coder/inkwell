@@ -37,11 +37,25 @@ assert.doesNotMatch(c, /mode "Text"/);
 assert.match(c, /<said>\nNate, N A T E\n<\/said>/);
 assert.match(fixContent({ text: "x", before: "", after: "", how: "selection", said: "y", modeName: "Email", modePrompt: "Formal.", app: "" }), /They selected this text[\s\S]*mode "Email"\): Formal\./);
 
+// With the whole box, it stands in for the text around; without it, before and after go along.
+const w = fixContent({ text: "See you Thursday.", before: "Hey Nait. ", after: "", how: "last", said: "make the whole thing friendlier", modeName: "Text", modePrompt: "", app: "", whole: "Hey Nait. See you Thursday." });
+assert.match(w, /<whole>\nHey Nait\. See you Thursday\.\n<\/whole>/);
+assert.doesNotMatch(w, /<before>/);
+assert.match(c, /<after>/, "no whole box: context as before");
+
+// Scope whole changes the whole box, and only when the box was sent.
+assert.deepEqual(finishFix("See you Thursday.", { scope: "whole", text: "Hi Nate! See you Thursday.", learn: ["Nate"], unchanged: false }, "Hey Nait. See you Thursday."),
+  { scope: "whole", text: "Hi Nate! See you Thursday.", learn: ["Nate"], unchanged: false });
+assert.deepEqual(finishFix("See you Thursday.", { scope: "whole", text: "See you Tuesday.", learn: [], unchanged: false }),
+  { scope: "part", text: "See you Tuesday.", learn: [], unchanged: false }, "no box sent: stays part");
+assert.deepEqual(finishFix("x", { scope: "whole", text: "Hey Nait. See you Thursday.", learn: [], unchanged: false }, "Hey Nait. See you Thursday.\n"),
+  { scope: "part", text: "x", learn: [], unchanged: true }, "whole box handed back as it was");
+
 // The answer keeps the picked text's own edges, and "no change" keeps it whole.
-assert.deepEqual(finishFix("Hey Nait, see you Thursday.", { text: "Hey Nate, see you Thursday.", learn: ["Nate"], unchanged: false }), { text: "Hey Nate, see you Thursday.", learn: ["Nate"], unchanged: false });
-assert.deepEqual(finishFix(" line one\n", { text: "Line one.", learn: [], unchanged: false }), { text: " Line one.\n", learn: [], unchanged: false });
-assert.deepEqual(finishFix("Thursday", { text: "Tuesday", learn: ["Tuesday"], unchanged: true }), { text: "Thursday", learn: [], unchanged: true });
-assert.deepEqual(finishFix("Thursday", { text: "  ", learn: [], unchanged: false }), { text: "Thursday", learn: [], unchanged: true });
-assert.deepEqual(finishFix("Thursday", {}), { text: "Thursday", learn: [], unchanged: true });
+assert.deepEqual(finishFix("Hey Nait, see you Thursday.", { text: "Hey Nate, see you Thursday.", learn: ["Nate"], unchanged: false }), { scope: "part", text: "Hey Nate, see you Thursday.", learn: ["Nate"], unchanged: false });
+assert.deepEqual(finishFix(" line one\n", { text: "Line one.", learn: [], unchanged: false }), { scope: "part", text: " Line one.\n", learn: [], unchanged: false });
+assert.deepEqual(finishFix("Thursday", { text: "Tuesday", learn: ["Tuesday"], unchanged: true }), { scope: "part", text: "Thursday", learn: [], unchanged: true });
+assert.deepEqual(finishFix("Thursday", { text: "  ", learn: [], unchanged: false }), { scope: "part", text: "Thursday", learn: [], unchanged: true });
+assert.deepEqual(finishFix("Thursday", {}), { scope: "part", text: "Thursday", learn: [], unchanged: true });
 
 console.log("fix helpers: all good");
