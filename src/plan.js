@@ -5,7 +5,7 @@
 // ordinary lines with a day (see tasks.js), gathered here from wherever they
 // live. Plain text on hairlines; nothing is copied.
 
-import { popMenu, askText, ask } from './menu.js';
+import { popMenu, askText } from './menu.js';
 import { trash, restore } from './trash.js';
 import {
   loadTasks, dayPlan, weekPlan, pace, planSettings, savePlanSettings, setTask, unTask, tickTask, tookTask, startTimer, stopTimer,
@@ -888,10 +888,14 @@ export class Plan {
       await this.wrote(await setTask(it.id, { day: how === 'keep' ? this.today : null }));
       return async () => this.wrote(await setTask(it.id, { day: was }));
     }
+    if (how === 'done') {
+      await this.wrote(await tickTask(it.id, true, Date.now()));
+      return async () => this.wrote(await tickTask(it.id, false, Date.now()));
+    }
     if (how === 'delete') {
       const row = await getEntry(it.id);
       if (!row || isTrashed(row)) return null;
-      await trash(row);
+      await trash(hqGoes(row));
       await this.wrote([await getEntry(it.id)]);
       return async () => { await restore(it.id); await this.wrote([await getEntry(it.id)]); };
     }
@@ -922,21 +926,14 @@ export class Plan {
     const list = items.filter((i) => this.canRemove(i));
     if (theirs.length && !list.length) { this.hooks.toast?.('That’s Nate’s task: it stays on the board for him'); return false; }
     if (!list.length) return false;
-    const hq = list.filter((i) => i.row.fields?.hq);
-    if (hq.length) {
-      const yes = await ask({
-        title: hq.length === 1 ? 'This task is on the Acro HQ board' : `${hq.length} of these are on the Acro HQ board`,
-        body: 'Deleting here takes it out of Inkwell only. It stays on the board, where you or Nate can remove it.',
-        ok: 'Delete from Inkwell', danger: true
-      });
-      if (!yes) return false;
-    }
+    // A task on the Acro HQ board comes off the board too (a minute or so later, so Undo still has time).
+    const onBoard = list.filter((i) => i.row.fields?.hq).length;
     const gone = [];
     let lines = 0;
     for (const i of list) {
       const row = await getEntry(i.row.id);
       if (!row || row.deleted || isTrashed(row)) continue;
-      const n = await trash(row);
+      const n = await trash(hqGoes(row));
       lines += n - 1;
       gone.push({ id: row.id, text: row.text || 'Untitled', from: i.world?.title || (i.root?.kind === 'page' ? i.root.title : '') });
     }
@@ -946,7 +943,8 @@ export class Plan {
     await this.wrote(await Promise.all(this.lastGone.map((id) => getEntry(id))));
     const one = gone[0];
     const under = lines ? ` and ${lines === 1 ? 'the line' : `${lines} lines`} under it` : '';
-    const said = gone.length === 1 ? `Deleted “${one.text}”${under}${one.from ? `, from ${one.from}` : ''}` : `Deleted ${gone.length} tasks${theirs.length ? ` (Nate’s ${theirs.length === 1 ? 'one stays' : 'stay'})` : ''}`;
+    const board = onBoard ? (gone.length === 1 ? ', and from the HQ board' : ` (${onBoard === gone.length ? 'from the HQ board too' : `${onBoard} from the HQ board too`})`) : '';
+    const said = gone.length === 1 ? `Deleted “${one.text}”${under}${one.from ? `, from ${one.from}` : ''}${board}` : `Deleted ${gone.length} tasks${board}${theirs.length ? ` (Nate’s ${theirs.length === 1 ? 'one stays' : 'stay'})` : ''}`;
     this.hooks.toast?.(said, { label: 'Undo', run: () => this.undoRemove() });
     return true;
   }
@@ -1530,6 +1528,11 @@ export class Plan {
     }, 1000);
   }
 }
+
+// A task kept in step with the Acro HQ board, deleted here, is deleted on the
+// board too: the mark tells the board sync it was meant (a page or project
+// put in the Trash doesn't take its board tasks with it).
+const hqGoes = (row) => (row.fields?.hq?.id ? { ...row, fields: { ...row.fields, hqDelete: Date.now() } } : row);
 
 // A line's words as written: its links as links, its [[links]] as names.
 function lineBits(r) {

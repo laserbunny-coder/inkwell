@@ -118,6 +118,11 @@ async function runInkwell(db: ReturnType<typeof admin>, url: string, userId: str
       } else {
         // The line first, then the board, then the link: whichever part fails, the next run sees where things
         // stand and finishes the job. A line changed in the app since it was read waits for the next run.
+        // A board task deleted first: should the line's part fail, the next run finds it gone and tidies up.
+        if (st.boardDelete) {
+          try { await callTool(url, "board_delete", { by: "Inkwell", collection: "tasks", ...st.boardDelete }); }
+          catch (e) { if (!/^No |not found/i.test((e as Error)?.message || "")) throw e; }
+        }
         if (st.patch) {
           const was = byId.get(st.patch.id);
           let q = db.from("writing_entries").update(st.patch.set).eq("id", st.patch.id).eq("user_id", userId);
