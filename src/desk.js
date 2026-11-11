@@ -23,8 +23,12 @@ const KIND = { decision: 'Decide', blocked: 'Do', review: 'Try' };
 const MINUTES = { decision: 2, blocked: 5, review: 10 };
 const SPANS = { today: 'Today', two: 'Since yesterday', week: 'This week' };
 export const STAGES = { on: 'On stage', wings: 'In the wings', back: 'Backstage' };
-const FILTERS = [['all', 'Everything'], ['waiting', 'Waiting on you'], ['working', 'Working'], ['quiet', 'Gone quiet'], ['finished', 'Finished']];
-const STATUS = { waiting: 'Waiting on you', working: 'Working', quiet: 'Gone quiet', finished: 'Finished' };
+const FILTERS = [['all', 'Everything'], ['waiting', 'Waiting on you'], ['loose', 'Closed with loose ends'], ['working', 'Working'], ['quiet', 'Gone quiet'], ['finished', 'Finished']];
+const STATUS = { waiting: 'Waiting on you', loose: 'Closed, still open', working: 'Working', quiet: 'Gone quiet', finished: 'Finished' };
+// A thread is closed when its latest Catch-up line starts "Closed:"; any later line reopens it.
+export const closedLine = (text) => /^\s*closed:/i.test(String(text || ''));
+// The "thread closed" tag and the filter can be switched off under Look.
+const showClosed = () => !root.classList.contains('hide-closedtag');
 const PACIFIC = 'America/Los_Angeles';
 const DAY = 864e5;
 // A thread that said "working" and then nothing for this long has gone quiet.
@@ -199,8 +203,9 @@ export function historyFor({ needs, updates, now }) {
     t.at = Math.max(t.at, made, end);
   }
   const list = [...threads.values()].map((t) => {
-    const status = t.open.length ? 'waiting' : t.last?.state === 'working' ? (now - t.at > QUIET_AFTER ? 'quiet' : 'working') : 'finished';
-    return { ...t, status, line: t.last?.text || t.need?.title || '', places: [...t.places], search: low([t.title, t.project, ...t.words].join(' \n ')) };
+    const closed = closedLine(t.last?.text);
+    const status = t.open.length ? (closed ? 'loose' : 'waiting') : t.last?.state === 'working' ? (now - t.at > QUIET_AFTER ? 'quiet' : 'working') : 'finished';
+    return { ...t, status, closed, line: t.last?.text || t.need?.title || '', places: [...t.places], search: low([t.title, t.project, ...t.words].join(' \n ')) };
   });
   return list.sort((a, b) => b.at - a.at);
 }
@@ -270,6 +275,8 @@ export class DeskPage {
       this.count(data.needs, now);
     }
     if (tab === 'history') this.all = data; else this.data = data;
+    if (tab !== 'history' && data) this.closed = await this.closedThreads(data);
+    if (token !== this.token) return;
     this.now = now;
     await this.render({ now, failed });
     // Just opened and not signed in yet: sync may still be starting, so look again soon.
@@ -278,6 +285,27 @@ export class DeskPage {
     clearInterval(this.timer);
     // Threads keep working while it's open: look again every two minutes.
     this.timer = setInterval(() => { if (this.showing() && !document.hidden) this.load({ quiet: true }); else clearInterval(this.timer); }, 120000);
+  }
+
+  // The threads that were closed while one of their calls is still open. The
+  // stage only reads a week of updates, so a thread whose latest line is older
+  // is looked up in all of history (at most every ten minutes).
+  async closedThreads(data) {
+    const open = new Set(data.needs.filter((n) => !n.resolved_at).map((n) => n.link));
+    if (!open.size) return new Set();
+    const last = new Map();
+    const note = (u) => { if (open.has(u.link) && (!last.has(u.link) || u.at >= last.get(u.link).at)) last.set(u.link, u); };
+    if ([...open].some((l) => !data.updates.some((u) => u.link === l))) {
+      if (!this.older || Date.now() - this.olderAt > 10 * 60000) {
+        try {
+          const all = await this.fetchAll?.();
+          if (all) { this.older = (all.updates || []).map((u) => ({ ...u, at: Date.parse(u.created_at) })); this.olderAt = Date.now(); }
+        } catch (e) { console.warn(e); }
+      }
+      for (const u of this.older || []) note(u);
+    }
+    for (const u of data.updates) note(u);
+    return new Set([...last].filter(([, u]) => closedLine(u.text)).map(([link]) => link));
   }
 
   renderLoading() {
@@ -369,7 +397,9 @@ export class DeskPage {
     const later = seats.flatMap((s) => s.later);
 
     const sum = make('div', 'dk-calls');
-    if (calls.length) sum.append(make('i', 'dk-sig'), document.createTextNode(`${calls.length === 1 ? '1 call' : `${calls.length} calls`} waiting · about ${minutes(calls.reduce((m, c) => m + (MINUTES[c.kind] || 5), 0))}`));
+    // How many of them come from threads already closed (when the tag is on).
+    const fromClosed = showClosed() ? calls.filter((c) => this.closed?.has(c.link)).length : 0;
+    if (calls.length) sum.append(make('i', 'dk-sig'), document.createTextNode(`${calls.length === 1 ? '1 call' : `${calls.length} calls`} waiting · about ${minutes(calls.reduce((m, c) => m + (MINUTES[c.kind] || 5), 0))}${fromClosed ? ` · ${fromClosed} from closed threads` : ''}`));
     else if (this.data) sum.textContent = 'Nothing needs you';
     // More than one: walk them one at a time.
     if (calls.length > 1 && this.through) {
@@ -521,6 +551,8 @@ export class DeskPage {
     a.dataset.id = c.id;
     const text = make('span', 'dk-call-t');
     text.append(make('span', 'dk-kind', KIND[c.kind] || 'Look'), document.createTextNode(c.title));
+    // Its thread was closed with this still open: say so, so it isn't mistaken for live work.
+    if (this.closed?.has(c.link) && showClosed()) text.append(make('span', 'dk-closed', 'thread closed'));
     a.append(make('i', `dk-sig${isNew(c.at) ? ' fresh' : ''}`), text, make('span', 'dk-call-m', `${MINUTES[c.kind] || 5} min · ${waited(c.at, now)}`));
     a.addEventListener('click', (e) => {
       if (e.metaKey || e.ctrlKey || e.shiftKey) return;
@@ -699,15 +731,19 @@ export class DeskPage {
     const draw = () => {
       const q = low(this.query);
       const hits = all.filter((t) => !q || t.search.includes(q));
-      filters.replaceChildren(...FILTERS.map(([id, label]) => {
-        const n = id === 'all' ? hits.length : hits.filter((t) => t.status === id).length;
+      // "Waiting on you" counts the closed ones too; their own chip goes when the tag is switched off.
+      const is = (t, id) => t.status === id || (id === 'waiting' && t.status === 'loose');
+      if (this.filter === 'loose' && !showClosed()) this.filter = 'waiting';
+      filters.replaceChildren(...FILTERS.filter(([id]) => id !== 'loose' || showClosed()).map(([id, label]) => {
+        const n = id === 'all' ? hits.length : hits.filter((t) => is(t, id)).length;
         const b = make('button', this.filter === id ? 'on' : '', label);
         b.append(make('span', 'dk-n', String(n)));
         b.setAttribute('aria-pressed', String(this.filter === id));
+        b.dataset.f = id;
         b.addEventListener('click', () => { this.filter = id; draw(); });
         return b;
       }));
-      const list = hits.filter((t) => this.filter === 'all' || t.status === this.filter);
+      const list = hits.filter((t) => this.filter === 'all' || is(t, this.filter));
       box.replaceChildren(...list.slice(0, 400).map((t) => this.thread(t, now)));
       if (!list.length) box.append(make('p', 'hint dk-none', all.length ? 'Nothing matches. Finished threads are searched too.' : 'No threads yet. A thread shows here from the first time it logs an update or needs you.'));
     };
@@ -718,7 +754,8 @@ export class DeskPage {
   }
 
   thread(t, now) {
-    const row = make('div', `dk-row dk-thread s-${t.status}`);
+    const status = t.status === 'loose' && !showClosed() ? 'waiting' : t.status;
+    const row = make('div', `dk-row dk-thread s-${status}`);
     const name = make('span', 'dk-rn');
     const a = make('a', 'dk-name', t.title || 'A thread');
     a.href = web(t.link); a.target = '_blank'; a.rel = 'noopener';
@@ -737,7 +774,7 @@ export class DeskPage {
       t.places.slice(0, 4).forEach((url, i) => { if (i) links.append(document.createTextNode(' · ')); links.append(this.placeLink(url)); });
       says.append(links);
     }
-    row.append(name, says, make('span', 'dk-rr', `${STATUS[t.status]} · ${when(t.at, now)}`));
+    row.append(name, says, make('span', 'dk-rr', `${STATUS[status]} · ${when(t.at, now)}`));
     return row;
   }
 }
