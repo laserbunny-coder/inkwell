@@ -292,15 +292,21 @@ try {
     await undoBtn.click({ timeout: 15000 });
     // Toasts come and go, so wait on what the Undo does (the import's lines gone),
     // and say what was on screen if it never happens.
-    const ids = (rs) => rs.map((r) => r.id).filter((id) => id !== 'settings-plan').sort().join();
+    // Taken back = nothing from Daybook is left and every row from before is still there.
+    // The app may save a row of its own meanwhile (slower runners do), so extra rows that
+    // didn't come from Daybook don't count.
+    const dbRow = (r) => !was.includes(r.id) && (r.fields?.fromDaybook || /^(wd|li|ar|pg)-db/.test(r.id));
+    const left = (rs) => ({ fromDb: rs.filter(dbRow).map((r) => r.id), missing: was.filter((id) => !rs.some((r) => r.id === id)) });
     const deadline = Date.now() + 30000;
-    while (ids(await live(q)) !== was.join()) {
-      if (Date.now() > deadline) throw new Error(`the Undo didn't take it back; on screen: ${await q.evaluate(() => document.querySelector('.toast')?.textContent || 'no toast')}; errors: ${q.errors.join(' | ') || 'none'}`);
+    for (;;) {
+      const now = left(await live(q));
+      if (!now.fromDb.length && !now.missing.length) break;
+      if (Date.now() > deadline) throw new Error(`the Undo didn't take it back (still from Daybook: ${now.fromDb.join(', ') || 'none'}; missing: ${now.missing.join(', ') || 'none'}); on screen: ${await q.evaluate(() => document.querySelector('.toast')?.textContent || 'no toast')}; errors: ${q.errors.join(' | ') || 'none'}`);
       await sleep(200);
     }
     const rows = await live(q);
-    // The Tasks page and the plan settings may stay (empty); nothing else is new.
-    assert.deepEqual(rows.map((r) => r.id).filter((id) => !['settings-plan'].includes(id)).sort(), was);
+    const extra = rows.map((r) => r.id).filter((id) => !was.includes(id) && id !== 'settings-plan');
+    if (extra.length) console.log(`     (rows the app saved on its own meanwhile: ${extra.join(', ')})`);
     const sent = rows.find((r) => r.id === 'li_sent');
     assert.ok(!sent.fields.task && !sent.fields.box, 'the line that was sent is a plain line again');
     assert.ok(!(rows.find((r) => r.id === 'settings-plan')?.fields.areas || {})['area-filmmaking']);

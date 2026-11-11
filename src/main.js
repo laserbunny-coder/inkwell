@@ -4059,6 +4059,7 @@ const commands = [
   { group: 'write', label: 'Stop gathering on this line', keys: '', run: () => notebook.stopGather(), when: () => inNotebook() && !!notebook.gatherLine() },
   { group: 'write', label: 'Task: put this line on a day’s plan (again: a plain line)', keys: `${mod}⇧↵`, words: ['todo', 'to-do', 'plan', 'schedule', 'today'], run: () => notebook.toggleTask(), when: inNotebook },
   { group: 'go', label: 'Go through loose lines: the last week’s unfiled lines, one at a time', words: ['sort', 'file', 'loose', 'triage', 'review', 'inbox', 'tidy'], run: () => through.open('loose') },
+  { group: 'go', label: 'Go through the tasks left from earlier days: keep, not today, or delete', words: ['carried', 'overdue', 'old tasks', 'pile', 'triage', 'clear'], run: () => through.open('carried') },
   { group: 'go', label: 'Go through what needs you: the Desk’s calls, one at a time', words: ['calls', 'needs you', 'decide', 'desk', 'triage', 'waiting'], run: () => through.open('calls') },
   { group: 'write', label: 'Done: strike this line through', keys: `${mod}↵`, run: () => toggleDone(notebook.editor), when: inNotebook },
   { group: 'write', label: 'Checklist: tick boxes on the lines under this one', keys: '', words: ['todo', 'to-do', 'list', 'checkbox', 'tick'], run: () => toggleChecklist(notebook.editor), when: () => inNotebook() && !lineChecks(notebook.editor.state)?.checklist },
@@ -5072,6 +5073,8 @@ through = new Through({
   changed: (rows) => applyRemote(rows),
   worlds: async () => (await byKind('world')).filter((w) => !w.deleted && !isTrashed(w)).sort((a, b) => b.updated_at - a.updated_at).map((w) => ({ id: w.id, title: w.title || 'Untitled' })),
   calls: { list: () => deskPage.waiting(), done: (id) => deskPage.callDone(id), later: (id) => deskPage.callLater(id) },
+  // Tasks left on today from earlier days: keep, take off the day, or delete.
+  carried: { list: () => plan.carriedList(), answer: (it, how) => plan.carriedAnswer(it, how) },
   onClose: () => { looseFoot(); plan?.soon(); }
 });
 // Under a recent day's lines: how many are still loose, and the way in.
@@ -5121,6 +5124,7 @@ plan = new Plan({
       return go(place);
     },
     go: (place) => go(place),
+    goThrough: () => through.open('carried'),
     off: (name) => hidden().has(name),
     // A project's steps were drawn again: its next date may have moved.
     steps: () => { if (view() === 'world' && state.worldId) projectPage?.setDate(nextDate(state.worldId)); },

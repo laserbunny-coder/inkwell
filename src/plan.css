@@ -348,3 +348,8 @@ html.hide-panes .ah-talk { display: none; }
 .dc-new { left: 52px; right: 4px; border: 1px solid var(--accent); background: var(--bg); padding: 2px 6px; z-index: 4; }
 .dc-new input { border: 0; background: none; color: var(--ink); font: 13.5px var(--ui); outline: none; padding: 2px 0; width: 100%; }
 :root.dc-dragging, :root.dc-dragging * { cursor: grabbing !important; }
+/* Picked with Shift + click (or Shift + Down), for deleting several at once. */
+.pl-task.sel, .pl-task.sel:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.pl-thru { border: 1px solid var(--line); background: none; color: var(--muted); font: 12.5px var(--ui); padding: 3px 10px; border-radius: 999px; cursor: pointer; }
+.pl-thru:hover, .pl-thru:focus-visible { color: var(--accent); border-color: var(--accent); }
+.hide-planview .pl-thru { display: inline-block; }
