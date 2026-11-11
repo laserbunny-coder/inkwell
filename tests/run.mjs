@@ -861,8 +861,19 @@ try {
     assert.equal(await ph.evaluate(() => document.activeElement?.classList.contains('ProseMirror')), true, 'keyboard stays up');
     assert.equal(await ph.locator('.script-bar button.current').innerText(), 'Character');
     // The handle beside the line opens the menu as a sheet (no dragging on a phone).
+    // What a tap on the handle reached, to say why if the sheet doesn't come (GitHub's runner only).
+    await ph.evaluate(() => {
+      window.__taps = [];
+      for (const t of ['pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchend', 'touchcancel', 'click', 'contextmenu']) {
+        document.addEventListener(t, (e) => window.__taps.push(`${t}:${e.target?.className?.baseVal ?? e.target?.className ?? e.target?.nodeName}:${e.pointerType ?? ''}:${Math.round(e.clientY ?? e.changedTouches?.[0]?.clientY ?? -1)}:${document.querySelectorAll('.handle-menu').length}`), true);
+      }
+    });
+    const hb = await ph.locator('.block-handle').boundingBox();
     await ph.locator('.block-handle').tap();
-    await ph.waitForSelector('.handle-menu.as-sheet', { state: 'visible' });
+    await ph.waitForSelector('.handle-menu.as-sheet', { state: 'visible', timeout: 8000 }).catch(async (e) => {
+      const seen = await ph.evaluate(() => ({ taps: window.__taps, menus: [...document.querySelectorAll('.handle-menu')].map((m) => m.className), handle: (() => { const h = document.querySelector('.block-handle'); const r = h?.getBoundingClientRect(); return h && `${h.className} ${Math.round(r.top)} ${Math.round(r.left)} ${getComputedStyle(h).display}`; })(), hover: matchMedia('(hover: none)').matches }));
+      throw new Error(`${e.message.split('\n')[0]} | handle before tap ${JSON.stringify(hb)} | ${JSON.stringify(seen)}`);
+    });
     assert.equal(await ph.locator('.handle-menu .head').innerText(), 'CHARACTER');
     assert.deepEqual(await ph.locator('.handle-menu .hm-chip').allInnerTexts(), ['Scene', 'Action', 'Character', 'Paren', 'Dialogue', 'Transition']);
     await ph.locator('.handle-menu .hm-chip', { hasText: 'Dialogue' }).tap();
