@@ -32,8 +32,10 @@ Call Dana
 Order rope`;
 
 try {
-  const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true });
+  const ctx = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true });
   const ph = await ctx.newPage();
+  // A morning, so the evening's "Look back over today?" card can't come in above the lines mid-check.
+  await ph.clock.install({ time: new Date('2026-11-11T10:00:00-08:00') });
   const errors = [];
   ph.on('pageerror', (e) => errors.push(e.message));
   await ph.goto(URL);
