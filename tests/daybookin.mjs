@@ -131,7 +131,10 @@ try {
   await p.evaluate(seed, HERE);
   await p.reload();
   await p.waitForFunction(() => document.documentElement.dataset.started === '1');
-  const before = (await live(p)).length;
+  const beforeIds = new Set((await live(p)).map((r) => r.id));
+  // Nothing from Daybook yet: the app may still save its own rows (the day's
+  // page and the like) on a slow machine, so look for Daybook's, not a count.
+  const fromDaybook = async () => (await live(p)).filter((r) => !beforeIds.has(r.id) && (r.fields?.fromDaybook || /^(wd|li|ar|pg)-db/.test(r.id))).map((r) => r.id);
 
   await check('the box says what would come in, and nothing is written yet', async () => {
     const said = await box(p);
@@ -145,12 +148,14 @@ try {
     assert.match(text, /1 new area: Garden\./);
     assert.match(text, /Left behind on purpose: 1 area time block, 1 thing in Daybook’s trash\./);
     assert.match(said.at(-1), /Daybook itself isn’t changed\./);
-    assert.equal((await live(p)).length, before);
+    assert.deepEqual(await fromDaybook(), []);
     await shot(p, 'daybookin-box');
     await p.locator('.dbin-box .ghost-btn').click();
     assert.equal(await p.locator('.dbin-box').count(), 0);
-    assert.equal((await live(p)).length, before);
+    assert.deepEqual(await fromDaybook(), []);
   });
+  // A failure above mustn't leave the box over every check after it.
+  if (await p.locator('.dbin-box').count()) await p.locator('.dbin-box .ghost-btn').click();
 
   await check('saying yes brings it in: projects, steps, tasks, notes and links', async () => {
     await box(p);
