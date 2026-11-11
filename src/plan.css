@@ -265,6 +265,12 @@ html.hide-panes .ah-talk { display: none; }
 .ev-w { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ev-d { margin-left: auto; flex: none; color: var(--faint); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .pl-ev.past, .pw-ev.past { opacity: .5; }
+/* Woven: an event at its place among the tasks, lined up with them; it can't be moved. */
+.pl-list .pl-wev { display: grid; grid-template-columns: 22px auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 8px; margin: 2px -8px; border-radius: var(--r, 6px); font-size: 13px; color: var(--muted); background: color-mix(in srgb, var(--raise) 55%, transparent); }
+.pl-list .pl-wev i { justify-self: center; transform: none; }
+.pl-list .pl-wev .ev-t { min-width: 0; }
+.pl-wev.drop-after { box-shadow: 0 2px 0 var(--accent); }
+.pl-wev.drop-before { box-shadow: 0 -2px 0 var(--accent); }
 .pw-ev { font-size: 11.5px; gap: 5px; padding: 1px 6px; flex-wrap: wrap; }
 .pw-ev .ev-t { min-width: 0; }
 .pw-ev .ev-w { flex-basis: 100%; padding-left: 11px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
@@ -288,3 +294,45 @@ html.hide-panes .ah-talk { display: none; }
 .pl-owner { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; line-height: 18px; }
 .pl-hq { font-size: 11px; letter-spacing: .04em; color: var(--muted); text-decoration: none; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; line-height: 17px; }
 .pl-hq:hover { color: var(--accent); border-color: var(--accent); }
+
+/* List | Calendar, beside the plan's name. */
+.pl-view { display: inline-flex; gap: 2px; padding: 2px; border-radius: 99px; background: color-mix(in srgb, var(--raise) 70%, transparent); align-self: center; }
+.pl-view button { border: 0; background: none; color: var(--faint); font: 12px var(--ui); padding: 3px 10px; border-radius: 99px; cursor: pointer; }
+.pl-view button:hover { color: var(--ink); }
+.pl-view button[aria-pressed="true"] { background: var(--raise); color: var(--ink); }
+.hide-planview .pl-view { display: none; }
+
+/* The day's Calendar: arranged by hand, snapping to 15 minutes. */
+.dc { display: grid; gap: 10px; margin-bottom: 6px; }
+.dc-tray { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font: 12.5px var(--ui); color: var(--faint); }
+.dc-tray-l { margin-right: 2px; }
+.dc-chip { border: 1px solid var(--line2); background: none; color: var(--muted); font: 13px var(--ui); padding: 3px 10px; border-radius: 99px; cursor: grab; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; touch-action: manipulation; -webkit-touch-callout: none; user-select: none; }
+.dc-chip:hover, .dc-chip:focus-visible { color: var(--ink); border-color: var(--accent); outline: none; }
+.dc-grid { position: relative; cursor: cell; }
+.dc-hour { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); pointer-events: none; }
+.dc-hour span { position: absolute; left: 0; top: -8px; padding-right: 6px; background: var(--bg); font: 11px var(--ui); color: var(--faint); font-variant-numeric: tabular-nums; }
+.dc-ev, .dc-blk, .dc-new { position: absolute; box-sizing: border-box; border-radius: var(--r, 6px); padding: 3px 8px; overflow: hidden; display: flex; flex-direction: column; font: 13px/1.3 var(--ui); min-height: 10px; }
+.dc-ev { border: 1px dashed var(--line2); color: var(--muted); background: color-mix(in srgb, var(--bg) 60%, transparent); cursor: default; }
+.dc-ev.past { opacity: .5; }
+.dc-blk { background: color-mix(in srgb, var(--accent) 16%, var(--raise)); border-left: 3px solid var(--accent); color: var(--ink); cursor: grab; touch-action: manipulation; -webkit-touch-callout: none; user-select: none; }
+.dc-blk:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dc-blk.timing { border-left-color: var(--signal); }
+.dc-blk.dragging { cursor: grabbing; box-shadow: 0 6px 18px rgb(0 0 0 / .25); z-index: 3; opacity: .92; }
+.dc-blk.dc-held { background: var(--tint); }
+.dc-blk.dc-off { opacity: .45; outline: 1px dashed var(--line2); }
+.dc-blk.preview { opacity: .75; pointer-events: none; z-index: 3; }
+.short:is(.dc-ev, .dc-blk) { flex-direction: row; align-items: center; gap: 8px; padding-block: 0; }
+.short:is(.dc-ev, .dc-blk) .dc-w { flex: 0 1 auto; min-width: 0; }
+.short:is(.dc-ev, .dc-blk) .dc-t { flex: none; }
+.dc-w { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dc-t { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dc-blk .dc-t { color: var(--muted); }
+.dc-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: ns-resize; }
+.dc-edge::after { content: ''; position: absolute; left: 50%; bottom: 2px; width: 18px; height: 2px; margin-left: -9px; border-radius: 2px; background: var(--line2); opacity: 0; }
+.dc-blk:hover .dc-edge::after { opacity: 1; }
+@media (hover: none) { .dc-edge { height: 9px; } .dc-edge::after { opacity: .8; } }
+.dc-now { position: absolute; left: 44px; right: 0; border-top: 1.5px solid var(--accent); pointer-events: none; z-index: 2; }
+.dc-now::before { content: ''; position: absolute; left: -4px; top: -4.5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.dc-new { left: 52px; right: 4px; border: 1px solid var(--accent); background: var(--bg); padding: 2px 6px; z-index: 4; }
+.dc-new input { border: 0; background: none; color: var(--ink); font: 13.5px var(--ui); outline: none; padding: 2px 0; width: 100%; }
+:root.dc-dragging, :root.dc-dragging * { cursor: grabbing !important; }

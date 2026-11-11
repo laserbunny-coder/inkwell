@@ -8,12 +8,13 @@
 import { popMenu, askText } from './menu.js';
 import {
   loadTasks, dayPlan, weekPlan, pace, planSettings, savePlanSettings, setTask, unTask, tickTask, tookTask, startTimer, stopTimer,
-  addTask, renameTask, arrange, plainLine, parseEst, readSpan, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE, stepsPage, stepsHome,
+  addTask, renameTask, arrange, weave, plainLine, parseEst, readSpan, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE, stepsPage, stepsHome,
   moveTask, isStretch, stretchWord, isRepeat, repeatWord, readDays, parseAdd, history, occItem, setRepeat, skipTask, rollTicked, dow, areaHours
 } from './tasks.js';
 import { areas, areaColor } from './library.js';
 import { drawAhead, aheadClick, aheadContext, aheadDrags } from './ahead.js';
 import { clockWord, freeLeft } from './calendar.js';
+import { drawCalendar } from './plancal.js';
 
 const make = (tag, cls, text) => {
   const el = document.createElement(tag);
@@ -187,6 +188,32 @@ export class Plan {
     return el;
   }
 
+  // An event in a woven plan: fixed at its place; tasks go above or below it.
+  wovenEvent(e, at) {
+    const el = this.eventLine(e, 'pl-ev');
+    el.classList.add('pl-wev');
+    el.dataset.at = String(at);
+    return el;
+  }
+
+  get estimates() { return !this.hooks.off?.('estimates'); }
+
+  // List or Calendar, remembered on this device.
+  get dayView() { try { return localStorage.getItem('planView') || 'list'; } catch { return 'list'; } }
+  set dayView(v) { try { localStorage.setItem('planView', v); } catch { /* no storage here */ } }
+  viewSwitch(asCal) {
+    const row = make('div', 'pl-view');
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', 'See the plan as');
+    for (const [id, label] of [['list', 'List'], ['cal', 'Calendar']]) {
+      const b = make('button', '', label);
+      b.dataset.act = `view-${id}`;
+      b.setAttribute('aria-pressed', String((id === 'cal') === asCal));
+      row.append(b);
+    }
+    return row;
+  }
+
   // After the plan writes: the open page hears about it, and the plan redraws.
   async wrote(rows) {
     const list = [rows].flat().filter(Boolean);
@@ -248,12 +275,14 @@ export class Plan {
     const head = make('div', 'pl-head');
     head.append(make('h2', 'pl-label', 'Plan'));
     const said = [];
-    if (p.todo.length) said.push(p.left ? `${span(p.left)} to do` : `${p.todo.length} to do`);
-    if (p.done.length) said.push(p.spent ? `${span(p.spent)} done` : `${p.done.length} done`);
+    // Time estimates are off unless switched on under Look: then it's only how many.
+    const est = this.estimates;
+    if (p.todo.length) said.push(est && p.left ? `${span(p.left)} to do` : `${p.todo.length} to do`);
+    if (p.done.length) said.push(est && p.spent ? `${span(p.spent)} done` : `${p.done.length} done`);
     head.append(make('span', 'pl-sum', said.join(' · ')));
     const evs = this.cal.filter((e) => e.day === day);
     // Today: the time still free before your day ends, less what's on the calendar.
-    if (day === today && p.todo.length) {
+    if (est && day === today && p.todo.length) {
       const free = Math.floor(freeLeft(evs, Date.now(), this.dayEnd) / 5) * 5;
       const left = make('button', `pl-left${p.left > free ? ' over' : ''}`, `${span(free)} left today`);
       left.dataset.act = 'dayend';
@@ -262,18 +291,28 @@ export class Plan {
       left.title = `Until ${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h < 12 || h === 24 ? 'am' : 'pm'}${evs.some((e) => !e.allDay) ? ', less what’s on your calendar' : ''}: click to change when your day ends`;
       head.append(left);
     }
-    head.append(this.switchRow('day'));
+    // List | Calendar: the same tasks as an order, or placed by hand on the day's hours.
+    const asCal = this.dayView === 'cal' && !this.hooks.off?.('planview');
+    head.append(this.viewSwitch(asCal), this.switchRow('day'));
+    // Woven: timed events sit among the tasks, at their place in the day; all-day
+    // ones (and every event, with "Events among the tasks" off) stay on top.
+    const woven = !this.hooks.off?.('woven');
+    const timed = woven ? evs.filter((e) => !e.allDay) : [];
+    const top = woven ? evs.filter((e) => e.allDay) : evs;
     const cal = make('div', 'pl-cal');
     cal.setAttribute('aria-label', 'On your calendar');
-    for (const e of evs) cal.append(this.eventLine(e, 'pl-ev'));
-    cal.hidden = !evs.length;
+    for (const e of top) cal.append(this.eventLine(e, 'pl-ev'));
+    cal.hidden = !top.length;
+    const row = (i) => this.taskRow(i, { next: day === today && i === p.next });
     const above = [
       ...p.carried.flatMap((i) => this.taskRow(i, { carried: true, next: day === today && i === p.next })),
-      ...p.open.flatMap((i) => this.taskRow(i, { next: day === today && i === p.next }))
+      ...(timed.length ? weave(p.open, timed, day, Date.now(), today).flatMap((x) => (x.event ? [this.wovenEvent(x.event, x.at)] : row(x.item))) : p.open.flatMap(row))
     ];
     const below = p.done.flatMap((i) => this.taskRow(i, {}));
-    const typing = this.typingIn(box, day);
-    if (typing) {
+    const typing = !asCal && this.typingIn(box, day);
+    if (asCal) {
+      box.replaceChildren(head, cal, drawCalendar(this, day, [...p.carried, ...p.open], evs));
+    } else if (typing) {
       // Adding one after another: the box stays where it is, the rest is drawn around it.
       for (const el of [...box.children]) if (el !== typing.list) el.remove();
       box.prepend(head, cal);
@@ -442,7 +481,10 @@ export class Plan {
     const est = make('button', 'pl-est');
     est.dataset.act = 'est';
     if (t.run) { est.textContent = clock(t, Date.now()); est.dataset.timer = id; est.classList.add('live'); est.setAttribute('aria-label', 'Time on the clock'); }
+    else if (done && !this.estimates) { est.textContent = t.actual ? span(t.actual) : ''; est.hidden = !t.actual; est.setAttribute('aria-label', 'How long it took'); }
     else if (done) { est.textContent = t.actual && t.est && t.actual !== t.est ? `${span(t.est)} → ${span(t.actual)}` : t.actual || t.est ? span(t.actual || t.est) : ''; est.setAttribute('aria-label', 'How long it took'); }
+    // With estimates off, an open task says nothing about how long it takes.
+    else if (!this.estimates) est.hidden = true;
     else { est.textContent = t.est ? span(t.est) : 'how long?'; if (!t.est) est.classList.add('unset'); est.setAttribute('aria-label', t.est ? `Takes about ${span(t.est)}; click to change` : 'Say how long it takes'); }
     // A habit has no hours: nothing to guess, nothing to say afterwards.
     if (t.habit) est.hidden = true;
@@ -712,6 +754,7 @@ export class Plan {
     if (act === 'week-prev' || act === 'week-next') return this.hooks.go({ view: 'plan', tab: 'week', week: addDays(weekOf(this.week || this.today)[0], act === 'week-prev' ? -7 : 7) });
     if (act === 'week-now') return this.hooks.go({ view: 'plan', tab: 'week' });
     if (act === 'open-day') return this.hooks.go({ view: 'notebook', pageId: `day-${el.closest('[data-day]').dataset.day}` });
+    if (act === 'view-list' || act === 'view-cal') { this.dayView = act.slice(5); return this.redraw(); }
     if (act === 'free') return this.askFree();
     if (act === 'dayend') return this.askDayEnd();
     if (act === 'area-target') return this.askTarget(el.closest('[data-area]').dataset.area);
@@ -758,22 +801,38 @@ export class Plan {
     this.rename(i, el);
   }
 
-  // Alt + Up / Alt + Down on a task moves it one place in its day.
+  // A day's list in its new order, tasks and (woven) events, with `moved` in
+  // its new place: the tasks' order is saved, and in a woven plan the moved
+  // one remembers which event it now follows.
+  async settle(list, seq, moved) {
+    const woven = seq.some((x) => x.classList?.contains('pl-wev'));
+    let ev = -1;
+    let pin = null;
+    const ids = [];
+    for (const x of seq) {
+      if (x.classList?.contains('pl-wev')) { ev = Number(x.dataset.at); continue; }
+      const id = x.dataset?.task || x.id;
+      ids.push(id);
+      if (id === moved && woven) pin = { id, after: ev };
+    }
+    return this.wrote(await arrange(ids, list.dataset.day, pin));
+  }
+
+  // Alt + Up / Alt + Down on a task moves it one place in its day (past an
+  // event, in a woven plan).
   nudge(e) {
     const row = e.target.closest?.('.pl-list [data-task][data-move]');
     if (!row) return false;
     const list = row.closest('.pl-list');
-    const rows = [...list.querySelectorAll('.pl-task[data-move]:not(.carried)')];
-    const ids = rows.map((r) => r.dataset.task);
-    const at = ids.indexOf(row.dataset.task);
+    const seq = [...list.querySelectorAll('.pl-task[data-move]:not(.carried):not(.ghost), .pl-wev')];
+    const at = seq.indexOf(row);
     const to = at + (e.key === 'ArrowUp' ? -1 : 1);
     e.preventDefault();
-    if (at < 0 || to < 0 || to >= ids.length) return true;
-    ids.splice(to, 0, ...ids.splice(at, 1));
+    if (at < 0 || to < 0 || to >= seq.length) return true;
+    seq.splice(to, 0, ...seq.splice(at, 1));
     const id = row.dataset.task;
     const which = e.target.dataset.act || 'words';
-    arrange(ids, list.dataset.day).then(async (rows) => {
-      await this.wrote(rows);
+    this.settle(list, seq, id).then(() => {
       // Keep the keyboard on the task that moved, so it can go on moving.
       const box = list.isConnected ? list : document;
       (box.querySelector(`[data-task="${id}"] [data-act="${which}"]`) || box.querySelector(`[data-task="${id}"] .pl-words`))?.focus();
@@ -918,7 +977,7 @@ export class Plan {
       items.push({ label: t.run ? 'Stop the timer' : 'Start the timer', run: () => this.timerFor(i) });
     }
     items.push('sep', ...this.dayItems(i), 'sep',
-      ...(t.habit ? [] : [{ label: t.est ? `Takes ${span(t.est)}` : 'How long it takes', sub: this.estItems(i) }]),
+      ...(t.habit || !this.estimates ? [] : [{ label: t.est ? `Takes ${span(t.est)}` : 'How long it takes', sub: this.estItems(i) }]),
       // It can come round again; one that does can be a habit, with no hours.
       ...(!done && !isStretch(t) && !t.mark ? [{ label: rep ? repeatWord(t.repeat) : 'Repeat', sub: this.repeatItems(i) }] : []),
       ...(!done && rep ? [
@@ -1044,7 +1103,8 @@ export class Plan {
       if (zone) return { zone };
       const list = target?.closest?.('.pl-list');
       if (!list) return null;
-      const rows = [...list.querySelectorAll('.pl-task:not(.done):not(.carried):not(.ghost)')].filter((r) => r.dataset.task !== id);
+      // In a woven plan the events count as places too: a task can go just above or below one.
+      const rows = [...list.querySelectorAll('.pl-task:not(.done):not(.carried):not(.ghost), .pl-wev')].filter((r) => r.dataset.task !== id);
       let after = null;
       for (const r of rows) { const b = r.getBoundingClientRect(); if (e.clientY > b.top + b.height / 2) after = r; }
       return { list, rows, after };
@@ -1064,9 +1124,9 @@ export class Plan {
         if (!i || (i.task.day || null) === day) return this.refresh();
         return this.wrote(await setTask(moved, { day, order: this.lastOrder(day) }));
       }
-      const ids = s.rows.map((r) => r.dataset.task);
-      ids.splice(s.after ? ids.indexOf(s.after.dataset.task) + 1 : 0, 0, moved);
-      return this.wrote(await arrange(ids, s.list.dataset.day));
+      const seq = [...s.rows];
+      seq.splice(s.after ? seq.indexOf(s.after) + 1 : 0, 0, { id: moved });
+      return this.settle(s.list, seq, moved);
     };
     this.touchDrags(root, { spot, show, clear, land, setId: (v) => { id = v; } });
     root.addEventListener('dragstart', (e) => {
