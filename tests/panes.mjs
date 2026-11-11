@@ -250,7 +250,12 @@ try {
     const li = ph.locator('#outline-editor li', { hasText: 'Kenji' });
     await li.locator(':scope > p').tap();
     await sleep(300);
-    await li.locator(':scope > .line-gutter .bullet').tap();
+    // Held still, the line's dots bring up its menu (a tap would zoom in).
+    const dots = await li.locator(':scope > .line-gutter .bullet').boundingBox();
+    const touch = await ph.context().newCDPSession(ph);
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: dots.x + dots.width / 2, y: dots.y + dots.height / 2 }] });
+    await sleep(650);
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await ph.waitForSelector('.handle-menu');
     await sleep(300);
     await ph.locator('.handle-menu button', { hasText: 'Peek beside' }).tap();
