@@ -663,19 +663,21 @@ function holdDrags(view) {
   });
   const off = once(() => { if (t?.armed) t.d.end(null, true); stop(); });
   const hear = [['touchmove', move], ['touchend', end], ['touchcancel', off]];
+  // Heard on the editor only (not the whole page), so a touch anywhere else
+  // in the app scrolls as freely as ever.
   view.dom.addEventListener('touchstart', start, { passive: true });
-  window.addEventListener('touchmove', move, { passive: false });
-  window.addEventListener('touchend', end, { passive: false });
-  window.addEventListener('touchcancel', off);
+  view.dom.addEventListener('touchmove', move, { passive: false });
+  view.dom.addEventListener('touchend', end, { passive: false });
+  view.dom.addEventListener('touchcancel', off);
   // The phone's own long-press menu (and word picking) would end the hold.
   const menu = (e) => { if (touchHeld || t) { e.preventDefault(); e.stopImmediatePropagation(); } };
   view.dom.addEventListener('contextmenu', menu, true);
   return () => {
     off();
     view.dom.removeEventListener('touchstart', start);
-    window.removeEventListener('touchmove', move);
-    window.removeEventListener('touchend', end);
-    window.removeEventListener('touchcancel', off);
+    view.dom.removeEventListener('touchmove', move);
+    view.dom.removeEventListener('touchend', end);
+    view.dom.removeEventListener('touchcancel', off);
     view.dom.removeEventListener('contextmenu', menu, true);
   };
 }
