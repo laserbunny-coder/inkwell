@@ -861,19 +861,8 @@ try {
     assert.equal(await ph.evaluate(() => document.activeElement?.classList.contains('ProseMirror')), true, 'keyboard stays up');
     assert.equal(await ph.locator('.script-bar button.current').innerText(), 'Character');
     // The handle beside the line opens the menu as a sheet (no dragging on a phone).
-    // What a tap on the handle reached, to say why if the sheet doesn't come (GitHub's runner only).
-    await ph.evaluate(() => {
-      window.__taps = [];
-      for (const t of ['pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchend', 'touchcancel', 'click', 'contextmenu']) {
-        document.addEventListener(t, (e) => window.__taps.push(`${t}:${e.target?.className?.baseVal ?? e.target?.className ?? e.target?.nodeName}:${e.pointerType ?? ''}:${Math.round(e.clientY ?? e.changedTouches?.[0]?.clientY ?? -1)}:${document.querySelectorAll('.handle-menu').length}`), true);
-      }
-    });
-    const hb = await ph.locator('.block-handle').boundingBox();
     await ph.locator('.block-handle').tap();
-    await ph.waitForSelector('.handle-menu.as-sheet', { state: 'visible', timeout: 8000 }).catch(async (e) => {
-      const seen = await ph.evaluate(() => ({ taps: window.__taps, menus: [...document.querySelectorAll('.handle-menu')].map((m) => m.className), handle: (() => { const h = document.querySelector('.block-handle'); const r = h?.getBoundingClientRect(); return h && `${h.className} ${Math.round(r.top)} ${Math.round(r.left)} ${getComputedStyle(h).display}`; })(), hover: matchMedia('(hover: none)').matches }));
-      throw new Error(`${e.message.split('\n')[0]} | handle before tap ${JSON.stringify(hb)} | ${JSON.stringify(seen)}`);
-    });
+    await ph.waitForSelector('.handle-menu.as-sheet', { state: 'visible' });
     assert.equal(await ph.locator('.handle-menu .head').innerText(), 'CHARACTER');
     assert.deepEqual(await ph.locator('.handle-menu .hm-chip').allInnerTexts(), ['Scene', 'Action', 'Character', 'Paren', 'Dialogue', 'Transition']);
     await ph.locator('.handle-menu .hm-chip', { hasText: 'Dialogue' }).tap();
@@ -915,13 +904,21 @@ try {
     // Done, Move to, Zoom and + (the insert menu) wait at the end.
     assert.deepEqual(await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do)), ['talk', 'undo', 'redo', 'outdent', 'indent', 'up', 'down', 'tag', 'link', 'done', 'move', 'zoom', 'insert']);
     assert.equal(await ph.locator('.outline-bar [data-do="link"]').evaluate((b) => b.getBoundingClientRect().right <= innerWidth), true, 'link fits on the first screen');
-    // The line you're on shows its handle; a tap brings its menu up from the bottom.
-    // Move down keeps the sheet open so it can be tapped again.
+    // The line you're on shows its handle; holding it still brings its menu up
+    // from the bottom (a tap zooms in, as on every line). Move down keeps the
+    // sheet open so it can be tapped again.
+    const touchCdp = await phoneCtx.newCDPSession(ph);
+    const hold = async (loc) => {
+      const b = await loc.boundingBox();
+      await touchCdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: b.x + b.width / 2, y: b.y + b.height / 2 }] });
+      await sleep(650);
+      await touchCdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    };
     const here = ph.locator('#outline-editor li.here > .line-gutter .bullet');
     await here.waitFor({ state: 'visible' });
-    await here.tap();
+    await hold(here);
     await ph.waitForSelector('.handle-menu.as-sheet', { state: 'visible' });
-    assert.equal(await ph.locator('.notebook.zoomed').count(), 0, 'a tap on the handle does not zoom');
+    assert.equal(await ph.locator('.notebook.zoomed').count(), 0, 'holding the handle does not zoom');
     await ph.locator('.handle-menu .pair .item', { hasText: 'Move down' }).tap();
     await ph.waitForFunction(() => {
       const t = [...document.querySelectorAll('#outline-editor .ProseMirror > ul > li > p')].map((p) => p.textContent);
@@ -931,10 +928,15 @@ try {
     await ph.locator('#outline-editor li > p', { hasText: /^Tides #sea$/ }).tap();
     assert.equal(await ph.locator('.handle-menu').count(), 0, 'a tap elsewhere closes it');
     await ph.keyboard.press('End');
+    // Undo takes the last change back (the move, or the tag when they came
+    // close together) and Redo puts it back.
+    const outlineNow = () => ph.evaluate(() => [...document.querySelectorAll('#outline-editor li > p')].map((p) => p.textContent).join('\n'));
+    const before = await outlineNow();
+    const asBefore = (same) => ph.waitForFunction(([was, same]) => ([...document.querySelectorAll('#outline-editor li > p')].map((p) => p.textContent).join('\n') === was) === same, [before, same]);
     await tap('undo');
-    await ph.waitForFunction(() => ![...document.querySelectorAll('#outline-editor li > p')].some((p) => p.textContent === 'Tides #sea'));
+    await asBefore(false);
     await tap('redo');
-    await ph.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].some((p) => p.textContent === 'Tides #sea'));
+    await asBefore(true);
     await tap('done');
     await ph.waitForFunction((t) => [...document.querySelectorAll('#outline-editor li[data-done] > p')].some((x) => x.textContent === t), 'Tides #sea');
     await tap('done');
@@ -1012,7 +1014,7 @@ try {
     await caret.tap();
     await ph.waitForSelector('#outline-editor li.folded');
     // The caret stepped up onto the folded line, so its handle is there now; Unfold leads its menu.
-    await ph.locator('#outline-editor li.here.folded > .line-gutter .bullet').tap();
+    await hold(ph.locator('#outline-editor li.here.folded > .line-gutter .bullet'));
     await ph.waitForSelector('.handle-menu.as-sheet', { state: 'visible' });
     assert.match(await ph.locator('.handle-menu .item').first().innerText(), /^Unfold the \d+ lines under it/);
     await ph.locator('.handle-menu .item').first().tap();
