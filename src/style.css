@@ -706,7 +706,17 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
   :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .bullet .grip { opacity: .6; }
   :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .bullet::after { opacity: 0; }
   :root.hide-bullets:not(.hide-handle):not(.focus) #outline-editor li.here.has-kids > .line-gutter .bullet { right: 1.4em; width: .7em; }
+  /* Every line shows its six dots, faintly, as a handle: a finger on them slides the line (as in Workflowy). */
+  :root:not(.hide-handle):not(.focus) #outline-editor .line-gutter .bullet { display: block; touch-action: none; -webkit-touch-callout: none; }
+  :root:not(.hide-handle):not(.focus) #outline-editor .line-gutter .bullet .grip { opacity: .35; }
+  :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .bullet .grip { opacity: .7; }
+  /* The dots stand in for the dot (and for a loose line's ring, which a phone never showed). */
+  :root:not(.hide-handle):not(.focus) #outline-editor li > .line-gutter .bullet::after { opacity: 0 !important; }
+  :root.hide-bullets:not(.hide-handle):not(.focus) #outline-editor li.has-kids > .line-gutter .bullet { right: 1.4em; width: .7em; }
 }
+/* A line lifted under the finger while it moves. */
+.line-lift { position: fixed; z-index: 80; pointer-events: none; padding: 6px 10px; background: linear-gradient(var(--raise), var(--raise)), var(--bg); color: var(--ink); font: 16px/1.45 var(--prose); border-radius: 10px; box-shadow: 0 10px 28px rgba(0, 0, 0, .35), 0 0 0 1px var(--line2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transform: scale(1.02); transform-origin: left center; }
+.line-lift[data-more]::after { content: attr(data-more); margin-left: 8px; font: 12px var(--ui); color: var(--muted); }
 @media (max-width: 700px) { .page { padding-left: 36px; } }
 
 #storage-blocked { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 24px; }
@@ -1966,3 +1976,5 @@ html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
 .al-kind input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
 .al-words { display: grid; gap: 2px; }
 .al-words small { color: var(--muted); line-height: 1.4; }
+
+@media (hover: none) { .line-drop { height: 3px; } .line-drop::before { content: ''; position: absolute; left: -7px; top: -3px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--accent); background: var(--bg); box-sizing: border-box; } }

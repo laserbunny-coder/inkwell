@@ -466,11 +466,17 @@ export function moveLine(editor, dir) {
 let dragOut = null;
 export function setLineDragOut(hooks) { dragOut = hooks; }
 
-// Drags a line by its dot (shown or not) to sit before or after another.
+// Drags a line by its dot (shown or not) to sit before or after another, or,
+// let go further to the right, as the first line under it (as in Workflowy).
+// With a finger the line lifts and follows it, and near the top or bottom of
+// the screen the page scrolls along for as long as the finger stays there.
+const NEST = 44; // px right of a line's words that drops a line under it
 function startDrag(view, dragged, event, { onClick } = {}) {
   const eid = dragged.querySelector(':scope > .line-gutter')?.dataset.eid;
   const x0 = event.clientX, y0 = event.clientY;
-  let mark = null, drop = null;
+  const touch = event.pointerType === 'touch';
+  let mark = null, drop = null, lift = null, dy = 0, raf = 0;
+  let last = { clientX: x0, clientY: y0 };
   const begin = () => {
     mark = document.createElement('div');
     mark.className = 'line-drop';
@@ -478,46 +484,101 @@ function startDrag(view, dragged, event, { onClick } = {}) {
     document.body.append(mark);
     dragged.classList.add('dragging');
     document.body.classList.add('line-dragging');
+    if (!touch) return;
+    // The line itself waits, faded, where it was (its class can be redrawn away).
+    dragged.style.opacity = '.35';
+    // A copy of the line's words rides under the finger.
+    const p = dragged.querySelector(':scope > p');
+    const b = (p || dragged).getBoundingClientRect();
+    lift = document.createElement('div');
+    lift.className = 'line-lift';
+    lift.setAttribute('aria-hidden', 'true');
+    lift.textContent = p?.textContent || '';
+    if (kidsCount(dragged)) lift.dataset.more = `+${kidsCount(dragged)}`;
+    Object.assign(lift.style, { left: `${b.left}px`, width: `${Math.min(b.width, innerWidth - b.left - 8)}px`, top: `${b.top}px` });
+    document.body.append(lift);
+    // It rides just above the finger, so the line where it will land stays in sight.
+    dy = b.height + 22;
+    navigator.vibrate?.(8);
+    const box = scroller(view.dom);
+    const step = () => {
+      if (!mark) return;
+      const y = last.clientY, edge = 72;
+      const speed = y < edge ? -Math.ceil((edge - y) / 6) : y > innerHeight - edge ? Math.ceil((y - (innerHeight - edge)) / 6) : 0;
+      if (speed) { if (box) box.scrollTop += speed; else window.scrollBy(0, speed); place(last); }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
   };
   // Keep hearing the pointer even when it goes over a pane beside this window.
   try { view.dom.setPointerCapture(event.pointerId); } catch { /* not a pointer we can hold */ }
   const find = (e) => {
-    const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('li');
+    let hit = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('li');
+    // A finger on the dots is in the margin: look across the words at that height too.
+    if (!hit && touch) {
+      const r = view.dom.getBoundingClientRect();
+      hit = document.elementFromPoint(r.left + Math.min(r.width / 2, 120), e.clientY)?.closest?.('li');
+    }
     if (!hit || !view.dom.contains(hit) || dragged.contains(hit)) return null;
     const box = hit.querySelector(':scope > p')?.getBoundingClientRect() || hit.getBoundingClientRect();
-    return { li: hit, after: e.clientY > box.top + box.height / 2, box };
+    const after = e.clientY > box.top + box.height / 2;
+    // Further right than the line's words start: under it, as its first line (not into a folded one).
+    const into = after && e.clientX > box.left + NEST && !hit.classList.contains('folded') && !hit.classList.contains('zoom-root');
+    return { li: hit, after, into, box };
   };
-  const move = (e) => {
-    if (!mark && Math.hypot(e.clientX - x0, e.clientY - y0) < 5) return;
-    if (!mark) begin();
+  const place = (e) => {
     drop = find(e);
     const away = !drop && !!dragOut?.over(e);
     document.body.classList.toggle('line-drag-away', away);
     mark.hidden = !drop;
-    if (drop) Object.assign(mark.style, { left: `${drop.box.left}px`, width: `${drop.box.width}px`, top: `${(drop.after ? drop.box.bottom : drop.box.top) - 1}px` });
+    if (drop) {
+      const indent = drop.into ? 24 : 0;
+      Object.assign(mark.style, { left: `${drop.box.left + indent}px`, width: `${drop.box.width - indent}px`, top: `${(drop.after ? drop.box.bottom : drop.box.top) - 1}px` });
+    }
+  };
+  const move = (e) => {
+    last = e;
+    if (!mark && Math.hypot(e.clientX - x0, e.clientY - y0) < (touch ? 4 : 5)) return;
+    if (!mark) begin();
+    if (lift) lift.style.top = `${e.clientY - dy}px`;
+    place(e);
   };
   const done = (e) => {
     try { view.dom.releasePointerCapture(event.pointerId); } catch { /* already let go */ }
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', done);
     window.removeEventListener('pointercancel', done);
+    cancelAnimationFrame(raf);
+    lift?.remove();
+    dragged.style.opacity = '';
     if (!mark) { if (e.type === 'pointerup') onClick?.(); return; }
     mark.remove();
+    mark = null;
     dragged.classList.remove('dragging');
     document.body.classList.remove('line-dragging', 'line-drag-away');
     if (e.type === 'pointercancel') return;
     drop = find(e);
     // Let go over a pane beside: it moves there.
     if (!drop) { if (dragOut) Promise.resolve(dragOut.drop(e, eid)).catch((err) => console.error(err)); return; }
-    dropLineAt(view, eid, drop.li.querySelector(':scope > .line-gutter')?.dataset.eid, drop.after);
+    dropLineAt(view, eid, drop.li.querySelector(':scope > .line-gutter')?.dataset.eid, drop.after, drop.into);
   };
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', done);
   window.addEventListener('pointercancel', done);
 }
+const kidsCount = (li) => li.querySelectorAll(':scope > ul li').length;
+// The box that scrolls the notebook (or none: the page itself scrolls).
+function scroller(el) {
+  for (let n = el.parentElement; n && n !== document.body; n = n.parentElement) {
+    const o = getComputedStyle(n).overflowY;
+    if ((o === 'auto' || o === 'scroll') && n.scrollHeight > n.clientHeight) return n;
+  }
+  return null;
+}
 
-// Puts the line `eid` (with what's under it) just before or after the line `targetEid`.
-export function dropLineAt(view, eid, targetEid, after) {
+// Puts the line `eid` (with what's under it) just before or after the line
+// `targetEid`, or (into) as the first line under it.
+export function dropLineAt(view, eid, targetEid, after, into = false) {
   const state = view.state;
   const posOf = (id) => { let at = -1; if (!id) return at; state.doc.descendants((n, pos) => { if (at < 0 && n.type.name === 'listItem' && n.attrs.eid === id) at = pos; return at < 0; }); return at; };
   if (!eid || eid === targetEid) return false;
@@ -530,11 +591,21 @@ export function dropLineAt(view, eid, targetEid, after) {
   // Not into itself.
   if (at > from && at < from + node.nodeSize) return false;
   const tr = state.tr.delete(from, from + node.nodeSize);
-  const to = tr.mapping.map(after ? at + target.nodeSize : at, after ? 1 : -1);
-  tr.insert(to, node);
+  let to;
+  if (into) {
+    const at2 = tr.mapping.map(at);
+    const t2 = tr.doc.nodeAt(at2);
+    const kids = t2.childCount > 1 && t2.lastChild.type.name === 'bulletList';
+    if (kids) { to = at2 + 1 + t2.firstChild.nodeSize + 1; tr.insert(to, node); }
+    else { const end = at2 + t2.nodeSize - 1; tr.insert(end, state.schema.nodes.bulletList.create(null, node)); to = end + 1; }
+  } else {
+    to = tr.mapping.map(after ? at + target.nodeSize : at, after ? 1 : -1);
+    tr.insert(to, node);
+  }
   tr.setSelection(TextSelection.create(tr.doc, Math.min(to + 2, tr.doc.content.size)));
   view.dispatch(tr.scrollIntoView());
-  view.focus();
+  // On a phone, landing a line doesn't bring the keyboard up.
+  if (!matchMedia('(hover: none)').matches) view.focus();
   return true;
 }
 
@@ -1097,9 +1168,15 @@ export const OutlineFold = Extension.create({
             else if (event.button !== 0) return true; // a right-click opens the menu (below)
             // A click zooms in; with a mouse, a drag moves the line. On a phone,
             // the handle beside the line you're on opens its menu; other dots zoom.
+            // On a phone the six dots do both, as in Workflowy: a tap opens the
+            // menu of the line you're on (zooms into any other), a slide moves it.
             else if (event.pointerType === 'touch') {
-              if (b.closest('li').classList.contains('here') && handleShown()) lineMenu(view, b, eid);
-              else view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid }));
+              const li = b.closest('li');
+              const tap = () => {
+                if (li.classList.contains('here') && handleShown()) lineMenu(view, b, eid);
+                else view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid }));
+              };
+              startDrag(view, li, event, { onClick: tap });
             } else startDrag(view, b.closest('li'), event, { onClick: () => view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid })) });
             return true;
           },
