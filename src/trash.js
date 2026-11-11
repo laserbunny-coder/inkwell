@@ -75,7 +75,8 @@ export async function restore(id) {
   }
   const now = Date.now();
   const back = rows.filter((r) => !r.deleted && isTrashed(r) && groups.has(r.fields.trashedWith)).map((r) => {
-    const { trashed: _t, trashedWith: _w, ...fields } = r.fields;
+    // (hqDelete: it was deleted from the Acro HQ board too; back here, it's only a task again.)
+    const { trashed: _t, trashedWith: _w, hqDelete: _h, ...fields } = r.fields;
     return { ...r, fields, updated_at: now };
   });
   await putEntries(back);

@@ -139,7 +139,7 @@ try {
     assert.equal(await page.locator('#plan .pl-task.sel').count(), 0);
   });
 
-  await check('a task on the Acro HQ board asks first, and Cancel keeps it', async () => {
+  await check('a task on the Acro HQ board is deleted without asking, marked to come off the board too; Undo takes it all back', async () => {
     const t = await named(page, 'Email Dana the boards');
     await put(page, [{ ...t, fields: { ...t.fields, hq: { id: 't9', link: 'https://hq.example/?task=t9' } }, updated_at: Date.now() }]);
     await page.reload();
@@ -148,11 +148,15 @@ try {
     await page.waitForSelector('#plan .pl-hq');
     await focusTask(page, 'Email Dana the boards');
     await page.keyboard.press('Control+Shift+Backspace');
-    await page.waitForSelector('.ask');
-    assert.match(await page.locator('.ask').innerText(), /Acro HQ board/);
-    await page.locator('.ask button', { hasText: 'Cancel' }).click();
-    await sleep(300);
-    assert.ok(!(await named(page, 'Email Dana the boards')).fields.trashed);
+    await page.waitForFunction(() => ![...document.querySelectorAll('#plan .pl-words')].some((w) => w.textContent === 'Email Dana the boards'));
+    assert.equal(await page.locator('.ask').count(), 0, 'no question');
+    assert.match(await toast(page), /from the HQ board/);
+    const gone = await named(page, 'Email Dana the boards');
+    assert.ok(gone.fields.trashed && gone.fields.hqDelete, 'in the Trash, and meant for the board too');
+    await page.locator('.toast .toast-action', { hasText: 'Undo' }).click();
+    await page.waitForFunction(() => [...document.querySelectorAll('#plan .pl-words')].some((w) => w.textContent === 'Email Dana the boards'));
+    const back = await named(page, 'Email Dana the boards');
+    assert.ok(!back.fields.trashed && !back.fields.hqDelete, 'back, and staying on the board');
   });
 
   // Two days later, everything still open is carried over.
@@ -167,7 +171,7 @@ try {
     await page.locator('#plan .pl-thru').click();
     await page.waitForSelector('.thru-card');
     const opts = await page.evaluate(() => [...document.querySelectorAll('.thru-opt')].map((b) => `${b.dataset.key} ${b.querySelector('.thru-label').textContent}`));
-    assert.deepEqual(opts, ['K Keep it for today', 'N Not today: off the day, still where it’s written', 'D Delete it', 'S Skip for now']);
+    assert.deepEqual(opts.filter((o) => !/HQ/.test(o)), ['K Keep it for today', 'C Done: check it off', 'N Not today: off the day, still where it’s written', 'D Delete it', 'S Skip for now']);
     assert.match(await page.locator('.thru-ctx').innerText(), /Planned for Nov 9/);
     await shot(page, 'thru-carried');
   });
@@ -189,6 +193,13 @@ try {
     await page.keyboard.press('z');
     await page.waitForFunction((t) => document.querySelector('.thru-big')?.textContent === t, third);
     assert.ok(!(await named(page, third)).fields.trashed, 'Undo brought it back');
+    await page.keyboard.press('c');
+    await page.waitForFunction((f) => document.querySelector('.thru-big')?.textContent !== f, third);
+    const ticked = await named(page, third);
+    assert.ok(ticked.fields.done && ticked.fields.task.done_at, 'done: checked off');
+    await page.keyboard.press('z');
+    await page.waitForFunction((t) => document.querySelector('.thru-big')?.textContent === t, third);
+    assert.ok(!(await named(page, third)).fields.done, 'Undo opened it again');
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !document.querySelector('.thru'));
     await page.waitForFunction(() => document.querySelectorAll('#plan .pl-task.carried').length === 5);

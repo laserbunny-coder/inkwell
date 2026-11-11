@@ -111,6 +111,37 @@ steps = planInkwell(base({ lines: [line("li-c")], links: [{ item_id: "li-c", tas
 assert.equal(set(steps[0]).fields.trashed, 5000);
 assert.equal(steps[0].link!.task_id, null);
 
+// Deleted by Michael in Inkwell (marked hqDelete): after a minute in the Trash it comes off the board, and the
+// line is just a line in the Trash. Before that minute (time for Undo), or put in the Trash without the mark
+// (a page went), or Nate's: the board is left alone.
+const hqLine = (id: string, trashed: number, more: Record<string, unknown> = {}) => {
+  const l = line(id);
+  l.fields = { ...l.fields, hq: { id: "t9" }, trashed, trashedWith: id, ...more };
+  return l;
+};
+const t9 = task("t9", 7);
+const lk = (id: string) => [{ item_id: id, task_id: "t9", seen: { v: 7, b: seenV, i: seenV } }];
+steps = planInkwell(base({ now: 70_000, tasks: [t9], lines: [hqLine("li-d", 5000, { hqDelete: 5000 })], links: lk("li-d") }));
+assert.equal(steps.length, 1);
+assert.deepEqual(steps[0].boardDelete, { id: "t9", if_version: 7 });
+assert.equal(steps[0].unlink, "li-d");
+assert.equal(set(steps[0]).fields.hq, undefined, "no longer tied to a board task");
+assert.equal(set(steps[0]).fields.hqDelete, undefined);
+assert.equal(set(steps[0]).fields.trashed, 5000, "still in the Trash");
+assert.equal(planInkwell(base({ now: 30_000, tasks: [t9], lines: [hqLine("li-d", 5000, { hqDelete: 5000 })], links: lk("li-d") })).length, 0, "Undo still has time");
+assert.equal(planInkwell(base({ now: 70_000, tasks: [t9], lines: [hqLine("li-d", 5000)], links: lk("li-d") })).length, 0, "no mark: the board stays");
+assert.equal(planInkwell(base({ now: 70_000, tasks: [task("t9", 7, { assignee: "Nate" })], lines: [hqLine("li-d", 5000, { hqDelete: 5000 })], links: lk("li-d") })).length, 0, "Nate's stays");
+// Already gone from the board too: only the link goes.
+steps = planInkwell(base({ now: 70_000, tasks: [], lines: [hqLine("li-d", 5000, { hqDelete: 5000 })], links: lk("li-d") }));
+assert.equal(steps[0].why, "deleted in both");
+assert.ok(!steps[0].boardDelete);
+assert.equal(steps[0].unlink, "li-d");
+// Brought back from the Trash afterwards (no hq, no link): a new task line, so it goes back on the board.
+const back = line("li-d");
+steps = planInkwell(base({ tasks: [], lines: [back], links: [], acro: new Set(["li-d"]) }));
+assert.equal(steps[0].why, "new in Inkwell");
+assert.equal(steps[0].board!.id, "inkwell-li-d");
+
 // Meetings: one read-only page each, with who, summary, decisions, action items and a link; the write-out on its own page.
 const m = { id: "rec-1", version: 9, data: { status: "ready", title: "First meeting test", date: "2026-11-01", summary: "- Plan is live.\n- Weekly for now.", decisions: ["Run it every Sunday."], speakers: [{ id: 0, name: "Nate" }, { id: 1, name: "Michael" }], suggestions: [{ title: "Fix Style Lab", assignee: "Nate", due: "2026-11-05" }], claudeJobs: [{ title: "Run the weekly review" }], said: [{ s: 0, t: 0, text: "Here's Wednesday." }, { s: 1, t: 16, text: "Okay." }] } };
 assert.deepEqual(meetingLines(m, "https://hq.example").map(([t]) => t), ["Who: Nate, Michael", "Summary", "Decisions", "Action items", "Open it in Acro HQ: https://hq.example/?meeting=rec-1"]);

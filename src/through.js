@@ -94,8 +94,9 @@ export class Through {
     if (this.kind === 'carried') {
       return [
         ['K', 'Keep it for today', 'keep'],
+        ['C', it.hq ? 'Done: check it off (on the HQ board too)' : 'Done: check it off', 'done'],
         ['N', 'Not today: off the day, still where it’s written', 'notoday'],
-        ...(it.canDelete ? [['D', it.hq ? 'Delete from Inkwell (it stays on the HQ board)' : 'Delete it', 'delete']] : []),
+        ...(it.canDelete ? [['D', it.hq ? 'Delete it (from the HQ board too)' : 'Delete it', 'delete']] : []),
         ['S', 'Skip for now', 'skip']
       ];
     }

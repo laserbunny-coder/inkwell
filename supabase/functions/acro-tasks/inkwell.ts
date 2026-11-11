@@ -9,7 +9,10 @@
 //     thing between two runs, the board wins.
 //   - The board's notes come over as one line under the task (kept up to date); notes written in Inkwell
 //     go to the board when the task is new there.
-//   - A board task deleted goes to Inkwell's Trash if it wasn't done. Nothing in Inkwell ever deletes a board task.
+//   - A board task deleted goes to Inkwell's Trash if it wasn't done. A task of Michael's he deletes in Inkwell
+//     (the app marks it hqDelete) is deleted on the board too, once it has been in the Trash a minute (time
+//     for Undo). Putting a whole page or project in the Trash, or a Claude's delete, never touches the board.
+//     Brought back from the Trash after that, it's a new task line again, and goes back on the board.
 // Links Daybook made (acro_task_links.item_id = a Daybook id) carry over to the line the import made for that
 // item (li-db-<id>), and are looked at afresh (the board's wording wins). This file only plans; index.ts runs it.
 
@@ -29,6 +32,8 @@ export type IStep = {
   patch?: { id: string; set: Partial<Line> };
   link?: ILink;
   unlink?: string;
+  /** A board task to delete (Michael deleted it in Inkwell). */
+  boardDelete?: { id: string; if_version: number };
 };
 export type IInput = {
   tasks: Task[];
@@ -48,6 +53,8 @@ export type IInput = {
 };
 
 const GAP = 1024;
+/** How long a task deleted in Inkwell waits in the Trash before it comes off the board (time for Undo). */
+export const UNDO_TIME = 60_000;
 const s = (v: unknown) => (typeof v === "string" ? v : "");
 const clean = (t: string) => t.replace(/\s+/g, " ").trim();
 const who = (a: unknown) => (s(a).trim() || PERSON);
@@ -117,8 +124,22 @@ export function planInkwell(inp: IInput): IStep[] {
     if (!l.task_id) continue;
     const ln = lines.get(l.item_id);
     if (!ln) { steps.push({ why: "Inkwell line gone", unlink: l.item_id }); continue; }
-    if (ln.deleted || ln.fields?.trashed) continue; // in the Trash: leave both alone
     const t = tasks.get(l.task_id);
+    if (ln.deleted || ln.fields?.trashed) {
+      // Deleted by Michael in Inkwell, meaning it: off the board too (his own tasks only), then it's
+      // just a line in the Trash. Anything else in the Trash: leave both alone.
+      const meant = Number(ln.fields?.hqDelete) > 0 && (ln.deleted || inp.now - Number(ln.fields?.trashed) >= UNDO_TIME);
+      if (!meant) continue;
+      if (t && boardIVals(t).who !== PERSON) continue;
+      const { hq: _hq, hqDelete: _d, ...fields } = ln.fields;
+      steps.push({
+        why: t ? "deleted in Inkwell" : "deleted in both",
+        ...(t ? { boardDelete: { id: t.id, if_version: t.version } } : {}),
+        patch: { id: ln.id, set: { fields } },
+        unlink: ln.id,
+      });
+      continue;
+    }
     if (!t) {
       steps.push({
         why: "board task deleted",
