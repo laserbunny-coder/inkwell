@@ -313,6 +313,10 @@ export async function savePlanSettings(next) {
 
 const byOrder = (a, b) => (a.task.order || 0) - (b.task.order || 0) || (a.row.created_at || 0) - (b.row.created_at || 0) || (a.row.id < b.row.id ? -1 : 1);
 const isDone = (i) => !!i.row.fields?.done;
+// Tasks from earlier days, on top of today's plan: in the order you put them
+// (task.carry, set when one is moved among them), the rest after, oldest day first.
+const carryOf = (i) => (i.task.carry?.day === i.task.day && Number.isFinite(i.task.carry?.n) ? i.task.carry.n : Infinity);
+const byCarried = (a, b) => carryOf(a) - carryOf(b) || (a.task.day < b.task.day ? -1 : a.task.day > b.task.day ? 1 : byOrder(a, b));
 // A finished task belongs to the day it was finished.
 const doneDay = (i) => (i.task.done_at ? isoOf(i.task.done_at) : i.task.day);
 // A habit has no hours.
@@ -326,7 +330,7 @@ const ghosts = (items, day, today) => items.filter((i) => !isDone(i) && isRepeat
 export function dayPlan(items, day, today = isoOf()) {
   const mine = items.filter((i) => i.mine && !isStretch(i.task));
   const open = [...mine.filter((i) => !isDone(i) && i.task.day === day), ...ghosts(mine, day, today)].sort(byOrder);
-  const carried = day === today ? mine.filter((i) => !isDone(i) && i.task.day && i.task.day < today).sort((a, b) => (a.task.day < b.task.day ? -1 : a.task.day > b.task.day ? 1 : byOrder(a, b))) : [];
+  const carried = day === today ? mine.filter((i) => !isDone(i) && i.task.day && i.task.day < today).sort(byCarried) : [];
   const done = [...mine.filter((i) => isDone(i) && doneDay(i) === day), ...didOn(mine, day)].sort((a, b) => (a.task.done_at || 0) - (b.task.done_at || 0));
   const todo = [...carried, ...open];
   return { open, carried, done, todo, next: todo.find((i) => !i.ghost) || null, left: todo.reduce((a, i) => a + est(i), 0), spent: done.reduce((a, i) => a + real(i), 0) };
@@ -642,6 +646,18 @@ export const renameTask = (id, text) => change(id, (r) => {
 // day, for one dragged in from another). Only rows that change are written.
 // pin: { id, after } puts that one task after the calendar event starting at
 // `after` minutes (-1: before them all) on this day, in a woven plan.
+// Tasks from earlier days put in a new order among themselves: each keeps its
+// day (the order is kept with that day, so it lapses once the task moves on).
+export async function arrangeCarried(ids) {
+  const out = [];
+  for (let n = 0; n < ids.length; n++) {
+    const t = taskOf(await getEntry(ids[n]));
+    if (!t || (t.carry?.n === n + 1 && t.carry?.day === t.day)) continue;
+    out.push(await change(ids[n], (r) => { withTask(r, { carry: { day: r.fields.task?.day || null, n: n + 1 } }); }));
+  }
+  return out.filter(Boolean);
+}
+
 export async function arrange(ids, day, pin = null) {
   const out = [];
   for (let n = 0; n < ids.length; n++) {

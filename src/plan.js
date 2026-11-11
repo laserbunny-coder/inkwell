@@ -9,7 +9,7 @@ import { popMenu, askText, ask } from './menu.js';
 import { trash, restore } from './trash.js';
 import {
   loadTasks, dayPlan, weekPlan, pace, planSettings, savePlanSettings, setTask, unTask, tickTask, tookTask, startTimer, stopTimer,
-  addTask, renameTask, arrange, weave, plainLine, parseEst, readSpan, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE, stepsPage, stepsHome,
+  addTask, renameTask, arrange, arrangeCarried, weave, plainLine, parseEst, readSpan, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE, stepsPage, stepsHome,
   moveTask, isStretch, stretchWord, isRepeat, repeatWord, readDays, parseAdd, history, occItem, setRepeat, skipTask, rollTicked, dow, areaHours
 } from './tasks.js';
 import { areas, areaColor } from './library.js';
@@ -991,6 +991,12 @@ export class Plan {
 
   // Moves a task to the start or the end of its day's list (past any events).
   toEnd(list, id, top) {
+    // One from an earlier day goes to the top or bottom of those.
+    if (list.querySelector(`.pl-task.carried[data-task="${CSS.escape(id)}"]`)) {
+      const ids = [...list.querySelectorAll('.pl-task.carried[data-move]')].map((x) => x.dataset.task).filter((x) => x !== id);
+      if (top) ids.unshift(id); else ids.push(id);
+      return arrangeCarried(ids).then((rows) => this.wrote(rows));
+    }
     const seq = [...list.querySelectorAll('.pl-task[data-move]:not(.carried):not(.ghost), .pl-wev')].filter((x) => x.dataset.task !== id);
     if (top) seq.unshift({ id }); else seq.push({ id });
     return this.settle(list, seq, id);
@@ -1002,7 +1008,8 @@ export class Plan {
     const row = e.target.closest?.('.pl-list [data-task][data-move]');
     if (!row) return false;
     const list = row.closest('.pl-list');
-    const seq = [...list.querySelectorAll('.pl-task[data-move]:not(.carried):not(.ghost), .pl-wev')];
+    const old = row.classList.contains('carried');
+    const seq = [...list.querySelectorAll(old ? '.pl-task.carried[data-move]' : '.pl-task[data-move]:not(.carried):not(.ghost), .pl-wev')];
     const at = seq.indexOf(row);
     const to = at + (e.key === 'ArrowUp' ? -1 : 1);
     e.preventDefault();
@@ -1010,7 +1017,7 @@ export class Plan {
     seq.splice(to, 0, ...seq.splice(at, 1));
     const id = row.dataset.task;
     const which = e.target.dataset.act || 'words';
-    this.settle(list, seq, id).then(() => {
+    (old ? arrangeCarried(seq.map((x) => x.dataset.task)).then((rows) => this.wrote(rows)) : this.settle(list, seq, id)).then(() => {
       // Keep the keyboard on the task that moved, so it can go on moving.
       const box = list.isConnected ? list : document;
       (box.querySelector(`[data-task="${id}"] [data-act="${which}"]`) || box.querySelector(`[data-task="${id}"] .pl-words`))?.focus();
@@ -1313,10 +1320,17 @@ export class Plan {
       const list = target?.closest?.('.pl-list');
       if (!list) return null;
       // In a woven plan the events count as places too: a task can go just above or below one.
-      const rows = [...list.querySelectorAll('.pl-task:not(.done):not(.carried):not(.ghost), .pl-wev')].filter((r) => r.dataset.task !== id);
+      const all = [...list.querySelectorAll('.pl-task:not(.done):not(.ghost), .pl-wev')].filter((r) => r.dataset.task !== id);
       let after = null;
-      for (const r of rows) { const b = r.getBoundingClientRect(); if (e.clientY > b.top + b.height / 2) after = r; }
-      return { list, rows, after };
+      for (const r of all) { const b = r.getBoundingClientRect(); if (e.clientY > b.top + b.height / 2) after = r; }
+      // Tasks from earlier days sit on top. One of those can move among them
+      // (they keep their day); today's own tasks can go as high as just under them.
+      const old = all.filter((r) => r.classList.contains('carried'));
+      const rest = all.filter((r) => !r.classList.contains('carried'));
+      const inOld = old.length > 0 && (after ? after.classList.contains('carried') : true);
+      const movingOld = !!list.querySelector(`.pl-task.carried[data-task="${CSS.escape(id || '')}"]`);
+      if (inOld && movingOld) return { list, rows: old, after, carried: true };
+      return { list, rows: rest, after: inOld ? null : after };
     };
     const show = (s) => {
       clear();
@@ -1335,6 +1349,7 @@ export class Plan {
       }
       const seq = [...s.rows];
       seq.splice(s.after ? seq.indexOf(s.after) + 1 : 0, 0, { id: moved });
+      if (s.carried) return this.wrote(await arrangeCarried(seq.map((x) => x.dataset?.task || x.id)));
       return this.settle(s.list, seq, moved);
     };
     this.touchDrags(root, { spot, show, clear, land, setId: (v) => { id = v; } });
@@ -1382,7 +1397,17 @@ export class Plan {
       cancelAnimationFrame(t.raf);
       t.lift?.remove();
       t.row.classList.remove('dragging', 'pl-armed');
-      document.documentElement.classList.remove('pl-touchdrag');
+      const html = document.documentElement;
+      html.classList.remove('pl-touchdrag');
+      // A task that was held stays out of typing, as in the outline: no
+      // keyboard and no words picked, so the next one can be held straight away.
+      if (t.armed) {
+        html.classList.add('pl-calm');
+        getSelection()?.removeAllRanges?.();
+        if (document.activeElement?.closest?.('#plan, .pl-list') && document.activeElement !== document.body) document.activeElement.blur();
+        clearTimeout(this.calmTimer);
+        this.calmTimer = setTimeout(() => { html.classList.remove('pl-calm'); getSelection()?.removeAllRanges?.(); }, 400);
+      }
       t = null;
       setId(null);
       clear();
@@ -1393,6 +1418,9 @@ export class Plan {
       if (!t) return;
       t.armed = true;
       t.row.classList.add('pl-armed');
+      clearTimeout(this.calmTimer);
+      document.documentElement.classList.add('pl-calm');
+      getSelection()?.removeAllRanges?.();
       if (!t.grip) navigator.vibrate?.(12);
     };
     const begin = () => {
