@@ -989,6 +989,13 @@ export class Plan {
     return this.wrote(await arrange(ids, list.dataset.day, pin));
   }
 
+  // Moves a task to the start or the end of its day's list (past any events).
+  toEnd(list, id, top) {
+    const seq = [...list.querySelectorAll('.pl-task[data-move]:not(.carried):not(.ghost), .pl-wev')].filter((x) => x.dataset.task !== id);
+    if (top) seq.unshift({ id }); else seq.push({ id });
+    return this.settle(list, seq, id);
+  }
+
   // Alt + Up / Alt + Down on a task moves it one place in its day (past an
   // event, in a woven plan).
   nudge(e) {
@@ -1174,6 +1181,9 @@ export class Plan {
       items.push({ label: 'Done', run: () => this.tick(i, true) });
       items.push({ label: t.run ? 'Stop the timer' : 'Start the timer', run: () => this.timerFor(i) });
     }
+    // On a phone, a quick way to the ends of the day without sliding past everything.
+    const list = !done && anchor?.dataset?.move && anchor.closest?.('.pl-list');
+    if (list) items.push('sep', { label: 'Move to the top', run: () => this.toEnd(list, i.row.id, true) }, { label: 'Move to the bottom', run: () => this.toEnd(list, i.row.id, false) });
     items.push('sep', ...this.dayItems(i), 'sep',
       ...(t.habit || !this.estimates ? [] : [{ label: t.est ? `Takes ${span(t.est)}` : 'How long it takes', sub: this.estItems(i) }]),
       // It can come round again; one that does can be a habit, with no hours.
@@ -1357,34 +1367,73 @@ export class Plan {
     });
   }
 
-  // On a touch screen there's no mouse drag: press and hold a task, then
-  // slide it to its new place (or, in Week, onto another day). Holding still
-  // instead brings up the task's menu as before; a quick swipe still scrolls.
+  // On a touch screen, as in Workflowy: put a finger on a task's six dots and
+  // slide, and it moves at once. Anywhere else on the task, press and hold
+  // first (a quick swipe still scrolls); holding still and letting go brings
+  // up its menu. The task lifts and follows the finger, and near the top or
+  // bottom of the screen the page scrolls along for as long as it's held there.
   touchDrags(root, { spot, show, clear, land, setId }) {
-    const HOLD = 320;
-    let t = null; // { row, id, x, y, armed, moving, timer }
+    const HOLD = 300;
+    let t = null; // { row, id, x, y, armed, moving, grip, timer, lift, dy, lastX, lastY, raf }
     const end = () => {
       if (!t) return;
       clearTimeout(t.timer);
+      cancelAnimationFrame(t.raf);
+      t.lift?.remove();
       t.row.classList.remove('dragging', 'pl-armed');
       document.documentElement.classList.remove('pl-touchdrag');
       t = null;
       setId(null);
       clear();
     };
-    const at = (x, y) => spot({ clientY: y }, document.elementFromPoint(x, y));
+    // The finger on the dots sits in the margin, so a miss there is tried again across the middle.
+    const at = (x, y) => spot({ clientY: y }, document.elementFromPoint(x, y)) || spot({ clientY: y }, document.elementFromPoint(innerWidth / 2, y));
+    const arm = () => {
+      if (!t) return;
+      t.armed = true;
+      t.row.classList.add('pl-armed');
+      if (!t.grip) navigator.vibrate?.(12);
+    };
+    const begin = () => {
+      t.moving = true;
+      setId(t.id);
+      const b = t.row.getBoundingClientRect();
+      // A copy of the task rides under the finger; the task itself waits, faded, where it was.
+      const lift = t.row.cloneNode(true);
+      lift.classList.remove('pl-armed', 'sel');
+      lift.classList.add('pl-lift');
+      lift.removeAttribute('data-task');
+      lift.querySelectorAll('[data-task], [data-act]').forEach((x) => { x.removeAttribute('data-task'); x.removeAttribute('data-act'); });
+      lift.setAttribute('aria-hidden', 'true');
+      Object.assign(lift.style, { left: `${b.left}px`, width: `${b.width}px`, top: `${b.top}px` });
+      document.body.append(lift);
+      t.lift = lift;
+      // It rides just above the finger, so the line where it will land stays in sight.
+      t.dy = b.height + 14;
+      t.row.classList.add('dragging');
+      document.documentElement.classList.add('pl-touchdrag');
+      navigator.vibrate?.(8);
+      // Near an edge, keep scrolling while the finger stays there.
+      const edge = 72;
+      const step = () => {
+        if (!t?.moving) return;
+        const y = t.lastY;
+        const speed = y < edge ? -Math.ceil((edge - y) / 6) : y > innerHeight - edge ? Math.ceil((y - (innerHeight - edge)) / 6) : 0;
+        if (speed) { window.scrollBy(0, speed); show(at(t.lastX, y)); }
+        t.raf = requestAnimationFrame(step);
+      };
+      t.raf = requestAnimationFrame(step);
+    };
     root.addEventListener('touchstart', (e) => {
       if (e.touches.length !== 1) return end();
       const row = e.target.closest?.('[data-task][data-move]');
       if (!row || e.target.closest('input')) return;
       const { clientX: x, clientY: y } = e.touches[0];
-      t = { row, id: row.dataset.task, x, y, armed: false, moving: false };
-      t.timer = setTimeout(() => {
-        if (!t) return;
-        t.armed = true;
-        row.classList.add('pl-armed');
-        navigator.vibrate?.(12);
-      }, HOLD);
+      end();
+      const grip = !!e.target.closest('.pl-grip');
+      t = { row, id: row.dataset.task, x, y, lastX: x, lastY: y, armed: false, moving: false, grip };
+      if (grip) arm();
+      else t.timer = setTimeout(arm, HOLD);
     }, { passive: true });
     root.addEventListener('touchmove', (e) => {
       if (!t) return;
@@ -1394,23 +1443,27 @@ export class Plan {
         return;
       }
       e.preventDefault();
+      t.lastX = x;
+      t.lastY = y;
       if (!t.moving) {
-        if (Math.hypot(x - t.x, y - t.y) < 6) return;
-        t.moving = true;
-        setId(t.id);
-        t.row.classList.add('dragging');
-        document.documentElement.classList.add('pl-touchdrag');
+        if (Math.hypot(x - t.x, y - t.y) < (t.grip ? 3 : 6)) return;
+        begin();
       }
+      t.lift.style.top = `${y - t.dy}px`;
       show(at(x, y));
-      // Near the top or bottom edge, the page scrolls along.
-      const edge = 60;
-      if (y < edge) window.scrollBy(0, -12);
-      else if (y > window.innerHeight - edge) window.scrollBy(0, 12);
     }, { passive: false });
     root.addEventListener('touchend', (e) => {
       if (!t) return;
       const was = t;
-      if (!was.moving) return end();
+      if (!was.moving) {
+        end();
+        // Held still and let go: its menu, where the finger was.
+        if (was.armed && !was.grip) {
+          e.preventDefault();
+          this.menu(this.item(was.id), was.row, { left: was.x, top: was.y });
+        }
+        return;
+      }
       e.preventDefault(); // no tap on whatever is under the finger
       const { clientX: x, clientY: y } = e.changedTouches[0];
       const s = at(x, y);
@@ -1418,8 +1471,12 @@ export class Plan {
       land(s, was.id);
     });
     root.addEventListener('touchcancel', end);
-    // The long-press menu only when the task wasn't moved.
-    root.addEventListener('contextmenu', (e) => { if (t?.moving) { e.preventDefault(); e.stopImmediatePropagation(); } else end(); }, true);
+    // A phone's own long-press menu would end the hold before the finger
+    // moves (Android sends it at about half a second): once a task is held,
+    // the task's menu comes on letting go instead.
+    root.addEventListener('contextmenu', (e) => {
+      if (t?.armed || t?.moving) { e.preventDefault(); e.stopImmediatePropagation(); } else end();
+    }, true);
   }
 
   // A running timer counts up on the page once a second.

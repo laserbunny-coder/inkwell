@@ -1,5 +1,6 @@
-// Today on the phone: press and hold a task, then slide it to reorder the
-// day (no mouse drag on a touch screen). Holding still brings up the menu.
+// Today on the phone: a finger on a task's six dots slides it at once, as in
+// Workflowy; anywhere else on the task, press and hold first, then slide.
+// Holding still and letting go brings up the menu.
 // Coming back after a few hours, or on a new day, the phone opens on Today.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
@@ -77,13 +78,57 @@ try {
     assert.deepEqual(await words(phone), ['Board reel 2', 'Call Dana', 'Order the storage drive']);
   });
 
+  await check('phone: a finger on the six dots slides the task at once, no waiting, and a copy rides under the finger', async () => {
+    const g = await centre(phone.locator('#plan .pl-task', { hasText: 'Order the storage drive' }).locator('.pl-grip'));
+    const top = await centre(phone.locator('#plan .pl-task', { hasText: 'Board reel 2' }));
+    await hold(cdp, g.x, g.y, 20);
+    await slide(cdp, g.x, g.y, top.y - 12);
+    assert.equal(await phone.locator('.pl-lift').count(), 1, 'the task lifts and follows the finger');
+    await lift(cdp);
+    await phone.waitForFunction(() => document.querySelector('#plan .pl-task .pl-words')?.innerText === 'Order the storage drive');
+    assert.deepEqual(await words(phone), ['Order the storage drive', 'Board reel 2', 'Call Dana']);
+    assert.equal(await phone.locator('.pl-lift').count(), 0, 'and is gone once it lands');
+  });
+
+  await check('phone: the phone’s own long-press menu doesn’t end a hold; the task still slides', async () => {
+    const row = phone.locator('#plan .pl-task', { hasText: 'Call Dana' });
+    const a = await centre(row.locator('.pl-title'));
+    const top = await centre(phone.locator('#plan .pl-task', { hasText: 'Order the storage drive' }));
+    await hold(cdp, a.x, a.y, 400);
+    // Android sends a contextmenu about half a second into a long press.
+    const stopped = await row.evaluate((r) => !r.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    assert.ok(stopped, 'the long-press menu is held back');
+    assert.equal(await phone.locator('.pop-menu').count(), 0, 'no menu yet');
+    await slide(cdp, a.x, a.y, top.y - 12);
+    await lift(cdp);
+    await phone.waitForFunction(() => document.querySelector('#plan .pl-task .pl-words')?.innerText === 'Call Dana');
+    assert.deepEqual(await words(phone), ['Call Dana', 'Order the storage drive', 'Board reel 2']);
+  });
+
+  await check('phone: holding still and letting go opens the task’s menu, which can send it to the bottom or the top', async () => {
+    const a = await centre(phone.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-title'));
+    await hold(cdp, a.x, a.y, 450);
+    await lift(cdp);
+    await phone.waitForSelector('.pop-menu');
+    await phone.locator('.pop-menu .pop-item', { hasText: 'Move to the bottom' }).click();
+    await phone.waitForFunction(() => [...document.querySelectorAll('#plan .pl-task .pl-words')].at(-1)?.innerText === 'Call Dana');
+    assert.deepEqual(await words(phone), ['Order the storage drive', 'Board reel 2', 'Call Dana']);
+    const b = await centre(phone.locator('#plan .pl-task', { hasText: 'Board reel 2' }).locator('.pl-title'));
+    await hold(cdp, b.x, b.y, 450);
+    await lift(cdp);
+    await phone.waitForSelector('.pop-menu');
+    await phone.locator('.pop-menu .pop-item', { hasText: 'Move to the top' }).click();
+    await phone.waitForFunction(() => document.querySelector('#plan .pl-task .pl-words')?.innerText === 'Board reel 2');
+    assert.deepEqual(await words(phone), ['Board reel 2', 'Order the storage drive', 'Call Dana']);
+  });
+
   await check('phone: a quick swipe over the tasks moves nothing', async () => {
     const a = await centre(phone.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-title'));
     await hold(cdp, a.x, a.y, 40);
     await slide(cdp, a.x, a.y, a.y + 120);
     await lift(cdp);
     await sleep(400);
-    assert.deepEqual(await words(phone), ['Board reel 2', 'Call Dana', 'Order the storage drive']);
+    assert.deepEqual(await words(phone), ['Board reel 2', 'Order the storage drive', 'Call Dana']);
   });
 
   await check('phone: six dots show on every task that can move, and a tap zooms into the task and Back comes out again', async () => {
@@ -102,7 +147,7 @@ try {
     await phone.reload();
     await started(phone);
     await phone.waitForFunction(() => document.querySelectorAll('#plan .pl-task').length === 3);
-    assert.deepEqual(await words(phone), ['Board reel 2', 'Call Dana', 'Order the storage drive']);
+    assert.deepEqual(await words(phone), ['Board reel 2', 'Order the storage drive', 'Call Dana']);
   });
 
   await check('phone: back within a few hours, it opens where you left off', async () => {

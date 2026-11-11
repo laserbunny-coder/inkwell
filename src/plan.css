@@ -28,7 +28,15 @@ html.has-rail .pl-switch { display: none; }
 /* Six dots in the margin: this one can be moved (drag it, or press and hold on a phone). */
 .pl-grip { position: absolute; left: -6px; top: 50%; transform: translateY(-50%); width: 10px; text-align: center; font-size: 12px; line-height: 1; color: var(--faint); opacity: 0; pointer-events: none; user-select: none; transition: opacity .12s; }
 .pl-task:hover .pl-grip, .pl-task:focus-within .pl-grip { opacity: 1; }
-@media (hover: none) { .pl-grip { opacity: .7; } }
+/* On a phone the dots are a handle: a finger on them slides the task at once, as in Workflowy.
+   The handle runs the task's full height in the margin, so it's easy to hit. */
+@media (hover: none) {
+  .pl-grip { opacity: .75; pointer-events: auto; touch-action: none; left: -14px; top: 0; bottom: 0; transform: none; width: 22px; display: flex; align-items: center; justify-content: center; font-size: 15px; -webkit-user-select: none; -webkit-touch-callout: none; }
+}
+/* The task lifted under the finger while it moves. */
+.pl-lift { position: fixed; z-index: 80; pointer-events: none; margin: 0; background: linear-gradient(var(--raise), var(--raise)), var(--bg); border-radius: 10px; box-shadow: 0 10px 28px rgba(0, 0, 0, .35), 0 0 0 1px var(--line2); opacity: .96; transform: scale(1.02); transform-origin: left center; }
+.pl-lift * { pointer-events: none !important; }
+.pl-lift .pl-grip { opacity: 1; color: var(--accent); }
 .hide-taskgrip .pl-grip { display: none; }
 /* Lines written under a task: its notes. */
 /* A triangle, as in an outliner: the lines under a task, shown here or hidden. */
@@ -353,3 +361,7 @@ html.hide-panes .ah-talk { display: none; }
 .pl-thru { border: 1px solid var(--line); background: none; color: var(--muted); font: 12.5px var(--ui); padding: 3px 10px; border-radius: 999px; cursor: pointer; }
 .pl-thru:hover, .pl-thru:focus-visible { color: var(--accent); border-color: var(--accent); }
 .hide-planview .pl-thru { display: inline-block; }
+@media (hover: none) {
+  .pl-task.drop-before, .pl-add.drop-before { box-shadow: 0 -3px 0 var(--accent); }
+  .pl-task.drop-after { box-shadow: 0 3px 0 var(--accent); }
+}
