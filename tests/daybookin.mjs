@@ -274,9 +274,17 @@ try {
     const was = (await live(q)).map((r) => r.id).sort();
     await box(q);
     await q.locator('.dbin-box .pill.primary').click();
-    await q.waitForSelector('.toast .toast-action');
-    await q.locator('.toast .toast-action').click();
-    await q.waitForFunction(() => /Taken back/.test(document.querySelector('.toast')?.textContent || ''));
+    // The import's own toast, by its words: any other toast would have its own button.
+    const undoBtn = q.locator('.toast', { hasText: 'Daybook is in' }).locator('.toast-action');
+    await undoBtn.click({ timeout: 15000 });
+    // Toasts come and go, so wait on what the Undo does (the import's lines gone),
+    // and say what was on screen if it never happens.
+    const ids = (rs) => rs.map((r) => r.id).filter((id) => id !== 'settings-plan').sort().join();
+    const deadline = Date.now() + 30000;
+    while (ids(await live(q)) !== was.join()) {
+      if (Date.now() > deadline) throw new Error(`the Undo didn't take it back; on screen: ${await q.evaluate(() => document.querySelector('.toast')?.textContent || 'no toast')}; errors: ${q.errors.join(' | ') || 'none'}`);
+      await sleep(200);
+    }
     const rows = await live(q);
     // The Tasks page and the plan settings may stay (empty); nothing else is new.
     assert.deepEqual(rows.map((r) => r.id).filter((id) => !['settings-plan'].includes(id)).sort(), was);
