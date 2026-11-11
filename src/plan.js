@@ -1367,13 +1367,14 @@ export class Plan {
     });
   }
 
-  // On a touch screen, as in Workflowy: put a finger on a task's six dots and
-  // slide, and it moves at once. Anywhere else on the task, press and hold
-  // first (a quick swipe still scrolls); holding still and letting go brings
-  // up its menu. The task lifts and follows the finger, and near the top or
-  // bottom of the screen the page scrolls along for as long as it's held there.
+  // On a touch screen, as in Workflowy (and as in the outline): press and hold
+  // anywhere on a task and it lifts, then follows the finger (a quick swipe
+  // still scrolls). On its six dots it slides at once; a tap there zooms in,
+  // and holding them still brings up its menu. Near the top or bottom of the
+  // screen the page scrolls along for as long as the finger stays there.
   touchDrags(root, { spot, show, clear, land, setId }) {
-    const HOLD = 300;
+    const HOLD = 400; // ms held on a task before it lifts
+    const MENU_HOLD = 450; // ms held still on the dots before the menu comes
     let t = null; // { row, id, x, y, armed, moving, grip, timer, lift, dy, lastX, lastY, raf }
     const end = () => {
       if (!t) return;
@@ -1432,8 +1433,16 @@ export class Plan {
       end();
       const grip = !!e.target.closest('.pl-grip');
       t = { row, id: row.dataset.task, x, y, lastX: x, lastY: y, armed: false, moving: false, grip };
-      if (grip) arm();
-      else t.timer = setTimeout(arm, HOLD);
+      if (grip) {
+        // The dots: a slide moves it at once, a tap zooms in, holding still brings up its menu.
+        arm();
+        t.timer = setTimeout(() => {
+          if (!t || t.moving) return;
+          t.menued = true;
+          navigator.vibrate?.(12);
+          this.menu(this.item(t.id), t.row, { left: t.x, top: t.y });
+        }, MENU_HOLD);
+      } else t.timer = setTimeout(arm, HOLD);
     }, { passive: true });
     root.addEventListener('touchmove', (e) => {
       if (!t) return;
@@ -1443,10 +1452,12 @@ export class Plan {
         return;
       }
       e.preventDefault();
+      if (t.menued) return;
       t.lastX = x;
       t.lastY = y;
       if (!t.moving) {
-        if (Math.hypot(x - t.x, y - t.y) < (t.grip ? 3 : 6)) return;
+        if (Math.hypot(x - t.x, y - t.y) < 6) return;
+        clearTimeout(t.timer);
         begin();
       }
       t.lift.style.top = `${y - t.dy}px`;
@@ -1457,11 +1468,9 @@ export class Plan {
       const was = t;
       if (!was.moving) {
         end();
-        // Held still and let go: its menu, where the finger was.
-        if (was.armed && !was.grip) {
-          e.preventDefault();
-          this.menu(this.item(was.id), was.row, { left: was.x, top: was.y });
-        }
+        // Held still and let go: it settles back (a menu that came stays open).
+        // A quick tap on the dots goes on to zoom in.
+        if ((was.armed && !was.grip) || was.menued) e.preventDefault();
         return;
       }
       e.preventDefault(); // no tap on whatever is under the finger
@@ -1472,8 +1481,8 @@ export class Plan {
     });
     root.addEventListener('touchcancel', end);
     // A phone's own long-press menu would end the hold before the finger
-    // moves (Android sends it at about half a second): once a task is held,
-    // the task's menu comes on letting go instead.
+    // moves (Android sends it at about half a second): once a task is held
+    // it waits (the dots bring up the task's own menu).
     root.addEventListener('contextmenu', (e) => {
       if (t?.armed || t?.moving) { e.preventDefault(); e.stopImmediatePropagation(); } else end();
     }, true);
