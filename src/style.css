@@ -859,6 +859,8 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 @media (hover: none) { #outline-editor .line-box { width: 1.12em; height: 1.12em; top: .26em; } #outline-editor .line-box::before { inset: -.6em; } }
 html.focus #outline-editor .check-count, .hide-check-count #outline-editor .check-count { display: none; }
 body.line-dragging, body.line-dragging * { user-select: none; }
+/* A finger held on a line's words: no word picking or phone menu while it moves. */
+html.line-holding .ProseMirror, html.line-holding .ProseMirror * { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 /* With the keyboard and a row up, leave room to scroll the last lines above them. */
 .outline-bar-on .notebook, .script-bar-on .sheet { padding-bottom: 60vh; }
 .alt-panel li.by-claude .alt-pick::after { content: '✦'; margin-left: 6px; font-size: 10px; color: var(--faint); vertical-align: .2em; }

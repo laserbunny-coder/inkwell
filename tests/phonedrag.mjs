@@ -1,7 +1,9 @@
-// Moving lines on a phone, as in Workflowy: every line shows faint six dots;
-// a finger on them slides the line (with what's under it) at once, before or
-// after another line, or, let go further right, as the first line under it.
-// A tap on the dots still zooms in (or opens the menu of the line you're on).
+// Moving lines on a phone, as in Workflowy: hold a finger still on a line's
+// words and it lifts, then follows the finger (with what's under it), before
+// or after another line, or, let go further right, as the first line under it.
+// A tap on the words puts the cursor there; a quick swipe scrolls. Every line
+// also shows faint six dots: a slide there moves it at once, a tap zooms in,
+// and holding them still brings up the line's menu.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -43,9 +45,9 @@ try {
   const words = (text) => ph.locator('#outline-editor li > p', { hasText: text }).first();
   const centre = async (loc) => { const b = await loc.boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2, b }; };
   // One finger: down on (x, y), then slide to (x2, y2) in small steps, then up.
-  const drag = async (from, to, { lookMid = null } = {}) => {
+  const drag = async (from, to, { lookMid = null, wait = 30 } = {}) => {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: from.x, y: from.y }] });
-    await sleep(30);
+    await sleep(wait);
     const steps = 10;
     for (let k = 1; k <= steps; k += 1) {
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: from.x + ((to.x - from.x) * k) / steps, y: from.y + ((to.y - from.y) * k) / steps }] });
@@ -110,6 +112,106 @@ try {
     await ph.waitForFunction(() => /Kenji/.test(document.querySelector('#outline-editor li.zoom-root > p')?.textContent || ''));
     await ph.evaluate(() => window.__outline.view.dispatch(window.__outline.state.tr.setMeta(window.__foldKey, { zoom: null })));
     assert.equal((await readOutline(ph)).replace(/\|/g, ''), START.trim());
+  });
+
+  await check('hold a finger on a line’s words: it pops out, then follows the finger to its new place', async () => {
+    await setOutline(ph, START);
+    await blurred();
+    const from = await centre(words('Order rope'));
+    const to = await centre(words('Board reel 2'));
+    let popped = 0, moved = 0, scrolled = -1;
+    const y0 = await ph.evaluate(() => scrollY);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: from.x, y: from.y }] });
+    await sleep(500);
+    popped = await ph.locator('.line-lift').count();
+    // Android's own long-press menu comes at about half a second: it is held back.
+    const stopped = await words('Order rope').evaluate((p) => !p.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    for (let k = 1; k <= 10; k += 1) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: from.x, y: from.y + ((to.b.y + 3 - from.y) * k) / 10 }] });
+      await sleep(25);
+    }
+    moved = await ph.locator('.line-drop:not([hidden])').count();
+    scrolled = await ph.evaluate((y) => scrollY - y, y0);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await sleep(300);
+    assert.equal(popped, 1, 'the line pops out once held');
+    assert.ok(stopped, 'the phone’s own menu is held back');
+    assert.equal(moved, 1, 'a line shows where it will land');
+    assert.equal(scrolled, 0, 'the page stays put while the line moves');
+    assert.equal((await readOutline(ph)).replace(/\|/g, ''), ["Kenji's verse", '  Rhymes for the chorus', 'Order rope', 'Board reel 2', 'Call Dana'].join('\n'));
+    assert.equal(await ph.locator('.line-lift').count(), 0, 'and the copy is gone once it lands');
+    assert.equal(await ph.evaluate(() => document.activeElement?.closest?.('.ProseMirror') ? 'editor' : 'none'), 'none', 'the keyboard stays down');
+  });
+
+  await check('a line held by its words carries what is under it, and can go under another line', async () => {
+    await setOutline(ph, START);
+    await blurred();
+    const from = await centre(words("Kenji's verse"));
+    const to = await centre(words('Call Dana'));
+    await drag(from, { x: to.b.x + 90, y: to.b.y + to.b.height - 3 }, { wait: 500 });
+    assert.equal((await readOutline(ph)).replace(/\|/g, ''), ['Board reel 2', 'Call Dana', "  Kenji's verse", '    Rhymes for the chorus', 'Order rope'].join('\n'));
+  });
+
+  await check('held still and let go, the line settles back and nothing changes', async () => {
+    await setOutline(ph, START);
+    await blurred();
+    const at = await centre(words('Call Dana'));
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: at.x, y: at.y }] });
+    await sleep(550);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await sleep(300);
+    assert.equal((await readOutline(ph)).replace(/\|/g, ''), START.trim());
+    assert.equal(await ph.locator('.line-lift, .line-drop').count(), 0);
+  });
+
+  await check('a quick swipe over the words scrolls and moves nothing, and a tap puts the cursor there', async () => {
+    await setOutline(ph, START);
+    await blurred();
+    const at = await centre(words('Board reel 2'));
+    await drag(at, { x: at.x, y: at.y + 160 }, { wait: 40 });
+    assert.equal((await readOutline(ph)).replace(/\|/g, ''), START.trim());
+    assert.equal(await ph.locator('.line-lift').count(), 0, 'nothing lifted');
+    await blurred();
+    const c = await centre(words('Call Dana'));
+    await ph.touchscreen.tap(c.x, c.y);
+    await sleep(300);
+    assert.ok((await readOutline(ph)).split('\n').find((l) => l.includes('Call')).includes('|'), 'the cursor is in “Call Dana”');
+  });
+
+  await check('in the line you are typing in, a hold is left to the phone (for picking words)', async () => {
+    await setOutline(ph, START);
+    const c = await centre(words('Call Dana'));
+    await ph.touchscreen.tap(c.x, c.y);
+    await sleep(300);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: c.x, y: c.y }] });
+    await sleep(500);
+    const lifted = await ph.locator('.line-lift').count();
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await sleep(200);
+    assert.equal(lifted, 0);
+    assert.equal((await readOutline(ph)).replace(/\|/g, ''), START.trim());
+  });
+
+  await check('holding the dots still brings up the line’s menu; a tap on the dots of the line you are on zooms in', async () => {
+    await setOutline(ph, START);
+    await blurred();
+    const d = await centre(dots('Board reel 2'));
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: d.x, y: d.y }] });
+    await sleep(600);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await ph.waitForSelector('.as-sheet, .hm-menu, .handle-menu, [role="menu"]', { timeout: 3000 });
+    assert.equal((await readOutline(ph)).replace(/\|/g, ''), START.trim(), 'nothing moved');
+    await ph.keyboard.press('Escape');
+    await sleep(300);
+    const c = await centre(words('Call Dana'));
+    await ph.touchscreen.tap(c.x, c.y);
+    await sleep(300);
+    const cd = await centre(dots('Call Dana'));
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cd.x, y: cd.y }] });
+    await sleep(80);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await ph.waitForFunction(() => /Call Dana/.test(document.querySelector('#outline-editor li.zoom-root > p')?.textContent || ''));
+    await ph.evaluate(() => window.__outline.view.dispatch(window.__outline.state.tr.setMeta(window.__foldKey, { zoom: null })));
   });
 
   await check('with the six-dot handle switched off under Look, the dots go away', async () => {
