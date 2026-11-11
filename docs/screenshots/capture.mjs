@@ -287,6 +287,7 @@ const fake = () => {
   window.__claude = async (body) => {
     if (body.mode === 'voice-modes') return { modes: window.__modes };
     if (body.mode === 'voice' && window.__voice) return window.__voice(body);
+    if (body.mode === 'bringin') return { home: 'pg_kenji', title: 'Kenji gags', about: 'Old gag ideas for Kenji and Sensei, from Workflowy.', tags: ['gags', 'ninjabunch'], todos: [...body.text.matchAll(/\[(l\d+)\] \(to-do\) film/g)].map((m) => m[1]) };
     throw new Error('Not now');
   };
 };
@@ -380,6 +381,13 @@ async function paintRenders(page) {
   }, ['sh_1', 'sh_2', 'sh_3', 'sh_4', 'sh_5', 'sh_6']);
 }
 
+const OLD_NOTES = `- Ninja Bunch gags
+  - Kenji hides in the dentist's ceiling
+    - [ ] film the ceiling tile bit
+  - Sensei falls asleep mid-lesson
+    - everyone tiptoes out, he wakes up alone
+  - Grandpa's rolling pin "accidentally" stops a burglar
+- [x] old: buy foam swords`;
 const RAW = 'okay so for the next reel um grandpa finally shows what the rolling pin can do. scratch that. kenji sees grandpa do it by accident at night on the roof. note to self ask dana if the roof set is too expensive';
 const VOICE = {
   raw: RAW, mode: 'idea', tag: 'ninjabunch',
@@ -423,13 +431,30 @@ const record = async (page, ms = 1800) => {
   await shot(page, 'desktop-shape');
   await go(page, { view: 'stage', id: NB, page: 'shape', sub: 'promises' });
   await shot(page, 'desktop-promises');
-  await go(page, { view: 'stage', id: NB, page: 'make', sub: 'board' });
-  await shot(page, 'desktop-stage-board');
-  // Stages…: each kind of piece goes through its own set, editable per project.
-  await page.getByRole('button', { name: 'Stages…' }).first().click().catch(() => console.log('no Stages… button'));
+  // Make holds the tools: the kit (the bible's elements) and shoot days.
+  await go(page, { view: 'stage', id: NB, page: 'make' });
+  await shot(page, 'desktop-kit');
+  // Workflow…: the steps each kind of piece goes through, and the Make tools.
+  await go(page, { view: 'world', id: NB });
+  await page.getByRole('button', { name: /^Workflow/ }).first().click().catch(() => console.log('no Workflow… button'));
   await page.waitForSelector('.stage-edit', { state: 'visible' }).catch(() => {});
   await sleep(600);
-  await shot(page, 'desktop-stage-sets', { top: false });
+  await shot(page, 'desktop-workflow', { top: false });
+  await page.keyboard.press('Escape');
+  await sleep(300);
+
+  // Bring in old notes: a section pasted from Workflowy keeps its nesting.
+  await page.keyboard.press('Control+k');
+  await page.keyboard.type('Bring in old notes');
+  await sleep(300);
+  await page.keyboard.press('Enter');
+  await page.locator('.bi').waitFor().catch(() => console.log('no bring-in box'));
+  await sleep(400);
+  await page.locator('.bi-paste').last().fill(OLD_NOTES);
+  await page.waitForFunction(() => document.querySelector('.bi-title')?.value, null, { timeout: 8000 }).catch(() => console.log('bring-in: no title'));
+  await page.locator('.bi-app').selectOption('workflowy').catch(() => {});
+  await sleep(600);
+  await shot(page, 'desktop-bring-in', { top: false });
   await page.keyboard.press('Escape');
   await sleep(300);
 
