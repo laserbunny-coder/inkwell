@@ -3785,6 +3785,7 @@ function setShown(name, on) {
   if (name === 'claude' || name === 'comments') notes.render();
   if (name === 'linkpics') resetLinkPics();
   if (name === 'panes') { if (!on) panes?.closeAll(); panes?.layout(); }
+  if (name === 'closedtag' && deskPage?.showing() && deskPage.now) deskPage.render({ now: deskPage.now, failed: false });
   syncSwitches();
 }
 // Reading a script through: only the script pages, no sections, notes or tools.

@@ -299,7 +299,7 @@ try {
   });
 
   await check('History filters and searches every line a thread ever logged', async () => {
-    assert.deepEqual((await page.locator('.dk-filters button').allInnerTexts()).map((t) => t.replace(/\s+/g, '')), ['Everything9', 'Waitingonyou3', 'Working0', 'Gonequiet1', 'Finished5']);
+    assert.deepEqual((await page.locator('.dk-filters button').allInnerTexts()).map((t) => t.replace(/\s+/g, '')), ['Everything9', 'Waitingonyou3', 'Closedwithlooseends0', 'Working0', 'Gonequiet1', 'Finished5']);
     await page.locator('.dk-filters button', { hasText: 'Waiting on you' }).click();
     assert.equal(await page.locator('.dk-thread').count(), 3);
     await page.locator('.dk-filters button', { hasText: 'Everything' }).click();
@@ -390,6 +390,74 @@ try {
       const wide = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
       assert.ok(wide <= 1, `${look}: ${wide}px too wide`);
       if (SHOTS) { await still(page); await page.screenshot({ path: `${SHOTS}/desk-${look}.png` }); }
+    }
+  });
+
+  await check('a call from a thread closed with it still open says “thread closed”, and History has a filter for it', async () => {
+    const link = `${INK}?thread=closedone`;
+    // Closed ten days ago (older than the week the stage reads), one try-out still open.
+    db.needs.push({ id: 'n9', kind: 'review', title: 'Try the six-dot handle menus', project: 'Inkwell', link, project_link: INK, created_at: T('2026-10-30T09:00:00'), body: '' });
+    db.updates.push({ id: 'u9', project: 'Inkwell', project_link: INK, link, thread: 'Six-dot handle menus', text: 'Closed: menus are live; one try-out still open', place: null, state: 'done', created_at: T('2026-10-30T10:00:00') });
+    try {
+      const stage = async () => {
+        await page.locator('.desk-switch button', { hasText: 'History' }).click();
+        await page.waitForSelector('.dk-thread');
+        await page.locator('.desk-switch button', { hasText: 'On stage' }).click();
+        await page.waitForSelector('.dk-call[data-id="n9"]');
+      };
+      const chips = async () => (await page.locator('.dk-filters button').allInnerTexts()).map((t) => t.replace(/\s+/g, ''));
+      await stage();
+      await page.waitForSelector('.dk-call[data-id="n9"] .dk-closed');
+      assert.equal(await page.locator('.dk-call[data-id="n9"] .dk-closed').innerText(), 'thread closed');
+      assert.equal(await page.locator('.dk-closed').count(), 1, 'only the closed thread’s call');
+      assert.match(await page.locator('.dk-calls').innerText(), /\d+ calls waiting · about [^·]+ · 1 from closed threads/);
+      if (SHOTS) { await still(page); await page.screenshot({ path: `${SHOTS}/desk-closed.png` }); }
+
+      await page.locator('.desk-switch button', { hasText: 'History' }).click();
+      await page.waitForSelector('.dk-thread');
+      assert.deepEqual((await chips()).slice(1, 3), ['Waitingonyou4', 'Closedwithlooseends1']);
+      await page.locator('.dk-filters button', { hasText: 'Closed with loose ends' }).click();
+      assert.deepEqual(await page.locator('.dk-thread .dk-name').allInnerTexts(), ['Six-dot handle menus']);
+      assert.match(await page.locator('.dk-thread .dk-rr').innerText(), /Closed, still open/);
+      assert.equal(await page.locator('.dk-thread .dk-rr').evaluate((e) => getComputedStyle(e).color), await page.locator('.dk-waits').first().evaluate((e) => getComputedStyle(e).color), 'in the signal colour');
+      if (SHOTS) { await still(page); await page.screenshot({ path: `${SHOTS}/desk-history-closed.png` }); }
+
+      // Switched off under Look: no tag, no chip, and the thread reads as waiting on you.
+      const flip = (on) => page.evaluate((v) => { const c = document.querySelector('[data-show="closedtag"]'); c.checked = v; c.dispatchEvent(new Event('change')); }, on);
+      await flip(false);
+      await page.waitForFunction(() => !document.querySelector('.dk-filters [data-f="loose"]'));
+      assert.match(await page.locator('.dk-thread', { hasText: 'Six-dot' }).locator('.dk-rr').innerText(), /Waiting on you/);
+      await flip(true);
+      await page.locator('.dk-filters button', { hasText: 'Everything' }).click();
+
+      // Written in again: a newer line that isn't "Closed:" opens it, and the tag goes.
+      db.updates.push({ id: 'u10', project: 'Inkwell', project_link: INK, link, thread: 'Six-dot handle menus', text: 'Back on it: the menus need one more fix', place: null, state: 'working', created_at: T('2026-11-09T13:00:00') });
+      await page.locator('.desk-switch button', { hasText: 'On stage' }).click();
+      await page.waitForSelector('.dk-call[data-id="n9"]');
+      await page.waitForFunction(() => !document.querySelector('.dk-closed'));
+      assert.doesNotMatch(await page.locator('.dk-calls').innerText(), /from closed/);
+      await page.locator('.desk-switch button', { hasText: 'History' }).click();
+      await page.waitForSelector('.dk-thread');
+      assert.deepEqual((await chips()).slice(1, 3), ['Waitingonyou4', 'Closedwithlooseends0']);
+
+      // Closed again, then answered: Done takes it off, tag and all.
+      db.updates.pop();
+      await stage();
+      await page.waitForSelector('.dk-call[data-id="n9"] .dk-closed');
+      // On a phone-wide window the tag wraps rather than spills.
+      const size = page.viewportSize();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await sleep(200);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth) <= 1, 'nothing spills at phone width');
+      await page.setViewportSize(size);
+      await page.locator('.dk-call[data-id="n9"]').click();
+      await pick(page, 'Done');
+      await page.waitForFunction(() => !document.querySelector('.dk-call[data-id="n9"]'));
+      assert.equal(await page.locator('.dk-closed').count(), 0);
+      assert.doesNotMatch(await page.locator('.dk-calls').innerText(), /from closed/);
+    } finally {
+      // Leave the shared fixtures as they were for the checks after this one.
+      for (const [list, ids] of [[db.needs, ['n9']], [db.updates, ['u9', 'u10']]]) for (const id of ids) { const i = list.findIndex((x) => x.id === id); if (i >= 0) list.splice(i, 1); }
     }
   });
 

@@ -93,8 +93,14 @@ const live = async (p) => (await all(p)).filter((r) => !r.deleted && r.kind !== 
 // the list to narrow to the command before clicking it.
 const pick = async (p, name) => {
   await p.waitForSelector('#palette-list li');
-  await p.locator('#palette-input').fill(name);
-  await p.waitForFunction((n) => document.querySelector('#palette-list li')?.textContent.includes(n), name);
+  // Right after a start the list can still be settling and drop what was written:
+  // write it again until the list has narrowed to the command.
+  for (let tries = 1; ; tries += 1) {
+    await p.locator('#palette-input').fill(name);
+    try { await p.waitForFunction((n) => document.querySelector('#palette-list li')?.textContent.includes(n), name, { timeout: 8000 }); break; } catch (e) {
+      if (tries >= 3) throw new Error(`the command list never narrowed to “${name}”; it shows: ${await p.evaluate(() => [document.querySelector('#palette-input')?.value, [...document.querySelectorAll('#palette-list li')].slice(0, 3).map((li) => li.textContent).join(' | ')].join(' → '))}`);
+    }
+  }
   // A click on the command, not Enter: on GitHub's slower machine an Enter right after a start
   // sometimes left the list open with the right command on top and no box.
   await p.locator('#palette-list li').first().click();
@@ -107,7 +113,9 @@ const command = async (p, name) => {
 const box = async (p) => {
   await command(p, 'Bring in Daybook');
   await p.waitForSelector('.dbin-box');
-  await p.waitForFunction(() => { const t = document.querySelector('.dbin-body')?.textContent || ''; return t && !t.startsWith('Reading'); });
+  await p.waitForFunction(() => { const t = document.querySelector('.dbin-body')?.textContent || ''; return t && !t.startsWith('Reading'); }).catch(async (e) => {
+    throw new Error(`the box never finished reading Daybook; it says: ${await p.evaluate(() => document.querySelector('.dbin-body')?.textContent || '(nothing)')}; errors: ${p.errors.join(' / ') || 'none'}`);
+  });
   return p.locator('.dbin-body p').allInnerTexts();
 };
 const still = (p) => p.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {}))));
