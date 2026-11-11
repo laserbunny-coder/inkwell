@@ -14,7 +14,10 @@ this repository.
 - Commit in batches, not after every small edit. One pull request per finished
   feature or fix. Add follow-up fixes to the open PR instead of opening new
   ones.
-- Don't re-run failed workflows. After one failure, stop and tell Michael.
+- Fixing a failing check and re-running it is fine without asking (Michael
+  relaxed this on Nov 11, 2026: the suspension came from many agents at once,
+  not from re-runs). Re-run a flaky job at most once; if it fails again, stop
+  and tell Michael.
 - Only push to main, deploy or publish when Michael says the update is ready.
 - Never loop GitHub's API (bulk issues, comments, labels or branches).
 - If GitHub returns any rate-limit error, stop all GitHub activity and tell
