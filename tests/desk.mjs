@@ -384,7 +384,7 @@ try {
     await page.keyboard.press('Control+J');
     await page.keyboard.press('Control+Shift+U');
     await page.waitForSelector('.dk-call');
-    for (const look of ['lamplight', 'graphite', 'typewriter', 'paper', 'midnight']) {
+    for (const look of ['lamplight', 'ember', 'candle', 'night', 'graphite', 'typewriter', 'paper', 'midnight']) {
       await page.evaluate((l) => document.querySelector(`.look-opt[data-look="${l}"]`).click(), look);
       await sleep(150);
       const wide = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);

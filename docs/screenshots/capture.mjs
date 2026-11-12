@@ -300,6 +300,8 @@ async function session(opts) {
   await ctx.exposeFunction('__remote', remote);
   await ctx.addInitScript(fake);
   await ctx.addInitScript(() => { try { if (!localStorage.getItem('theme')) localStorage.setItem('theme', 'dark'); } catch {} });
+  // Another look for every shot: LOOK=ember node docs/screenshots/capture.mjs
+  if (process.env.LOOK) await ctx.addInitScript((l) => { try { localStorage.setItem('look', l); } catch {} }, process.env.LOOK);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log('page error:', e.message));
   await page.goto(APP);

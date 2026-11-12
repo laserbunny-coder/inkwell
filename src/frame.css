@@ -34,6 +34,34 @@
   --ui: 'Geist', 'Inter', system-ui, sans-serif;
   --title: 'Newsreader', Georgia, serif; --title-w: 500; --title-ls: -.02em;
 }
+:root[data-look="ember"] {
+  color-scheme: dark;
+  --bg: #13110F; --panel: #171512; --raise: #201D19; --line: #26221E; --line2: #36312B;
+  --ink: #BEB6A9; --soft: #A49C8F; --muted: #888074; --faint: #5E5850; --title-ink: #DDD4C6;
+  --accent: #E2843A; --tint: rgba(226, 132, 58, .10); --signal: #F2B84B; --wv-blue: #C9A15B;
+  --ui: 'Geist', 'Inter', system-ui, sans-serif;
+  --title: 'Newsreader', Georgia, serif; --title-w: 400; --title-ls: -.01em;
+}
+:root[data-look="candle"] {
+  color-scheme: dark;
+  --bg: #1A1611; --panel: #1E1914; --raise: #27211A; --line: #2D271F; --line2: #3D352B;
+  --ink: #AFA493; --soft: #998E7D; --muted: #8C816F; --faint: #5C5447; --title-ink: #CDBFA9;
+  --accent: #D9A050; --tint: rgba(217, 160, 80, .10); --signal: #EBC86E; --wv-blue: #B98A6A;
+  --ui: 'Geist', 'Inter', system-ui, sans-serif;
+  --title: 'Newsreader', Georgia, serif; --title-w: 400; --title-ls: -.01em;
+}
+:root[data-look="night"] {
+  color-scheme: dark;
+  --bg: #110C07; --panel: #150F09; --raise: #1E160D; --line: #241A10; --line2: #352717;
+  --ink: #C9A67A; --soft: #AE8E66; --muted: #977856; --faint: #64503A; --title-ink: #E0BC8C;
+  --accent: #E8873A; --tint: rgba(232, 135, 58, .11); --signal: #F4B547; --wv-blue: #C99A55;
+  --ui: 'Geist', 'Inter', system-ui, sans-serif;
+  --title: 'Newsreader', Georgia, serif; --title-w: 400; --title-ls: -.01em;
+}
+/* The warm night looks: soft words, a brighter title, links underlined so they never rely on colour,
+   and "needs you" as a gold dot with a soft glow (orange is the everyday accent here). */
+:root:is([data-look="ember"], [data-look="candle"], [data-look="night"]) :is(#nb-title, #wh-title, #ph-title, .lib-head h1, .st-title, .tg-head h1, .tags-home h1, .rail-brand) { color: var(--title-ink); }
+:root:is([data-look="ember"], [data-look="candle"], [data-look="night"]) .dk-sig { box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 24%, transparent); }
 :root[data-look="graphite"] {
   color-scheme: dark;
   --bg: #0F0F10; --panel: #131314; --raise: #1B1B1D; --line: #222224; --line2: #343437;
@@ -159,7 +187,7 @@ html, body { -webkit-font-smoothing: antialiased; }
 /* ---------- The Look part of the Aa panel ---------- */
 
 .look-pick { display: flex; flex-direction: column; gap: 8px; margin-bottom: 6px; }
-.look-list { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.look-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .look-opt { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 11px; text-align: center; }
 .look-swatch { position: relative; display: flex; align-items: center; justify-content: center; height: 40px; border-radius: 8px; border: 1px solid var(--line2); font: 400 17px 'Newsreader', Georgia, serif; }
 .look-swatch i { position: absolute; right: 6px; bottom: 6px; width: 6px; height: 6px; border-radius: 50%; }

@@ -146,16 +146,23 @@ try {
     assert.deepEqual(await p.locator('.today-switch button').allInnerTexts(), ['Day', 'Week', 'Weeks ahead', 'Pace']);
   });
 
-  await check('the five looks: one tap changes the whole app, and it sticks after a reload', async () => {
+  await check('the looks: one tap changes the whole app, and it sticks after a reload', async () => {
     const bg = () => p.evaluate(() => getComputedStyle(document.body).backgroundColor);
     assert.equal(await p.evaluate(() => document.documentElement.dataset.look), 'midnight');
     assert.equal(await bg(), 'rgb(14, 17, 23)');
     await p.locator('.rail-tools [data-cmd=page]').click();
-    assert.deepEqual(await p.locator('.look-opt .look-name').allInnerTexts(), ['Midnight Ink', 'Lamplight', 'Graphite', 'Typewriter', 'Paper']);
+    assert.deepEqual(await p.locator('.look-opt .look-name').allInnerTexts(), ['Midnight Ink', 'Lamplight', 'Ember', 'Candle', 'Night shift', 'Graphite', 'Typewriter', 'Paper']);
     await p.locator('.look-opt', { hasText: 'Paper' }).click();
     assert.equal(await p.evaluate(() => document.documentElement.dataset.look), 'paper');
     assert.equal(await p.evaluate(() => document.documentElement.dataset.theme), 'light');
     assert.notEqual(await bg(), 'rgb(14, 17, 23)');
+    // The warm night looks: soft words on near-black, still easy to read.
+    for (const [name, look, ground] of [['Ember', 'ember', 'rgb(19, 17, 15)'], ['Candle', 'candle', 'rgb(26, 22, 17)'], ['Night shift', 'night', 'rgb(17, 12, 7)']]) {
+      await p.locator('.look-opt', { hasText: name }).click();
+      assert.equal(await p.evaluate(() => document.documentElement.dataset.look), look);
+      assert.equal(await p.evaluate(() => document.documentElement.dataset.theme), 'dark');
+      assert.equal(await bg(), ground);
+    }
     await p.locator('.look-opt', { hasText: 'Lamplight' }).click();
     assert.equal(await p.evaluate(() => document.documentElement.dataset.theme), 'dark');
     await p.locator('#page-done').click();
