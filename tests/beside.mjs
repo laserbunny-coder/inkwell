@@ -379,7 +379,7 @@ try {
     await goMain(page, { view: 'write', chapterId: 'ch_r' });
     await page.keyboard.press('Control+Backslash');
     f = await pane(page, 'plan', 'day');
-    for (const look of ['lamplight', 'graphite', 'typewriter', 'paper', 'midnight']) {
+    for (const look of ['lamplight', 'ember', 'candle', 'night', 'graphite', 'typewriter', 'paper', 'midnight']) {
       await page.evaluate((l) => { document.documentElement.dataset.look = l; }, look);
       await sleep(80);
       const box = await page.locator('.pane .pane-tab[aria-pressed="true"]').boundingBox();

@@ -29,6 +29,9 @@ const save = (k, v) => { try { if (v == null) localStorage.removeItem(k); else l
 export const LOOKS = [
   { id: 'midnight', name: 'Midnight Ink', about: 'Blue-black page, ink-blue accent, a tall serif for titles.', bar: '#0E1117', swatch: ['#0E1117', '#E9E6DF', '#9FB6F2'] },
   { id: 'lamplight', name: 'Lamplight', about: 'Warm dark, like a desk lamp at night. The look Inkwell grew up with.', bar: '#171412', swatch: ['#171412', '#EEE7DB', '#DDA98E'] },
+  { id: 'ember', name: 'Ember', about: 'Warm near-black, soft grey words, an orange glow. Easy on the eyes.', bar: '#13110F', swatch: ['#13110F', '#BEB6A9', '#E2843A'] },
+  { id: 'candle', name: 'Candle', about: 'The softest: brown-black page, dimmer words, honey accent.', bar: '#1A1611', swatch: ['#1A1611', '#AFA493', '#D9A050'] },
+  { id: 'night', name: 'Night shift', about: 'Almost no blue light: sepia words for late nights.', bar: '#110C07', swatch: ['#110C07', '#C9A67A', '#E8873A'] },
   { id: 'graphite', name: 'Graphite', about: 'Neutral black and white, no colour at all. Sans titles.', bar: '#0F0F10', swatch: ['#0F0F10', '#EEEEEC', '#858583'] },
   { id: 'typewriter', name: 'Typewriter', about: 'A plain-text notebook: one fixed-width font for everything.', bar: '#0F1315', swatch: ['#0F1315', '#DCE3E5', '#7FD1C3'], font: 'https://fonts.googleapis.com/css2?family=Cascadia+Code:ital,wght@0,400;0,500;0,700;1,400&display=swap' },
   { id: 'paper', name: 'Paper', about: 'Light, for daylight and for reading printouts.', bar: '#F3F3EF', swatch: ['#F3F3EF', '#1B1F28', '#2C4DA8'], light: true }

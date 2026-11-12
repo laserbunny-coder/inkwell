@@ -509,7 +509,7 @@ try {
   });
 
   await check('all five looks keep the plan readable; no page errors', async () => {
-    for (const look of ['lamplight', 'graphite', 'typewriter', 'paper', 'midnight']) {
+    for (const look of ['lamplight', 'ember', 'candle', 'night', 'graphite', 'typewriter', 'paper', 'midnight']) {
       await page.evaluate((l) => document.querySelector(`.look-opt[data-look="${l}"]`).click(), look);
       await sleep(150);
       const c = await page.evaluate(() => { const s = getComputedStyle(document.querySelector('#plan .pl-words')); return [s.color, getComputedStyle(document.body).backgroundColor]; });
