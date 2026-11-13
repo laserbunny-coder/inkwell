@@ -70,7 +70,7 @@ try {
   await check('the Go panel’s rooms reach Today, the Desk, the Library, the Drawer and Tags', async () => {
     await p.keyboard.press('Control+O');
     await p.waitForSelector('.go-panel', { state: 'visible' });
-    assert.deepEqual(await p.locator('.go-desk .go-tab-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags']);
+    assert.deepEqual(await p.locator('.go-desk .go-tab-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up']);
     await p.locator('.go-desk .go-tab', { hasText: 'Tags' }).click();
     await p.waitForFunction(() => document.documentElement.dataset.view === 'tags');
     await p.keyboard.press('Control+O');
@@ -263,6 +263,52 @@ try {
     await ph.locator('.pb-handle').tap();
     await ph.waitForSelector('.placebar', { state: 'visible' });
     await ph.evaluate(() => document.documentElement.classList.remove('focus'));
+  });
+  await check('on a phone the look is one tap from Go, and the menu finds it by name', async () => {
+    await settle(ph);
+    await ph.locator('.pb-place').tap();
+    await ph.waitForSelector('.go-panel', { state: 'visible' });
+    await ph.locator('.go-look').tap();
+    await ph.waitForSelector('.page-settings', { state: 'visible' });
+    assert.equal(await ph.locator('.go-panel').isVisible(), false);
+    await ph.locator('.look-opt[data-look="ember"]').tap();
+    assert.equal(await ph.evaluate(() => document.documentElement.dataset.look), 'ember');
+    await ph.locator('.look-opt[data-look="midnight"]').tap();
+    await ph.locator('#page-done').tap();
+    await ph.waitForSelector('.page-settings', { state: 'hidden' });
+    await settle(ph);
+    for (const word of ['theme', 'look', 'candle', 'night shift']) {
+      await settle(ph);
+      await ph.locator('.pb-place').tap();
+      await ph.waitForSelector('.go-panel', { state: 'visible' });
+      await ph.locator('.go-all').tap();
+      await ph.waitForSelector('.palette', { state: 'visible' });
+      await ph.fill('#palette-input', word);
+      await sleep(150);
+      assert.match(await ph.locator('#palette-list').innerText(), /Look, page and text settings/, `"${word}" finds the look`);
+      await ph.keyboard.press('Escape');
+      await ph.waitForSelector('.palette', { state: 'hidden' });
+    }
+  });
+
+  await check('on a phone the Library has Drawer beside Tags, and Go has Catch-up', async () => {
+    await settle(ph);
+    await ph.locator('.pb-lib').tap();
+    await ph.waitForFunction(() => document.documentElement.dataset.view === 'library');
+    await settle(ph);
+    assert.equal(await ph.locator('.lib-drawer').isVisible(), true);
+    await ph.locator('.lib-drawer').tap();
+    await ph.waitForFunction(() => document.documentElement.dataset.view === 'drawer');
+    await settle(ph);
+    await ph.locator('.pb-place').tap();
+    await ph.waitForSelector('.go-panel', { state: 'visible' });
+    await ph.locator('.go-desk .go-tab', { hasText: 'Catch-up' }).tap();
+    await ph.waitForFunction(() => document.documentElement.dataset.view === 'desk');
+    const wide = await ph.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    assert.ok(wide <= 0, `page is ${wide}px too wide`);
+    await settle(ph);
+    await ph.locator('.pb-today').tap();
+    await ph.waitForSelector('.notebook', { state: 'visible' });
   });
   await phone.close();
 

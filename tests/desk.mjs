@@ -329,7 +329,7 @@ try {
     await sleep(300);
     await page.keyboard.press('Control+O');
     await page.waitForSelector('.go-panel', { state: 'visible' });
-    assert.deepEqual(await page.locator('.go-desk .go-tab-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags']);
+    assert.deepEqual(await page.locator('.go-desk .go-tab-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up']);
     await page.locator('.go-desk .go-tab', { hasText: 'Desk' }).click();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'desk');
     await page.waitForSelector('.dk-chair');
@@ -506,7 +506,7 @@ try {
   await check('the menu moved into the Go sheet as Everything', async () => {
     await phone.locator('.pb-place').tap();
     await phone.waitForSelector('.go-panel', { state: 'visible' });
-    assert.deepEqual(await phone.locator('.go-desk .go-tab-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags']);
+    assert.deepEqual(await phone.locator('.go-desk .go-tab-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up']);
     await phone.locator('.go-all').tap();
     await phone.waitForSelector('.palette', { state: 'visible' });
     assert.equal(await phone.locator('.go-panel').isVisible(), false);
