@@ -148,15 +148,17 @@ try {
     await p.keyboard.type('Rewritten.');
     await sleep(4800);
     await p.keyboard.press('Control+Shift+H');
-    await sleep(500);
-    const n = await p.locator('#history-list button').count();
+    await p.waitForSelector('.hstrip .hs-tick');
+    const n = await p.locator('.hs-tick').count();
     assert.ok(n >= 2, `expected 2+ versions, got ${n}`);
-    await p.locator('#history-list button').filter({ hasText: /first kept/ }).click();
-    await p.locator('#history-restore').click();
-    // It asks first, and keeps the text as it is now in the history.
-    await p.locator('.ask .pill').click();
+    // The first mark, then Go back (with Undo, keeping the text as it is now in the history).
+    await p.keyboard.press('Home');
+    await p.locator('.hs-btn', { hasText: 'Go back to this version' }).click();
     await sleep(800);
+    await p.keyboard.press('Escape');
+    await sleep(200);
     assert.match(await p.locator('#editor .ProseMirror').innerText(), /First draft line\./);
+    assert.equal(await p.locator('.hstrip').count(), 0);
   });
 
   await check('page width and text size change and stick after reload', async () => {
