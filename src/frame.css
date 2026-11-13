@@ -251,7 +251,7 @@ html, body { -webkit-font-smoothing: antialiased; }
 :root:not([data-motion="off"]) :is(.card, .sb-card, .st-card) { transition: border-color var(--t1) ease, background-color var(--t1) ease; }
 @media (min-width: 701px) {
   /* The switch at the top has Tags now. */
-  html.has-rail .lib-tags { display: none; }
+  html.has-rail .lib-jumps { display: none; }
 }
 @media (max-width: 700px) {
   :root:is([data-look="midnight"], [data-look="paper"]) :is(#nb-title, #wh-title, #ph-title, .lib-head h1, .tags-home h1) { font-size: 34px; }

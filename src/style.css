@@ -1024,7 +1024,7 @@ html.hide-voice .voice-chip { display: none; }
 html.typewriter #editor, html.typewriter #outline-editor { padding-bottom: 50vh; }
 
 /* The Tags page */
-.lib-tags { align-self: center; }
+.lib-jumps { align-self: center; display: inline-flex; gap: 4px; }
 .tg-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin: 8px 0; }
 .tg-head h1 { font-family: var(--prose); font-weight: 500; font-size: 38px; margin: 0; overflow-wrap: anywhere; }
 .tg-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 18px; }
@@ -1738,6 +1738,7 @@ button.st-from:hover { color: var(--ink); }
 .go-desk { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .go-desk:has(> :nth-child(5)) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .go-desk:has(> :nth-child(6)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.go-desk:has(> :nth-child(7)) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .go-tab { min-height: 48px; border-radius: 10px; border: 0; background: var(--bg); color: var(--ink); font: 13px var(--ui); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; padding: 4px; }
 .go-tab:hover, .go-tab:focus-visible { outline: 1px solid var(--accent); }
 .go-tab.desk { border: 1px solid var(--line); background: none; }

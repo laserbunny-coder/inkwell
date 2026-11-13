@@ -141,8 +141,10 @@ html.has-rail .rail #desk-toggle[data-n]::after { margin-left: auto; }
 .hide-deskcount #desk-toggle::after, .hide-deskcount .pb-desk::after { display: none; }
 
 /* The phone's Go sheet ends with the whole menu. */
-.go-all { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 46px; padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; background: none; color: var(--ink); font: 14px var(--ui); text-align: left; cursor: pointer; }
-.go-all .go-ctx { color: var(--muted); font-size: 12.5px; }
+.go-all, .go-look { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 46px; padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; background: none; color: var(--ink); font: 14px var(--ui); text-align: left; cursor: pointer; }
+.go-all .go-ctx, .go-look .go-ctx { color: var(--muted); font-size: 12.5px; }
+.go-ends { display: grid; grid-template-columns: auto 1fr; gap: 6px; }
+.go-look.go-look { width: auto; font: 500 16px var(--ui); }
 
 /* ---------- narrower ---------- */
 @media (max-width: 1100px) {
