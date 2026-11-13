@@ -40,6 +40,20 @@ export function wordCount(text) {
   return m ? m.length : 0;
 }
 
+// Words in a whole page, counting again only the paragraphs that changed: an
+// unchanged paragraph stays the very same node from one key press to the next.
+const nodeWords = new WeakMap();
+export function blockWords(node) {
+  let w = nodeWords.get(node);
+  if (w === undefined) { w = wordCount(node.textContent); nodeWords.set(node, w); }
+  return w;
+}
+export function docWords(doc) {
+  let n = 0;
+  doc.forEach((node) => { n += blockWords(node); });
+  return n;
+}
+
 // Note types are data, not code, so they can be renamed or added later.
 export const DEFAULT_NOTE_TYPES = [
   { id: 'writing', name: 'Writing', color: '#2F5DA8' },

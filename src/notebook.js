@@ -16,6 +16,7 @@ import { MAX_BYTES } from './files.js';
 import { toast } from './menu.js';
 import { SlashMenu } from './slash.js';
 import { TaskLine, redrawTasks } from './taskline.js';
+import { checkLineDecos, diffLineDecos } from './linedecos.js';
 import { isLoose, inWindow } from './loosemark.js';
 import { taskOf, chipLabel, setTask, unTask, isoOf } from './tasks.js';
 
@@ -139,6 +140,8 @@ export class Notebook {
       onUpdate: ({ editor }) => this.store.change(editor.state.doc)
     });
     window.__outline = this.editor;
+    window.__checkDecos = () => checkLineDecos(this.editor.state);
+    window.__diffDecos = () => diffLineDecos(this.editor.state);
     $('#nb-prev').addEventListener('click', () => this.step(-1));
     $('#nb-next').addEventListener('click', () => this.step(1));
     $('#nb-today').addEventListener('click', () => this.openDay());

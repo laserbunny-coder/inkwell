@@ -9,7 +9,8 @@
 
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { Decoration } from '@tiptap/pm/view';
+import { lineDecos } from './linedecos.js';
 
 export const taskKey = new PluginKey('taskLine');
 
@@ -33,42 +34,39 @@ export const TaskLine = Extension.create({
   },
   addProseMirrorPlugins() {
     const { task, label, onChip, loose } = this.options;
-    const build = (doc) => {
+    // Line by line, so a key press redraws only the lines it touched; new task
+    // details or filing redraw them all (redrawTasks).
+    const make = (node, pos, state) => {
       const decos = [];
-      doc.descendants((node, pos) => {
-        if (node.type.name !== 'listItem' || !node.firstChild || !node.attrs.eid) return;
-        const t = task(node.attrs.eid);
-        if (!t) {
-          // doc > list > item: only lines straight on the page can be loose.
-          if (doc.resolve(pos).depth === 1 && loose(node.attrs.eid)) decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'is-loose' }));
-          return;
-        }
-        const words = label(t, !!node.attrs.done);
-        decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'is-task' }));
-        const end = pos + 1 + node.firstChild.nodeSize - 1;
-        decos.push(Decoration.widget(end, () => {
-          const b = document.createElement('button');
-          b.type = 'button';
-          b.className = 'task-chip';
-          b.tabIndex = -1;
-          b.contentEditable = 'false';
-          b.dataset.eid = node.attrs.eid;
-          b.textContent = words;
-          b.title = 'A task: click to change its day or how long it takes';
-          return b;
-        }, { side: 1, key: `t-${node.attrs.eid}-${words}`, ignoreSelection: true }));
-      });
-      return DecorationSet.create(doc, decos);
+      if (!node.firstChild || !node.attrs.eid) return decos;
+      const t = task(node.attrs.eid);
+      if (!t) {
+        // doc > list > item: only lines straight on the page can be loose.
+        if (state.doc.resolve(pos).depth === 1 && loose(node.attrs.eid)) decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'is-loose' }));
+        return decos;
+      }
+      const words = label(t, !!node.attrs.done);
+      decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'is-task' }));
+      const end = pos + 1 + node.firstChild.nodeSize - 1;
+      decos.push(Decoration.widget(end, () => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'task-chip';
+        b.tabIndex = -1;
+        b.contentEditable = 'false';
+        b.dataset.eid = node.attrs.eid;
+        b.textContent = words;
+        b.title = 'A task: click to change its day or how long it takes';
+        return b;
+      }, { side: 1, key: `t-${node.attrs.eid}-${words}`, ignoreSelection: true }));
+      return decos;
     };
     const chip = (event) => event.target.closest?.('.task-chip');
     return [new Plugin({
       key: taskKey,
-      state: {
-        init: (_c, state) => build(state.doc),
-        apply: (tr, old) => (tr.docChanged || tr.getMeta(taskKey) ? build(tr.doc) : old)
-      },
+      state: lineDecos({ key: taskKey, make, rebuild: (tr) => !!tr.getMeta(taskKey) }),
       props: {
-        decorations(state) { return this.getState(state); },
+        decorations(state) { return this.getState(state).set; },
         handleDOMEvents: {
           pointerdown(_view, event) { if (!chip(event)) return false; event.preventDefault(); return true; },
           mousedown(_view, event) { if (!chip(event)) return false; event.preventDefault(); return true; },
