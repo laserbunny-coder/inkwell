@@ -3229,6 +3229,7 @@ const nav = new Nav({
   search: (text) => { openPalette('go'); const input = $('#palette-input'); input.value = text; filterPalette(); },
   capture: () => captureHere({ start: true }),
   menu: () => openPalette(),
+  look: () => { if ($('.page-settings').hidden) togglePageSettings(); $('.page-settings').scrollTop = 0; },
   outline: () => body.classList.add('show-outline'),
   isTouch: () => touch.matches,
   keyLabel,
@@ -3309,6 +3310,17 @@ async function renderStrip() {
 }
 
 // A tab: the same page at the size you're at.
+// The Desk's Catch-up sits at its very bottom; this opens the Desk and scrolls there.
+async function goCatchup() {
+  await go({ view: 'desk' });
+  for (let i = 0; i < 40; i++) {
+    const sec = $('.dk-catchup');
+    if (sec?.offsetParent) { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  toast('Catch-up shows here once you’re signed in (the sync button at the top)');
+}
+
 async function goPage(id) {
   if (id === 'today') return go({ view: 'notebook', pageId: dayId(isoToday()) });
   if (id === 'drawer') return go({ view: 'drawer' });
@@ -3319,6 +3331,7 @@ async function goPage(id) {
   if (id === 'pace') return go({ view: 'plan', tab: 'pace' });
   if (id === 'desk') return go({ view: 'desk' });
   if (id === 'desk-history') return go({ view: 'desk', tab: 'history' });
+  if (id === 'catchup') return goCatchup();
   const ctx = await pageContext();
   if (!ctx?.id) return;
   return openPage(await getEntry(ctx.id), id);
@@ -3989,6 +4002,7 @@ const commands = [
   { group: 'go', label: 'Search inside all your writing', keys: `${mod}⇧F`, run: () => openPalette('search') },
   { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
   { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
+  { group: 'go', label: 'Catch-up: what your Claude threads did (bottom of the Desk)', keys: '', words: ['catch up', 'catch-up', 'catchup', 'threads', 'updates', 'claude'], run: () => goCatchup() },
   { group: 'go', label: 'Week: seven days of tasks, and what isn’t on a day yet', keys: '', words: ['plan', 'tasks', 'schedule', 'calendar', 'hours', 'tray'], run: () => go({ view: 'plan', tab: 'week' }) },
   { group: 'go', label: 'Weeks ahead: six weeks, a lane for each project', keys: '', words: ['plan', 'roadmap', 'weeks', 'months', 'dates', 'deadline', 'milestone', 'schedule', 'timeline', 'stretch'], run: () => go({ view: 'plan', tab: 'ahead' }) },
   { group: 'go', label: 'Pace: what you planned against what it really took', keys: '', words: ['plan', 'tasks', 'time', 'estimate', 'looking back', 'hours'], run: () => go({ view: 'plan', tab: 'pace' }) },
@@ -4067,7 +4081,7 @@ const commands = [
   { group: 'write', label: 'Box on this line (tick it when done; or type [ ] at the start)', keys: '', words: ['checkbox', 'todo', 'to-do', 'tick'], run: () => toggleBox(notebook.editor), when: () => inNotebook() && lineChecks(notebook.editor.state) && !lineChecks(notebook.editor.state).box },
   { group: 'write', label: 'No box on this line (a note, not a thing to do)', keys: '', words: ['checkbox', 'tick'], run: () => toggleBox(notebook.editor), when: () => inNotebook() && !!lineChecks(notebook.editor.state)?.box },
   { group: 'view', label: 'Keyboard shortcuts (all the keys)', keys: `${mod}/`, run: toggleShortcuts },
-  { group: 'page', label: 'Page and text settings', keys: '', run: togglePageSettings },
+  { group: 'page', label: 'Look, page and text settings (Aa)', keys: '', words: ['look', 'looks', 'theme', 'themes', 'colour', 'colours', 'color', 'colors', 'dark', 'light', 'appearance', 'aa', 'settings', 'midnight', 'lamplight', 'ember', 'candle', 'night shift', 'graphite', 'typewriter', 'paper', 'motion', 'text size', 'font'], run: togglePageSettings },
   { group: 'page', label: 'Wider page', keys: 'Alt+]', run: () => setPage(currentWidth() + 40, currentSize()) },
   { group: 'page', label: 'Narrower page', keys: 'Alt+[', run: () => setPage(currentWidth() - 40, currentSize()) },
   { group: 'page', label: 'Larger text', keys: 'Alt+=', run: () => setPage(currentWidth(), currentSize() + 1) },
@@ -4529,9 +4543,12 @@ function filterPalette() {
       const l = label.toLowerCase();
       if (l === q) return 0;
       if (l.startsWith(q)) return l[q.length] === ' ' ? 1 : 2;
-      return l.includes(` ${q}`) ? 3 : 4;
+      if (l.includes(` ${q}`)) return 3;
+      return l.includes(q) ? 4 : 5;
     };
-    paletteItems = paletteSource.filter((c) => usable(c) && inGroup(c) && c.label.toLowerCase().includes(q))
+    // A command's other words (theme for the look, catch-up for the Desk) find it too, after the names.
+    const hit = (c) => c.label.toLowerCase().includes(q) || (paletteMode === 'commands' && (c.words || []).some((w) => w.toLowerCase().startsWith(q)));
+    paletteItems = paletteSource.filter((c) => usable(c) && inGroup(c) && hit(c))
       .map((c, i) => ({ c, i, r: q ? rank(c.label) : 0 })).sort((a, b) => a.r - b.r || a.i - b.i).slice(0, 60).map((x) => x.c);
     // Not a title? Offer to look inside the writing too.
     if (paletteMode === 'go' && q.length > 1) {

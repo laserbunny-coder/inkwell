@@ -35,7 +35,7 @@ const MIC = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke=
 
 export class Nav {
   // hooks: go(place), goPage(id), tabs() → [{id,label,n}], active() → tab id,
-  // crumb() → the crumb's buttons, search(text), capture(), menu(), outline(),
+  // crumb() → the crumb's buttons, search(text), capture(), menu(), look(), outline(),
   // isTouch(), keyLabel(text)
   constructor(hooks) {
     this.hooks = hooks;
@@ -264,7 +264,7 @@ export class Nav {
     }
 
     const desk = make('div', 'go-desk');
-    for (const [id, label, keys] of [['today', 'Today', '⌘J'], ['desk', 'Desk', '⌘⇧U'], ['library', 'Library', '⌘⇧O'], ['drawer', 'Drawer', ''], ['tags', 'Tags', '']]) {
+    for (const [id, label, keys] of [['today', 'Today', '⌘J'], ['desk', 'Desk', '⌘⇧U'], ['library', 'Library', '⌘⇧O'], ['drawer', 'Drawer', ''], ['tags', 'Tags', ''], ['catchup', 'Catch-up', '']]) {
       const b = make('button', 'go-tab desk' + (active === id && !inside ? ' on' : ''));
       b.append(make('span', 'go-tab-name', label));
       if (keys && !this.hooks.isTouch()) b.append(make('span', 'keys', this.hooks.keyLabel(keys)));
@@ -278,11 +278,18 @@ export class Nav {
     }
     section('Rooms', desk);
     // The phone's bar has no room for the menu, so it's the sheet's last line.
+    // Look gets its own button beside it: the one setting people look for most.
     if (this.hooks.isTouch()) {
+      const row = make('div', 'go-ends');
+      const look = make('button', 'go-look', 'Aa');
+      look.append(make('span', 'go-ctx', 'Look'));
+      look.setAttribute('aria-label', 'Look: colours, font and text size');
+      look.addEventListener('click', go(() => this.hooks.look()));
       const all = make('button', 'go-all', 'Everything');
-      all.append(make('span', 'go-ctx', 'the whole menu, settings and Look'));
+      all.append(make('span', 'go-ctx', 'the whole menu and settings'));
       all.addEventListener('click', go(() => this.hooks.menu()));
-      parts.push(all);
+      row.append(look, all);
+      parts.push(row);
     }
     if (!this.hooks.isTouch()) parts.push(make('p', 'go-hint', `${this.hooks.keyLabel('⌘O')}, then Enter, flips you back to where you just were. Typing finds anything.`));
     p.replaceChildren(...parts);
