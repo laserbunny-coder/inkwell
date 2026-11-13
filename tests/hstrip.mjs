@@ -16,9 +16,29 @@ const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT
 await sleep(1500);
 const URL = `http://localhost:${PORT}/`;
 
+// Signed in to a stand-in for the cloud (as in history.mjs), so the app opens
+// on the writing page the same way here and on the test machine.
+const table = new Map();
+let clock = Date.parse('2026-10-20T00:00:00Z');
+function remote(op, arg) {
+  if (op === 'push') {
+    const stamp = new Date((clock += 1000)).toISOString();
+    return arg.map((r) => { table.set(`${r.user}:${r.id}`, r); return { id: r.id, updated_at: stamp }; });
+  }
+  return [];
+}
+const fake = () => {
+  window.__syncBackend = {
+    user: async () => ({ id: "u1" }), onAuth() {}, signIn() {}, signOut() {},
+    push: (rows) => window.__remote('push', rows), pull: () => window.__remote('pull', {}),
+    subscribe() {}, unsubscribe() {}
+  };
+};
 const browser = await chromium.launch();
 async function device(viewport = { width: 1300, height: 850 }) {
   const ctx = await browser.newContext({ viewport, hasTouch: viewport.width < 700, isMobile: viewport.width < 700 });
+  await ctx.exposeFunction('__remote', remote);
+  await ctx.addInitScript(fake);
   const p = await ctx.newPage();
   p.errors = [];
   p.on('pageerror', (e) => p.errors.push(e.message));
