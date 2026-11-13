@@ -19,7 +19,7 @@ import { keep, versionsOf, tidyHistory, blocks as docBlocks, compare, deletedFro
 import { editStages, newWorkflow } from './stageedit.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, askPiece, askScript, showCopy, toast, closeMenu } from './menu.js';
 import { Sync } from './sync.js';
-import { ensureSeed, hasWriting, outline, entry, wordCount, noteTypes, newId as newIdLocal } from './model.js';
+import { ensureSeed, hasWriting, outline, entry, wordCount, docWords, noteTypes, newId as newIdLocal } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
 import { EntryRef, TagMarks } from './outline.js';
 import { retitleLinks, freshenRefs } from './links.js';
@@ -1306,7 +1306,7 @@ $('#chapter-links-chip').addEventListener('click', () => $('.chapter-links').scr
 function refreshWords() {
   if (view() !== 'write') { $('#words').textContent = ''; return; }
   if (isScript()) { const n = scriptPages(editor.state.doc); $('#words').textContent = `About ${n} page${n === 1 ? '' : 's'}`; return; }
-  $('#words').textContent = `${wordCount(editor.state.doc.textContent).toLocaleString()} words`;
+  $('#words').textContent = `${docWords(editor.state.doc).toLocaleString()} words`;
 }
 
 async function newChapter() {

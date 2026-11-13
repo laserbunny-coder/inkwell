@@ -1,7 +1,7 @@
 import { children, getEntry, putEntries, snapshots } from './db.js';
 import { keep } from './history.js';
-import { tagsIn, wordCount } from './model.js';
-import { refsIn } from './outline.js';
+import { tagsIn, blockWords } from './model.js';
+import { refsIn, WAL_LONG } from './outline.js';
 import { placeSorts } from './order.js';
 import { walKey } from './panes.js';
 
@@ -56,17 +56,29 @@ export class ChapterStore {
   change(doc) {
     if (!this.chapter) return;
     this.version += 1;
-    const json = doc.toJSON();
-    try {
-      localStorage.setItem(WAL(this.chapter.id), JSON.stringify({ at: Date.now(), doc: json }));
-    } catch (e) {
-      console.warn('write-ahead copy failed', e);
-    }
+    // The write-ahead copy, in case the app closes before the save lands. On a
+    // long chapter it costs more than a key press, so there it's written at most
+    // once a second (a pause, leaving or hiding the app saves for real anyway).
+    this.walDoc = doc;
+    this.walId = this.chapter.id;
+    if (doc.content.size < WAL_LONG) this.writeWal();
+    else if (!this.walTimer) this.walTimer = setTimeout(() => this.writeWal(), 1000);
     this.onStatus('saving');
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.flush(doc), SAVE_DEBOUNCE_MS);
     clearTimeout(this.snapTimer);
-    this.snapTimer = setTimeout(() => this.snapshot(json, doc.textContent), SNAPSHOT_IDLE_MS);
+    this.snapTimer = setTimeout(() => this.snapshot(doc.toJSON(), doc.textContent), SNAPSHOT_IDLE_MS);
+  }
+
+  writeWal() {
+    clearTimeout(this.walTimer);
+    this.walTimer = null;
+    if (!this.walDoc || !this.walId) return;
+    try {
+      localStorage.setItem(WAL(this.walId), JSON.stringify({ at: Date.now(), doc: this.walDoc.toJSON() }));
+    } catch (e) {
+      console.warn('write-ahead copy failed', e);
+    }
   }
 
   flush(doc) {
@@ -97,7 +109,7 @@ export class ChapterStore {
       present.add(id);
       const kind = node.type.name === 'sceneBreak' ? 'scene' : node.type.name === 'heading' ? 'heading' : 'para';
       const text = node.textContent;
-      words += wordCount(text);
+      words += blockWords(node);
       const content = node.toJSON().content || null;
       const prev = this.cache.get(id);
       const title = kind === 'scene' ? node.attrs.title : '';
@@ -149,6 +161,8 @@ export class ChapterStore {
     await putEntries(rows);
     for (const r of rows) if (r.id !== chapter.id) this.cache.set(r.id, r);
     if (version === this.version && chapter === this.chapter) {
+      clearTimeout(this.walTimer);
+      this.walTimer = null;
       localStorage.removeItem(WAL(chapter.id));
       this.savedVersion = version;
       this.onStatus('saved');

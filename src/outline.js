@@ -9,6 +9,7 @@ import { keep } from './history.js';
 import { newId, tagsIn } from './model.js';
 import { placeSorts, bySort } from './order.js';
 import { walKey } from './panes.js';
+import { lineDecos, changedRangeOf, insertsNodes, unitsIn } from './linedecos.js';
 
 // The notebook's pages (daily pages and named pages) are outlines: lines you
 // can nest, Workflowy-style. Every line is its own entry whose parent is the
@@ -145,8 +146,21 @@ export const LineIds = Extension.create({
       key: new PluginKey('lineIds'),
       appendTransaction(trs, _old, state) {
         if (!trs.some((tr) => tr.docChanged)) return null;
-        const seen = new Set();
         let tr = null;
+        // Typing words can't make a second copy of a line's id: only check the
+        // lines just changed, unless whole lines came in (Enter, paste, a move).
+        if (!trs.some((t) => insertsNodes(t, 'listItem'))) {
+          const r = changedRangeOf(trs);
+          if (!r) return null;
+          for (const [node, pos] of unitsIn(state.doc, r, (n) => n.type.name === 'listItem')) {
+            if (node.attrs.eid) continue;
+            tr = tr || state.tr;
+            tr.setNodeMarkup(pos, undefined, { ...node.attrs, eid: newId('li') });
+          }
+          if (tr) tr.setMeta('addToHistory', false);
+          return tr;
+        }
+        const seen = new Set();
         state.doc.descendants((node, pos) => {
           if (node.type.name !== 'listItem') return;
           const id = node.attrs.eid;
@@ -222,25 +236,25 @@ export const TagMarks = Extension.create({
   addOptions() { return { onTag: () => {} }; },
   addProseMirrorPlugins() {
     const onTag = this.options.onTag;
-    const build = (doc) => {
+    const key = new PluginKey('tagMarks');
+    // Paragraph by paragraph, so a key press redraws only its own paragraph's tags.
+    const make = (block, at) => {
       const decos = [];
-      doc.descendants((node, pos) => {
+      block.forEach((node, offset) => {
         if (!node.isText) return;
+        const pos = at + 1 + offset;
         for (const m of node.text.matchAll(TAG)) {
           const from = pos + m.index + m[1].length;
           decos.push(Decoration.inline(from, from + m[2].length, { class: 'tag', 'data-tag': m[2].slice(1).toLowerCase() }));
         }
       });
-      return DecorationSet.create(doc, decos);
+      return decos;
     };
     return [new Plugin({
-      key: new PluginKey('tagMarks'),
-      state: {
-        init: (_c, state) => build(state.doc),
-        apply: (tr, old) => (tr.docChanged ? build(tr.doc) : old)
-      },
+      key,
+      state: lineDecos({ key, unit: 'block', make }),
       props: {
-        decorations(state) { return this.getState(state); },
+        decorations(state) { return this.getState(state).set; },
         handleDOMEvents: {
           click(_view, event) {
             const t = event.target.closest?.('.tag[data-tag]');
@@ -265,19 +279,17 @@ export const GatherBadge = Extension.create({
   addOptions() { return { onTag: () => {}, onOpen: () => {}, origin: () => '' }; },
   addProseMirrorPlugins() {
     const { onTag, onOpen, origin } = this.options;
-    const build = (doc) => {
+    const make = (node, pos) => {
       const decos = [];
-      doc.descendants((node, pos) => {
-        if (node.type.name !== 'listItem' || !node.firstChild) return;
-        if (node.attrs.mirror) {
-          const from = origin(node.attrs.mirror);
-          decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'mirror', ...(from ? { 'data-from': from } : {}) }));
-        }
-        if (node.attrs.gather) {
-          decos.push(Decoration.node(pos + 1, pos + 1 + node.firstChild.nodeSize, { class: 'gathers', 'data-gathers': `#${node.attrs.gather}` }));
-        }
-      });
-      return DecorationSet.create(doc, decos);
+      if (!node.firstChild) return decos;
+      if (node.attrs.mirror) {
+        const from = origin(node.attrs.mirror);
+        decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'mirror', ...(from ? { 'data-from': from } : {}) }));
+      }
+      if (node.attrs.gather) {
+        decos.push(Decoration.node(pos + 1, pos + 1 + node.firstChild.nodeSize, { class: 'gathers', 'data-gathers': `#${node.attrs.gather}` }));
+      }
+      return decos;
     };
     // Clicks past the end of a line's words land on the drawn label.
     const pastWords = (p, event) => {
@@ -304,22 +316,21 @@ export const GatherBadge = Extension.create({
       // Clearing a mirror's words takes the mirror off this line (the
       // original keeps its words), so an emptied line never refills itself.
       appendTransaction(trs, _old, state) {
-        if (!trs.some((t) => t.docChanged)) return null;
+        // Only a line that was just changed can have been emptied.
+        const r = changedRangeOf(trs);
+        if (!r) return null;
         let tr = null;
-        state.doc.descendants((node, pos) => {
-          if (node.type.name !== 'listItem' || !node.attrs.mirror || node.firstChild?.content.size) return;
+        for (const [node, pos] of unitsIn(state.doc, r, (n) => n.type.name === 'listItem')) {
+          if (!node.attrs.mirror || node.firstChild?.content.size) continue;
           tr = tr || state.tr;
           // A fresh id too: the mirror's id stays free in case it's brought back.
           tr.setNodeMarkup(pos, undefined, { ...node.attrs, mirror: null, eid: null });
-        });
+        }
         return tr;
       },
-      state: {
-        init: (_c, state) => build(state.doc),
-        apply: (tr, old) => (tr.docChanged || tr.getMeta(mirrorKey) ? build(tr.doc) : old)
-      },
+      state: lineDecos({ key: mirrorKey, make, rebuild: (tr) => !!tr.getMeta(mirrorKey) }),
       props: {
-        decorations(state) { return this.getState(state); },
+        decorations(state) { return this.getState(state).set; },
         handleDOMEvents: {
           mousedown(_view, event) {
             if (!hit(event)) return false;
@@ -349,6 +360,7 @@ export const GatherBadge = Extension.create({
 // under it folds them away; clicking a bullet zooms in so that line is the
 // whole page. Which lines are folded is remembered on this device.
 export const foldKey = new PluginKey('fold');
+const gutterKey = new PluginKey('lineGutter');
 const FOLDED = 'folded';
 const loadFolded = () => { try { return new Set(JSON.parse(localStorage.getItem(FOLDED) || '[]')); } catch { return new Set(); } };
 const saveFolded = (set) => { try { localStorage.setItem(FOLDED, JSON.stringify([...set].slice(-2000))); } catch {} };
@@ -387,6 +399,28 @@ function hiddenRanges(doc, { folded, zoom }) {
       ranges.push({ from: start, to: start + kids.nodeSize, eid: node.attrs.eid });
     }
   });
+  return { ranges, root };
+}
+
+// The same, looking only at the lines around one place (the caret): the
+// fold it's hidden in, if any, and the zoomed-in line when it's one of them.
+// Falls back to the whole page only when zoomed in and the place is outside.
+function hiddenAround(doc, st, at) {
+  const $at = doc.resolve(at);
+  const ranges = [];
+  let root = null;
+  for (let d = 1; d <= $at.depth; d++) {
+    const node = $at.node(d);
+    if (node.type.name !== 'listItem') continue;
+    const pos = $at.before(d);
+    if (st.zoom && node.attrs.eid === st.zoom) root = { from: pos, to: pos + node.nodeSize, node };
+    const kids = kidsOf(node);
+    if (kids && st.folded.has(node.attrs.eid) && node.attrs.eid !== st.zoom) {
+      const start = pos + node.nodeSize - 1 - kids.nodeSize;
+      ranges.push({ from: start, to: start + kids.nodeSize, eid: node.attrs.eid });
+    }
+  }
+  if (st.zoom && !root) root = hiddenRanges(doc, st).root;
   return { ranges, root };
 }
 
@@ -825,53 +859,47 @@ export const LineChecks = Extension.create({
     };
     return [new Plugin({
       key: boxKey,
+      state: lineDecos({ key: boxKey, make: (li, pos, state) => {
+        const decos = [];
+        const inList = inChecklist(state.doc, pos);
+        const kids = kidsOf(li);
+        if (hasBox(li, inList)) {
+          const done = !!li.attrs.done;
+          decos.push(Decoration.node(pos, pos + li.nodeSize, { class: 'boxed' }));
+          decos.push(Decoration.widget(pos + 1, () => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'line-box';
+            b.tabIndex = -1;
+            b.contentEditable = 'false';
+            b.dataset.eid = li.attrs.eid || '';
+            b.setAttribute('role', 'checkbox');
+            b.setAttribute('aria-checked', String(done));
+            b.setAttribute('aria-label', done ? 'Done; tap to untick' : 'Tick when done');
+            return b;
+          }, { side: -1, key: `b-${li.attrs.eid}-${done ? 1 : 0}`, ignoreSelection: true }));
+        }
+        if (li.attrs.checklist) {
+          // How many are ticked, faintly after the checklist's own words.
+          let all = 0;
+          let ticked = 0;
+          kids?.forEach((k) => { if (hasBox(k, true)) { all++; if (k.attrs.done) ticked++; } });
+          decos.push(Decoration.node(pos, pos + li.nodeSize, { class: 'checklist' }));
+          if (all) {
+            const end = pos + 1 + li.firstChild.nodeSize - 1;
+            decos.push(Decoration.widget(end, () => {
+              const c = document.createElement('span');
+              c.className = 'check-count';
+              c.contentEditable = 'false';
+              c.textContent = `${ticked}/${all}`;
+              return c;
+            }, { side: 1, key: `c-${li.attrs.eid}-${ticked}-${all}`, ignoreSelection: true }));
+          }
+        }
+        return decos;
+      } }),
       props: {
-        decorations(state) {
-          const decos = [];
-          const walk = (list, base, inList) => {
-            list.forEach((li, offset) => {
-              const pos = base + offset;
-              if (li.type.name !== 'listItem') return;
-              const kids = kidsOf(li);
-              if (hasBox(li, inList)) {
-                const done = !!li.attrs.done;
-                decos.push(Decoration.node(pos, pos + li.nodeSize, { class: 'boxed' }));
-                decos.push(Decoration.widget(pos + 1, () => {
-                  const b = document.createElement('button');
-                  b.type = 'button';
-                  b.className = 'line-box';
-                  b.tabIndex = -1;
-                  b.contentEditable = 'false';
-                  b.dataset.eid = li.attrs.eid || '';
-                  b.setAttribute('role', 'checkbox');
-                  b.setAttribute('aria-checked', String(done));
-                  b.setAttribute('aria-label', done ? 'Done; tap to untick' : 'Tick when done');
-                  return b;
-                }, { side: -1, key: `b-${li.attrs.eid}-${done ? 1 : 0}`, ignoreSelection: true }));
-              }
-              if (li.attrs.checklist) {
-                // How many are ticked, faintly after the checklist's own words.
-                let all = 0;
-                let ticked = 0;
-                kids?.forEach((k) => { if (hasBox(k, true)) { all++; if (k.attrs.done) ticked++; } });
-                decos.push(Decoration.node(pos, pos + li.nodeSize, { class: 'checklist' }));
-                if (all) {
-                  const end = pos + 1 + li.firstChild.nodeSize - 1;
-                  decos.push(Decoration.widget(end, () => {
-                    const c = document.createElement('span');
-                    c.className = 'check-count';
-                    c.contentEditable = 'false';
-                    c.textContent = `${ticked}/${all}`;
-                    return c;
-                  }, { side: 1, key: `c-${li.attrs.eid}-${ticked}-${all}`, ignoreSelection: true }));
-                }
-              }
-              if (kids) walk(kids, pos + li.nodeSize - 1 - kids.nodeSize + 1, !!li.attrs.checklist);
-            });
-          };
-          state.doc.forEach((list, offset) => { if (list.type.name === 'bulletList') walk(list, offset + 1, false); });
-          return DecorationSet.create(state.doc, decos);
-        },
+        decorations(state) { return this.getState(state).set; },
         handleDOMEvents: {
           // A tap or click on a box ticks it, without moving the caret or
           // bringing up the keyboard on a phone.
@@ -1033,7 +1061,32 @@ export const OutlineKeys = Extension.create({
   addProseMirrorPlugins() {
     return [new Plugin({
       key: new PluginKey('outlinePaste'),
-      props: { clipboardTextParser: (text, _$at, plain, view) => linesFromText(text, view.state.schema) }
+      props: {
+        clipboardTextParser: (text, _$at, plain, view) => linesFromText(text, view.state.schema),
+        // Pasted lines get their ids here, all at once, when they have none or
+        // the page already has theirs (a copy). Giving them out one by one
+        // afterwards took seconds for a paste of a couple of thousand lines.
+        transformPasted(slice, view) {
+          let lines = false;
+          slice.content.descendants((n) => { if (lines) return false; if (n.type.name === 'listItem') lines = true; return !lines; });
+          if (!lines) return slice;
+          const used = new Set();
+          view.state.doc.descendants((n) => { if (n.type.name === 'listItem' && n.attrs.eid) used.add(n.attrs.eid); return !n.isTextblock; });
+          const fix = (frag) => {
+            const out = [];
+            frag.forEach((n) => {
+              let node = n.isTextblock || n.isLeaf ? n : n.copy(fix(n.content));
+              if (node.type.name === 'listItem') {
+                if (!node.attrs.eid || used.has(node.attrs.eid)) node = node.type.create({ ...node.attrs, eid: newId('li') }, node.content, node.marks);
+                used.add(node.attrs.eid);
+              }
+              out.push(node);
+            });
+            return Fragment.from(out);
+          };
+          return new Slice(fix(slice.content), slice.openStart, slice.openEnd);
+        }
+      }
     })];
   }
 });
@@ -1209,6 +1262,50 @@ export const OutlineFold = Extension.create({
   },
   addProseMirrorPlugins() {
     const onZoom = this.options.onZoom;
+    // Each line's dot and fold arrow, and its place in a zoom. Kept from key
+    // press to key press, redrawing only the lines a change touched.
+    const gutter = lineDecos({
+      key: gutterKey,
+      rebuild: (tr) => !!tr.getMeta(foldKey),
+      context: (state, prev, tr) => {
+        const st = foldKey.getState(state);
+        if (!st.zoom) return { st, root: null };
+        if (prev?.root && tr) {
+          const at = tr.mapping.map(prev.root.from, 1);
+          const n = state.doc.nodeAt(at);
+          if (n?.attrs.eid === st.zoom) {
+            const root = { from: at, to: at + n.nodeSize };
+            // Lines that came in just at its edge (a paste at its end) are
+            // outside it: which lines are in sight changed, so redraw them all.
+            return { st, root, full: tr.mapping.map(prev.root.to, 1) !== root.to || tr.mapping.map(prev.root.from, -1) !== root.from };
+          }
+        }
+        return { st, root: hiddenRanges(state.doc, st).root, full: !!prev };
+      },
+      make: (node, pos, _state, { st, root }) => {
+        const decos = [];
+        const eid = node.attrs.eid;
+        const kids = kidsOf(node);
+        const folded = kids && st.folded.has(eid) && eid !== st.zoom;
+        const cls = [kids ? 'has-kids' : '', folded ? 'folded' : ''];
+        if (root) {
+          if (eid === st.zoom) cls.push('zoom-root');
+          else if (pos < root.from && pos + node.nodeSize > root.to) cls.push('zoom-path');
+          else if (pos < root.from || pos >= root.to) cls.push('zoom-hidden');
+        }
+        decos.push(Decoration.node(pos, pos + node.nodeSize, { class: cls.filter(Boolean).join(' ') }));
+        decos.push(Decoration.widget(pos + 1, () => {
+          const w = document.createElement('span');
+          w.className = 'line-gutter';
+          w.contentEditable = 'false';
+          w.innerHTML = `${kids ? '<button type="button" class="fold" tabindex="-1" aria-label="Fold or unfold"></button>' : ''}<button type="button" class="bullet" tabindex="-1" aria-label="Zoom in, or right-click for this line's actions">${GRIP}</button>`;
+          w.dataset.eid = eid || '';
+          return w;
+        }, { side: -1, key: `g-${eid}-${kids ? 1 : 0}`, ignoreSelection: true }));
+
+        return decos;
+      }
+    });
     return [new Plugin({
       key: foldKey,
       state: {
@@ -1245,8 +1342,8 @@ export const OutlineFold = Extension.create({
         const st = foldKey.getState(state);
         if (!st.folded.size && !st.zoom) return null;
         if (!trs.some((t) => t.docChanged || t.selectionSet || t.getMeta(foldKey))) return null;
-        const { ranges, root } = hiddenRanges(state.doc, st);
         const head = state.selection.head;
+        const { ranges, root } = hiddenAround(state.doc, st, head);
         if (st.zoom && !root) return state.tr.setMeta(foldKey, { zoom: null });
         const forward = head >= oldState.selection.head;
         if (root && (head < root.from || head > root.to)) {
@@ -1260,37 +1357,7 @@ export const OutlineFold = Extension.create({
         return state.tr.setSelection(sel || Selection.findFrom(state.doc.resolve(inside.from), -1, true));
       },
       props: {
-        decorations(state) {
-          const st = foldKey.getState(state);
-          const decos = [];
-          const { root } = hiddenRanges(state.doc, st);
-          // The line the caret is in: on a phone its handle stands in for the dot.
-          const { $head } = state.selection;
-          let here = -1;
-          for (let d = $head.depth; d > 0; d--) if ($head.node(d).type.name === 'listItem') { here = $head.before(d); break; }
-          state.doc.descendants((node, pos) => {
-            if (node.type.name !== 'listItem') return;
-            const eid = node.attrs.eid;
-            const kids = kidsOf(node);
-            const folded = kids && st.folded.has(eid) && eid !== st.zoom;
-            const cls = [kids ? 'has-kids' : '', folded ? 'folded' : '', pos === here ? 'here' : ''];
-            if (root) {
-              if (eid === st.zoom) cls.push('zoom-root');
-              else if (pos < root.from && pos + node.nodeSize > root.to) cls.push('zoom-path');
-              else if (pos < root.from || pos >= root.to) cls.push('zoom-hidden');
-            }
-            decos.push(Decoration.node(pos, pos + node.nodeSize, { class: cls.filter(Boolean).join(' ') }));
-            decos.push(Decoration.widget(pos + 1, () => {
-              const w = document.createElement('span');
-              w.className = 'line-gutter';
-              w.contentEditable = 'false';
-              w.innerHTML = `${kids ? '<button type="button" class="fold" tabindex="-1" aria-label="Fold or unfold"></button>' : ''}<button type="button" class="bullet" tabindex="-1" aria-label="Zoom in, or right-click for this line's actions">${GRIP}</button>`;
-              w.dataset.eid = eid || '';
-              return w;
-            }, { side: -1, key: `g-${eid}-${kids ? 1 : 0}`, ignoreSelection: true }));
-          });
-          return DecorationSet.create(state.doc, decos);
-        },
+        decorations(state) { return gutterKey.getState(state).set; },
         handleDOMEvents: {
           pointerdown(view, event) {
             const b = event.target.closest?.('.line-gutter button');
@@ -1324,6 +1391,20 @@ export const OutlineFold = Extension.create({
           }
         }
       }
+    }), new Plugin({
+      key: gutterKey,
+      state: gutter
+    }), new Plugin({
+      // The line the caret is in: on a phone its handle stands in for the dot.
+      props: {
+        decorations(state) {
+          const { $head } = state.selection;
+          for (let d = $head.depth; d > 0; d--) {
+            if ($head.node(d).type.name === 'listItem') return DecorationSet.create(state.doc, [Decoration.node($head.before(d), $head.after(d), { class: 'here' })]);
+          }
+          return null;
+        }
+      }
     })];
   }
 });
@@ -1342,6 +1423,8 @@ export function refsIn(content) {
 
 // Per window: a pane beside the main window keeps its own (panes.js).
 const WAL = walKey;
+// About 1,500 lines: past this the write-ahead copy is written once a second, not on every key.
+export const WAL_LONG = 150000;
 
 // Loads and saves one outline page, the same two-layer way as chapters:
 // write-ahead copy at once, changed lines to IndexedDB a moment later.
@@ -1422,12 +1505,26 @@ export class OutlineStore {
   change(doc) {
     if (!this.page) return;
     this.version += 1;
-    try { localStorage.setItem(WAL(this.page.id), JSON.stringify({ at: Date.now(), doc: doc.toJSON() })); } catch { /* full */ }
+    // The write-ahead copy (the whole page, in case the app closes before the
+    // save lands). On a long page writing it costs more than a key press, so
+    // there it's written at most once a second; a pause in typing, leaving the
+    // page or hiding the app saves for real anyway.
+    this.walDoc = doc;
+    this.walId = this.page.id;
+    if (doc.content.size < WAL_LONG) this.writeWal();
+    else if (!this.walTimer) this.walTimer = setTimeout(() => this.writeWal(), 1000);
     this.onStatus('saving');
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.flush(doc), 300);
     clearTimeout(this.snapTimer);
     this.snapTimer = setTimeout(() => this.snapshot(doc.toJSON(), doc.textContent), 4000);
+  }
+
+  writeWal() {
+    clearTimeout(this.walTimer);
+    this.walTimer = null;
+    if (!this.walDoc || !this.walId) return;
+    try { localStorage.setItem(WAL(this.walId), JSON.stringify({ at: Date.now(), doc: this.walDoc.toJSON() })); } catch { /* full */ }
   }
 
   flush(doc) {
@@ -1527,6 +1624,8 @@ export class OutlineStore {
     for (const r of rows) if (r.id !== page.id && !sourceRows.includes(r)) this.cache.set(r.id, r);
     if (sourceRows.length) this.onSources(sourceRows);
     if (version === this.version && page === this.page) {
+      clearTimeout(this.walTimer);
+      this.walTimer = null;
       localStorage.removeItem(WAL(page.id));
       this.savedVersion = version;
       this.onStatus('saved');
