@@ -68,6 +68,8 @@ import { CompareView, BesidePane } from './compare.js';
 import { inPane, PANE_ID, PaneHost, host as paneHost, sendChanged, onChanged, BESIDE_PLACES } from './panes.js';
 import { SideNotes } from './sidenotes.js';
 import { Talk } from './talk.js';
+import { HistoryStrip } from './hstrip.js';
+import './hstrip.css';
 import { aheadSource } from './ahead.js';
 import { events as calendarEvents, forgetCalendar } from './calendar.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
@@ -350,7 +352,7 @@ const notebook = new Notebook({
     plan?.showDay(page);
     looseFoot();
     tidyNudge();
-    $('#nb-more').replaceChildren(...(page.kind === 'page' ? [menuButton(() => pageMenu(page), 'More for this page')] : []));
+    $('#nb-more').replaceChildren(menuButton(() => (page.kind === 'page' ? pageMenu(page) : dayMenu()), page.kind === 'page' ? 'More for this page' : 'More for this day'));
     renderCrumb();
   },
   // Zooming in is a step you can go Back from.
@@ -597,10 +599,14 @@ window.addEventListener('popstate', async (e) => {
 // Shift + Enter in Go, or a middle-click on something that takes you
 // somewhere: the next place opens beside instead.
 let besideUntil = 0;
+// The history strip (made further down, with history).
+let hstrip = null;
+
 async function go(place) {
   if (besideUntil > Date.now()) { besideUntil = 0; return openBeside(place); }
   // A menu left open belongs to the place you're leaving.
   closeMenu();
+  if (hstrip?.isOpen) hstrip.close({ stay: true });
   // Somewhere that has since gone to the Trash (Back can lead there): go nearby instead.
   if (place.view === 'write' && place.chapterId && gone(await getEntry(place.chapterId))) place = { view: 'library' };
   // Posting moved from Make to Deliver: an old place with its tab goes there.
@@ -2139,7 +2145,7 @@ async function pageMenu(page) {
     { label: 'Open', run: () => go({ view: 'notebook', pageId: p.id }) },
     { label: 'Rename…', run: () => rename(p) },
     { label: 'New page inside', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(p.id); } },
-    { label: 'History…', run: async () => { await go({ view: 'notebook', pageId: p.id }); await openHistory(); } },
+    { label: 'History', run: async () => { if (!(inNotebook() && notebook.page?.id === p.id)) await go({ view: 'notebook', pageId: p.id }); await hstrip.open(); } },
     { label: 'Share a link to read and comment…', run: () => openShare(p) },
     { label: 'What Claude knows about this page…', run: () => showClaudeKnows(p) },
     { label: 'Move to', sub: [{ label: 'Loose pages (no world)', current: !p.parent_id, run: () => movePage(p, null) }, ...(await homesFor(p)).map((h) => ({ label: h.label, current: p.parent_id === h.id, run: () => movePage(p, h.id) }))] },
@@ -2200,7 +2206,7 @@ async function chapterMenu(chapter) {
   return [
     { label: 'Open', run: () => go({ view: 'write', chapterId: ch.id }) },
     { label: 'Rename…', run: () => rename(ch) },
-    { label: 'History…', run: async () => { await go({ view: 'write', chapterId: ch.id }); await openHistory(); } },
+    { label: 'History', run: async () => { if (!(writing() && state.chapterId === ch.id)) await go({ view: 'write', chapterId: ch.id }); await hstrip.open(); } },
     { label: 'Move up', run: () => moveChapter(ch, -1) },
     { label: 'Move down', run: () => moveChapter(ch, 1) },
     ...(acts.length > 1 ? [{ label: `Move to ${level.toLowerCase()}`, sub: acts.map((a) => ({ label: a.title, current: a.id === ch.parent_id, run: () => moveChapterToAct(ch, a) })) }] : []),
@@ -3581,7 +3587,23 @@ const dayLabel = (ms) => {
   return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', ...(d.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {}) });
 };
 
-async function openHistory() {
+// The strip over the page (Ctrl + Shift + H, or History in the page's ⋯ menu).
+hstrip = new HistoryStrip({
+  target: historyTarget,
+  toast,
+  askText,
+  openList: (pick) => openHistory(pick)
+});
+window.__hstrip = hstrip;
+$('#ch-more').append(menuButton(() => (state.chapterId && store.chapter ? chapterMenu(store.chapter) : []), 'More for this chapter'));
+
+// The day page's ⋯ menu.
+function dayMenu() {
+  return [{ label: 'History', run: () => hstrip.open() }];
+}
+
+// Every version as a list, and what was deleted: reached from the strip's own ⋯.
+async function openHistory(pick) {
   const panel = $('.history');
   if (!panel.hidden) { closeHistory(); return; }
   const t = historyTarget();
@@ -3590,7 +3612,7 @@ async function openHistory() {
   historyAt = t;
   panel.hidden = false;
   $('#history-title').textContent = `History · ${t.name}`;
-  await renderHistoryList();
+  await renderHistoryList(pick);
 }
 
 function closeHistory() {
@@ -4051,7 +4073,8 @@ const commands = [
   { group: 'write', label: 'Next alternate (word, or else paragraph)', keys: '⌥↓', run: () => flip(editor, 1), when: writing },
   { group: 'write', label: 'Previous alternate', keys: '⌥↑', run: () => flip(editor, -1), when: writing },
   { group: 'write', label: 'Scene break', keys: `${mod}⇧↵`, run: () => editor.chain().focus().insertSceneBreak().run(), when: writing },
-  { group: 'write', label: 'History: earlier versions, and what was deleted (this chapter or page)', keys: `${mod}⇧H`, run: openHistory, when: () => writing() || (inNotebook() && !!notebook.page) },
+  { group: 'write', label: 'History: drag back through earlier versions of this chapter or page', keys: `${mod}⇧H`, words: ['versions', 'earlier', 'undo', 'go back', 'restore', 'scrub', 'timeline'], run: () => hstrip.toggle(), when: () => writing() || (inNotebook() && !!notebook.page) },
+  { group: 'write', label: 'History as a list, and what was deleted (this chapter or page)', keys: '', words: ['deleted', 'versions', 'bring back'], run: () => openHistory(), when: () => writing() || (inNotebook() && !!notebook.page) },
   { group: 'write', label: 'Note categories: add, rename, recolour', keys: '', run: () => notes.editTypes() },
   { group: 'view', label: 'Sidebar (keep open)', keys: `${mod}1`, run: () => body.classList.toggle('pin-outline') },
   { group: 'view', label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: writing },
@@ -4626,7 +4649,8 @@ document.addEventListener('click', (e) => {
   if (cmd === 'palette') openPalette();
   if (cmd === 'notes' && writing()) toggleNotes();
   if (cmd === 'page') togglePageSettings();
-  if (cmd === 'history') openHistory();
+  if (cmd === 'history') hstrip.toggle();
+  if (cmd === 'history-list') openHistory();
   if (cmd === 'new-chapter') newChapter();
   if (cmd === 'new-act') newAct();
   if (cmd === 'new-page') newPageHere();
@@ -4686,7 +4710,7 @@ document.addEventListener('keydown', (e) => {
   else if (m && e.shiftKey && k === 'e' && writing()) { e.preventDefault(); editor.commands.focus(); alts.toggle({ scope: 'word', focusAdd: true }); }
   else if (m && e.shiftKey && k === 'd' && writing() && editor.isFocused) { e.preventDefault(); newParagraphVersion(editor); }
   else if (e.altKey && !e.shiftKey && !m && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && writing() && editor.isFocused) { if (flip(editor, e.key === 'ArrowDown' ? 1 : -1)) e.preventDefault(); }
-  else if (m && e.shiftKey && k === 'h' && (writing() || inNotebook())) { e.preventDefault(); openHistory(); }
+  else if (m && e.shiftKey && k === 'h' && (writing() || inNotebook())) { e.preventDefault(); if (!$('.history').hidden) closeHistory(); else hstrip.toggle(); }
   else if (m && e.shiftKey && k === 'l') { e.preventDefault(); toggleTheme(); }
   else if (m && e.shiftKey && k === 'g') { e.preventDefault(); toggleGrid(); }
   else if (m && e.shiftKey && !e.altKey && k === 's') { e.preventDefault(); toggleProduction(); }

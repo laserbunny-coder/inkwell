@@ -1,4 +1,4 @@
-import { allEntries, byKind, putEntries, getEntry, getMeta, setMeta, snapshots, addSnapshot, allSnapshots, dropSnapshots } from './db.js';
+import { allEntries, byKind, putEntries, getEntry, getMeta, setMeta, snapshots, addSnapshot, allSnapshots, dropSnapshots, labelSnapshot } from './db.js';
 import { entry, newId, wordCount } from './model.js';
 
 // The history of a chapter or a page: every version kept as you pause typing
@@ -24,19 +24,49 @@ export async function keep(rootId, doc, text, { force = false, label } = {}) {
 }
 
 // Every version of one chapter or page, newest first, from here and the cloud.
+// Each says where it is kept (snapId on this device, entryId synced), so it
+// can be named later.
 export async function versionsOf(rootId) {
-  const local = (await snapshots(rootId)).map((s) => ({ at: s.at, words: s.words, doc: s.doc, label: s.label || '' }));
+  const local = (await snapshots(rootId)).map((s) => ({ at: s.at, words: s.words, doc: s.doc, label: s.label || '', snapId: s.id }));
   const synced = (await byKind('version')).filter((v) => v.fields?.of === rootId && v.fields.doc)
-    .map((v) => ({ at: v.fields.at, words: v.fields.words, doc: v.fields.doc, label: v.title || '', synced: true }));
-  const seen = new Set();
+    .map((v) => ({ at: v.fields.at, words: v.fields.words, doc: v.fields.doc, label: v.title || '', synced: true, entryId: v.id }));
+  const seen = new Map();
   const out = [];
   for (const v of [...local, ...synced].sort((a, b) => b.at - a.at)) {
     const key = JSON.stringify(v.doc);
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const was = seen.get(key);
+    if (was) {
+      // The same words kept twice (here and synced): one mark, either name.
+      if (v.snapId != null && was.snapId == null) was.snapId = v.snapId;
+      if (v.entryId && !was.entryId) was.entryId = v.entryId;
+      if (!was.label && v.label) was.label = v.label;
+      continue;
+    }
+    seen.set(key, v);
     out.push(v);
   }
   return out;
+}
+
+// Give a kept version a name (or take it away with ''). Named ones are never thinned out.
+export async function nameVersion(v, label) {
+  if (v.snapId != null) await labelSnapshot(v.snapId, label);
+  if (v.entryId) {
+    const e = await getEntry(v.entryId);
+    if (e) await putEntries([{ ...e, title: label, updated_at: Date.now() }]);
+  }
+  v.label = label;
+}
+
+// How many words changed from one version to the next (added, cut or reworded).
+export function changedWords(before, after) {
+  let n = 0;
+  const count = (t) => (t.match(/\S+/g) || []).length;
+  for (const c of compare(before, after)) {
+    if (c.op === 'ins' || c.op === 'del') n += count(c.block.text);
+    else if (c.op === 'chg') for (const w of c.words) if (w.op !== '=') n += count(w.t);
+  }
+  return n;
 }
 
 // Which of a list of {id, root, at} to let go: within each root, keep all from
@@ -141,6 +171,82 @@ export function words(x, y) {
   while (i < A.length) push(A[i++], '-');
   while (j < B.length) push(B[j++], '+');
   return out;
+}
+
+// ---------- putting a paragraph or line back into today's page ----------
+
+// Every node with an id in a document, with the list it sits in and its place there.
+function index(doc) {
+  const at = new Map();
+  const walk = (list, owner) => {
+    list.forEach((n, i) => {
+      if (n.attrs?.eid && (n.type === 'listItem' || !owner || owner.type !== 'listItem')) at.set(n.attrs.eid, { node: n, list, i, owner });
+      if (n.content) walk(n.content, n.type === 'bulletList' ? owner : n);
+    });
+  };
+  walk(doc.content || [], null);
+  return at;
+}
+
+// Today's page with one block of an old version back in it: reworded back
+// if it's still there, or put back where it used to sit if it was cut (an
+// outline line with the lines under it, leaving out any that are still in
+// today's page somewhere).
+export function withBlockBack(nowDoc, oldDoc, eid) {
+  const doc = structuredClone(nowDoc);
+  const now = index(doc);
+  const old = index(oldDoc);
+  const was = old.get(eid);
+  if (!was) return null;
+  const here = now.get(eid);
+  if (here) {
+    if (here.node.type === 'listItem') {
+      const para = (was.node.content || []).find((c) => c.type === 'paragraph');
+      const k = (here.node.content || []).findIndex((c) => c.type === 'paragraph');
+      if (para && k >= 0) here.node.content[k] = structuredClone(para);
+    } else here.list[here.i] = structuredClone(was.node);
+    return doc;
+  }
+  const prune = (n) => {
+    const c = structuredClone(n);
+    const strip = (x) => {
+      if (!x.content) return x;
+      x.content = x.content.filter((k) => !(k.type === 'listItem' && k.attrs?.eid && now.has(k.attrs.eid))).map(strip);
+      x.content = x.content.filter((k) => !(k.type === 'bulletList' && !(k.content || []).length));
+      return x;
+    };
+    return strip(c);
+  };
+  const node = prune(was.node);
+  // After the nearest earlier neighbour that's still there.
+  for (let k = was.i - 1; k >= 0; k--) {
+    const prev = was.list[k].attrs?.eid && now.get(was.list[k].attrs.eid);
+    if (prev) { prev.list.splice(prev.i + 1, 0, node); return doc; }
+  }
+  // First under its parent line, if that's still there.
+  const parentId = was.owner?.type === 'listItem' ? was.owner.attrs?.eid : null;
+  const parent = parentId && now.get(parentId);
+  if (parent) {
+    const kids = parent.node.content || (parent.node.content = []);
+    let list = kids.find((c) => c.type === 'bulletList');
+    if (!list) { list = { type: 'bulletList', content: [] }; kids.push(list); }
+    list.content.unshift(node);
+    return doc;
+  }
+  // Else after whatever came before it in reading order, or at the very top.
+  const order = blocks(oldDoc).map((b) => b.eid);
+  for (let k = order.indexOf(eid) - 1; k >= 0; k--) {
+    const prev = now.get(order[k]);
+    if (prev) { prev.list.splice(prev.i + 1, 0, node); return doc; }
+  }
+  if (node.type === 'listItem') {
+    const top = (doc.content || []).find((c) => c.type === 'bulletList');
+    if (top) { top.content.unshift(node); return doc; }
+    doc.content = [{ type: 'bulletList', content: [node] }, ...(doc.content || [])];
+    return doc;
+  }
+  doc.content = [node, ...(doc.content || [])];
+  return doc;
 }
 
 // ---------- things deleted from a chapter or page ----------

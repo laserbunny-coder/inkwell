@@ -51,8 +51,14 @@ async function device(viewport = { width: 1300, height: 850 }) {
 }
 const syncNow = (p) => p.evaluate(() => window.__sync.run());
 const text = (p) => p.locator('#editor .ProseMirror').innerText();
+// The list of versions (and what was deleted) is reached from the strip's own ⋯.
 const openHistory = async (p) => {
-  if (await p.locator('.history').isVisible()) await p.keyboard.press('Escape'); await p.keyboard.press('Control+Shift+H'); await p.waitForSelector('.history', { state: 'visible' }); await sleep(400); };
+  if (await p.locator('.history').isVisible()) await p.keyboard.press('Escape');
+  await p.keyboard.press('Control+Shift+H');
+  await p.waitForSelector('.hstrip');
+  await p.locator('.hstrip .hs-more').click();
+  await p.locator('.pop-menu .pop-item', { hasText: 'Every version as a list' }).click();
+  await p.waitForSelector('.history', { state: 'visible' }); await sleep(400); };
 const closeHistory = async (p) => { await p.keyboard.press('Escape'); await sleep(200); };
 // Type a paragraph at the very end of the chapter.
 const setText = (p, paras) => p.evaluate((ps) => {

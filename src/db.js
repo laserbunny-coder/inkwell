@@ -368,6 +368,15 @@ export async function snapshots(chapterId) {
   return rows.sort((a, b) => b.at - a.at);
 }
 
+export async function labelSnapshot(id, label) {
+  const db = await open();
+  const tx = db.transaction('snapshots', 'readwrite');
+  const store = tx.objectStore('snapshots');
+  const row = await result(store.get(id));
+  if (row) store.put(label ? { ...row, label } : (({ label: _, ...rest }) => rest)(row));
+  return done(tx);
+}
+
 export async function allSnapshots() {
   const db = await open();
   return result(db.transaction('snapshots').objectStore('snapshots').getAll());

@@ -1,0 +1,88 @@
+/* The history strip: hidden until asked for, then under the page's top line. */
+.hstrip {
+  position: sticky; top: 0; z-index: 25;
+  margin: 0 -14px 22px; padding: 12px 14px 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  font-family: var(--ui, system-ui, sans-serif); font-size: 13px; color: var(--soft, var(--muted));
+  box-shadow: 0 10px 24px -18px rgba(0, 0, 0, .7);
+}
+.hs-track { position: relative; height: 44px; touch-action: none; cursor: ew-resize; user-select: none; -webkit-user-select: none; border-radius: 6px; outline: none; }
+.hs-track:focus-visible { box-shadow: 0 0 0 1px var(--line2, var(--line)); }
+.hs-track::before { content: ''; position: absolute; left: 0; right: 0; bottom: 6px; height: 1px; background: var(--line2, var(--line)); }
+.hs-ticks { position: absolute; inset: 0; pointer-events: none; }
+.hs-tick { position: absolute; bottom: 6px; width: 16px; margin-left: -8px; height: 38px; display: flex; justify-content: center; align-items: flex-end; }
+.hs-tick i { display: block; width: var(--w, 3px); border-radius: 2px; background: var(--faint); transition: background .1s, width .1s; }
+.hs-tick.now i { background: var(--ink); }
+.hs-tick.a i { background: var(--accent); width: calc(var(--w, 3px) + 2px); min-width: 4px; }
+.hs-tick.b i { background: var(--signal, #F0BE55); width: calc(var(--w, 3px) + 2px); min-width: 4px; }
+.hs-tick.named::after { content: ''; position: absolute; bottom: -6px; width: 5px; height: 5px; border-radius: 50%; background: var(--muted); }
+.hs-days { position: relative; height: 20px; font: 11px/20px var(--mono, ui-monospace, monospace); color: var(--faint); white-space: nowrap; }
+.hs-days span { position: absolute; top: 0; transform: translateX(-2px); }
+.hs-days span.now { right: 0; color: var(--muted); }
+.hs-when { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 0 12px; margin-top: 4px; border-top: 1px solid var(--line); }
+.hs-t { font-family: var(--title-font, var(--prose)); font-size: 19px; line-height: 1.2; color: var(--title-ink, var(--ink)); }
+.hs-sub { color: var(--muted); }
+.hs-name { border: 0; background: none; color: var(--faint); padding: 2px 4px; font: inherit; text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
+.hs-name:hover { color: var(--ink); }
+.hs-sp { flex: 1; }
+.hs-btn { border: 1px solid var(--line2, var(--line)); background: none; color: var(--soft, var(--muted)); font: inherit; padding: 5px 12px; border-radius: 99px; white-space: nowrap; cursor: pointer; }
+.hs-btn:hover { color: var(--ink); border-color: var(--muted); }
+.hs-btn[aria-pressed="true"] { background: var(--raise); color: var(--ink); border-color: var(--accent); }
+.hs-btn.go { border-color: var(--accent); color: var(--ink); }
+.hs-btn.hs-more { padding: 5px 10px; border-color: transparent; font-size: 15px; line-height: 1; }
+.hs-btn.hs-done { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+
+/* While it's open the page is read-only, and only the page shows. */
+.hs-hide > .ProseMirror:not(.hs-past) { display: none !important; }
+.hs-past[hidden], .hs-cmp[hidden] { display: none !important; }
+html.hs-open .ProseMirror:not(.hs-past) { caret-color: transparent; }
+html.hs-open .notebook :is(#plan, .evening-card, .loose-foot, .tidy-nudge, .day-review, .backlinks, .past-days, #nb-links, #nb-zoom) { display: none !important; }
+html.hs-open .page :is(.notes-layer, .chapter-links) { display: none !important; }
+html.hs-open .hs-hide + .hs-cmp ~ * { display: none; }
+.hs-past { color: var(--soft, var(--ink)); }
+.hs-past .hs-v > *:first-child { margin-top: 0; }
+.hs-note { font: 12.5px/1.5 var(--ui, system-ui, sans-serif); color: var(--faint); margin: 0 0 18px; }
+.hs-can { position: relative; border-radius: 6px; cursor: default; }
+.hs-can:hover, .hs-can.picked, .hs-can:focus-within { background: var(--tint); }
+.hs-can:focus-visible { outline: 1px solid var(--line2, var(--line)); }
+.hs-diff { box-shadow: -2px 0 0 var(--line2, var(--line)); }
+.hs-gone { box-shadow: -2px 0 0 var(--gone, #E58A6B); }
+.hs-new { box-shadow: -2px 0 0 var(--accent); }
+.hs-past del, .hs-cmp del { text-decoration: line-through; text-decoration-color: var(--gone, #E58A6B); background: rgba(229, 138, 107, .16); color: var(--muted); border-radius: 3px; padding: 0 1px; }
+.hs-cmp ins { text-decoration: none; background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink); border-radius: 3px; padding: 0 1px; }
+.hs-tools { position: absolute; right: 4px; top: -15px; z-index: 3; display: none; gap: 2px; padding: 2px; background: var(--raise); border: 1px solid var(--line2, var(--line)); border-radius: 99px; font: 12px var(--ui, system-ui, sans-serif); line-height: 1.4; text-indent: 0; }
+.hs-can:hover > .hs-tools, .hs-can:focus-within > .hs-tools, .hs-can.picked > .hs-tools { display: inline-flex; }
+.hs-tools button { border: 0; background: none; color: var(--soft, var(--muted)); font: inherit; padding: 3px 10px; border-radius: 99px; white-space: nowrap; cursor: pointer; }
+.hs-tools button:hover { color: var(--ink); background: var(--line); }
+
+/* Two marks side by side: wider than the page, lined up by paragraph. */
+.hs-cmp { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 28px; align-items: start;
+  width: min(1040px, calc(100vw - 64px)); margin-left: 50%; transform: translateX(-50%);
+  font-family: var(--prose); font-size: calc(var(--text-size, 21px) * .82); line-height: 1.6; color: var(--soft, var(--ink)); }
+.hs-ch { font: 12.5px var(--ui, system-ui, sans-serif); color: var(--muted); padding-bottom: 10px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.hs-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; background: var(--accent); }
+.hs-dot.b { background: var(--signal, #F0BE55); }
+.hs-cb { margin: 0 -8px 12px; padding: 2px 8px; }
+.hs-cb.heading { font-weight: 500; }
+.hs-cb.scene { color: var(--muted); font-family: var(--ui, system-ui, sans-serif); font-size: 13px; letter-spacing: .04em; }
+.hs-none { font: 13px var(--ui, system-ui, sans-serif); color: var(--faint); padding: 6px 8px; margin: 0 -8px 12px; border: 1px dashed var(--line2, var(--line)); border-radius: 6px; }
+.hs-fold { grid-column: 1 / -1; justify-self: center; border: 1px solid var(--line); background: none; color: var(--faint); font: 12px var(--ui, system-ui, sans-serif); padding: 4px 12px; border-radius: 99px; margin: 0 0 14px; cursor: pointer; }
+.hs-fold:hover { color: var(--ink); }
+.hs-cmp.one { display: block; width: auto; margin-left: 0; transform: none; font-size: calc(var(--text-size, 18px) * .9); }
+.hs-cmp.one .hs-fold { display: block; margin: 0 auto 14px; }
+
+@media (max-width: 700px) {
+  .hstrip { margin: 0 -6px 18px; padding: 10px 10px 0; border-radius: 10px; }
+  .hs-t { font-size: 17px; flex-basis: 100%; }
+  .hs-when { gap: 8px; }
+  .hs-btn { padding: 6px 12px; }
+  .hs-tools { position: static; margin-top: 8px; width: max-content; max-width: 100%; flex-wrap: wrap; border-radius: 12px; }
+  .hs-can:hover > .hs-tools { display: none; }
+  .hs-can.picked > .hs-tools, .hs-can.picked:hover > .hs-tools { display: flex; }
+}
+@media (prefers-reduced-motion: reduce) { .hs-tick i { transition: none; } }
+
+/* The chapter's ⋯, quietly at its top right. */
+.ch-head { position: relative; height: 0; }
+.ch-head #ch-more { position: absolute; right: -6px; top: -40px; }
+html.hs-open .ch-head { display: none; }
