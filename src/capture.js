@@ -6,6 +6,7 @@ import { addFile, localFile, uploadPending, lengthLabel } from './files.js';
 import { setFileNote } from './filenode.js';
 import { placeVoice } from './voice.js';
 import { speechTerms } from './terms.js';
+import { isTouch } from './device.js';
 
 // Capture: an idea in seconds, asking nothing. Tap, talk, tap Done. The
 // recording is kept on this device first (piece by piece while you talk, so
@@ -475,7 +476,7 @@ function lengthOf(file) {
     a.src = url;
   });
 }
-const phone = () => window.matchMedia?.('(hover: none)').matches;
+const phone = isTouch;
 // How long the recording could actually hear (time with the screen off left out).
 const heard = (rec) => Math.max(0, Date.now() - rec.t0 - rec.away - (rec.awayAt != null ? Date.now() - rec.awayAt : 0));
 // "40 seconds", "1 minute", "10 minutes", for the screen-off notes.

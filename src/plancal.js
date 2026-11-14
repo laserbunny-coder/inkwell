@@ -11,6 +11,7 @@
 // this device.
 
 import { setTask, addTask, span, minutesOf } from './tasks.js';
+import { isCompact } from './device.js';
 
 export const SNAP = 15;
 const GUTTER = 52;
@@ -23,7 +24,7 @@ const readZoom = () => { try { const v = localStorage.getItem('calHours'); retur
 const keepZoom = (z) => { try { localStorage.setItem('calHours', String(z)); } catch { /* private window */ } };
 // A length on the grid, in minutes, at the grid's zoom (--px).
 const Y = (min, less = 0) => `calc(var(--px, 1) * ${min}px${less ? ` - ${less}px` : ''})`;
-const phoneish = () => matchMedia('(hover: none), (max-width: 899px)').matches;
+const phoneish = isCompact;
 // The phone's bar at the bottom: the sheet sits on it, and drags scroll above it.
 const barH = () => {
   const bar = document.querySelector('.placebar');

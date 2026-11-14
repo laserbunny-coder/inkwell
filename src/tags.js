@@ -4,6 +4,7 @@ import { rootsOf, titleOf } from './notebook.js';
 import { bySort, GAP } from './order.js';
 import { ago } from './library.js';
 import { fileUrl, isImage } from './files.js';
+import { isTouch } from './device.js';
 
 // The Tags page: every #tag you've used, with how many things carry it and
 // when it was last used, sorted into groups (Claude suggests them; you can
@@ -529,7 +530,7 @@ export class TagsPage {
     sheet.append(acts);
     sheet.append(make('p', 'hint tg-keys', 'Alt + Right arrow: next · Alt + Left arrow: back · Ctrl + Enter: done'));
     commit();
-    if (note && token === this.token && !matchMedia('(hover: none)').matches) note.focus();
+    if (note && token === this.token && !isTouch()) note.focus();
   }
 
   // The notes box, kept as lines under the item: one line per line typed.

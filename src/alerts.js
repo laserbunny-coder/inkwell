@@ -11,6 +11,7 @@
 // Turning alerts on signs this device up (push_subs, marked app 'inkwell').
 
 import { make } from './menu.js';
+import { mobileOS } from './device.js';
 
 const KEY = 'inkwell-alerts';
 export const KINDS = [
@@ -25,7 +26,7 @@ const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}');
 const keep = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* full */ } };
 const unb64 = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
 const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const phone = () => /Android|iPhone|iPad/.test(navigator.userAgent);
+const phone = mobileOS;
 const device = () => (/Android/.test(navigator.userAgent) ? 'Android phone' : /iPhone|iPad/.test(navigator.userAgent) ? 'iPhone' : /Windows/.test(navigator.userAgent) ? 'Windows computer' : 'This device');
 export const supported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 

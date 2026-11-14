@@ -1,4 +1,5 @@
 // Side by side: other places open in panes beside the main view.
+import { media } from './device.js';
 //
 // A pane is Inkwell itself, loaded again in a frame (index.html?pane=<id>)
 // with its chrome hidden, so any view works in a pane and can be written in.
@@ -98,7 +99,7 @@ export class PaneHost {
     this.sheetOpen = false;
     this.sheetFull = false;
     this.sheetAt = 0;
-    this.narrow = matchMedia('(max-width: 899px), (hover: none)');
+    this.narrow = media('compact');
     this.build();
     this.narrow.addEventListener('change', () => this.layout());
     window.addEventListener('resize', () => this.layout());

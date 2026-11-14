@@ -19,6 +19,7 @@ import { drawAhead, aheadClick, aheadContext, aheadDrags } from './ahead.js';
 import { clockWord, freeLeft } from './calendar.js';
 import { drawCalendar } from './plancal.js';
 import { children, getEntry, isTrashed } from './db.js';
+import { media } from './device.js';
 
 const make = (tag, cls, text) => {
   const el = document.createElement(tag);
@@ -46,7 +47,7 @@ export const tabFor = (tab) => (tab === 'when' ? 'plan' : ['plan', 'day', ...CAL
 const TABS = [['today', 'Today', 'today', 'Alt+1'], ['plan', 'Plan', 'plan', 'Alt+2'], ['cal', 'Calendar', 'calendar', 'Alt+3']];
 const PHONE_TABS = [['page', 'Page', 'today-page'], ['plan', 'Plan', 'today-plan'], ['cal', 'Calendar', 'calendar']];
 const clip = (t, n = 40) => { const s = String(t || 'Untitled').replace(/\s+/g, ' ').trim() || 'Untitled'; return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
-const hover = matchMedia('(hover: hover)');
+const hover = media('mouse');
 const long = (iso, opts) => dateOf(iso).toLocaleDateString('en-US', opts);
 // "12:04" while a timer runs.
 const clock = (task, now) => {

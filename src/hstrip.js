@@ -3,6 +3,7 @@ import { versionsOf, blocks as docBlocks, words as wordDiff, changedWords, nameV
 import { alignBlocks } from './drafts.js';
 import { wordCount } from './model.js';
 import { popMenu } from './menu.js';
+import { isNarrow } from './device.js';
 
 // The history strip: hidden until asked for (the page's ⋯ menu, or
 // Ctrl + Shift + H). A line of marks, one for every kept version of the page
@@ -362,7 +363,7 @@ export class HistoryStrip {
     const B = this.marks[hi];
     const asBlocks = (doc) => docBlocks(doc).map((b) => ({ eid: b.eid, kind: kindOf(b), text: b.text, depth: b.depth, src: b }));
     const rows = alignBlocks(asBlocks(A.doc), asBlocks(B.doc));
-    const phone = matchMedia('(max-width: 700px)').matches;
+    const phone = isNarrow();
     const c = this.cmp;
     c.replaceChildren();
     c.classList.toggle('one', phone);

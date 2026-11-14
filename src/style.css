@@ -208,7 +208,7 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 .wv-dot:hover { opacity: 1; transform: scale(1.25); }
 .wv-line[data-status="guess"] .wv-dot { background: transparent; border-color: var(--faint); }
 .wv-line[data-status="missing"] .wv-dot { background: #d9a441; opacity: .9; }
-@media (max-width: 700px) { .wv-dot { left: -16px; } }
+@media (--narrow) { .wv-dot { left: -16px; } }
 /* Quiet: Focus keeps the line only (titles too with Ctrl + Shift + .), and no dots. */
 :root.focus .wv-dot, :root.reading .wv-dot { display: none; }
 :root.focus:not(.focus-sections) .wv-title, :root.reading .wv-title, :root.hide-sections:not(.focus) .wv-title { visibility: hidden; }
@@ -283,7 +283,7 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 .note-hide { border: 0; background: transparent; padding: 0; color: var(--muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; opacity: 0; transition: opacity .15s; }
 .note:hover .note-hide, .note:focus-within .note-hide, .note-hide:focus { opacity: .8; }
 .note-hide:hover { opacity: 1; color: var(--ink); }
-@media (hover: none) { .note-hide { opacity: .6; } }
+@media (--touch) { .note-hide { opacity: .6; } }
 
 /* Command menu */
 .palette-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(20,18,15,.25); }
@@ -297,7 +297,7 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 .palette li .hint { color: var(--muted); font-size: 12px; }
 .palette li.back { color: var(--muted); font-size: 13px; }
 /* No keyboard on a phone, so shortcuts would only be clutter there. */
-@media (hover: none) { .palette li:not(.opens) .keys { display: none; } }
+@media (--touch) { .palette li:not(.opens) .keys { display: none; } }
 
 /* History */
 .history { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; }
@@ -352,7 +352,7 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 .font-list button:hover { border-color: var(--faint); }
 .font-list button.current { border-color: var(--accent); color: var(--accent); }
 
-@media (max-width: 700px) {
+@media (--narrow) {
   .page { padding: 56px 20px 40vh; }
 }
 
@@ -388,7 +388,7 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 #outline-editor .bullet::after { content: ''; position: absolute; left: .49em; top: .66em; width: .32em; height: .32em; border-radius: 50%; background: var(--faint); transition: transform .12s; }
 #outline-editor .bullet:hover::after { background: var(--accent); transform: scale(1.4); }
 /* Without bullets (the default) the dot only shows under the pointer, so a line can still be zoomed into. */
-@media (min-width: 701px) { .hide-bullets #outline-editor .ProseMirror > ul { padding-left: 0; } }
+@media (--wide) { .hide-bullets #outline-editor .ProseMirror > ul { padding-left: 0; } }
 .hide-bullets #outline-editor .bullet::after { opacity: 0; transition: opacity .12s, transform .12s; }
 .hide-bullets #outline-editor .bullet:hover::after, .hide-bullets #outline-editor .bullet:focus-visible::after { opacity: 1; }
 #outline-editor li.folded > .line-gutter .bullet::after { box-shadow: 0 0 0 .22em var(--line); background: var(--muted); }
@@ -398,7 +398,7 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 #outline-editor li.folded > .line-gutter .fold { transform: rotate(-90deg); }
 #outline-editor li.folded > ul { display: none; }
 /* On a phone the caret is the way to fold: always there (faintly) on lines with lines under them, with room for a thumb. */
-@media (hover: none) {
+@media (--touch) {
   #outline-editor li.has-kids > .line-gutter .fold { opacity: .45; }
   #outline-editor li.folded > .line-gutter .fold { opacity: .8; }
   /* Without bullets the caret takes the bullet's spot, clear of the screen-edge strip; zoom is on the row. */
@@ -463,7 +463,7 @@ a.ref:hover { background: var(--tint); }
 .versions-head-actions { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
 .versions-actions .ghost-btn:hover { background: var(--tint); color: var(--ink); }
 .versions-empty { color: var(--muted); padding: 8px 0; }
-@media (max-width: 700px) { .versions-pair { grid-template-columns: 1fr; gap: 10px; } }
+@media (--narrow) { .versions-pair { grid-template-columns: 1fr; gap: 10px; } }
 
 .picker { position: fixed; z-index: 62; width: 320px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,.16); overflow: hidden; }
 .picker input { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: 10px 12px; outline: none; }
@@ -479,9 +479,9 @@ a.ref:hover { background: var(--tint); }
 .slash .label { flex: 0 0 auto; }
 .slash .hint { flex: 1 1 auto; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slash .keys { color: var(--faint); font-size: 11px; }
-@media (hover: none) { .slash .keys { display: none; } .slash li { padding: 10px 8px; } }
+@media (--touch) { .slash .keys { display: none; } .slash li { padding: 10px 8px; } }
 
-@media (max-width: 700px) {
+@media (--narrow) {
   .notebook { padding: 48px 20px 40vh; }
   .nb-head .ghost-btn { opacity: 1; }
 }
@@ -580,7 +580,7 @@ button.tree-area:hover { color: var(--ink); }
 .past-toggle:hover::before { background: var(--faint); }
 .past-toggle:focus-visible { outline: none; }
 /* No hover on a phone: keep a faint hint that the line can be tapped. */
-@media (hover: none) { .past-toggle span { opacity: .55; } }
+@media (--touch) { .past-toggle span { opacity: .55; } }
 .past-day { border-top: 1px solid var(--line); padding: 22px 0 10px; }
 html.focus .past-days:not(.open) { display: none !important; }
 /* The day review: folded under the day's lines, with a card for each thing to sort. */
@@ -660,7 +660,7 @@ html.focus .past-days:not(.open) { display: none !important; }
 #outline-editor li.mirror[data-from]::after { content: '⇄ ' attr(data-from); position: absolute; left: 100%; top: .5em; margin-left: 12px; white-space: nowrap; color: var(--muted); font: 11px var(--ui); padding: 0 4px; border-radius: 4px; opacity: 0; transition: opacity .15s; cursor: pointer; pointer-events: none; }
 #outline-editor li.mirror[data-from]:hover::after { opacity: .7; pointer-events: auto; }
 /* Phones have no margin to spare: just a faint ⇄ at the line's right edge. */
-@media (hover: none), (max-width: 760px) {
+@media (--touch), (max-width: 760px) {
   #outline-editor li.mirror > p { padding-right: 22px; }
   #outline-editor li.mirror[data-from]::after { content: '⇄'; left: auto; right: 0; margin: 0; font-size: 13px; top: .3em; opacity: .45; pointer-events: auto; }
 }
@@ -678,7 +678,7 @@ html.focus #outline-editor p.gathers::after, html.focus #outline-editor li.mirro
 .block-handle:hover, .block-handle.open { background: var(--tint); color: var(--ink); }
 body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-select: none; }
 .drop-line { position: absolute; left: -8px; right: -8px; height: 2px; border-radius: 2px; background: var(--accent); pointer-events: none; }
-@media (hover: none) { .block-handle { opacity: .6; } }
+@media (--touch) { .block-handle { opacity: .6; } }
 @media (max-width: 760px) { .block-handle { left: -30px; } }
 
 /* The handle's menu, the same for paragraphs, script lines and notebook lines.
@@ -709,7 +709,7 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 /* A notebook line's dot is its handle too: six dots on hover, like a paragraph's. */
 #outline-editor .bullet .grip { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 10px; height: 16px; color: var(--faint); opacity: 0; transition: opacity .12s; pointer-events: none; }
 #outline-editor .bullet { border-radius: 6px; }
-@media (hover: hover) {
+@media (--mouse) {
   :root:not(.focus) #outline-editor .line-gutter:hover .bullet .grip,
   :root:not(.focus) #outline-editor li:has(> p:hover) > .line-gutter .bullet .grip,
   :root:not(.focus) #outline-editor li.menu-open > .line-gutter .bullet .grip { opacity: 1; }
@@ -722,7 +722,7 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 }
 /* On a phone, the line you're on shows its handle (tap for the menu) in the dot's spot. The fold arrow
    means "lines inside" on every line, this one too, so when it has one the handle steps left beside it. */
-@media (hover: none) {
+@media (--touch) {
   :root:not(.focus) #outline-editor li.here > .line-gutter .bullet { display: block; }
   :root:not(.focus) #outline-editor li.here > .line-gutter .bullet .grip { opacity: .6; }
   :root:not(.focus) #outline-editor li.here > .line-gutter .bullet::after { opacity: 0; }
@@ -738,7 +738,7 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 /* A line lifted under the finger while it moves. */
 .line-lift { position: fixed; z-index: 80; pointer-events: none; padding: 6px 10px; background: linear-gradient(var(--raise), var(--raise)), var(--bg); color: var(--ink); font: 16px/1.45 var(--prose); border-radius: 10px; box-shadow: 0 10px 28px rgba(0, 0, 0, .35), 0 0 0 1px var(--line2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transform: scale(1.02); transform-origin: left center; }
 .line-lift[data-more]::after { content: attr(data-more); margin-left: 8px; font: 12px var(--ui); color: var(--muted); }
-@media (max-width: 700px) { .page { padding-left: 36px; } }
+@media (--narrow) { .page { padding-left: 36px; } }
 
 #storage-blocked { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 24px; }
 #storage-blocked > div { max-width: 420px; font-family: var(--prose); font-size: 18px; color: var(--ink); line-height: 1.5; }
@@ -835,7 +835,7 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .alt-panel li:not(.current) .alt-pick:hover { color: var(--ink); }
 .alt-drop { padding: 4px 8px; opacity: 0; }
 .alt-panel li:hover .alt-drop, .alt-drop:focus { opacity: 1; }
-@media (hover: none) { .alt-drop { opacity: .6; } }
+@media (--touch) { .alt-drop { opacity: .6; } }
 .alt-panel input { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 7px 8px; font-family: var(--prose); font-size: 15px; outline: none; }
 .alt-panel input:focus { border-color: var(--accent); }
 .focus .alt-panel { display: none; }
@@ -887,7 +887,7 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 #outline-editor .line-box[aria-checked="true"]::after { content: ''; position: absolute; left: .3em; top: .08em; width: .26em; height: .52em; border: solid var(--bg); border-width: 0 .13em .13em 0; transform: rotate(45deg); }
 #outline-editor li.boxed[data-done] > p { text-decoration-color: var(--faint); }
 #outline-editor .check-count { margin-left: .6em; font-family: var(--ui, inherit); font-size: .68em; color: var(--faint); font-variant-numeric: tabular-nums; user-select: none; }
-@media (hover: none) { #outline-editor .line-box { width: 1.12em; height: 1.12em; top: .26em; } #outline-editor .line-box::before { inset: -.6em; } }
+@media (--touch) { #outline-editor .line-box { width: 1.12em; height: 1.12em; top: .26em; } #outline-editor .line-box::before { inset: -.6em; } }
 html.focus #outline-editor .check-count, .hide-check-count #outline-editor .check-count { display: none; }
 body.line-dragging, body.line-dragging * { user-select: none; }
 /* A finger held on a line's words: no word picking or phone menu while it moves. */
@@ -908,7 +908,7 @@ html.line-holding .ProseMirror, html.line-holding .ProseMirror *, html.line-calm
 .card-wrap:hover > .more-btn, .card-wrap > .more-btn:focus-visible { opacity: .8; }
 .ms-row .more-btn, .loose-list .more-btn, .ms-act-title .more-btn { opacity: 0; }
 .ms-row:hover .more-btn, .loose-list li:hover .more-btn, .ms-act-title:hover .more-btn, .more-btn:focus-visible { opacity: .8; }
-@media (hover: none) {
+@media (--touch) {
   .card-wrap > .more-btn, .ms-row .more-btn, .loose-list .more-btn, .ms-act-title .more-btn { opacity: .7; }
 }
 #lib-path .more-btn { opacity: .8; vertical-align: middle; }
@@ -979,7 +979,7 @@ html.line-holding .ProseMirror, html.line-holding .ProseMirror *, html.line-calm
 .hb-scene { text-align: center; font-size: .8em; letter-spacing: .08em; text-transform: uppercase; }
 .hb-when { display: block; font-family: var(--ui); font-size: 12px; color: var(--faint); margin-top: 2px; }
 .history-back { font-family: var(--ui); font-size: 13px; padding: 4px 8px; margin-left: 6px; color: var(--accent); }
-@media (max-width: 700px) {
+@media (--narrow) {
   /* One column: the list on top, the version under it scrolling on its own. */
   .history-body { flex-direction: column; flex-wrap: nowrap; }
   #history-list { flex: none; width: auto; max-height: 34vh; border-right: 0; border-bottom: 1px solid var(--line); }
@@ -1097,7 +1097,7 @@ html.typewriter #editor, html.typewriter #outline-editor { padding-bottom: 50vh;
 .tg-acts [data-act="prev"] { margin-right: auto; }
 .tg-keys { text-align: right; margin-top: 8px; }
 .tag-chip.all-tags { border-style: dashed; }
-@media (hover: none) { .tg-keys { display: none; } .tg-tag { cursor: default; } }
+@media (--touch) { .tg-keys { display: none; } .tg-tag { cursor: default; } }
 @media (max-width: 640px) {
   .tg-head h1 { font-size: 30px; }
   .tg-card { padding: 16px; }
@@ -1174,8 +1174,8 @@ html.typewriter #editor, html.typewriter #outline-editor { padding-bottom: 50vh;
 .gv-more { display: block; padding: 0 4px 4px 20px; font-size: 11px; color: var(--faint); }
 .gv-empty, .gv-hint { margin: 14px 2px; max-width: 60ch; }
 .ph-grid-btn { font-size: 13px; }
-@media (hover: none) { .gv-grip { display: none; } .gv-open { padding-left: 10px; } }
-@media (max-width: 700px) {
+@media (--touch) { .gv-grip { display: none; } .gv-open { padding-left: 10px; } }
+@media (--narrow) {
   .grid-view { padding: 56px 0 12vh; }
   .gv-head, .gv-sub { padding: 0 16px; }
   .gv-title { font-size: 24px; }
@@ -1211,7 +1211,7 @@ html.typewriter #editor, html.typewriter #outline-editor { padding-bottom: 50vh;
 .promise-list .state { font-size: 12px; color: var(--muted); }
 .promise-list li.unpaid .state { color: var(--accent); }
 .promise-list li.paid .line { color: var(--muted); }
-@media (max-width: 700px) {
+@media (--narrow) {
   .stage-board { grid-auto-columns: 72%; overflow-x: auto; scroll-snap-type: x mandatory; margin-right: -16px; padding-right: 16px; }
   .sb-col { scroll-snap-align: start; }
 }
@@ -1297,7 +1297,7 @@ div.pd-scene-title { cursor: default; }
 .pd-star { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .5); color: #fff; font-size: 13px; line-height: 22px; padding: 0; opacity: 0; }
 .pd-render:hover .pd-star, .pd-render.starred .pd-star { opacity: 1; }
 .pd-render.starred .pd-star { color: #F5C26B; }
-@media (hover: none) { .pd-star { opacity: .85; } }
+@media (--touch) { .pd-star { opacity: .85; } }
 .pd-refs .pd-render { width: 64px; height: 64px; }
 .pd-add { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 4px 0; }
 .pd-add .ghost-btn { font-size: 13px; padding: 5px 8px; }
@@ -1393,7 +1393,7 @@ div.pd-scene-title { cursor: default; }
 .pd-price-row .pd-input { padding: 4px 7px; font-size: 13px; }
 .pd-price-row.head span { font-size: 11px; color: var(--faint); }
 .pd-price-when { font-size: 11.5px; color: var(--faint); }
-@media (max-width: 700px) {
+@media (--narrow) {
   .prod-view { padding: 56px 16px 12vh; }
   .pd-gen { grid-template-columns: 1fr 80px; }
   .pd-gen .pd-field:nth-child(n+3) { grid-column: 1 / -1; }
@@ -1466,7 +1466,7 @@ div.pd-scene-title { cursor: default; }
 .cmp-point { margin: 0 0 12px; }
 .cmp-where { font-weight: 600; font-size: 13px; color: var(--muted); }
 .cmp-overall { margin: 8px 0 0; font-style: italic; }
-@media (max-width: 700px) {
+@media (--narrow) {
   .compare-view { padding: 56px 16px 12vh; }
   .cmp-row { grid-template-columns: 1fr; }
   .cmp-row > .cmp-a, .cmp-row > .cmp-b-col { display: none; }
@@ -1589,7 +1589,7 @@ body.alt-held .pt-num { display: block; }
 body.looking:not(.typing) .topbar { transform: none; opacity: .55; transition: transform .2s ease, opacity .15s ease; }
 body.looking .topbar:hover, body.looking .topbar:focus-within, body.show-top .topbar, body.alt-held .topbar { transform: none; opacity: 1; }
 :root.focus body.looking:not(.show-top):not(.alt-held) .topbar { transform: translateY(-100%); }
-@media (max-width: 700px) {
+@media (--narrow) {
   .page-tabs { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; margin: 0 -4px; padding: 0; }
   .page-tabs:not([hidden]) + .spacer { display: none; }
   .page-tabs::-webkit-scrollbar { display: none; }
@@ -1604,7 +1604,7 @@ body.looking .topbar:hover, body.looking .topbar:focus-within, body.show-top .to
   body.looking:not(.typing) :is(.library, .project-home, .world-home, .tags-home, .desk-home, .plan-home, .grid-view, .prod-view, .stage-view, .compare-view) { padding-top: max(28px, calc(var(--topbar-h, 48px) + 24px)); }
 }
 /* On a computer the faint bar stays on the pages you look at, so they start below it. */
-@media (min-width: 701px) {
+@media (--wide) {
   /* Not tied to typing, so the page doesn't jump when a box gets or loses the caret. */
   body.looking :is(.library, .project-home, .world-home, .tags-home, .desk-home, .plan-home, .grid-view, .prod-view, .stage-view, .compare-view) { padding-top: max(104px, calc(var(--topbar-h, 88px) + 20px)); }
 }
@@ -1621,7 +1621,7 @@ body.looking .topbar:hover, body.looking .topbar:focus-within, body.show-top .to
 .tp-line { width: 100%; text-align: left; border: 0; background: transparent; padding: 6px 8px; border-radius: 6px; color: var(--ink); font-family: var(--prose); font-size: 16px; line-height: 1.45; cursor: grab; }
 .tp-line:hover { background: var(--tint); }
 .tp-lines li.done .tp-line { color: var(--faint); text-decoration: line-through; }
-@media (max-width: 700px) {
+@media (--narrow) {
   .today-panel { top: auto; left: 0; width: auto; height: 64vh; border-left: 0; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; box-shadow: 0 -10px 30px rgba(0,0,0,.35); }
 }
 
@@ -1715,7 +1715,7 @@ button.st-from:hover { color: var(--ink); }
 .st-posted .loose-title, .st-fixes .loose-title { flex: 1; text-align: left; }
 .pd-share { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; max-width: 620px; }
 .pd-share .pd-input { width: 100%; }
-@media (max-width: 700px) {
+@media (--narrow) {
   .stage-view { padding: 48px 16px 20vh; }
   .st-person { grid-template-columns: 1fr 1fr; }
   .st-cards { grid-template-columns: 1fr; }
@@ -1733,7 +1733,7 @@ button.st-from:hover { color: var(--ink); }
 .wh-recent .loose-title { flex: 1; text-align: left; }
 .st-form-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .st-ref { color: var(--accent); margin-left: .25em; font-size: .9em; }
-@media (max-width: 700px) {
+@media (--narrow) {
   .st-node text { font-size: 22px; }
   .st-edge-label, .st-edge.sug-label { font-size: 18px; }
 }
@@ -1777,7 +1777,7 @@ button.st-from:hover { color: var(--ink); }
 .go-tab.quiet { color: var(--muted); }
 .go-hint { margin: 0; font-size: 12px; color: var(--faint); }
 
-@media (hover: none) {
+@media (--touch) {
   /* The phone has its own bar for getting around and the mic. */
   /* The phone has its own bar for getting around and the mic. Where you are
      and the menu live down there, so the top keeps only this place's pages. */
@@ -1827,7 +1827,7 @@ button.st-from:hover { color: var(--ink); }
 .pb-leave { border: 0; border-radius: 999px; padding: 6px 12px; background: var(--ink); color: var(--bg); font: 500 12.5px var(--ui); }
 /* The computer: in Focus the tab sits in the bottom-left corner and brings
    the rail and top bar back until the next click on the page. */
-@media (min-width: 701px) and (hover: hover) {
+@media (--roomy) {
   :root.focus body:not(.bar-peek) .pb-tab { display: grid; left: 10px; bottom: 10px; }
   :root.focus body.bar-peek .pb-focus { display: flex; left: auto; right: 16px; translate: none; bottom: 16px; }
 }
@@ -1873,7 +1873,7 @@ button.st-from:hover { color: var(--ink); }
 .pd-plan-list { margin: 0 0 10px; padding-left: 18px; color: var(--muted); }
 .pd-sheet-kind { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
 .pd-state { display: flex; align-items: center; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
-@media (max-width: 700px) { .pd-state { justify-content: flex-start; } }
+@media (--narrow) { .pd-state { justify-content: flex-start; } }
 
 /* What Claude knows: Claude's one-line notes and weekly summaries, out of sight unless opened. */
 .ck { width: min(560px, 100%); max-height: min(80vh, 760px); overflow-y: auto; }
@@ -2024,7 +2024,7 @@ html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
 .al-words { display: grid; gap: 2px; }
 .al-words small { color: var(--muted); line-height: 1.4; }
 
-@media (hover: none) { .line-drop { height: 3px; } .line-drop::before { content: ''; position: absolute; left: -7px; top: -3px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--accent); background: var(--bg); box-sizing: border-box; } }
+@media (--touch) { .line-drop { height: 3px; } .line-drop::before { content: ''; position: absolute; left: -7px; top: -3px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--accent); background: var(--bg); box-sizing: border-box; } }
 
 /* ---------- The one box (box.js): Ctrl + K, Ctrl + O, the phone's Go ---------- */
 .palette.box { width: min(680px, calc(100% - 32px)); top: 12vh; display: flex; flex-direction: column; max-height: 78vh; font-family: var(--ui); }
@@ -2075,7 +2075,7 @@ html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
 .palette.box-all li.box-gh { padding-top: 14px; }
 .palette.box-all .box-foot { display: block; margin: 0; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--faint); }
 .palette.box-all .box-foot[hidden] { display: none; }
-@media (hover: none) {
+@media (--touch) {
   /* The phone: a sheet from the bottom; while you type it rises above the keyboard. */
   .palette.box { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: auto; max-height: 86vh; border-radius: 20px 20px 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
   .palette.box::before { content: ''; display: block; align-self: center; width: 40px; height: 4px; border-radius: 4px; background: var(--line); margin: 10px 0 0; flex: none; }

@@ -32,7 +32,7 @@ html.has-rail .pl-switch { display: none; }
 .pl-task:hover .pl-grip, .pl-task:focus-within .pl-grip { opacity: 1; }
 /* On a phone the dots are a handle: a finger on them slides the task at once, as in Workflowy.
    The handle runs the task's full height in the margin, so it's easy to hit. */
-@media (hover: none) {
+@media (--touch) {
   .pl-grip { opacity: .75; pointer-events: auto; touch-action: none; left: -14px; top: 0; bottom: 0; transform: none; width: 22px; display: flex; align-items: center; justify-content: center; font-size: 15px; -webkit-user-select: none; -webkit-touch-callout: none; }
 }
 /* The task lifted under the finger while it moves. */
@@ -66,12 +66,12 @@ html.has-rail .pl-switch { display: none; }
 .pl-task:hover :is(.pl-play, .pl-more), :is(.pl-play, .pl-more):focus-visible, .pl-task.timing .pl-play { opacity: 1; }
 .pl-play:hover, .pl-more:hover { color: var(--ink); background: var(--line); }
 .pl-task.timing .pl-play { color: var(--accent); }
-@media (hover: none) { .pl-play, .pl-more { opacity: 1; } }
+@media (--touch) { .pl-play, .pl-more { opacity: 1; } }
 .pl-est { border: 0; background: none; padding: 2px 6px; border-radius: var(--r, 6px); color: var(--muted); font: 12px var(--ui); font-variant-numeric: tabular-nums; cursor: pointer; min-width: 52px; text-align: right; }
 .pl-est:hover { color: var(--ink); background: var(--line); }
 .pl-est.unset { color: var(--faint); opacity: 0; }
 .pl-task:hover .pl-est.unset, .pl-est.unset:focus-visible { opacity: 1; }
-@media (hover: none) { .pl-est.unset { opacity: 1; } }
+@media (--touch) { .pl-est.unset { opacity: 1; } }
 .pl-est.live { color: var(--accent); font-family: var(--mono); }
 .pl-add { cursor: text; }
 .pl-add input { border: 0; background: transparent; color: var(--ink); font: 15.5px/1.4 var(--prose); padding: 0; outline: none; min-width: 0; width: 100%; grid-column: 2 / -1; }
@@ -137,7 +137,7 @@ button.pl-meter-v:hover { color: var(--ink); background: var(--raise); }
 .pw-day .pl-add .pl-check, .pw-chips .pl-add .pl-check { display: none; }
 .pw-day .pl-add input, .pw-chips .pl-add input { font: 13px var(--ui); grid-column: 1; }
 :is(.pw-day, .pw-tray):hover .pl-add, .pw-day .pl-add:focus-within, .pw-chips .pl-add:focus-within { opacity: 1; }
-@media (hover: none) { .pw-day .pl-add, .pw-chips .pl-add { opacity: 1; } }
+@media (--touch) { .pw-day .pl-add, .pw-chips .pl-add { opacity: 1; } }
 .pw-tray { margin-top: 0; padding: 18px 0 8px; border-top: 1px solid var(--line); }
 .pw-chips { display: flex; flex-wrap: wrap; gap: 2px 6px; margin-top: 8px; align-items: flex-start; }
 .pw-chips .pw-task { width: auto; max-width: 260px; }
@@ -166,7 +166,7 @@ button.pl-meter-v:hover { color: var(--ink); background: var(--raise); }
   .pw-day:nth-child(4n) { border-right: 0; }
   .pw-day:nth-child(4n + 1) { padding-left: 0; }
 }
-@media (max-width: 700px) {
+@media (--narrow) {
   .pl-top h1, :root:is([data-look="midnight"], [data-look="paper"]) .pl-top h1 { font-size: 30px; }
   .pl-side { width: 100%; justify-content: space-between; }
   .pl-switch { margin-left: 0; }
@@ -228,7 +228,7 @@ button.pl-meter-v:hover { color: var(--ink); background: var(--raise); }
 .ah-grip { position: absolute; top: 0; right: 0; bottom: 0; width: 9px; cursor: ew-resize; border-radius: 0 var(--r, 6px) var(--r, 6px) 0; }
 .ah-bar:hover .ah-grip { background: linear-gradient(to right, transparent 5px, var(--line2) 5px, var(--line2) 6px, transparent 6px); }
 .ah-bar.dragging { opacity: .8; cursor: grabbing; box-shadow: 0 0 0 1px var(--accent); }
-@media (hover: none) { .ah-grip { display: none; } .ah-slot span { opacity: .6; } }
+@media (--touch) { .ah-grip { display: none; } .ah-slot span { opacity: .6; } }
 .ah-dia { display: flex; align-items: baseline; gap: 6px; min-width: 0; margin: 0 4px; border: 0; background: none; padding: 3px 6px; border-radius: var(--r, 6px); color: var(--ink); font: 12.5px/1.35 var(--ui); text-align: left; cursor: pointer; }
 .ah-dia:hover, .ah-dia:focus-visible { background: var(--raise); outline: none; }
 .ah-dia i { width: 7px; height: 7px; flex: none; transform: translateY(-1px) rotate(45deg); background: var(--muted); }
@@ -245,7 +245,7 @@ html.hide-panes .ah-talk { display: none; }
 .hide-estimates :is(.ah-hrs, .ah-h .pl-track, .ah-note) { display: none; }
 /* A date that can't move, on a project's steps. */
 .pl-when.hard { color: var(--signal); }
-@media (max-width: 700px) {
+@media (--narrow) {
   .ah-wrap { margin: 18px -16px 0; padding: 0 16px; }
   .ah { grid-template-columns: 104px repeat(var(--weeks, 6), 132px); min-width: 0; width: max-content; }
   .ah-corner, .ah-p { position: sticky; left: 0; z-index: 2; background: var(--bg); }
@@ -346,7 +346,7 @@ html.hide-panes .ah-talk { display: none; }
 .dc-chip:hover, .dc-chip:focus-visible { background: var(--tint); outline: none; }
 .dc-chip.dc-held { background: var(--tint); box-shadow: inset 3px 0 0 var(--accent); }
 .dc-sheet.dc-sheet-low { opacity: .25; pointer-events: none; }
-@media (hover: none), (max-width: 899px) {
+@media (--compact) {
   .dc-sheet { position: fixed; top: auto; left: 0; right: 0; width: auto; bottom: var(--dc-bar, 0px); max-height: 46vh; border-radius: 14px 14px 0 0; border-width: 1px 0 0; box-shadow: 0 -10px 30px rgb(0 0 0 / .25); padding: 4px 16px calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 36; }
   .dc-sh-grab { display: block; width: 36px; height: 4px; border-radius: 4px; background: var(--line2); margin: 4px auto 6px; }
   .dc-chip { padding: 11px 10px; font-size: 15px; }
@@ -381,7 +381,7 @@ html.hide-panes .ah-talk { display: none; }
 .dc-blk:hover + .dc-handle, .dc-handle:hover, .dc-handle.active { pointer-events: auto; }
 .dc-blk:hover + .dc-handle::after, .dc-handle:hover::after, .dc-handle.active::after, .dc-blk:focus-visible + .dc-handle::after { opacity: .9; }
 :root.dc-dragging .dc-handle:not(.active) { visibility: hidden; }
-@media (hover: none) { .dc-handle { pointer-events: auto; height: 20px; } .dc-handle::after { opacity: .5; top: 4px; width: 22px; margin-left: -11px; } }
+@media (--touch) { .dc-handle { pointer-events: auto; height: 20px; } .dc-handle::after { opacity: .5; top: 4px; width: 22px; margin-left: -11px; } }
 .dc-now { position: absolute; left: 44px; right: 0; border-top: 1.5px solid var(--accent); pointer-events: none; z-index: 2; }
 .dc-now::before { content: ''; position: absolute; left: -4px; top: -4.5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .dc-new { left: 52px; right: 4px; border: 1px solid var(--accent); background: var(--bg); padding: 2px 6px; z-index: 4; }
@@ -391,7 +391,7 @@ html.hide-panes .ah-talk { display: none; }
 .pl-task.sel, .pl-task.sel:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .pl-thru { border: 1px solid var(--line); background: none; color: var(--muted); font: 12.5px var(--ui); padding: 3px 10px; border-radius: 999px; cursor: pointer; }
 .pl-thru:hover, .pl-thru:focus-visible { color: var(--accent); border-color: var(--accent); }
-@media (hover: none) {
+@media (--touch) {
   .pl-task.drop-before, .pl-add.drop-before { box-shadow: 0 -3px 0 var(--accent); }
   .pl-task.drop-after { box-shadow: 0 3px 0 var(--accent); }
 }
@@ -457,7 +457,7 @@ html.pulling-phone .pu-head { padding-top: 0; }
 .pu-line.dragging { opacity: .35; }
 .pu-grip { position: absolute; left: calc(var(--d, 0) * 18px - 2px); top: 0; bottom: 0; width: 18px; display: flex; align-items: center; justify-content: center; color: var(--faint); font-size: 12px; opacity: 0; touch-action: none; }
 .pu-line:hover .pu-grip { opacity: 1; }
-@media (hover: none) { .pu-grip { opacity: .8; width: 28px; left: calc(var(--d, 0) * 18px - 8px); font-size: 15px; } .pu-line { padding-left: calc(22px + var(--d, 0) * 18px); padding-block: 8px; } }
+@media (--touch) { .pu-grip { opacity: .8; width: 28px; left: calc(var(--d, 0) * 18px - 8px); font-size: 15px; } .pu-line { padding-left: calc(22px + var(--d, 0) * 18px); padding-block: 8px; } }
 .pu-ring { width: 10px; height: 10px; border: 1.5px solid var(--muted); border-radius: 50%; flex: none; transform: translateY(1px); }
 .pu-ring.plain { width: 5px; height: 5px; border: 0; background: var(--faint); transform: translateY(-2px); margin: 0 2px; }
 .pu-words { flex: 1; min-width: 0; font: 15px/1.4 var(--prose); overflow-wrap: anywhere; }
@@ -509,7 +509,7 @@ html:not(.pulling-phone) .pull-zones { display: none; }
 .wp-row { display: flex; justify-content: flex-end; gap: 8px; }
 .wp-ok, .wp-cancel { border: 1px solid var(--line2); background: none; color: var(--ink); border-radius: 99px; padding: 8px 16px; font: 14px var(--ui); cursor: pointer; }
 .wp-ok { border-color: var(--accent); }
-@media (max-width: 700px) { .pl-head .pl-pull { margin-left: 0; } }
+@media (--narrow) { .pl-head .pl-pull { margin-left: 0; } }
 
 /* ---------- Today rebalanced (Nov 14) ---------- */
 
@@ -549,7 +549,7 @@ html:not(.pulling-phone) .pull-zones { display: none; }
 .pl-pick-b:first-of-type { color: var(--accent); }
 .pl-pick-b.danger { color: var(--signal, #e5484d); }
 .pl-pick-b:disabled { opacity: .4; cursor: default; }
-@media (hover: none) {
+@media (--touch) {
   .pl-pickbar { left: 8px; right: 8px; transform: none; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); justify-content: center; flex-wrap: wrap; row-gap: 2px; }
   body.kb-up .pl-pickbar { bottom: 8px; }
 }
@@ -571,14 +571,14 @@ html:not(.pulling-phone) .pull-zones { display: none; }
 .notebook.plan-side > #plan .pl-cal { margin-bottom: 6px; }
 html.focus .notebook.plan-side > #plan, .notebook.plan-side.zoomed > #plan { display: none; }
 .tp-wide { display: none; }
-@media (hover: hover) and (min-width: 1100px) { .tp-wide { display: flex; } }
+@media (--mouse) and (min-width: 1100px) { .tp-wide { display: flex; } }
 
 /* ---------- the day on a phone: Page | Plan | When | Week | Ahead ---------- */
 .tp-switch[hidden] { display: none !important; }
 .pl-switch-phone { display: flex; width: 100%; margin: 0; gap: 0; }
 .pl-switch-phone button { flex: 1 1 0; padding: 7px 0; font-size: 13.5px; white-space: nowrap; min-width: 0; }
 .tp-switch { margin: -6px 0 14px; }
-@media (hover: none) {
+@media (--touch) {
   html.has-rail .pl-switch { display: flex; }
   .pl-head .pl-switch { display: none; }
   .pl-top + .pl-switch-phone, .pl-sheet > .pl-switch-phone { margin: 0 0 16px; }
@@ -596,7 +596,7 @@ html.focus .notebook.plan-side > #plan, .notebook.plan-side.zoomed > #plan { dis
 
 /* One row per task on a narrow screen: the details go under the words only
    when there's something to say, as one small line. */
-@media (max-width: 700px) {
+@media (--narrow) {
   .pl-task { grid-template-columns: 22px minmax(0, 1fr) auto; row-gap: 0; align-items: center; padding-block: 6px; }
   .pl-task .pl-check { margin-top: 0; }
   .pl-task:not(.one-row) { align-items: start; }
@@ -611,7 +611,7 @@ html.focus .notebook.plan-side > #plan, .notebook.plan-side.zoomed > #plan { dis
   .pl-early-b { padding: 6px 8px; }
 }
 .hide-estimates [data-cmd="pace"] { display: none !important; }
-@media (max-width: 700px) {
+@media (--narrow) {
   .pl-task:not(.one-row) .pl-acts { grid-row: 1 / span 2; align-self: center; }
 }
 /* What's when: Not planned, grouped by project, each folded with its count. */
@@ -673,7 +673,7 @@ html.has-rail .pl-switches { flex-direction: row; align-items: center; }
 .pw-tray.pw-row .pw-rd { font: 13px var(--ui); color: var(--muted); }
 .pw-row.drop-on .pw-rb { background: var(--tint); border-color: var(--accent); }
 
-@media (hover: none) {
+@media (--touch) {
   .pl-switches { align-items: stretch; width: 100%; }
   .pl-zoom { align-self: stretch; }
   .pl-zoom button { flex: 1 1 0; padding: 6px 0; }
@@ -685,7 +685,7 @@ html.has-rail .pl-switches { flex-direction: row; align-items: center; }
 }
 .pw-rows .pw-row { padding: 0; margin: 0; border: 0; min-height: 0; background: none; box-shadow: none; }
 .pw-rows .pw-row::before, .pw-rows .pw-row::after { display: none; }
-@media (hover: none) {
+@media (--touch) {
   #plan-sheet[data-tab="week"] .pl-top h1 { font-size: 24px; }
   #plan-sheet[data-tab="week"] .pl-top { margin-bottom: 0; }
   .pw-rb { padding: 9px 12px; }
@@ -707,17 +707,17 @@ html.has-rail .pl-switches { flex-direction: row; align-items: center; }
 .pl-restline { margin-top: 18px; }
 .pl-restline.open span::after { transform: rotate(-135deg); margin-bottom: -.1em; }
 .pl-restline span { opacity: .75; }
-@media (hover: none) { .pl-restline span { opacity: 1; } }
+@media (--touch) { .pl-restline span { opacity: 1; } }
 .pl-rest:not(.open) { display: none; }
 :is(html.pl-dragging, html.pl-touchdrag, html.pull-dragging) .pl-rest { display: block; }
 
 /* "3 done": the done tasks out of sight; a tap shows them for now. */
 .pl-doneline { display: block; border: 0; background: none; color: var(--faint); font: 12px var(--ui); padding: 8px 0 4px 34px; cursor: pointer; text-align: left; opacity: .8; }
 .pl-doneline:hover, .pl-doneline:focus-visible { color: var(--muted); opacity: 1; }
-@media (hover: none) { .pl-doneline { padding: 12px 0 8px 34px; } }
+@media (--touch) { .pl-doneline { padding: 12px 0 8px 34px; } }
 
 /* From a project: a line with lines under it starts folded; ▸ 12 opens it. */
 .pu-fold { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: var(--faint); font: 11.5px var(--ui); padding: 2px 6px; border-radius: 10px; cursor: pointer; }
 .pu-fold:hover, .pu-fold:focus-visible { color: var(--muted); background: var(--hover, rgba(127,127,127,.12)); }
 .pu-whenis + .pu-fold { margin-left: 6px; }
-@media (hover: none) { .pu-fold { min-width: 44px; min-height: 32px; justify-content: center; font-size: 13px; } }
+@media (--touch) { .pu-fold { min-width: 44px; min-height: 32px; justify-content: center; font-size: 13px; } }

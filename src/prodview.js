@@ -1,3 +1,4 @@
+import { media } from './device.js';
 import { getEntry, getMany, putEntries, byKind } from './db.js';
 import { tagsIn, entry, newId } from './model.js';
 import { loadStructure, rowsAt } from './grid.js';
@@ -61,7 +62,7 @@ export class ProductionView {
     this.open = new Set();
     this.busy = Promise.resolve();
     this.timers = new Map();
-    this.touch = matchMedia('(hover: none)');
+    this.touch = media('touch');
     this.dayId = null;
     el.addEventListener('dragover', (e) => { if (this.isOpen && [...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault(); });
     el.addEventListener('drop', (e) => this.dropAnywhere(e));

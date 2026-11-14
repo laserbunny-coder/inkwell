@@ -6,6 +6,7 @@
 // line; on a phone it's a sheet from the bottom, with big rows for a thumb.
 
 import { addDays, dateOf, horizon, whenHeadings, isoOf } from './tasks.js';
+import { media } from './device.js';
 
 const make = (tag, cls, text) => {
   const el = document.createElement(tag);
@@ -14,7 +15,7 @@ const make = (tag, cls, text) => {
   if (tag === 'button') el.type = 'button';
   return el;
 };
-const small = matchMedia('(max-width: 700px), (hover: none)');
+const small = media('smallish');
 const long = (iso, opts) => dateOf(iso).toLocaleDateString('en-US', opts);
 
 // Every choice, in order: { id, label, hint, words, when, chip }.

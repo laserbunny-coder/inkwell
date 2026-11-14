@@ -8,10 +8,11 @@
 // bar takes over.
 
 import { setFont, currentFont } from './fonts.js';
+import { media } from './device.js';
 
 const root = document.documentElement;
 // A rail needs room and a pointer; a touch screen keeps its bottom bar.
-const wide = matchMedia('(min-width: 701px) and (hover: hover)');
+const wide = media('roomy');
 
 const make = (tag, cls, text) => {
   const el = document.createElement(tag);

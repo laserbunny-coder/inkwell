@@ -1,4 +1,5 @@
 import { keyboard } from './keyboard.js';
+import { media, isTouch, isNarrow } from './device.js';
 import './style.css';
 import './frame.css';
 import './desk.css';
@@ -231,7 +232,7 @@ const blocks = new BlockHandle(editor, $('.sheet'), { menu: paragraphMenu });
 // The alternates buttons sit at the far end of the same row (the whole row
 // when it isn't a script), reached by scrolling it sideways.
 const scriptBar = $('.script-bar');
-const touch = matchMedia('(hover: none)');
+const touch = media('touch');
 function placeScriptBar() {
   const script = isScript();
   const focus = root.classList.contains('focus');
@@ -564,7 +565,7 @@ const currentEditor = () => (inNotebook() ? notebook.editor : editor);
 // ---------- getting around ----------
 
 // The phone opens on Today when you've been away a while (see the start).
-const PHONE = matchMedia('(hover: none) and (pointer: coarse)');
+const PHONE = media('phone');
 const AWAY = 3 * 60 * 60 * 1000;
 function phoneAway(now = Date.now()) {
   if (!PHONE.matches || inPane) return false;
@@ -3515,7 +3516,7 @@ function renderBoard(w, pieces, el = $('#wh-board')) {
     b.addEventListener('click', (e) => { e.stopPropagation(); setStage(p, list[list.indexOf(stageOf(p, w)) + 1]); });
     return b;
   };
-  const touch = matchMedia('(hover: none)').matches;
+  const touch = isTouch();
   // One row of columns for each set of stages in the world (a Universe can
   // have reels on AI video and a novel on Book); one set needs no label.
   const sets = [...new Set(pieces.map(({ row }) => stageSetOf(row, w).id))].map(setById);
@@ -3578,7 +3579,7 @@ function renderBoard(w, pieces, el = $('#wh-board')) {
 let edgesQuietUntil = 0;
 // On a touch screen an edge opens on a tap, never on a hover: phones send
 // stray hover events when the page shifts (the keyboard opening, say).
-const hovers = () => Date.now() > edgesQuietUntil && !matchMedia('(hover: none)').matches;
+const hovers = () => Date.now() > edgesQuietUntil && !isTouch();
 $('.edge-left').addEventListener('mouseenter', () => { if (hovers()) body.classList.add('show-outline'); });
 $('.edge-left').addEventListener('click', () => body.classList.add('show-outline'));
 $('.outline').addEventListener('mouseleave', () => body.classList.remove('show-outline'));
@@ -3841,7 +3842,7 @@ $('#history-copy').addEventListener('click', () => {
 // ---------- page width and text size (per device) ----------
 
 const DEFAULT_WIDTH = 660;
-const defaultSize = () => (matchMedia('(max-width: 700px)').matches ? 18 : 21);
+const defaultSize = () => (isNarrow() ? 18 : 21);
 const currentWidth = () => Number(localStorage.getItem('pageWidth')) || DEFAULT_WIDTH;
 const currentSize = () => Number(localStorage.getItem('textSize')) || defaultSize();
 
@@ -4306,7 +4307,7 @@ const commands = [
   { group: 'view', label: 'Show the panes beside', words: ['pane', 'peek', 'side by side'], when: () => !!panes?.count && panes.sheet && !panes.sheetOpen, run: () => panes.showSheet() },
   { group: 'view', label: 'Close the pane you’re in', keys: `${mod}⌥W`, words: ['pane', 'side by side', 'close'], when: () => inPane, run: () => paneHost()?.close(PANE_ID) },
   { group: 'view', label: 'Close all the panes beside', words: ['pane', 'side by side', 'close'], when: () => !!panes?.count, run: () => panes.closeAll() },
-  { group: 'new', label: 'Save links from your browser (Save to Inkwell button)…', keys: '', words: ['bookmark', 'bookmarklet', 'share', 'save link', 'twitter', 'x', 'web page', 'computer', 'desktop'], run: () => showSaveButton(), when: () => !matchMedia('(pointer: coarse)').matches },
+  { group: 'new', label: 'Save links from your browser (Save to Inkwell button)…', keys: '', words: ['bookmark', 'bookmarklet', 'share', 'save link', 'twitter', 'x', 'web page', 'computer', 'desktop'], run: () => showSaveButton(), when: () => !media('finger').matches },
   { group: 'new', label: 'Bring in old notes (from Thymer, Tana, Workflowy, OneNote)…', keys: '', words: ['import', 'paste', 'opml', 'markdown', 'migrate', 'old apps'], run: () => bringInOld() },
   { group: 'sync', label: 'Connect Scribe, the dictation keyboard…', keys: '', run: () => connectScribe() },
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },

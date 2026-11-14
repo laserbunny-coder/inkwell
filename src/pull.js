@@ -7,6 +7,7 @@
 
 import { children, getEntry, isTrashed } from './db.js';
 import { taskOf, whenWord, stepsPage, isoOf } from './tasks.js';
+import { media } from './device.js';
 
 const make = (tag, cls, text) => {
   const el = document.createElement(tag);
@@ -16,7 +17,7 @@ const make = (tag, cls, text) => {
   return el;
 };
 const root = document.documentElement;
-const phone = matchMedia('(max-width: 899px), (hover: none)');
+const phone = media('compact');
 const read = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } };
 const keep = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private window */ } };
 const MAX_LINES = 600;

@@ -23,7 +23,7 @@ h1 { font: 600 30px/1.25 Literata, Georgia, serif; margin: 12px 0 8px; }
 .rd-line { padding-left: calc(var(--d) * 22px); margin: 0 0 .3em; }
 .rd-done { text-decoration: line-through; color: var(--muted); }
 .rd-picked { background: var(--pick); box-shadow: -8px 0 0 var(--pick), 8px 0 0 var(--pick); }
-@media (hover: hover) { body:not(.rd-nocomment) .rd-block:hover { background: var(--pick); cursor: text; } }
+@media (--mouse) { body:not(.rd-nocomment) .rd-block:hover { background: var(--pick); cursor: text; } }
 
 /* Screenplay format, sized to the screen. */
 .rd-screenplay #rd-body { font: 16px/1.5 'Courier Prime', 'Courier New', Courier, monospace; }
@@ -36,7 +36,7 @@ h1 { font: 600 30px/1.25 Literata, Georgia, serif; margin: 12px 0 8px; }
 .rd-dialogue { padding-left: 17%; max-width: 78%; margin: 0 0 1em !important; }
 .rd-transition { text-align: right; text-transform: uppercase; margin: 1em 0 !important; }
 .rd-section { font: 600 12px/1.4 Inter, system-ui, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin: 2.2em 0 .4em; }
-@media (max-width: 700px) {
+@media (--narrow) {
   .rd-character { padding-left: 30%; }
   .rd-paren { padding-left: 18%; max-width: 85%; }
   .rd-dialogue { padding-left: 10%; max-width: 92%; }
