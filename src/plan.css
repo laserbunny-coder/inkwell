@@ -667,3 +667,13 @@ html.has-rail .pl-switches { flex-direction: row; align-items: center; }
 .ol-today .ww-h { display: flex; align-items: center; gap: 10px; }
 .ol-today .ww-h .ww-fold { width: auto; flex: 1 1 auto; }
 .ol-today .ww-h .pl-left { flex: none; }
+/* In the narrow column beside the page a task's name gets the whole width:
+   its project goes under it, and its buttons float in on hover. */
+.notebook.plan-side > #plan .pl-task { grid-template-columns: 22px minmax(0, 1fr); row-gap: 0; }
+.notebook.plan-side > #plan .pl-meta { display: contents; }
+.notebook.plan-side > #plan .pl-sub { display: flex; align-items: baseline; gap: 2px 8px; flex-wrap: wrap; grid-column: 2; grid-row: 2; margin: 1px 0 0 -4px; min-width: 0; font-size: 11.5px; }
+.notebook.plan-side > #plan .pl-sub:empty { display: none; }
+.notebook.plan-side > #plan .pl-sub .pl-place { max-width: none; padding: 0 4px; }
+.notebook.plan-side > #plan .pl-acts { display: flex; align-items: center; gap: 2px; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: var(--raise); border-radius: var(--r, 6px); padding-left: 6px; opacity: 0; pointer-events: none; }
+.notebook.plan-side > #plan .pl-task:is(:hover, :focus-within, .timing) .pl-acts { opacity: 1; pointer-events: auto; }
+.notebook.plan-side > #plan .pl-est:not(.unset) { opacity: 1; }

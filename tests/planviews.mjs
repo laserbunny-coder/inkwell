@@ -166,7 +166,7 @@ try {
     const text = await pc.evaluate(() => document.documentElement.outerHTML);
     assert.ok(!/What’s when|What's when/.test(text), 'no What’s when left on the screen');
     await pc.keyboard.press('Control+k');
-    await pc.keyboard.type('whats when');
+    await pc.keyboard.type("what's when"); // a straight apostrophe, as a keyboard types it
     await sleep(300);
     assert.match(await pc.locator('#palette-list li').first().innerText(), /^Plan/);
     await pc.keyboard.press('Escape');

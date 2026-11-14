@@ -4577,7 +4577,9 @@ function openGroup(id) {
 }
 
 function filterPalette() {
-  const q = $('#palette-input').value.trim().toLowerCase();
+  // Straight and curly apostrophes are the same thing here ("what's when").
+  const norm = (t) => t.toLowerCase().replace(/[’‘']/g, '');
+  const q = norm($('#palette-input').value.trim());
   const usable = (c) => !c.when || c.when();
   if (paletteMode === 'commands' && !q && !paletteGroup) {
     // Anything waiting on you stays at the top; then the categories.
@@ -4604,7 +4606,7 @@ function filterPalette() {
     // Best matches first: the whole name, then names starting with it, then a
     // word starting with it, then anywhere (so "Page 3" isn't lost behind "Page 30").
     const rank = (label) => {
-      const l = label.toLowerCase();
+      const l = norm(label);
       if (l === q) return 0;
       if (l.startsWith(q)) return l[q.length] === ' ' ? 1 : 2;
       if (l.includes(` ${q}`)) return 3;
@@ -4614,7 +4616,7 @@ function filterPalette() {
     // Several words find a name holding them all, in any order ("calendar week").
     const words = q.split(/\s+/).filter(Boolean);
     const allIn = (l) => words.length > 1 && words.every((w) => l.includes(w));
-    const hit = (c) => c.label.toLowerCase().includes(q) || allIn(c.label.toLowerCase()) || (paletteMode === 'commands' && (c.words || []).some((w) => w.toLowerCase().startsWith(q)));
+    const hit = (c) => norm(c.label).includes(q) || allIn(norm(c.label)) || (paletteMode === 'commands' && (c.words || []).some((w) => norm(w).startsWith(q)));
     paletteItems = paletteSource.filter((c) => usable(c) && inGroup(c) && hit(c))
       .map((c, i) => ({ c, i, r: q ? rank(c.label) : 0 })).sort((a, b) => a.r - b.r || a.i - b.i).slice(0, 60).map((x) => x.c);
     // Not a title? Offer to look inside the writing too.
