@@ -175,3 +175,17 @@ html.has-rail .rail #desk-toggle[data-n]::after { margin-left: auto; }
 .dk-closed { display: inline-block; margin-left: 8px; padding: 0 7px; border: 1px solid var(--line2); border-radius: 99px; font: 500 10.5px/1.7 var(--ui); letter-spacing: .04em; color: var(--muted); vertical-align: 2px; white-space: nowrap; }
 .dk-thread.s-loose .dk-rr { color: var(--signal); }
 .hide-closedtag .dk-closed { display: none; }
+
+/* ---------- arranging by hand (drag; hold first on a phone) ---------- */
+.dk-moving, .dk-moving * { cursor: grabbing !important; -webkit-user-select: none; user-select: none; }
+.dk-moving, .dk-moving body { overscroll-behavior: none; }
+.dk-calm [data-drag], .dk-calm [data-drag] * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+@media (hover: none) { [data-drag] { -webkit-touch-callout: none; } }
+.dk-dragging { opacity: .3; }
+.dk-armed { background: var(--raise); transition: background .15s; }
+.dk-lift { position: fixed; z-index: 80; pointer-events: none; margin: 0; max-height: 240px; overflow: hidden; padding: 12px 16px; box-sizing: border-box; background: linear-gradient(var(--raise), var(--raise)) var(--bg); background-color: var(--bg); border: 0; border-radius: 10px; box-shadow: 0 12px 30px rgba(0, 0, 0, .5), 0 0 0 1px var(--line2); opacity: 1; transform: rotate(-.6deg) scale(1.01); list-style: none; }
+.dk-lift * { pointer-events: none !important; }
+.dk-lift-card { padding: 14px 18px; }
+.dk-lift-card h3 { display: flex; align-items: center; gap: 10px; margin: 0; font-family: var(--title); font-weight: var(--title-w); letter-spacing: var(--title-ls); font-size: 24px; line-height: 1.15; }
+.dk-lift-card .dk-more { display: none; }
+.dk-dropbar { position: fixed; z-index: 79; pointer-events: none; background: var(--accent); border-radius: 2px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
