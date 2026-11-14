@@ -8,6 +8,7 @@ import './project.css';
 import { getEntry, putEntries } from './db.js';
 import { popMenu } from './menu.js';
 import { seatsFor, deskSettings, saveDeskSettings, STAGES, when, shortDay, web } from './desk.js';
+import { make } from './dom.js';
 
 const DAY = 864e5;
 // How far back Turns looks.
@@ -16,13 +17,6 @@ const TURNS = 5;
 // The Desk's data is asked for again after this long.
 const FRESH = 60000;
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text != null) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 
 export class ProjectPage {
   // els: { seat, facts, calls, crew, turns }. hooks: fetch(sinceIso) →

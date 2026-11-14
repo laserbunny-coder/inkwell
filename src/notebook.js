@@ -20,13 +20,13 @@ import { checkLineDecos, diffLineDecos } from './linedecos.js';
 import { isLoose, inWindow } from './loosemark.js';
 import { taskOf, chipLabel, setTask, unTask, isoOf } from './tasks.js';
 import { isTouch } from './device.js';
+import { pad } from './dates.js';
 
 // The notebook: a page for every day, plus named pages, all written as nested
 // lines. Lines can link to pages, days and chapters with [[, carry #tags, and
 // every page shows the lines elsewhere that link to it.
 
 const $ = (s) => document.querySelector(s);
-const pad = (n) => String(n).padStart(2, '0');
 
 export const isoDate = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 export const dayId = (iso) => `day-${iso}`;

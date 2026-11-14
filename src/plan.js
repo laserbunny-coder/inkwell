@@ -20,14 +20,8 @@ import { clockWord, freeLeft } from './calendar.js';
 import { drawCalendar } from './plancal.js';
 import { children, getEntry, isTrashed } from './db.js';
 import { media } from './device.js';
+import { make } from './dom.js';
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 const ICON = {
   play: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4 2.5v11l9-5.500z" fill="currentColor"/></svg>',
   pause: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4 3h3v10H4zM9 3h3v10H9z" fill="currentColor"/></svg>',

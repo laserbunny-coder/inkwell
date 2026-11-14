@@ -1,5 +1,6 @@
 import { getEntry, putEntries, byKind, CLAUDE } from './db.js';
 import { entry } from './model.js';
+import { plain as make } from './dom.js';
 
 // What Claude knows: the notes Claude keeps to find its way around Inkwell
 // (see the connector, supabase/functions/inkwell-mcp). They're out of sight
@@ -13,12 +14,6 @@ import { entry } from './model.js';
 //   written early each Monday (and at the start of a month) by the
 //   inkwell-digest function.
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  return el;
-};
 export const aboutId = (id) => `ab-${id}`;
 const KIND = { world: 'world', project: 'piece', page: 'page', chapter: 'chapter' };
 const shortDate = (t) => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });

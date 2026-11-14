@@ -1,5 +1,6 @@
 import { byKind, putEntries } from './db.js';
 import { entry, newId, noteTypes, saveNoteTypes, tagsIn } from './model.js';
+import { plain as make } from './dom.js';
 
 // Notes sit beside the text, each lined up with the top of its paragraph.
 // A note is its own entry whose parent is the paragraph it belongs to, so it
@@ -118,7 +119,6 @@ export class NotesLayer {
   commentCard(note) {
     const type = this.types.find((t) => t.id === note.type);
     const c = note.fields.comment;
-    const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
     const card = make('div', 'note note-comment');
     card.dataset.note = note.id;
     card.style.setProperty('--hat', type?.color || '#2E8B7A');

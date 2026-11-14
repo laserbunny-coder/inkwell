@@ -12,6 +12,7 @@
 
 import { setTask, addTask, span, minutesOf } from './tasks.js';
 import { isCompact } from './device.js';
+import { make } from './dom.js';
 
 export const SNAP = 15;
 const GUTTER = 52;
@@ -33,13 +34,6 @@ const barH = () => {
   return phoneish() && r && r.height && r.top < innerHeight && getComputedStyle(bar).visibility !== 'hidden' ? Math.max(0, Math.round(innerHeight - r.top)) : 0;
 };
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 export const hm = (min) => {
   const h = Math.floor(min / 60) % 24;
   const m = Math.round(min % 60);

@@ -14,6 +14,7 @@ import { getEntry, putEntries, byKind, isTrashed } from './db.js';
 import { editedAt } from './library.js';
 import { seatsFor, deskSettings, saveDeskSettings, DESK_ID, STAGES, tomorrowMorning } from './desk.js';
 import { loadTasks, planSettings, moveTask, addTask, stepsHome, isStretch, stretchWord, aheadPlan, isoOf, addDays, dateOf, dayWord, isRepeat, repeatWord } from './tasks.js';
+import { make } from './dom.js';
 
 const DAY = 864e5;
 const KEEP = 30; // messages kept for each conversation
@@ -23,13 +24,6 @@ const STARTERS = {
   one: ['What’s the next step here?', 'Is this week’s part of it realistic?', 'What’s in the way?']
 };
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text != null) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 const clip = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const ls = {
   get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } },

@@ -1,9 +1,9 @@
+import { plain as make } from './dom.js';
 // "Save to Inkwell" for a computer's browser, where Inkwell isn't in the share
 // menu: a bookmark that, clicked on any page (a post on X, a video, an
 // article), opens Inkwell with that page's address. It lands on today's page
 // the way a share from the phone does, and Claude's snapshot follows.
 
-const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
 export function bookmarklet(base) {
   const app = base.split('#')[0].split('?')[0];

@@ -6,14 +6,9 @@
 import './through.css';
 import { looseRecent, guess, reviewThreads, sortLine, unsort } from './loose.js';
 import { isoOf, dayWord } from './tasks.js';
+import { plain as make } from './dom.js';
 
 const root = document.documentElement;
-const make = (tag, cls, text) => {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text != null) e.textContent = text;
-  return e;
-};
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 // Which way a card leaves: up to a plan, down to wait, left into a project, right when skipped.

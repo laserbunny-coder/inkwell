@@ -1,5 +1,7 @@
 import { children, getEntry } from './db.js';
 import { addLine } from './capture.js';
+import { make } from './dom.js';
+import { pad, isoToday } from './dates.js';
 
 // The pages of the work, like DaVinci Resolve's: Gather, Shape, Write,
 // Revise, Make, Deliver, left to right, from the first spark to posted. Each
@@ -73,13 +75,6 @@ export function tabsFor(ctx) {
   return [{ id: 'overview', label: 'Overview', about: ctx.scope === 'world' ? 'The whole world at a glance' : 'This piece at a glance', n: 0 }, ...pages.map((t, i) => ({ ...t, n: i + 1 }))];
 }
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 
 export class PageStrip {
   // hooks: pick(tabId)
@@ -115,8 +110,6 @@ export class PageStrip {
 
 // ---------- the Today panel: today's lines, beside whatever you're doing ----------
 
-const pad = (n) => String(n).padStart(2, '0');
-const isoToday = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 
 export class TodayPanel {
   // hooks: open(lineId), openDay(), added(rows), focusBack()

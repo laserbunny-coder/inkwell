@@ -4,6 +4,7 @@ import { entry, tagsIn } from './model.js';
 import { GAP } from './order.js';
 import { addFile, isAudio } from './files.js';
 import { queueMeeting } from './meeting.js';
+import { pad } from './dates.js';
 
 // Share into Inkwell: from Chrome, Instagram, Pinterest or any Android app,
 // Share, then Inkwell. The phone hands the shared page, picture or text to
@@ -13,7 +14,6 @@ import { queueMeeting } from './meeting.js';
 // summary) when there's a connection, so it's still useful if the page
 // disappears.
 
-const pad = (n) => String(n).padStart(2, '0');
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 
 // What the service worker kept, waiting for the app.

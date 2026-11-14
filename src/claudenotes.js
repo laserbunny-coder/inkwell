@@ -1,6 +1,7 @@
 import { children, getEntry, putEntries } from './db.js';
 import { entry, newId } from './model.js';
 import { ensureNoteType, CLAUDE_TYPE } from './sharelink.js';
+import { plain as make } from './dom.js';
 
 // Claude's notes on a draft, in the three forms Michael asked for, and only
 // when he asks: margin notes in their own Claude category (one switch hides
@@ -93,7 +94,6 @@ export class TalkPanel {
   close() { this.el.hidden = true; document.body.classList.remove('talk-on'); }
 
   render() {
-    const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
     const el = this.el;
     el.replaceChildren();
     const head = make('div', 'bs-head');

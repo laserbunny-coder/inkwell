@@ -1,5 +1,6 @@
 import { getEntry } from './db.js';
 import { draftsOf, sideDoc, sourceLabel, pairChapters, alignBlocks, changeCount, sideText } from './drafts.js';
+import { plain as make } from './dom.js';
 
 // Comparing versions of a piece: two drafts, or the text then and now, side
 // by side with the scenes lined up and the changes softly marked; Claude can
@@ -7,7 +8,6 @@ import { draftsOf, sideDoc, sourceLabel, pairChapters, alignBlocks, changeCount,
 // only, beside the text you're writing: the old draft open while you write
 // the new one.
 
-const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const DAY = 864e5;
 
 // What can be picked as a side, as <select> options.

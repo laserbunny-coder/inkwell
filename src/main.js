@@ -84,6 +84,8 @@ import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
 import { openBringIn } from './bringin.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, nextLabel, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, dropOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
+import { make } from './dom.js';
+import { isoOf, isoToday } from './dates.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -1413,13 +1415,6 @@ function renameable(el, row, after) {
   el.addEventListener('blur', () => finish(true));
 }
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 const dot = (color) => { const d = make('span', 'dot'); d.style.background = color; return d; };
 
 async function areaPath(areaId, all) {
@@ -4463,7 +4458,6 @@ async function showSpace() {
 const timeNow = () => new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, ' ').toLowerCase();
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 function dayFrom(n) { const d = new Date(); d.setDate(d.getDate() + n); return d; }
-const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const shortDay = (d) => d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 
 function insertTime(ed) { ed.chain().focus().insertContent(`${timeNow()} `).run(); }
@@ -4597,10 +4591,6 @@ async function showTrash() {
   else { box.open = true; box.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 }
 
-function isoToday() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 // Everything you can go to: books, areas, chapters, pages and recent days.
 // Move to…: send the line you're on (and what's under it) to another page or day.

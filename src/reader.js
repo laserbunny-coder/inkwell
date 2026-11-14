@@ -1,6 +1,7 @@
 import './reader.css';
 import config from './config.js';
 import { media, isNarrow } from './device.js';
+import { plain as make } from './dom.js';
 
 // The page a share link opens: a piece or a bible page from Inkwell, to read
 // and comment on, with no account. Everything here comes from the copy the
@@ -8,7 +9,6 @@ import { media, isNarrow } from './device.js';
 // inkwell-share server function.
 
 const $ = (s) => document.querySelector(s);
-const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const token = decodeURIComponent(location.hash.replace(/^#/, '')).trim();
 
 // The writer, reading their own link on a browser where they're signed in to

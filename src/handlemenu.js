@@ -1,5 +1,6 @@
 import { keyLabel } from './keys.js';
 import { media } from './device.js';
+import { make } from './dom.js';
 // The menu behind every six-dot handle: paragraphs, script lines and notebook
 // lines all use it, so it looks and reads the same everywhere. Each menu runs
 // in the same order (work on this one, turn into, add above, move, delete).
@@ -16,13 +17,6 @@ import { media } from './device.js';
 const touch = media('touch');
 let open = null;
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 
 export const handleMenuIsOpen = () => !!open;
 

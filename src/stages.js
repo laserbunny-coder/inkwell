@@ -9,6 +9,7 @@ import { worldPromises } from './grid.js';
 import { elementsIn, ELEMENT_TYPES, typeOf, shootDays } from './production.js';
 import { shareId, commentsOn } from './sharelink.js';
 import { isLife, hasLineDrag, lineDragId, lineWords } from './pages.js';
+import { make } from './dom.js';
 
 // The pages that aren't one of the older views: Gather, Shape, Write, Revise,
 // Make, Deliver and Notes at the size of a world, the piece-sized Gather,
@@ -23,13 +24,6 @@ import { isLife, hasLineDrag, lineDragId, lineWords } from './pages.js';
 // The Drawer is ideas with no home yet (#drawer). Pulling one into a world
 // links it there rather than moving it: one idea can feed many things.
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch { /* full */ } };
 const plural = (n, w, many = `${w}s`) => `${n.toLocaleString()} ${n === 1 ? w : many}`;

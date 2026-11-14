@@ -5,6 +5,8 @@ import { GAP, bySort } from './order.js';
 import { descendants } from './outline.js';
 import { addTask } from './tasks.js';
 import { intoDrawer, outOfDrawer } from './stages.js';
+import { plain as make } from './dom.js';
+import { pad, isoOf } from './dates.js';
 
 // The day review. Claude reads a day's page and writes a few sentences on what
 // the day was like, then sorts what's on it into threads, each with a
@@ -29,8 +31,6 @@ const EVENING = 21;
 export const MULLING = 'pg_mulling';
 const MULLING_TITLE = 'Still thinking about';
 
-const pad = (n) => String(n).padStart(2, '0');
-const isoOf = (t) => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const shortDay = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); };
 
 // The day's lines, in order, with how deeply each sits.
@@ -350,7 +350,6 @@ async function addMulling(iso, path, it, text) {
 
 // ---------- on the day page ----------
 
-const make = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; };
 const LABEL = { task: 'Make it a task', mull: 'Keep thinking', drawer: 'Into the drawer', split: 'Split', let_go: 'Let go' };
 
 export class DayReview {

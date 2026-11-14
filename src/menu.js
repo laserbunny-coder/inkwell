@@ -1,15 +1,10 @@
+import { make } from './dom.js';
+export { make };
 // Small pieces shared by the Library, a book's home and the sidebar: a menu
 // that drops from a ⋯ button (or a right-click, or a long press on a phone),
 // a question to answer before anything big happens, and a note at the bottom
 // of the screen with an Undo.
 
-export const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 
 let openMenu = null;
 export function closeMenu() { openMenu?.remove(); openMenu = null; }

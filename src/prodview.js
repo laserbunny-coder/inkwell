@@ -14,6 +14,7 @@ import {
   viewSlots, toolIdsFor, toolIdsOf, ASPECTS, RATES, rulesOf, genOf, secsOf, runsOf,
   PRICES_ID, priceList, priceOf, pricesChecked, estimate, spent, money, toEdl, cutEvents
 } from './production.js';
+import { make } from './dom.js';
 
 // The production view of a piece (Ctrl + Shift + S): its scenes, each with
 // the elements it uses and its shots; a storyboard of the stills picked;
@@ -21,13 +22,6 @@ import {
 // plot grid, nothing here is a copy: a scene is the scene heading in the
 // script, the kit is the world's bible pages.
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch { /* full */ } };
 const hidden = () => new Set(JSON.parse(pref('prodHide', '[]')));

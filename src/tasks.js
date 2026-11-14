@@ -28,15 +28,13 @@
 import { getEntry, putEntries, tasked, children, isTrashed } from './db.js';
 import { entry, newId, tagsIn } from './model.js';
 import { GAP } from './order.js';
+import { pad, isoOf, dateOf, addDays } from './dates.js';
+export { isoOf, dateOf, addDays };
 
 export const TASKS_PAGE = 'page-tasks';
 export const PLAN_ID = 'settings-plan';
 export const FREE_HOURS = 45;
 
-const pad = (n) => String(n).padStart(2, '0');
-export const isoOf = (d = new Date()) => { const x = new Date(d); return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`; };
-export const dateOf = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
-export const addDays = (iso, n) => { const d = dateOf(iso); d.setDate(d.getDate() + n); return isoOf(d); };
 // The week a day is in, Monday first.
 export const weekOf = (iso) => {
   const d = dateOf(iso);

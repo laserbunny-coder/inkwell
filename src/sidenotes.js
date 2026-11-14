@@ -8,13 +8,8 @@ import './beside.css';
 import { byKind, children, getEntry } from './db.js';
 import { noteTypes } from './model.js';
 import { bySort } from './order.js';
+import { plain as make } from './dom.js';
 
-const make = (tag, cls, text) => {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text != null) e.textContent = text;
-  return e;
-};
 const short = (s, n) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
 // The paragraphs of a chapter in reading order, however deep they sit.

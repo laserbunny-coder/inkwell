@@ -1,5 +1,6 @@
 // Side by side: other places open in panes beside the main view.
 import { media } from './device.js';
+import { plain as make } from './dom.js';
 //
 // A pane is Inkwell itself, loaded again in a frame (index.html?pane=<id>)
 // with its chrome hidden, so any view works in a pane and can be written in.
@@ -30,7 +31,6 @@ const MAX_SHOWN = 3;
 const ALONE = 0.62;
 const SPINE = 38;
 const LAYOUT = 'panes';
-const make = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; };
 
 // The host, from any window of this family (null when there's none).
 export function host() {

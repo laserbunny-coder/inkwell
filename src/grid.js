@@ -4,6 +4,7 @@ import { placeSorts } from './order.js';
 import { SECTION_NAMES, sectionName } from './schema.js';
 import { bookType, hasManuscript, kindName, worldOf, piecesIn } from './library.js';
 import { media } from './device.js';
+import { plain as make } from './dom.js';
 
 // The plot grid: the manuscript shown as a table, the way Rowling planned
 // with hers. Rows are the story's own units (acts, chapters, scenes, a
@@ -297,12 +298,6 @@ export async function placeAmong(id, parentId, kind, { before = null, after = nu
 
 // ---------- the view ----------
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  return el;
-};
 const LEVEL_KEY = (id) => `gridLevel:${id}`;
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch { /* full */ } };

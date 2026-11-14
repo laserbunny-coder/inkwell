@@ -1,3 +1,4 @@
+import { plain as make } from './dom.js';
 // A Woven script's look: the faint line, the names, the dialogue and the
 // scene titles, set per script so each one can feel like its genre (red
 // brush-stroke titles for a kung fu comedy, a typewriter for noir). It only
@@ -105,7 +106,6 @@ export function applyLook(root, look) {
   root.classList.toggle('wv-tleft', l.titlePos === 'left');
 }
 
-const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 
 // The "Look" part of the Aa panel for a Woven script.
 // hooks: { look(), save(look), ask(text) → Promise<look|null>, canAsk() }

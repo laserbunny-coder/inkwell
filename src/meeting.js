@@ -6,6 +6,7 @@ import { setFileNote } from './filenode.js';
 import { withTag } from './capture.js';
 import { placeVoice } from './voice.js';
 import { speechTerms } from './terms.js';
+import { pad, isoOf } from './dates.js';
 
 // Meetings: a recording of a meeting (Samsung's Voice Recorder shared into
 // Inkwell, or a file added with Ctrl+K on the desk) lands on today's page,
@@ -17,8 +18,6 @@ import { speechTerms } from './terms.js';
 // A shared recording with only one voice in it is an idea said out loud, so
 // it's written up like a Capture instead.
 
-const pad = (n) => String(n).padStart(2, '0');
-const isoOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const clock = (d = new Date()) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, ' ').toLowerCase();
 const blank = { done: false, gather: null, gathered: null, mirror: null };
 const fileNode = (row) => ({ type: 'file', attrs: { id: row.id, name: row.title, type: row.fields.type, size: row.fields.size, duration: row.fields.duration || 0 } });

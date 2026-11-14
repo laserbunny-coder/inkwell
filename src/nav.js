@@ -1,3 +1,4 @@
+import { make } from './dom.js';
 // Getting around: always show where you are, and one tap on it gets you
 // anywhere.
 //
@@ -12,13 +13,6 @@
 const RECENT = 'recentPlaces';
 const KEEP = 8;
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 
 // One key per place, so the same chapter or page shows once in the list.
 export function placeKey(p) {
