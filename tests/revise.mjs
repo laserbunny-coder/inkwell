@@ -7,6 +7,7 @@
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 import { alignBlocks, pairChapters, likeness, runsOf, changeCount } from '../src/drafts.js';
 import { hashOf, newToken, linkFor } from '../src/sharelink.js';
@@ -152,7 +153,7 @@ put({ id: 'li_2', kind: 'line', parent_id: 'li_1', sort: 1024, text: 'Hates rain
 put({ id: 'day-2026-10-20', kind: 'day', title: '2026-10-20' });
 put({ id: 'li_day', kind: 'line', parent_id: 'day-2026-10-20', sort: 1024, text: 'My secret journal line', content: [{ type: 'text', text: 'My secret journal line' }], fields: { done: false } });
 
-const browser = await chromium.launch();
+const browser = pageFirst(await chromium.launch());
 async function device(opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, colorScheme: 'dark', ...opts });
   await ctx.exposeFunction('__remote', remote);

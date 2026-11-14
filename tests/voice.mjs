@@ -11,6 +11,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 
 const require = createRequire(import.meta.url);
@@ -78,7 +79,7 @@ const wav = (() => {
 const wavPath = join(dir, 'Walk by the river.wav');
 writeFileSync(wavPath, wav);
 
-const browser = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
+const browser = pageFirst(await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] }));
 const ctx = await browser.newContext({ permissions: ['microphone', 'clipboard-read', 'clipboard-write'], colorScheme: 'dark', viewport: { width: 1280, height: 860 } });
 await ctx.exposeFunction('__remote', remote);
 await ctx.addInitScript(fake);

@@ -268,7 +268,7 @@ try {
   });
 
   await check('on a phone the events fit, and nothing spills', async () => {
-    const phone = await open(undefined, { ...devices['Pixel 7'] });
+    const phone = await open(undefined, { ...devices['Pixel 7'], todayPage: false });
     await day(phone, '2026-11-09');
     await phone.waitForSelector('#plan .pl-ev');
     await add(phone, 'Cut the trailer 2h');
@@ -277,7 +277,7 @@ try {
     assert.ok(wide <= 1, `the page spills ${wide}`);
     await shot(phone, 'calendar-phone');
     await go(phone, { view: 'plan', tab: 'week' });
-    await phone.waitForSelector('.pw-ev');
+    await phone.waitForSelector('.pw-rows .pw-row');
     const wide2 = await phone.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     assert.ok(wide2 <= 1, `the week spills ${wide2}`);
     assert.deepEqual(phone.errors, []);

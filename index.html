@@ -212,7 +212,7 @@
       </section>
       <section class="wp-part" id="wh-steps"></section>
       <div class="wp-daybook" id="wh-task-box" hidden>
-        <input type="text" id="wh-task" class="st-input wh-task" placeholder="Call the contractor about the cabinets" aria-label="A task for Daybook">
+        <input type="text" id="wh-task" class="st-input wh-task" placeholder="Call the contractor about the cabinets" aria-label="A task for this project">
         <div class="hint">Enter sends this one to your Daybook inbox, with a link back here.</div>
       </div>
       <section class="wp-part" id="wh-next-box" hidden>
@@ -395,7 +395,9 @@
     <label class="switch"><input type="checkbox" data-show="nudge"> After 9 pm, a reminder on today to review it</label>
     <label class="switch"><input type="checkbox" data-show="marks"> Link and tag ideas in the day review</label>
     <label class="switch"><input type="checkbox" data-show="tidy"> Tidy pass reminder on Today</label>
-    <label class="switch"><input type="checkbox" data-show="plan"> The plan on top of a day’s page</label>
+    <label class="switch"><input type="checkbox" data-show="plan"> Show the plan on Today (and on a day’s page)</label>
+    <label class="switch tp-wide"><input type="checkbox" data-show="planside"> Plan at the side of the page on a wide screen (off: on top, one column) <span class="keys">Alt+P</span></label>
+    <label class="switch"><input type="checkbox" data-show="foldearlier"> Fold earlier days into one line (more than three)</label>
     <label class="switch"><input type="checkbox" data-show="took"> “How long did it take?” when you tick a task</label>
     <label class="switch"><input type="checkbox" data-show="taskchips"> A task’s day and length after its words</label>
     <label class="switch"><input type="checkbox" data-show="taskgrip"> Six dots on a task in the plan, to show it can be moved</label>
@@ -404,11 +406,10 @@
     <label class="switch"><input type="checkbox" data-show="deskread"> Claude’s one-line read on the Desk</label>
     <label class="switch"><input type="checkbox" data-show="deskcount"> How many things need you, beside Desk</label>
     <label class="switch"><input type="checkbox" data-show="closedtag"> “Thread closed” on calls from closed threads, and their filter in History</label>
-    <label class="switch"><input type="checkbox" data-show="aheadhours"> Each week’s hours at the top of Weeks ahead</label>
+    <label class="switch"><input type="checkbox" data-show="aheadhours"> Each week’s hours at the top of Calendar’s six weeks</label>
     <label class="switch"><input type="checkbox" data-show="areahours"> Each area’s hours under the week</label>
     <label class="switch"><input type="checkbox" data-show="calendar"> Your Google Calendar’s events in the plan</label>
     <label class="switch"><input type="checkbox" data-show="woven"> Calendar events among the tasks, at their place in the day (off: apart, on top)</label>
-    <label class="switch"><input type="checkbox" data-show="planview"> List | Calendar beside the plan’s name</label>
     <label class="switch"><input type="checkbox" data-show="estimates"> Time estimates: how long each task takes, and the hours left today</label>
     <label class="switch"><input type="checkbox" data-show="hoursleft"> “Left today” beside today’s plan</label>
     <label class="switch"><input type="checkbox" data-show="repeatmark"> The ↻ after a task that repeats</label>

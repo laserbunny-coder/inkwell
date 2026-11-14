@@ -6,6 +6,7 @@
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 import { promiseState } from '../src/grid.js';
 
@@ -103,7 +104,7 @@ l('pp_6', 'Arrows.', 'action');
 put({ id: 'pr_s1', kind: 'project', parent_id: 'wd_monks', title: 'Season One', area_id: 'area-writing', sort: 3, fields: { type: 'lines', label: 'Season' } });
 for (const [i, t] of ['Pilot', 'The Hive', 'Siege'].entries()) put({ id: `pr_e${i + 1}`, kind: 'project', parent_id: 'pr_s1', title: t, area_id: 'area-writing', sort: (i + 1) * 1024, fields: { type: 'lines', label: 'Episode' } });
 
-const browser = await chromium.launch();
+const browser = pageFirst(await chromium.launch());
 async function device(opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, colorScheme: 'dark', ...opts });
   await ctx.exposeFunction('__remote', remote);

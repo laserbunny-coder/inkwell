@@ -4,6 +4,7 @@
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 import { thin, compare, words } from '../src/history.js';
 
@@ -36,7 +37,7 @@ const fake = () => {
     subscribe() {}, unsubscribe() {}
   };
 };
-const browser = await chromium.launch();
+const browser = pageFirst(await chromium.launch());
 async function device(viewport = { width: 1300, height: 850 }) {
   const ctx = await browser.newContext({ viewport, hasTouch: viewport.width < 700 });
   await ctx.exposeFunction('__remote', remote);

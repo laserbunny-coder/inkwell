@@ -71,7 +71,7 @@ export function drawAhead(plan) {
 
   const head = make('header', 'pl-top');
   const left = make('div');
-  left.append(make('div', 'pl-eyebrow', 'Six weeks'), make('h1', '', 'Weeks ahead'));
+  left.append(make('div', 'pl-eyebrow', 'Six weeks, a lane for each project'), make('h1', '', 'Calendar'));
   const side = make('div', 'pl-side');
   if (plan.hooks.talk?.()) {
     const b = make('button', 'ghost-btn ah-talk', '✦ Plan it out with Claude');
@@ -99,7 +99,8 @@ export function drawAhead(plan) {
     open.dataset.act = 'ahead-week';
     open.dataset.week = w.iso;
     open.title = w.now ? 'This week: open it day by day' : `The week of ${long(w.iso, { month: 'long', day: 'numeric' })}: open it day by day`;
-    h.append(open, hrs, track);
+    // Hours go with time estimates: with them off, only the weeks.
+    h.append(open, ...(plan.estimates ? [hrs, track] : []));
     grid.append(h);
   });
 
@@ -181,7 +182,7 @@ export function drawAhead(plan) {
   const parts = [head, wrap];
   if (!model.lanes.length) parts.push(make('p', 'pl-note', 'Nothing is on stage. A project gets a lane here once it’s on stage at the Desk.'));
   else {
-    if (model.note) parts.push(make('p', 'pl-note ah-note', model.note));
+    if (model.note && plan.estimates) parts.push(make('p', 'pl-note ah-note', model.note));
     if (!model.lanes.some((l) => l.bars.length || l.dates.length || l.loose.length)) parts.push(make('p', 'pl-note', 'Click a week in a project’s lane to say what happens then.'));
   }
   sheet.replaceChildren(...parts);

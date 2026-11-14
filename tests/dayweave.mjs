@@ -170,7 +170,7 @@ try {
     assert.deepEqual(page.errors, []);
   });
 
-  const phone = await open({ width: 412, height: 915 }, { hasTouch: true, isMobile: true });
+  const phone = await open({ width: 412, height: 915 }, { hasTouch: true, isMobile: true, todayPage: false });
   await check('phone: the events sit in the list there too, and nothing spills', async () => {
     await go(phone, { view: 'notebook', pageId: 'day-2026-11-09' });
     await add(phone, 'Charge the camera batteries');

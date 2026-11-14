@@ -4,6 +4,7 @@
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 
 const require = createRequire(import.meta.url);
@@ -32,7 +33,7 @@ const fake = () => {
   };
 };
 
-const browser = await chromium.launch();
+const browser = pageFirst(await chromium.launch());
 let failed = 0;
 async function check(name, fn) {
   try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message}`); }

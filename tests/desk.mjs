@@ -194,11 +194,26 @@ try {
     if (SHOTS) { await still(page); await page.screenshot({ path: `${SHOTS}/desk.png` }); await page.screenshot({ path: `${SHOTS}/desk-full.png`, fullPage: true }); }
   });
 
-  await check('a north star is written right on the Desk and kept on the project', async () => {
+  await check('a north star shows on its Desk card once written (no empty prompt there), and can be changed right on the card', async () => {
     const nb = page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: 'The Ninja Bunch' }) });
-    assert.equal(await nb.locator('.dk-star').getAttribute('data-ph'), 'North star: what is this for?');
+    assert.equal(await nb.locator('.dk-star').count(), 0, 'no “what is this for?” on the card: that lives on the project’s page');
+    // Written on the project's page.
+    await page.evaluate(() => new Promise((res) => {
+      const r = indexedDB.open('writing');
+      r.onsuccess = () => {
+        const st = r.result.transaction('entries', 'readwrite').objectStore('entries');
+        const q = st.getAll();
+        q.onsuccess = () => { const w = q.result.find((x) => x.kind === 'world' && x.title === 'The Ninja Bunch'); st.put({ ...w, fields: { ...w.fields, star: 'Reels first.' }, updated_at: Date.now() }); st.transaction.oncomplete = () => res(); };
+      };
+    }));
+    await page.evaluate(() => { history.pushState({ view: 'library' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'library' } })); });
+    await sleep(300);
+    await page.evaluate(() => { history.pushState({ view: 'desk' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'desk' } })); });
+    await nb.locator('.dk-star').waitFor();
+    assert.equal(await nb.locator('.dk-star').innerText(), 'Reels first.');
     await nb.locator('.dk-star').click();
-    await page.keyboard.type('Reels first. One a week, each one funnier than the last.');
+    await page.keyboard.press('End');
+    await page.keyboard.type(' One a week, each one funnier than the last.');
     await page.keyboard.press('Enter');
     await sleep(300);
     const w = (await all(page)).find((r) => r.kind === 'world' && r.title === 'The Ninja Bunch');
