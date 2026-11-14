@@ -150,30 +150,26 @@ export class Frame {
     this.history.title = 'History: every Claude thread, newest first';
     this.deskSwitch.append(this.dkPill, this.onStage, this.history);
     this.deskSwitch.hidden = true;
-    // Today from four distances: the day, the week, the weeks ahead, and looking back.
+    // Today in three words: Today (the page and its plan), Plan (one list
+    // from today outward) and Calendar (Day, Week, Six weeks). Alt + 1, 2, 3.
     this.todaySwitch = make('div', 'place-switch today-switch');
     this.todaySwitch.setAttribute('role', 'group');
     this.todaySwitch.setAttribute('aria-label', 'Views of Today');
     this.tdPill = make('span', 'switch-pill');
     this.tdPill.setAttribute('aria-hidden', 'true');
-    this.dayBtn = make('button', 'tb-btn', 'Day');
+    this.dayBtn = make('button', 'tb-btn', 'Today');
     this.dayBtn.dataset.cmd = 'today';
-    this.dayBtn.title = 'Day: today’s plan on top of today’s page';
-    this.whenBtn = make('button', 'tb-btn', 'What’s when');
-    this.whenBtn.dataset.cmd = 'when';
-    this.whenBtn.title = 'What’s when: today, tomorrow, this week, next week, this month and later, on one page';
-    this.weekBtn = make('button', 'tb-btn', 'Week');
-    this.weekBtn.dataset.cmd = 'week';
-    this.weekBtn.title = 'Week: seven days, and what isn’t on a day yet';
-    this.aheadBtn = make('button', 'tb-btn', 'Weeks ahead');
-    this.aheadBtn.dataset.cmd = 'ahead';
-    this.aheadBtn.title = 'Weeks ahead: six weeks, a lane for each project';
-    this.paceBtn = make('button', 'tb-btn', 'Pace');
-    this.paceBtn.dataset.cmd = 'pace';
-    this.paceBtn.title = 'Pace: what you planned against what it really took';
-    // Alt + 1 to 4 in Today, said quietly beside each name.
-    // (Alt + 1 to 4 for these are held while the planning views are rethought.)
-    this.todaySwitch.append(this.tdPill, this.dayBtn, this.whenBtn, this.weekBtn, this.aheadBtn, this.paceBtn);
+    this.dayBtn.dataset.key = 'Alt+1';
+    this.dayBtn.title = 'Today: today’s page with its plan (Alt + 1)';
+    this.planBtn = make('button', 'tb-btn', 'Plan');
+    this.planBtn.dataset.cmd = 'plan';
+    this.planBtn.dataset.key = 'Alt+2';
+    this.planBtn.title = 'Plan: today, tomorrow, this week, next week, this month, later and not planned, in one list (Alt + 2)';
+    this.calBtn = make('button', 'tb-btn', 'Calendar');
+    this.calBtn.dataset.cmd = 'calendar';
+    this.calBtn.dataset.key = 'Alt+3';
+    this.calBtn.title = 'Calendar: the plan on time, as a day, a week or six weeks (Alt + 3, again for the next zoom)';
+    this.todaySwitch.append(this.tdPill, this.dayBtn, this.planBtn, this.calBtn);
     this.todaySwitch.hidden = true;
     // Page tabs are redrawn each time, so their highlight lives beside them and slides.
     this.tabsPill = make('span', 'tabs-pill');
@@ -275,8 +271,9 @@ export class Frame {
     const day = v === 'plan' || (v === 'notebook' && !!this.hooks.onDay?.());
     this.todaySwitch.hidden = !day;
     if (day) {
-      const at = v === 'plan' ? (this.last?.tab === 'pace' ? this.paceBtn : this.last?.tab === 'ahead' ? this.aheadBtn : this.last?.tab === 'when' ? this.whenBtn : this.weekBtn) : this.dayBtn;
-      for (const b of [this.dayBtn, this.whenBtn, this.weekBtn, this.aheadBtn, this.paceBtn]) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
+      const tab = this.last?.tab;
+      const at = v === 'plan' ? (tab === 'plan' || tab === 'when' || tab === 'day' ? this.planBtn : this.calBtn) : this.dayBtn;
+      for (const b of [this.dayBtn, this.planBtn, this.calBtn]) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
     }
     // The Library is one room: its word in the rail stays lit on the Drawer and Tags too.
     const libBtn = document.getElementById('library-toggle');

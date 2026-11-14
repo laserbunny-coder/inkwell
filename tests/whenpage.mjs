@@ -1,7 +1,7 @@
-// What's when: loose time (a week, a month, later), one When picker, the
-// planning page with its six headings, and lines pulled in from a project
-// (beside on a computer, the bottom half on a phone), which also feed Week and
-// Weeks ahead.
+// Plan: loose time (a week, a month, later), one When picker, the outline
+// with its headings (Today to Not planned), and lines pulled in from a project
+// (beside on a computer, the bottom half on a phone), which also feed
+// Calendar's Week and Six weeks.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -67,6 +67,14 @@ const get = async (p, id) => (await all(p)).find((r) => r.id === id);
 const still = (p) => p.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {}))));
 const under = (p, bucket) => p.locator(`.ww-sec[data-bucket="${bucket}"] .pl-task .pl-words`).allInnerTexts();
 const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: `${SHOTS}/${name}.png` }); };
+// Calendar, then one of its zooms.
+const TAB = { Day: 'calday', Week: 'week', 'Six weeks': 'ahead', Pace: 'pace' };
+const zoomTo = async (p, label) => {
+  if (!(await p.locator('#plan-sheet .pl-zoom').isVisible().catch(() => false))) await p.locator('.today-switch button[data-cmd="calendar"]').click();
+  await p.waitForSelector('#plan-sheet .pl-zoom');
+  await p.locator(`#plan-sheet .pl-zoom button[data-tab="${TAB[label]}"]`).click();
+  await p.waitForFunction((l) => document.querySelector('#plan-sheet .pl-zoom [aria-pressed="true"]')?.textContent === l, label);
+};
 const centre = async (loc) => { const b = await loc.boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
 
 let failed = 0;
@@ -84,7 +92,8 @@ async function open(opts) {
   await page.goto(URL);
   await page.waitForFunction(() => document.documentElement.dataset.started === '1');
   await page.evaluate(seed, SEED);
-  await page.evaluate(() => { localStorage.setItem('lastWorld', 'wd_nb'); });
+  // Every heading of Plan open but Not planned (a new device opens Today alone).
+  await page.evaluate(() => { localStorage.setItem('lastWorld', 'wd_nb'); localStorage.setItem('planOpen', JSON.stringify(['today', 'tomorrow', 'week', 'next', 'month', 'later'])); });
   await page.reload();
   await page.waitForFunction(() => document.documentElement.dataset.started === '1');
   return { ctx, page };
@@ -137,18 +146,20 @@ try {
   // ---------- a computer ----------
   const { page } = await open({ viewport: { width: 1440, height: 900 } });
 
-  await check('the switch at the top is Day, What’s when, Week, Weeks ahead, Pace, and What’s when has six headings with counts', async () => {
+  await check('the switch at the top is Today, Plan, Calendar, and Plan has its headings with counts', async () => {
     await page.evaluate(() => document.querySelector('#view-toggle').click());
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
-    assert.deepEqual(await page.locator('.today-switch button').allInnerTexts(), ['Day', 'What’s when', 'Week', 'Weeks ahead', 'Pace']);
-    await page.locator('.today-switch button', { hasText: 'What’s when' }).click();
+    assert.deepEqual(await page.locator('.today-switch button').allInnerTexts(), ['Today', 'Plan', 'Calendar']);
+    await page.locator('.today-switch button', { hasText: 'Plan' }).click();
     await page.waitForSelector('.ww-sec');
     await still(page);
-    assert.deepEqual(await page.locator('.ww-name').allInnerTexts(), ['Today', 'Tomorrow', 'This week', 'Next week', 'This month', 'Later']);
+    assert.deepEqual(await page.locator('#plan-sheet .ww-name').allInnerTexts(), ['Today', 'Tomorrow', 'This week', 'Next week', 'This month', 'Later', 'Not planned']);
     assert.deepEqual(await under(page, 'today'), ['Call the printer', 'Write Kenji’s verse'], 'carried over first; Nate’s task isn’t on your page');
     assert.deepEqual(await under(page, 'week'), ['Old loose one'], 'a week gone by rolls on quietly');
     assert.deepEqual(await under(page, 'next'), ['Rough cut Reel 2', 'Send boards to Nate']);
-    assert.equal(await page.locator('.ww-sec[data-bucket="next"] .ww-date').innerText(), 'Tue 17', 'an exact day says its date');
+    assert.equal(await page.locator('.ww-sec[data-bucket="next"] .pl-task', { hasText: 'Send boards' }).locator('.ww-date').innerText(), 'Tue 17', 'an exact day says its date');
+    assert.equal(await page.locator('.ww-sec[data-bucket="next"] .pl-task', { hasText: 'Rough cut' }).locator('.ww-date').innerText(), 'any day', 'none says any day');
+    assert.equal(await page.locator('.ww-none.empty').count(), 1, 'Not planned: every task here has a time, and plain steps aren’t tasks, so a thin line that still takes a drop');
     assert.deepEqual(await under(page, 'month'), ['Color pass']);
     assert.deepEqual(await under(page, 'later'), ['Song for Reel 4']);
     assert.equal(await page.locator('.ww-sec[data-bucket="next"] .ww-n').innerText(), '2');
@@ -172,11 +183,13 @@ try {
     await shot(page, 'd-when-pull');
   });
 
-  await check('drag a plain line from the project onto “Next week”: it becomes a task loose in next week, and stays in its project', async () => {
+  await check('drag a plain line from the project onto “Next week”, folded: it becomes a task loose in next week, stays in its project, and the heading opens', async () => {
+    await page.locator('.ww-sec[data-bucket="next"] .ww-fold').click();
+    await page.waitForSelector('.ww-sec[data-bucket="next"].folded');
     const from = await centre(page.locator('.pu-line[data-id="st_1"] .pu-words'));
     const to = await centre(page.locator('.ww-sec[data-bucket="next"] .ww-h'));
     await drag(page, from, to);
-    await page.waitForFunction(() => [...document.querySelectorAll('.ww-sec[data-bucket="next"] .pl-words')].some((x) => x.textContent === 'Pick the stills'));
+    await page.waitForFunction(() => [...document.querySelectorAll('.ww-sec[data-bucket="next"]:not(.folded) .pl-words')].some((x) => x.textContent === 'Pick the stills'));
     const r = await get(page, 'st_1');
     assert.equal(r.parent_id, 'steps-wd_nb');
     assert.deepEqual(r.fields.task.span, { kind: 'week', start: '2026-11-16' });
@@ -262,15 +275,15 @@ try {
   });
 
   await check('a loose task is on no day’s plan: today’s page shows only today’s and the carried-over one', async () => {
-    await page.getByRole('button', { name: 'Day', exact: true }).click();
+    await page.locator('.today-switch button', { hasText: 'Today' }).click();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
     await page.waitForSelector('#plan .pl-task');
     const words = await page.locator('#plan .pl-task .pl-words').allInnerTexts();
     assert.deepEqual(words, ['Call the printer', 'Write Kenji’s verse']);
   });
 
-  await check('Week: from Week alone, one press and one drag puts a project step on a day; the tray is “Any day this week”', async () => {
-    await page.getByRole('button', { name: 'Week', exact: true }).click();
+  await check('Week: from Calendar’s week, one press and one drag puts a project step on a day; the tray is “Any day this week”', async () => {
+    await zoomTo(page, 'Week');
     await page.waitForSelector('.pw-week');
     assert.equal(await page.locator('.pw-tray .pl-label').innerText(), 'ANY DAY THIS WEEK');
     assert.deepEqual(await page.locator('.pw-tray .pw-task .pw-t').allInnerTexts(), ['Old loose one'], 'no task without a When is listed');
@@ -292,8 +305,8 @@ try {
     assert.deepEqual((await get(page, 'st_9')).fields.task.span, { kind: 'week', start: '2026-11-09' });
   });
 
-  await check('Weeks ahead: a task loose in a week is a quiet mark in its week; a drop on a week gives it that week', async () => {
-    await page.locator('.today-switch button', { hasText: 'Weeks ahead' }).click();
+  await check('Six weeks: a task loose in a week is a quiet mark in its week; a drop on a week gives it that week', async () => {
+    await zoomTo(page, 'Six weeks');
     await page.waitForSelector('.ah');
     assert.ok(await page.locator('.pull').isVisible(), 'the project pane stays open from view to view');
     const mark = page.locator('.ah-loose', { hasText: 'Rough cut Reel 2' });
@@ -319,7 +332,7 @@ try {
   });
 
   await check('Ctrl + click on a project in the rail opens it beside a planning view; right-click offers Open beside', async () => {
-    await page.getByRole('button', { name: 'Week', exact: true }).click();
+    await zoomTo(page, 'Week');
     await page.waitForSelector('.pw-week');
     await page.locator('.rail-project', { hasText: 'Acro ads' }).click({ modifiers: ['Control'] });
     await page.waitForFunction(() => document.querySelector('.pu-name')?.textContent === 'Acro ads');
@@ -354,13 +367,13 @@ try {
   const cdp = await pctx.newCDPSession(phone);
   const touch = async (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
 
-  await check('phone: What’s when, and Pull from a project opens the project in the bottom half', async () => {
+  await check('phone: Plan, and From a project opens the project in the bottom half', async () => {
     await phone.evaluate(() => document.querySelector('#view-toggle').click());
     await phone.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
-    await phone.waitForSelector('.tp-switch .pl-switch [data-cmd="when"]');
-    await phone.evaluate(() => document.querySelector('.tp-switch .pl-switch [data-cmd="when"]').click());
-    await phone.waitForSelector('.ww-sec');
-    await phone.locator('.pl-pull:visible').click();
+    await phone.waitForSelector('.tp-switch .pl-switch [data-cmd="today-plan"]');
+    await phone.evaluate(() => document.querySelector('.tp-switch .pl-switch [data-cmd="today-plan"]').click());
+    await phone.waitForSelector('#plan .ww-sec');
+    await phone.locator('#plan .pl-from-project:visible').click();
     await phone.waitForSelector('.pull:not([hidden]) .pu-line');
     assert.ok(await phone.evaluate(() => document.documentElement.classList.contains('pulling-phone')));
     const b = await phone.locator('.pull').boundingBox();
@@ -369,13 +382,28 @@ try {
     await shot(phone, 'p-when-split');
   });
 
-  await check('phone: slide a line up by its dots; the top folds into six places; let go on “This week”', async () => {
+  await check('phone: a quick swipe on a step scrolls the project and never moves it', async () => {
+    const w = await centre(phone.locator('.pu-line[data-id="st_1"] .pu-words'));
+    await touch('touchStart', w.x, w.y);
+    for (let k = 1; k <= 4; k++) { await touch('touchMove', w.x, w.y - k * 25); await sleep(10); }
+    await touch('touchEnd', 0, 0);
+    await sleep(400);
+    assert.ok(await phone.evaluate(() => document.querySelector('.pu-body').scrollTop > 0), 'the project scrolled');
+    assert.equal(await phone.locator('.pull-zones').count(), 0);
+    assert.equal((await get(phone, 'st_1')).fields.task, undefined);
+    await phone.evaluate(() => { document.querySelector('.pu-body').scrollTop = 0; });
+    await sleep(200);
+  });
+
+  await check('phone: slide a line up by its dots; the top folds into seven places, all in sight; let go on “This week”', async () => {
     const g = await centre(phone.locator('.pu-line[data-id="st_1"] .pu-grip'));
     await touch('touchStart', g.x, g.y);
     await sleep(40);
     for (let k = 1; k <= 6; k++) { await touch('touchMove', g.x, g.y - k * 20); await sleep(30); }
     await phone.waitForSelector('.pull-zones .pz');
-    assert.deepEqual(await phone.locator('.pull-zones .pz-l').allInnerTexts(), ['Today', 'Tomorrow', 'This week', 'Next week', 'This month', 'Later']);
+    assert.deepEqual(await phone.locator('.pull-zones .pz-l').allInnerTexts(), ['Today', 'Tomorrow', 'This week', 'Next week', 'This month', 'Later', 'Not planned']);
+    const pane = await phone.locator('.pull').boundingBox();
+    for (const b of await phone.locator('.pull-zones .pz').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON()))) assert.ok(b.top >= 0 && b.bottom <= pane.y + 1 && b.height >= 30, `a place at ${Math.round(b.top)} to ${Math.round(b.bottom)}, the project from ${Math.round(pane.y)}`);
     const z = await centre(phone.locator('.pz[data-value="week"]'));
     for (let k = 1; k <= 8; k++) { await touch('touchMove', g.x, g.y - 120 + ((z.y + 10 - (g.y - 120)) * k) / 8); await sleep(30); }
     assert.ok(await phone.locator('.pz[data-value="week"].pull-over').count(), 'the place under the finger lights up');
@@ -402,9 +430,11 @@ try {
     assert.equal((await get(phone, 'st_9')).fields.task.day, '2026-11-14');
   });
 
-  await check('phone: Week folds into seven days and “Any day this week” while a line slides up', async () => {
-    await phone.evaluate(() => document.querySelector('.pl-switch [data-cmd="week"]').click());
-    await phone.waitForSelector('.pw-week');
+  await check('phone: Calendar’s week folds into seven days and “Any day this week” while a line slides up', async () => {
+    await phone.evaluate(() => document.querySelector('.tp-switch .pl-switch [data-cmd="calendar"]').click());
+    await phone.waitForSelector('.pl-zoom');
+    await phone.evaluate(() => document.querySelector('.pl-zoom [data-tab="week"]').click());
+    await phone.waitForSelector('.pw-rows');
     assert.ok(await phone.locator('.pull').isVisible());
     await phone.locator('.pu-line[data-id="st_2"]').scrollIntoViewIfNeeded();
     const g = await centre(phone.locator('.pu-line[data-id="st_2"] .pu-grip'));
@@ -415,7 +445,7 @@ try {
     const z = await centre(phone.locator('.pz[data-value="2026-11-15"]'));
     for (let k = 1; k <= 6; k++) { await touch('touchMove', g.x, g.y - 120 + ((z.y + 10 - (g.y - 120)) * k) / 6); await sleep(30); }
     await touch('touchEnd', 0, 0);
-    await phone.waitForFunction(() => [...document.querySelectorAll('.pw-day[data-day="2026-11-15"] .pw-t')].some((x) => x.textContent === 'Board Reel 3'));
+    await phone.waitForFunction(() => /Board Reel 3/.test(document.querySelector('.pw-day[data-day="2026-11-15"] .pw-rt')?.textContent || ''));
     assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth <= 360), true, 'no sideways scroll at 360 px');
   });
 

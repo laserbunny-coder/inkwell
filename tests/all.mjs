@@ -8,7 +8,7 @@ import { readdirSync } from 'node:fs';
 // About how many seconds each test file takes. Every tests/*.mjs file runs,
 // listed here or not, so a new one can't be missed.
 const FILES = {
-  order: 1, script: 1, today: 60, hstrip: 25, stats: 1, run: 81, alts: 11, data: 20, sync: 29, tidy: 39,
+  order: 1, script: 1, today: 60, planviews: 60, hstrip: 25, stats: 1, run: 81, alts: 11, data: 20, sync: 29, tidy: 39,
   search: 15, history: 24, caret: 8, files: 8, slash: 6, worlds: 17, structure: 33,
   capture: 21, voice: 21, share: 7, lists: 25, daybook: 12, review: 18, tags: 9,
   production: 29, revise: 28, pages: 18, nav: 11, shapes: 16, stagesets: 18, ghosttap: 12, outliner: 20, claudeknows: 15, bringin: 12, tidypass: 25, checklists: 14, evening: 12, nosync: 0, pagefirst: 0, linkcatch: 12, scribe: 12, aiprod: 30, panes: 30, woven: 25, desk: 40, plan: 40, through: 30, beside: 40, project: 35, talk: 40, ahead: 40, repeats: 40, calendar: 30, daybookin: 30, phoneplan: 25, alerts: 15, hq: 15, gcal: 12, dayweave: 25, daycal: 30, plantidy: 25, phonedrag: 15, linedecos: 15, whenpage: 60

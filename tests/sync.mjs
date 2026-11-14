@@ -367,20 +367,18 @@ try {
     await input.fill('Pack the tripod');
     await input.press('Enter');
     await sleep(500);
-    await laptop.locator('#plan .pl-view button', { hasText: 'Calendar' }).click();
-    await laptop.locator('#plan .dc-chip', { hasText: 'Pack the tripod' }).click();
-    await laptop.waitForSelector('#plan .dc-blk');
+    const toCal = (p) => p.evaluate(() => { const pl = { view: 'plan', tab: 'calday' }; history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); });
+    await toCal(laptop);
+    await laptop.locator('#plan-sheet .dc-chip', { hasText: 'Pack the tripod' }).click();
+    await laptop.waitForSelector('#plan-sheet .dc-blk');
     await syncNow(laptop);
     await syncNow(phone);
     await sleep(800);
     const t = [...table.values()].find((r) => r.text === 'Pack the tripod').fields.task;
     assert.ok(t.on && Number.isFinite(t.on.at) && t.len === 30, 'the time went up with the task');
-    await phone.locator('#plan .pl-view button', { hasText: 'Calendar' }).click();
-    await phone.waitForSelector('#plan .dc-blk');
-    assert.equal(await phone.locator('#plan .dc-blk .dc-t').innerText(), await laptop.locator('#plan .dc-blk .dc-t').innerText());
-    // Back to the list on both, as the next checks expect.
-    await laptop.locator('#plan .pl-view button', { hasText: 'List' }).click();
-    await phone.locator('#plan .pl-view button', { hasText: 'List' }).click();
+    await toCal(phone);
+    await phone.waitForSelector('#plan-sheet .dc-blk');
+    assert.equal(await phone.locator('#plan-sheet .dc-blk .dc-t').innerText(), await laptop.locator('#plan-sheet .dc-blk .dc-t').innerText());
   });
 
 

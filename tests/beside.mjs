@@ -133,7 +133,7 @@ try {
     assert.equal(h.kind, '', 'the switch says what it is');
     assert.equal(h.swap, false, 'a plan alone doesn’t trade places with the page');
     assert.deepEqual(await words(f), ['Call Dana about the storyboards', 'Write the second verse of Kenji’s song']);
-    assert.equal(await f.locator('#plan-sheet .pl-switch [aria-current="page"]').innerText(), 'Day');
+    assert.equal(await f.locator('#plan-sheet .pl-switch [aria-current="page"]').innerText(), 'Today');
     assert.equal(await f.locator('.topbar').isVisible(), false);
     // Typing still lands on the day's page.
     await page.keyboard.type(' again');
@@ -153,13 +153,13 @@ try {
     assert.ok((await words(f)).includes('Print the call sheet'));
   });
 
-  await check('the plan’s own Week and Pace open in the pane; Day comes back to today’s plan alone', async () => {
-    await f.locator('#plan-sheet .pl-switch button[data-cmd="week"]').click();
+  await check('the plan’s own Calendar opens in the pane; Today comes back to today’s plan alone', async () => {
+    await f.locator('#plan-sheet .pl-switch button[data-cmd="calendar"]').click();
     f = await pane(page, 'plan', 'week');
     await headIs(page, 'Plan', 'Week');
     assert.equal((await head(page)).swap, true);
     assert.equal(await f.locator('.pw-day').count(), 7);
-    await f.locator('#plan-sheet .pl-switch button', { hasText: 'Day' }).click();
+    await f.locator('#plan-sheet .pl-switch button', { hasText: 'Today' }).click();
     f = await pane(page, 'plan', 'day');
     await headIs(page, 'Plan', 'Today');
     assert.equal(await f.evaluate(() => document.documentElement.dataset.view), 'plan', 'not the whole day page');

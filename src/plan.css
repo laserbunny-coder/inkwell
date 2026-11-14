@@ -521,7 +521,7 @@ html:not(.pulling-phone) .pull-zones { display: none; }
 .pl-pick-b.danger { color: var(--signal, #e5484d); }
 .pl-pick-b:disabled { opacity: .4; cursor: default; }
 @media (hover: none) {
-  .pl-pickbar { left: 8px; right: 8px; transform: none; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .pl-pickbar { left: 8px; right: 8px; transform: none; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); justify-content: center; flex-wrap: wrap; row-gap: 2px; }
   body.kb-up .pl-pickbar { bottom: 8px; }
 }
 
@@ -602,3 +602,68 @@ html.focus .notebook.plan-side > #plan, .notebook.plan-side.zoomed > #plan { dis
 .pl-switch-phone { overflow-x: auto; scrollbar-width: none; }
 .pl-switch-phone::-webkit-scrollbar { display: none; }
 .pl-switch-phone button { flex: 1 0 auto; padding-inline: 10px; }
+
+/* ---------- Page, Plan, Calendar (Nov 14, build 1b) ---------- */
+/* Calendar's zoom: Day, Week, Six weeks (and Pace with estimates on). */
+.pl-switches { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.pl-zoom { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 99px; }
+.pl-zoom button { border: 0; background: none; color: var(--muted); font: 13px var(--ui); padding: 5px 12px; border-radius: 99px; cursor: pointer; white-space: nowrap; }
+.pl-zoom button:hover { color: var(--ink); }
+.pl-zoom button[aria-pressed="true"] { background: var(--raise); color: var(--ink); }
+html.has-rail .pl-switches { flex-direction: row; align-items: center; }
+
+/* Plan: one outline. A heading with nothing under it is a thin line that still takes a drop. */
+.pl-outline .ww-sec.empty .ww-fold { padding: 2px 0; font-size: 15px; color: var(--faint); }
+.pl-outline .ww-sec.empty .ww-tri { visibility: hidden; }
+.pl-outline .ww-sec.empty { margin-top: 10px; }
+.pl-outline .ww-sec.empty .ww-h { border-bottom-color: var(--line); }
+.pl-outline .ol-today .ww-fold { color: var(--ink); }
+.pl-outline .ol-today .pl-cal { margin: 4px 0 0 14px; }
+.pl-outline .ol-today > .ww-list { padding-left: 0; }
+.pl-outline > .pl-top + .ww-sec { margin-top: 18px; }
+#plan.pl-outline > .ww-sec:first-child { margin-top: 0; }
+.ww-tag { margin-left: auto; font: 12px var(--ui); color: var(--faint); white-space: nowrap; }
+
+/* Under today's list on a computer: Tomorrow, This week, Further out. */
+.pl-further { margin-top: 14px; }
+.pl-fline { margin-top: 2px !important; }
+.pl-fline .ww-fold { font: 14px var(--ui); color: var(--muted); padding: 5px 0; }
+.pl-fline .ww-fold:hover { color: var(--ink); }
+.pl-fline .ww-n { margin-left: 2px; }
+.pl-fline-go { margin-left: auto; font: 12px var(--ui); color: var(--accent); }
+.pl-fline .ww-h { border-bottom: 0; margin: 0; }
+
+/* The week on a phone: one screen, a row a day. */
+.pw-rows { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.pw-row { border-radius: 10px; }
+.pw-rb { display: grid; grid-template-columns: 34px 34px minmax(0, 1fr) auto; align-items: baseline; gap: 6px; width: 100%; border: 1px solid var(--line); border-radius: 10px; background: none; padding: 11px 12px; color: var(--ink); text-align: left; cursor: pointer; font: 14px var(--ui); }
+.pw-rd { font: var(--title-w, 400) 20px/1 var(--title); }
+.pw-rs { color: var(--muted); font-size: 12.5px; }
+.pw-rt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--soft, var(--ink)); }
+.pw-rt.none { color: var(--faint); }
+.pw-rn { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.pw-row.today .pw-rb { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.pw-row.past .pw-rb { opacity: .55; }
+.pw-tray.pw-row .pw-rd { font: 13px var(--ui); color: var(--muted); }
+.pw-row.drop-on .pw-rb { background: var(--tint); border-color: var(--accent); }
+
+@media (hover: none) {
+  .pl-switches { align-items: stretch; width: 100%; }
+  .pl-zoom { align-self: stretch; }
+  .pl-zoom button { flex: 1 1 0; padding: 6px 0; }
+  /* While a step slides up from a project, all seven headings fit as drop places. */
+  .pull-zones { gap: 4px; padding: 8px 10px; }
+  .pz { font-size: 16px; padding: 0 14px; min-height: 34px; }
+  .pl-outline .ww-fold { font-size: 19px; }
+  .pl-outline .ww-sec { margin-top: 16px; }
+}
+.pw-rows .pw-row { padding: 0; margin: 0; border: 0; min-height: 0; background: none; box-shadow: none; }
+.pw-rows .pw-row::before, .pw-rows .pw-row::after { display: none; }
+@media (hover: none) {
+  #plan-sheet[data-tab="week"] .pl-top h1 { font-size: 24px; }
+  #plan-sheet[data-tab="week"] .pl-top { margin-bottom: 0; }
+  .pw-rb { padding: 9px 12px; }
+}
+.ol-today .ww-h { display: flex; align-items: center; gap: 10px; }
+.ol-today .ww-h .ww-fold { width: auto; flex: 1 1 auto; }
+.ol-today .ww-h .pl-left { flex: none; }

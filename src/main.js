@@ -57,7 +57,7 @@ import { DayReview, getReview } from './review.js';
 import { TagsPage, tagIndex, statsOf } from './tags.js';
 import { DeskPage, DESK_ID, deskSettings } from './desk.js';
 import { ProjectPage } from './projectpage.js';
-import { Plan, HELD as PLAN_HELD } from './plan.js';
+import { Plan, tabFor, isCal, ZOOMS } from './plan.js';
 import { Pull } from './pull.js';
 import { closeWhen, whenOpen } from './when.js';
 import { Through } from './through.js';
@@ -681,8 +681,10 @@ async function go(place) {
     else {
       if (place.line) notebook.focusLine(place.line);
       remember({ view: 'notebook', pageId: notebook.page.id });
-      // Back on a page that stayed open: its count may have been put away meanwhile.
+      // Back on a page that stayed open: its count may have been put away
+      // meanwhile, and its plan may have changed in Plan or Calendar.
       looseFoot();
+      plan?.showDay(notebook.page);
     }
     if ((place.zoom || null) !== notebook.zoom) {
       const mode = historyMode;
@@ -706,7 +708,8 @@ async function go(place) {
     remember(place);
     await tagsPage?.show(place);
   } else if (place.view === 'plan') {
-    remember({ view: 'plan', tab: ['pace', 'day', 'ahead', 'when'].includes(place.tab) ? place.tab : 'week', ...(place.week ? { week: place.week } : {}) });
+    // What's when is Plan now; Day, Week, Weeks ahead and Pace are zooms of Calendar.
+    remember({ view: 'plan', tab: tabFor(place.tab), ...(place.week ? { week: place.week } : {}) });
     await plan?.showPage(place);
   } else if (place.view === 'sidenotes') {
     remember({ view: 'sidenotes' });
@@ -1626,7 +1629,12 @@ async function drawCrumb() {
     parts.push(lib, link('Drawer', () => {}, 'here'));
   } else if (view() === 'plan') {
     if (lastPlace?.tab === 'day') parts.push(link('Today', () => {}, 'here'));
-    else parts.push(link('Today', () => go({ view: 'notebook', pageId: dayId(isoToday()) }), ''), link(lastPlace?.tab === 'pace' ? 'Pace' : lastPlace?.tab === 'ahead' ? 'Weeks ahead' : lastPlace?.tab === 'when' ? 'What’s when' : 'Week', () => {}, 'here'));
+    else {
+      const tab = tabFor(lastPlace?.tab);
+      parts.push(link('Today', () => go({ view: 'notebook', pageId: dayId(isoToday()) }), ''));
+      if (tab === 'plan') parts.push(link('Plan', () => {}, 'here'));
+      else parts.push(link('Calendar', () => plan.goTab('cal'), ''), link(ZOOMS.find((z) => z[0] === tab)?.[1] || 'Week', () => {}, 'here'));
+    }
   } else if (view() === 'sidenotes') {
     parts.push(link(sideNotes.title || 'No draft open', () => {}, 'here'));
   } else if (view() === 'talk') {
@@ -3327,8 +3335,11 @@ async function pageContext() {
   return null;
 }
 
+let stripView = null;
 async function renderStrip() {
   strip.set(await pageContext());
+  // A new page starts untucked, so the first tap on it can't shift it under the finger.
+  if (view() !== stripView) { stripView = view(); body.classList.remove('typing'); }
   body.classList.toggle('looking', LOOKING.includes(view()));
   $('.topbar').classList.toggle('has-tabs', !$('#page-tabs').hidden);
 }
@@ -3351,7 +3362,9 @@ async function goPage(id) {
   if (id === 'library') return go({ view: 'library', area: null });
   if (id === 'tags') return go({ view: 'tags' });
   if (id === 'week') return go({ view: 'plan', tab: 'week' });
-  if (id === 'when') return go({ view: 'plan', tab: 'when' });
+  if (id === 'when' || id === 'plan') return go({ view: 'plan', tab: 'plan' });
+  if (id === 'calendar') return plan.goTab('cal');
+  if (id === 'calday') return go({ view: 'plan', tab: 'calday' });
   if (id === 'ahead') return go({ view: 'plan', tab: 'ahead' });
   if (id === 'pace') return go({ view: 'plan', tab: 'pace' });
   if (id === 'desk') return go({ view: 'desk' });
@@ -3387,6 +3400,8 @@ window.addEventListener('blur', () => { clearTimeout(altTimer); body.classList.r
 let lastMove = null;
 document.addEventListener('mousemove', (e) => {
   if (!body.classList.contains('typing')) return;
+  // A finger's tap sends a mouse move too; only a real mouse untucks.
+  if (e.sourceCapabilities?.firesTouchEvents) return;
   if (lastMove && Math.abs(e.clientX - lastMove[0]) + Math.abs(e.clientY - lastMove[1]) > 12) { body.classList.remove('typing'); lastMove = null; }
   else if (!lastMove) lastMove = [e.clientX, e.clientY];
 });
@@ -4044,14 +4059,15 @@ const commands = [
   { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
   { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
   { group: 'go', label: 'Catch-up: what your Claude threads did (bottom of the Desk)', keys: '', words: ['catch up', 'catch-up', 'catchup', 'threads', 'updates', 'claude'], run: () => goCatchup() },
-  { group: 'go', label: 'Day: today’s plan and today’s page', keys: '', words: ['today', 'plan', 'day', 'tasks'], run: () => go(todayKey(1)) },
+  { group: 'go', label: 'Today: today’s page with its plan', keys: 'Alt+1', words: ['today', 'plan', 'day', 'tasks', 'page'], run: () => todayKey(1) },
   { group: 'go', label: 'Bring earlier days to today (every task left from before, onto today)', keys: 'Alt+Shift+T', words: ['carried', 'earlier', 'overdue', 'late', 'move', 'today', 'left over'], run: () => plan.bringToday() },
-  { group: 'go', label: 'What’s when: today, tomorrow, this week, next week, this month, later', keys: '', words: ['when', 'whats', 'plan', 'planning', 'schedule', 'later', 'month', 'next week', 'loose'], run: () => go({ view: 'plan', tab: 'when' }) },
-  { group: 'go', label: 'Week: seven days of tasks, and what’s for any day this week', keys: '', words: ['plan', 'tasks', 'schedule', 'calendar', 'hours', 'tray', 'any day'], run: () => go({ view: 'plan', tab: 'week' }) },
+  { group: 'go', label: 'Plan: today, tomorrow, this week, next week, this month, later, not planned', keys: 'Alt+2', words: ['what’s when', 'whats when', 'when', 'planning', 'schedule', 'later', 'month', 'next week', 'loose', 'not planned', 'outline'], run: () => todayKey(2) },
+  { group: 'go', label: 'Calendar: day (today’s hours)', keys: '', words: ['calendar', 'day', 'hours', 'time', 'schedule'], run: () => go({ view: 'plan', tab: 'calday' }) },
+  { group: 'go', label: 'Calendar: week (seven days, and what’s for any day this week)', keys: '', words: ['calendar', 'week', 'plan', 'tasks', 'schedule', 'tray', 'any day'], run: () => go({ view: 'plan', tab: 'week' }) },
   { group: 'write', label: 'When: plan this line (today, this week, next week, later…)', keys: 'Alt+W', words: ['when', 'schedule', 'plan', 'day', 'week', 'month', 'later', 'task'], run: () => setTimeout(() => whenHere(), 60) },
-  { group: 'go', label: 'Pull from a project: open one next to the plan, to drag its lines in', keys: '', words: ['pull', 'project', 'beside', 'plan', 'drag', 'split'], run: () => pullFromProject() },
-  { group: 'go', label: 'Weeks ahead: six weeks, a lane for each project', keys: '', words: ['plan', 'roadmap', 'weeks', 'months', 'dates', 'deadline', 'milestone', 'schedule', 'timeline', 'stretch'], run: () => go({ view: 'plan', tab: 'ahead' }) },
-  { group: 'go', label: 'Pace: what you planned against what it really took', keys: '', words: ['plan', 'tasks', 'time', 'estimate', 'looking back', 'hours'], run: () => go({ view: 'plan', tab: 'pace' }), when: () => !hidden().has('estimates') },
+  { group: 'go', label: 'From a project: open one next to the plan, to drag its steps in', keys: '', words: ['pull', 'project', 'beside', 'plan', 'drag', 'split', 'steps'], run: () => pullFromProject() },
+  { group: 'go', label: 'Calendar: six weeks (a lane for each project)', keys: '', words: ['calendar', 'weeks ahead', 'ahead', 'six weeks', 'roadmap', 'weeks', 'months', 'dates', 'deadline', 'milestone', 'schedule', 'timeline', 'stretch'], run: () => go({ view: 'plan', tab: 'ahead' }) },
+  { group: 'go', label: 'Calendar: pace (what you planned against what it really took)', keys: '', words: ['calendar', 'pace', 'plan', 'tasks', 'time', 'estimate', 'looking back', 'hours'], run: () => go({ view: 'plan', tab: 'pace' }), when: () => !hidden().has('estimates') },
   { group: 'go', label: 'Desk: every project, what needs you and who’s working on it', keys: `${mod}⇧U`, words: ['claude', 'threads', 'needs you', 'calls', 'catch-up', 'catchup', 'updates', 'projects', 'stage'], run: () => go({ view: 'desk' }) },
   { group: 'go', label: 'History: every Claude thread, newest first', keys: '', words: ['threads', 'closed', 'finished', 'desk', 'search threads'], run: () => go({ view: 'desk', tab: 'history' }) },
   { group: 'go', label: 'Today’s page', keys: `${mod}J`, run: () => go({ view: 'notebook', pageId: dayId(isoToday()) }) },
@@ -4595,7 +4611,10 @@ function filterPalette() {
       return l.includes(q) ? 4 : 5;
     };
     // A command's other words (theme for the look, catch-up for the Desk) find it too, after the names.
-    const hit = (c) => c.label.toLowerCase().includes(q) || (paletteMode === 'commands' && (c.words || []).some((w) => w.toLowerCase().startsWith(q)));
+    // Several words find a name holding them all, in any order ("calendar week").
+    const words = q.split(/\s+/).filter(Boolean);
+    const allIn = (l) => words.length > 1 && words.every((w) => l.includes(w));
+    const hit = (c) => c.label.toLowerCase().includes(q) || allIn(c.label.toLowerCase()) || (paletteMode === 'commands' && (c.words || []).some((w) => w.toLowerCase().startsWith(q)));
     paletteItems = paletteSource.filter((c) => usable(c) && inGroup(c) && hit(c))
       .map((c, i) => ({ c, i, r: q ? rank(c.label) : 0 })).sort((a, b) => a.r - b.r || a.i - b.i).slice(0, 60).map((x) => x.c);
     // Not a title? Offer to look inside the writing too.
@@ -4690,7 +4709,7 @@ document.addEventListener('click', (e) => {
   // Beside, the plan's own Day is today's plan alone, not the whole page.
   if (cmd === 'today') go(inPane && view() === 'plan' ? BESIDE_PLACES.plan : { view: 'notebook', pageId: dayId(isoToday()) });
   // On a phone the day is two views: its page, and its plan.
-  if (cmd === 'today-page' || cmd === 'today-plan') plan.goTab(cmd === 'today-page' ? 'page' : 'day');
+  if (cmd === 'today-page' || cmd === 'today-plan') plan.goTab(cmd === 'today-page' ? 'page' : 'plan');
   if (cmd === 'beside') toggleBesidePane();
   if (cmd === 'talk') openTalk();
   if (cmd === 'drawer') go({ view: 'drawer' });
@@ -4699,7 +4718,8 @@ document.addEventListener('click', (e) => {
   if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
   if (cmd === 'tags') go({ view: 'tags' });
   if (cmd === 'week') go({ view: 'plan', tab: 'week' });
-  if (cmd === 'when') go({ view: 'plan', tab: 'when' });
+  if (cmd === 'when' || cmd === 'plan') go({ view: 'plan', tab: 'plan' });
+  if (cmd === 'calendar') plan.goTab('cal');
   if (cmd === 'ahead') go({ view: 'plan', tab: 'ahead' });
   if (cmd === 'pace') go({ view: 'plan', tab: 'pace' });
   if (cmd === 'desk') go({ view: 'desk' });
@@ -4721,8 +4741,8 @@ document.addEventListener('keydown', (e) => {
   else if (e.altKey && !m && e.shiftKey && e.code === 'KeyT') { e.preventDefault(); plan.bringToday(); }
   // Alt + P: the plan beside today's page, or on top of it.
   else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyP' && !inPane) { e.preventDefault(); flipPlan(); }
-  // Alt + 1 to 4 in Today (Day, What's when, Week, Weeks ahead): held while the planning views are rethought.
-  else if (!PLAN_HELD.keys && e.altKey && !m && !e.shiftKey && /^Digit[1-4]$/.test(e.code) && inToday()) { e.preventDefault(); go(todayKey(Number(e.code.slice(5)))); }
+  // Alt + 1, 2, 3 in Today: Today, Plan, Calendar (again in a calendar: the next zoom).
+  else if (e.altKey && !m && !e.shiftKey && /^Digit[1-3]$/.test(e.code) && inToday()) { e.preventDefault(); todayKey(Number(e.code.slice(5))); }
   // Alt + W: When (today, this week, next week, later…) for the line or lines here.
   else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyW') { e.preventDefault(); whenHere(); }
   // Alt + Left / Right: Back and Forward, everywhere (in a line too), so a task
@@ -5180,7 +5200,11 @@ async function looseFoot() {
   foot.replaceChildren(document.createElement('i'), words, b);
 }
 // Today's views, for Alt + 1 to 4.
-const todayKey = (n) => (n === 1 ? { view: 'notebook', pageId: dayId(isoToday()) } : { view: 'plan', tab: ['when', 'week', 'ahead'][n - 2] });
+function todayKey(n) {
+  if (n === 1) return go({ view: 'notebook', pageId: dayId(isoToday()) });
+  if (n === 2) return touch.matches ? plan.goTab('plan') : go({ view: 'plan', tab: 'plan' });
+  return view() === 'plan' && isCal(tabFor(lastPlace?.tab)) ? plan.stepZoom() : plan.goTab('cal');
+}
 function inToday() {
   if (view() === 'plan') return true;
   return inNotebook() && !!notebook.page && notebook.isDay && !notebook.zoom;
@@ -5246,9 +5270,9 @@ if (inNotebook() && notebook.page) plan.showDay(notebook.page);
 
 // ---------- pulling lines in from a project, beside a planning view ----------
 
-// Day (a day's page with its plan), What's when, Week and Weeks ahead.
+// Today (a day's page with its plan), Plan, and Calendar's Week and Six weeks.
 function planningView() {
-  if (view() === 'plan') return ['when', 'week', 'ahead', 'day'].includes(lastPlace?.tab || 'week');
+  if (view() === 'plan') return ['plan', 'week', 'ahead', 'day'].includes(tabFor(lastPlace?.tab));
   return inNotebook() && !!notebook.page && notebook.isDay && !notebook.zoom;
 }
 pull = inPane ? null : new Pull({
@@ -5288,7 +5312,7 @@ pull = inPane ? null : new Pull({
 });
 async function pullFromProject(id = null) {
   if (!pull) return;
-  if (!planningView()) await go({ view: 'plan', tab: 'when' });
+  if (!planningView()) await go({ view: 'plan', tab: 'plan' });
   if (pull.isOpen && !id) pull.close(); else await pull.start(id);
 }
 // Ctrl + click on a project in the rail: beside the plan in a planning view

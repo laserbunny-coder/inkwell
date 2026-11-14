@@ -71,7 +71,7 @@ export function drawAhead(plan) {
 
   const head = make('header', 'pl-top');
   const left = make('div');
-  left.append(make('div', 'pl-eyebrow', 'Six weeks'), make('h1', '', 'Weeks ahead'));
+  left.append(make('div', 'pl-eyebrow', 'Six weeks, a lane for each project'), make('h1', '', 'Calendar'));
   const side = make('div', 'pl-side');
   if (plan.hooks.talk?.()) {
     const b = make('button', 'ghost-btn ah-talk', '✦ Plan it out with Claude');

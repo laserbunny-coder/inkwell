@@ -1,11 +1,10 @@
 // Today rebalanced (Nov 14 2026). On a phone: one line of header, one switch
-// (Page, Plan, When, Week, Ahead), one row per task, no cursor on arrival.
+// (Page, Plan, Calendar), one row per task, no cursor on arrival.
 // Earlier days fold into one line that is never a place tasks get stuck: To
 // today (Alt + Shift + T) with Undo, a Today button on each, Pick several. On a
 // computer the plan sits beside the page or on top (Alt + P). With time
 // estimates off, no hours anywhere. No sideways scroll anywhere on a phone.
-// (The views past Page and Plan, their names and keys are held while they're
-// rethought: see HELD in src/plan.js.)
+// (Plan and Calendar themselves: tests/planviews.mjs.)
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -78,11 +77,11 @@ try {
     assert.ok(await phone.locator('.placebar').isVisible(), 'the bar at the bottom');
   });
 
-  await check('phone: one line of header and one switch of five in one row', async () => {
+  await check('phone: one line of header and one switch of three in one row', async () => {
     assert.equal(await phone.locator('#nb-title').innerText(), 'Sat, Nov 14');
     assert.ok(!(await phone.locator('#nb-kind').isVisible()), 'no TODAY eyebrow');
     assert.ok(!(await phone.locator('.nb-date').isVisible()), 'no calendar icon');
-    assert.deepEqual(await phone.locator('.tp-switch button').allInnerTexts(), ['Page', 'Plan', 'What’s when', 'Week', 'Weeks ahead']);
+    assert.deepEqual(await phone.locator('.tp-switch button').allInnerTexts(), ['Page', 'Plan', 'Calendar']);
     const tops = await phone.locator('.tp-switch button').evaluateAll((bs) => [...new Set(bs.map((b) => Math.round(b.getBoundingClientRect().top)))]);
     assert.equal(tops.length, 1, 'one row');
     assert.equal(await phone.locator('.tp-switch [aria-current="page"]').innerText(), 'Plan', 'Plan the first time');

@@ -50,13 +50,13 @@ const go = async (p, place) => {
   await sleep(350);
 };
 const add = async (p, text) => { const input = p.locator('#plan input[data-add]').first(); await input.fill(text); await input.press('Enter'); await sleep(400); };
-const blk = (p, text) => p.locator('#plan .dc-blk', { hasText: text });
-const chip = (p, text) => p.locator('#plan .dc-chip', { hasText: text });
-const chips = (p) => p.locator('#plan .dc-chip').allInnerTexts();
+const blk = (p, text) => p.locator('#plan-sheet .dc-blk', { hasText: text });
+const chip = (p, text) => p.locator('#plan-sheet .dc-chip', { hasText: text });
+const chips = (p) => p.locator('#plan-sheet .dc-chip').allInnerTexts();
 const words = (p) => p.locator('#plan .pl-task:not(.done) .pl-words').allInnerTexts();
 // Where on the screen a time of day is, on the grid.
-const yOf = async (p, min) => p.evaluate(([m, px]) => { const g = document.querySelector('#plan .dc-grid'); return g.getBoundingClientRect().top + (m - Number(g.dataset.from)) * px; }, [min, PX]);
-const xOf = async (p) => p.evaluate(() => { const g = document.querySelector('#plan .dc-grid').getBoundingClientRect(); return g.left + g.width * 0.6; });
+const yOf = async (p, min) => p.evaluate(([m, px]) => { const g = document.querySelector('#plan-sheet .dc-grid'); return g.getBoundingClientRect().top + (m - Number(g.dataset.from)) * px; }, [min, PX]);
+const xOf = async (p) => p.evaluate(() => { const g = document.querySelector('#plan-sheet .dc-grid').getBoundingClientRect(); return g.left + g.width * 0.6; });
 const drag = async (p, x, y0, y1) => {
   await p.mouse.move(x, y0);
   await p.mouse.down();
@@ -91,26 +91,27 @@ try {
   await add(page, 'Print the call sheet');
   const order = await words(page);
 
-  await check('List | Calendar sits beside Plan; Calendar shows the day by the hour, with nothing placed yet', async () => {
-    assert.deepEqual(await page.locator('#plan .pl-view button').allInnerTexts(), ['List', 'Calendar']);
-    await page.locator('#plan .pl-view button', { hasText: 'Calendar' }).click();
-    await page.waitForSelector('#plan .dc-grid');
-    assert.equal(await page.locator('#plan .pl-list').count(), 0);
+  await check('Calendar’s Day shows the day by the hour, with nothing placed yet', async () => {
+    assert.equal(await page.locator('#plan .pl-view').count(), 0, 'no List | Calendar inside the plan any more');
+    await page.locator('.today-switch button', { hasText: 'Calendar' }).click();
+    await page.waitForSelector('#plan-sheet .pl-zoom');
+    await page.locator('#plan-sheet .pl-zoom button[data-tab="calday"]').click();
+    await page.waitForSelector('#plan-sheet .dc-grid');
     assert.deepEqual(await chips(page), order, 'every open task waits above, yesterday’s too');
-    assert.equal(await page.locator('#plan .dc-blk').count(), 0, 'yesterday’s time doesn’t carry over');
-    assert.deepEqual(await page.locator('#plan .dc-ev .dc-w').allInnerTexts(), ['Standup with Nate', 'Dentist']);
-    assert.equal(await page.locator('#plan .dc-now').count(), 1);
-    assert.equal(await page.locator('#plan .dc-hour span').first().innerText(), '7 am');
+    assert.equal(await page.locator('#plan-sheet .dc-blk').count(), 0, 'yesterday’s time doesn’t carry over');
+    assert.deepEqual(await page.locator('#plan-sheet .dc-ev .dc-w').allInnerTexts(), ['Standup with Nate', 'Dentist']);
+    assert.equal(await page.locator('#plan-sheet .dc-now').count(), 1);
+    assert.equal(await page.locator('#plan-sheet .dc-hour span').first().innerText(), '7 am');
   });
 
   await check('a click on a waiting task puts it in the next free half hour', async () => {
     await chip(page, 'Cut the trailer').click();
-    await page.waitForSelector('#plan .dc-blk');
+    await page.waitForSelector('#plan-sheet .dc-blk');
     assert.deepEqual(await placedAt(page, 'Cut the trailer'), { day: TODAY, at: 14 * 60 + 30 });
     assert.equal((await named(page, 'Cut the trailer')).fields.task.len, 30);
     assert.match(await blk(page, 'Cut the trailer').locator('.dc-t').innerText(), /2:30 pm · 30 min/);
     await chip(page, 'Email Dana').click();
-    await page.waitForFunction(() => document.querySelectorAll('#plan .dc-blk').length === 2);
+    await page.waitForFunction(() => document.querySelectorAll('#plan-sheet .dc-blk').length === 2);
     assert.equal((await placedAt(page, 'Email Dana the boards')).at, 15 * 60, 'the next free one, not on top of the first');
   });
 
@@ -120,7 +121,7 @@ try {
     assert.equal((await placedAt(page, 'Cut the trailer')).at, 16 * 60 + 15);
     assert.match(await blk(page, 'Cut the trailer').locator('.dc-t').innerText(), /4:15 pm · 30 min/);
     // Beside the Dentist, not on top of it.
-    const [a, b] = [await blk(page, 'Cut the trailer').boundingBox(), await page.locator('#plan .dc-ev', { hasText: 'Dentist' }).boundingBox()];
+    const [a, b] = [await blk(page, 'Cut the trailer').boundingBox(), await page.locator('#plan-sheet .dc-ev', { hasText: 'Dentist' }).boundingBox()];
     assert.ok(a.x >= b.x + b.width - 1 || b.x >= a.x + a.width - 1, 'overlaps sit side by side');
   });
 
@@ -140,19 +141,19 @@ try {
 
   await check('click an empty spot and write: a new task right there, and on the list at the end', async () => {
     await page.mouse.click(await xOf(page), await yOf(page, 11 * 60 + 10));
-    const input = page.locator('#plan .dc-new input');
+    const input = page.locator('#plan-sheet .dc-new input');
     await input.waitFor();
     assert.equal(await input.getAttribute('placeholder'), 'A task at 11 am');
     await input.fill('Call the print shop');
     await input.press('Enter');
-    await page.waitForFunction(() => [...document.querySelectorAll('#plan .dc-blk')].some((b) => /Call the print shop/.test(b.textContent)));
+    await page.waitForFunction(() => [...document.querySelectorAll('#plan-sheet .dc-blk')].some((b) => /Call the print shop/.test(b.textContent)));
     const t = (await named(page, 'Call the print shop')).fields.task;
     assert.deepEqual([t.day, t.on, t.len], [TODAY, { day: TODAY, at: 11 * 60 }, 30]);
     await shot(page, 'daycal');
   });
 
   await check('the calendar never reorders the list, and the list never moves a block', async () => {
-    await page.locator('#plan .pl-view button', { hasText: 'List' }).click();
+    await go(page, { view: 'notebook', pageId: `day-${TODAY}` });
     await page.waitForSelector('#plan .pl-list');
     assert.deepEqual(await words(page), [...order, 'Call the print shop']);
     assert.equal(await page.locator('#plan .pl-task .pl-est:visible').count(), 0, 'no times on the list');
@@ -161,13 +162,13 @@ try {
     await page.waitForFunction(() => document.querySelectorAll('#plan .pl-task .pl-words')[1]?.textContent === 'Print the call sheet' || document.querySelectorAll('#plan .pl-task .pl-words')[2]?.textContent === 'Print the call sheet');
     await sleep(300);
     assert.deepEqual(await placedAt(page, 'Print the call sheet'), { day: TODAY, at: 19 * 60 });
-    await page.locator('#plan .pl-view button', { hasText: 'Calendar' }).click();
-    await page.waitForSelector('#plan .dc-grid');
+    await go(page, { view: 'plan', tab: 'calday' });
+    await page.waitForSelector('#plan-sheet .dc-grid');
   });
 
   await check('drag a block up past the top to take it off the calendar', async () => {
     const c = await centre(blk(page, 'Email Dana'));
-    const top = await page.locator('#plan .dc-grid').boundingBox();
+    const top = await page.locator('#plan-sheet .dc-grid').boundingBox();
     await drag(page, c.x, c.y, top.y - 60);
     assert.equal((await named(page, 'Email Dana the boards')).fields.task.on, null);
     assert.ok((await chips(page)).includes('Email Dana the boards'));
@@ -177,19 +178,15 @@ try {
     await blk(page, 'Call the print shop').click();
     await page.waitForFunction(() => /Call the print shop/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''), null, { timeout: 15000 });
     await page.keyboard.press('Alt+ArrowLeft');
-    await page.waitForFunction(() => !document.querySelector('#outline-editor li.zoom-root') && !!document.querySelector('#plan .dc-grid'));
+    await page.waitForFunction(() => document.documentElement.dataset.view === 'plan' && !!document.querySelector('#plan-sheet .dc-grid'));
   });
 
-  await check('it’s remembered on this device; Look can hide the switch, which leaves the list', async () => {
+  await check('Calendar opens on the zoom used last on this device', async () => {
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
     await go(page, { view: 'notebook', pageId: `day-${TODAY}` });
-    await page.waitForSelector('#plan .dc-grid');
-    await page.evaluate(() => document.querySelector('[data-show="planview"]').click());
-    await page.waitForSelector('#plan .pl-list');
-    assert.equal(await page.locator('#plan .pl-view').isVisible(), false);
-    await page.evaluate(() => document.querySelector('[data-show="planview"]').click());
-    await page.waitForSelector('#plan .dc-grid');
+    await page.locator('.today-switch button', { hasText: 'Calendar' }).click();
+    await page.waitForSelector('#plan-sheet .dc-grid');
     assert.deepEqual(page.errors, []);
   });
 
@@ -199,23 +196,27 @@ try {
   await check('phone: the calendar fits, and a block moves after a hold', async () => {
     await go(phone, { view: 'notebook', pageId: `day-${TODAY}` });
     await add(phone, 'Charge the batteries');
-    await phone.locator('#plan .pl-view button', { hasText: 'Calendar' }).tap();
-    await phone.waitForSelector('#plan .dc-grid');
+    await phone.locator('.tp-switch button', { hasText: 'Calendar' }).tap();
+    await phone.waitForSelector('#plan-sheet .pl-zoom');
+    await still(phone);
+    await sleep(600);
+    await phone.locator('#plan-sheet .pl-zoom button[data-tab="calday"]').tap();
+    await phone.waitForSelector('#plan-sheet .dc-grid');
     // On a phone what isn't on the calendar waits below the hours, folded into one line.
-    assert.match(await phone.locator('#plan .dc-tray-fold').innerText(), /1 not on the calendar/);
-    await phone.locator('#plan .dc-tray-fold').tap();
-    await phone.locator('#plan .dc-chip', { hasText: 'Charge' }).tap();
-    await phone.waitForSelector('#plan .dc-blk');
+    assert.match(await phone.locator('#plan-sheet .dc-tray-fold').innerText(), /1 not on the calendar/);
+    await phone.locator('#plan-sheet .dc-tray-fold').tap();
+    await phone.locator('#plan-sheet .dc-chip', { hasText: 'Charge' }).tap();
+    await phone.waitForSelector('#plan-sheet .dc-blk');
     assert.equal((await placedAt(phone, 'Charge the batteries')).at, 14 * 60 + 30);
     assert.ok(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'nothing spills');
-    await phone.evaluate(() => document.querySelector('#plan .dc-blk').scrollIntoView({ block: 'center' }));
+    await phone.evaluate(() => document.querySelector('#plan-sheet .dc-blk').scrollIntoView({ block: 'center' }));
     await sleep(200);
-    const c = await centre(phone.locator('#plan .dc-blk'));
+    const c = await centre(phone.locator('#plan-sheet .dc-blk'));
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: c.x, y: c.y }] });
     await sleep(450);
     for (let k = 1; k <= 8; k++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: c.x, y: c.y + (60 * PX * k) / 8 }] }); await sleep(30); }
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    await phone.waitForFunction(() => /3:30 pm/.test(document.querySelector('#plan .dc-blk .dc-t')?.textContent || ''));
+    await phone.waitForFunction(() => /3:30 pm/.test(document.querySelector('#plan-sheet .dc-blk .dc-t')?.textContent || ''));
     assert.equal((await placedAt(phone, 'Charge the batteries')).at, 15 * 60 + 30);
     await shot(phone, 'daycal-phone');
     assert.deepEqual(phone.errors, []);

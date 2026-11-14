@@ -143,7 +143,7 @@ try {
     await toToday(p);
     await sleep(300);
     assert.equal(await p.locator('.place-switch:not(.desk-switch):not(.today-switch)').isVisible(), false, 'the Library’s switch is away on Today');
-    assert.deepEqual(await p.locator('.today-switch button').allInnerTexts(), ['Day', 'What’s when', 'Week', 'Weeks ahead', 'Pace']);
+    assert.deepEqual(await p.locator('.today-switch button').allInnerTexts(), ['Today', 'Plan', 'Calendar']);
   });
 
   await check('the looks: one tap changes the whole app, and it sticks after a reload', async () => {
