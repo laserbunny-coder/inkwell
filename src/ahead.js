@@ -63,7 +63,7 @@ export function drawAhead(plan) {
   const src = plan.aheadSrc || { lanes: [], dates: [] };
   const model = aheadPlan(plan.items, { today, weeks: WEEKS, free: plan.free, lanes: src.lanes, dates: src.dates });
   // A project in the wings only gets a lane when something of its is in view.
-  model.lanes = model.lanes.filter((l) => !l.faint || l.bars.length || l.dates.length || plan.aheadAdd?.world === l.id);
+  model.lanes = model.lanes.filter((l) => !l.faint || l.bars.length || l.dates.length || l.loose.length || plan.aheadAdd?.world === l.id);
   plan.ahead = model;
   const sheet = plan.sheet;
   const adding = plan.aheadAdd;
@@ -79,6 +79,8 @@ export function drawAhead(plan) {
     b.title = 'Talk the weeks through with Claude, beside this (Alt + T)';
     side.append(b);
   }
+  const pull = plan.pullButton();
+  if (pull) side.append(pull);
   side.append(plan.switchRow('ahead'));
   head.append(left, side);
 
@@ -146,6 +148,16 @@ export function drawAhead(plan) {
       if (!bar.late) { const grip = make('i', 'ah-grip'); grip.setAttribute('aria-hidden', 'true'); b.append(grip); }
       rows.append(b);
     }
+    // Loose in a week: quiet, with no day.
+    for (const m of lane.loose) {
+      const b = make('button', 'ah-loose');
+      b.style.gridColumn = String(m.col);
+      b.dataset.act = 'ahead-loose';
+      b.dataset.task = m.item.row.id;
+      b.title = `Some day that week: ${m.text}`;
+      b.append(make('span', '', m.text));
+      rows.append(b);
+    }
     if (adding && adding.world === lane.id) {
       const col = model.weeks.findIndex((w) => w.iso === adding.week) + 1;
       if (col > 0) {
@@ -170,7 +182,7 @@ export function drawAhead(plan) {
   if (!model.lanes.length) parts.push(make('p', 'pl-note', 'Nothing is on stage. A project gets a lane here once it’s on stage at the Desk.'));
   else {
     if (model.note) parts.push(make('p', 'pl-note ah-note', model.note));
-    if (!model.lanes.some((l) => l.bars.length || l.dates.length)) parts.push(make('p', 'pl-note', 'Click a week in a project’s lane to say what happens then.'));
+    if (!model.lanes.some((l) => l.bars.length || l.dates.length || l.loose.length)) parts.push(make('p', 'pl-note', 'Click a week in a project’s lane to say what happens then.'));
   }
   sheet.replaceChildren(...parts);
   const input = sheet.querySelector('.ah-add input');
@@ -224,6 +236,11 @@ export function aheadClick(plan, act, el) {
     const i = el.dataset.task ? plan.item(el.dataset.task) : null;
     if (i) dateMenu(plan, i, el);
     else { const place = JSON.parse(el.dataset.go || 'null'); if (place) plan.hooks.go(place); }
+    return true;
+  }
+  if (act === 'ahead-loose') {
+    const i = plan.item(el.dataset.task);
+    if (i) plan.menu(i, el);
     return true;
   }
   if (act === 'ahead-bar') {

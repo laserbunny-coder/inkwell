@@ -25,7 +25,7 @@
 
 import { oneSuggestion, type Item as TidyItem, type Row as TidyRow } from "../_shared/tidy.ts";
 import { Bad as LogBad, type Db as LogDb, type Note, runNeeds, runUpdates, TOOLS as LOG_SOURCE, type Update } from "../mcp/tools.ts";
-import { addDays, blank, daysIn, dueDay, firstOn, isRepeat, isStretch, repeatWord, roll, type RepeatRule, type Task, taskOf } from "./taskrules.ts";
+import { addDays, blank, daysIn, dow, dueDay, firstOn, isRepeat, isStretch, repeatWord, roll, spanOf, spanWord, type RepeatRule, type Task, taskOf } from "./taskrules.ts";
 
 /** One Inkwell entry, as stored in writing_entries. */
 export type Entry = {
@@ -130,7 +130,7 @@ export const INSTRUCTIONS = `Inkwell is this person's own writing app and notebo
 - Keep to the person's voice and don't add more than they asked for.
 - Say what you added and where, in plain words, since the person sees your reply, not the tool calls.
 - Production (AI video): a piece's shots, each with a code that never changes (NB-E01-S03A-04), prompts for its still and its video, how it's generated (model, seconds, first and last frame, the line it's timed to, and a group when several shots are made in one generation), and its tries with a star on the one that worked. The world's kit holds each character's sheet (front, three-quarter, side, back), each location's lighting line and angles, the show rules (frame, frame rate, always and never) and each tool's ID for an element (Higgsfield Soul ID or Element, ComfyUI LoRA, Kling reference). To make shots in another tool (Higgsfield, Kling, ComfyUI…): read them with production, write prompts that use the kit's looks, lighting, rules and tool IDs, and pass the reference picture links along. Bring results back with add_try (the file or link, model, settings, seconds, cost), star the one that worked with star, and keep prompts or generation details current with update_shot. Old prompts are never lost: they stay with the try that used them. Prices (prices, update_prices) feed the cost estimate on the Make tab; when you check prices, update them with the source.
-- Tasks and plans live in Inkwell. A task is an ordinary line with a day, an estimate and a tick, and it lives where it was written: on a project's Steps page, on a daily page, or on the Tasks page for ones added straight to a plan. Today's page gathers every task on that day at its top (the person reorders it there), with Week, Weeks ahead and Pace beside it. list_tasks reads them (by day range, by project, done since a day); add_task adds one (put it in its project when it belongs to one, with notes as lines under it and a link back to where it came from); update_task moves it to another day, sets its estimate, makes it repeat or a habit, a stretch of work (until) or a date to hit (mark, hard when it can't move: never move a hard one); time puts it at a time on its day's Calendar (the hand-arranged day view; length_minutes is how long the block is), and null takes it off; order_day sets a day's order; mark_done ticks it; delete_line and rename_line delete or reword one when the person asks, and a repeating one comes round again on its next day. Each change is recorded as yours with an Undo. Keep a week's estimated hours within the person's free hours (free_hours). Habits have no hours. Only tasks owned by the person (owner me) are on their day; others are planning lines.
+- Tasks and plans live in Inkwell. A task is an ordinary line with a day (or, with no exact day yet, a loose when: this week, next week, a month, or later), an estimate and a tick, and it lives where it was written: on a project's Steps page, on a daily page, or on the Tasks page for ones added straight to a plan. Today's page gathers every task on that day at its top (the person reorders it there), with Week, Weeks ahead and Pace beside it. list_tasks reads them (by day range, by project, done since a day); add_task adds one (put it in its project when it belongs to one, with notes as lines under it and a link back to where it came from); update_task moves it to another day, sets its estimate, makes it repeat or a habit, a stretch of work (until) or a date to hit (mark, hard when it can't move: never move a hard one); time puts it at a time on its day's Calendar (the hand-arranged day view; length_minutes is how long the block is), and null takes it off; order_day sets a day's order; mark_done ticks it; delete_line and rename_line delete or reword one when the person asks, and a repeating one comes round again on its next day. Each change is recorded as yours with an Undo. Keep a week's estimated hours within the person's free hours (free_hours). Habits have no hours. Only tasks owned by the person (owner me) are on their day; others are planning lines.
 - Needs you: when this chat needs the person (a decision only they can make, work blocked on them, something ready to review or try), raise_needs_you with one short line, the kind, the Claude project's name and this chat's link; raising again from the same link updates it; clear_needs_you once it no longer needs them. It shows in Inkwell's Catch-up and on Today.
 - Catch-up: each time this chat posts a result to the person, log_update with one plain line of what changed (done, live or working), the Claude project's name, this chat's title and link, plus place (its Inkwell link, ?open=) when the work has one. One line per result, not per step.`;
 
@@ -486,6 +486,7 @@ const REPEAT = {
 };
 const TASK_FIELDS = {
   day: str("The day to do it, YYYY-MM-DD, \"today\" or \"tomorrow\"; null takes it off any day."),
+  when: { type: ["string", "null"], description: "Loose time instead of a day, when there's no exact day: \"this week\", \"next week\", \"week of YYYY-MM-DD\", \"this month\", \"next month\", a month as YYYY-MM, or \"later\"; null takes it off. A task has a day or a when, never both (setting one clears the other). Loose ones show on the What's when page and Week's \"Any day this week\", never on a day's plan, and are never late." },
   est_minutes: { type: ["integer", "string", "null"], description: "How long it should take, in minutes (1 to 1440)." },
   until: str("Makes it a stretch of work from its day through this day (a bar in Weeks ahead, not on one day's plan). YYYY-MM-DD, or null."),
   mark: { type: ["string", "null"], enum: ["date", "hard", null], description: "A date to hit on its day: date, or hard when it can't move. null takes it off." },
@@ -507,7 +508,8 @@ TOOLS.push(
         to: str("Last day, YYYY-MM-DD (defaults to from)."),
         world_id: str("Only tasks in this project or world (ids from list_worlds)."),
         query: str("Only tasks whose words contain this."),
-        unscheduled: { type: ["boolean", "string"], description: "Only tasks on no day yet." },
+        unscheduled: { type: ["boolean", "string"], description: "Only tasks on no day yet (loose ones included, with their when)." },
+        loose: { type: ["boolean", "string"], description: "Only tasks with a loose time (this week, next week, a month, later) and no day." },
         include_done: { type: ["boolean", "string"], description: "Include ticked ones." },
         done_since: str("Only tasks ticked on or after this day, YYYY-MM-DD (and each time a repeating one was done)."),
         everyone: { type: ["boolean", "string"], description: "Include tasks that are someone else's (owner other than me)." },
@@ -2031,6 +2033,24 @@ function timeArg(v: unknown): number | null | undefined {
   return Number(m[1]) * 60 + Number(m[2]);
 }
 const hhmm = (at: number) => `${String(Math.floor(at / 60)).padStart(2, "0")}:${String(at % 60).padStart(2, "0")}`;
+/** Loose time: "this week", "next week", "week of YYYY-MM-DD", "this month", "next month", "YYYY-MM", "later"; null takes it off; undefined leaves it. */
+function spanArg(v: unknown, now: string): Task["span"] | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === "" || v === "null" || v === "none") return null;
+  const s = String(v).trim().toLowerCase().replace(/_/g, " ");
+  const mon = addDays(now, 1 - dow(now));
+  const month = (iso: string) => `${iso.slice(0, 7)}-01`;
+  const nextMonth = () => { const [y, m] = now.split("-").map(Number); return `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}-01`; };
+  if (s === "this week") return { kind: "week", start: mon };
+  if (s === "next week") return { kind: "week", start: addDays(mon, 7) };
+  const w = /^(?:week|week of|the week of)\s+(\d{4}-\d{2}-\d{2})$/.exec(s);
+  if (w) return { kind: "week", start: addDays(w[1], 1 - dow(w[1])) };
+  if (s === "this month") return { kind: "month", start: month(now) };
+  if (s === "next month") return { kind: "month", start: nextMonth() };
+  if (/^\d{4}-\d{2}$/.test(s)) return { kind: "month", start: `${s}-01` };
+  if (s === "later" || s === "someday") return { kind: "later", start: null };
+  throw new Bad('when must be "this week", "next week", "week of YYYY-MM-DD", "this month", "next month", a month as YYYY-MM, or "later" (or null).');
+}
 
 function minutesArg(v: unknown, name: string): number | null | undefined {
   if (v === undefined) return undefined;
@@ -2097,6 +2117,7 @@ function taskOut(p: Placed, tz: string | null, on?: string) {
   const done = !!p.row.fields?.done;
   return {
     id: p.row.id, text: p.row.text, ...(on && on !== t.day ? { on } : {}), day: t.day ?? null,
+    ...(spanOf(t) ? { when: spanWord(t, today(tz)) } : {}),
     ...(t.est ? { est_minutes: t.est } : {}),
     ...(done ? { done: true, ...(t.done_at ? { done_at: localDate(new Date(t.done_at).toISOString(), tz) } : {}), ...(t.actual ? { actual_minutes: t.actual } : {}) } : {}),
     ...(isStretch(t) ? { until: t.until } : {}), ...(t.mark ? { mark: t.mark } : {}),
@@ -2135,6 +2156,10 @@ async function listTasks(args: Record<string, unknown>, db: Db) {
     return { done_since: since, tasks: out.slice(0, 300) };
   }
   const withDone = boolArg(args.include_done, false);
+  if (boolArg(args.loose, false)) {
+    const list = all.filter((p) => spanOf(p.task) && (withDone || !p.row.fields?.done));
+    return { today: now, loose: list.slice(0, 300).map((p) => taskOut(p, tz)) };
+  }
   if (boolArg(args.unscheduled, false)) {
     const list = all.filter((p) => !p.task.day && (withDone || !p.row.fields?.done));
     return { unscheduled: list.slice(0, 300).map((p) => taskOut(p, tz)) };
@@ -2185,11 +2210,14 @@ async function addTask(args: Record<string, unknown>, db: Db) {
     }
   }
   let day = await taskDay(args.day, db) ?? null;
+  const loose = spanArg(args.when, now) ?? null;
+  if (loose && day) throw new Bad("Give a day or a when, not both.");
   const until = await taskDay(args.until, db, "until") ?? null;
   const mark = args.mark === "date" || args.mark === "hard" ? args.mark : null;
   let repeat = ruleArg(args.repeat, day && day > now ? day : now) ?? null;
   if (repeat) day = repeat.from;
   if ((until || mark) && !day) throw new Bad("A stretch (until) or a date to hit (mark) needs a day.");
+  if (loose && repeat) throw new Bad("A repeating task needs days, not a when.");
   if (until && day && until < day) throw new Bad("until must be on or after its day.");
   const owner = typeof args.owner === "string" && args.owner.trim() && args.owner.trim().toLowerCase() !== "me" ? args.owner.trim().slice(0, 40) : null;
   const at = timeArg(args.time);
@@ -2244,7 +2272,7 @@ async function addTask(args: Record<string, unknown>, db: Db) {
   const siblings = rows.some((r) => r.id === parentId) ? [] : (await db.kids([parentId])).filter((r) => r.kind === "line" && !r.deleted);
   const sort = siblings.reduce((m, r) => Math.max(m, r.sort || 0), 0) + GAP;
   const { content, links, text: plain } = inline(text, shape);
-  const task: Task = { ...blank(), day, est: est ?? null, order: await lastOrder(db, shape, day, now), ...(owner ? { owner } : {}), ...(until && !repeat ? { until } : {}), ...(mark && !repeat ? { mark } : {}), ...(repeat ? { repeat, habit: boolArg(args.habit, false) } : {}), ...(typeof at === "number" ? { on: { day: day!, at }, len: len ? Math.max(15, len) : 30 } : {}) };
+  const task: Task = { ...blank(), day, est: est ?? null, order: await lastOrder(db, shape, day, now), ...(owner ? { owner } : {}), ...(until && !repeat ? { until } : {}), ...(mark && !repeat ? { mark } : {}), ...(repeat ? { repeat, habit: boolArg(args.habit, false) } : {}), ...(typeof at === "number" ? { on: { day: day!, at }, len: len ? Math.max(15, len) : 30 } : {}), ...(loose && !day ? { span: loose } : {}) };
   const line = row("line", { id: newId("li"), parent_id: parentId, sort, text: plain, content, links, tags: tagsIn(plain), fields: { done: false, box: true, task } });
   rows.push(line);
   const notes: unknown[] = Array.isArray(args.notes) ? [...args.notes] : typeof args.notes === "string" && args.notes.trim() ? [args.notes] : [];
@@ -2255,13 +2283,13 @@ async function addTask(args: Record<string, unknown>, db: Db) {
   if (notes.length) rows.push(...lineRows(notes, line.id, 0, shape));
   await db.insert(rows);
   return {
-    added: plain, id: line.id, to: name, day, ...(est ? { est_minutes: est } : {}), ...(repeat ? { repeats: repeatWord(repeat) } : {}),
+    added: plain, id: line.id, to: name, day, ...(loose && !day ? { when: spanWord({ ...task }, now) } : {}), ...(est ? { est_minutes: est } : {}), ...(repeat ? { repeats: repeatWord(repeat) } : {}),
     link: `${APP}?open=${encodeURIComponent(line.id)}`,
   };
 }
 
 /** The task fields a change touched, before and after, so it can be undone. */
-const TASK_KEYS = ["day", "est", "until", "mark", "repeat", "habit", "owner", "actual", "order", "did"] as const;
+const TASK_KEYS = ["day", "est", "until", "mark", "repeat", "habit", "owner", "actual", "order", "did", "span"] as const;
 function pick(t: Partial<Task> | null, keys: string[]) {
   const o: Record<string, unknown> = {};
   for (const k of keys) o[k] = t ? (t as Record<string, unknown>)[k] ?? null : null;
@@ -2286,6 +2314,18 @@ async function updateTask(args: Record<string, unknown>, db: Db) {
   }
   const est = minutesArg(args.est_minutes, "est_minutes");
   if (est !== undefined) patch.est = est;
+  // Loose time: a day and a span never go together.
+  const loose = spanArg(args.when, now);
+  if (loose !== undefined) {
+    if (loose && day) throw new Bad("Give a day or a when, not both.");
+    patch.span = loose;
+    if (loose) {
+      patch.day = null;
+      patch.until = null;
+      patch.mark = null;
+      if (was && isRepeat(was)) { patch.repeat = null; patch.habit = false; }
+    }
+  } else if (patch.day) patch.span = null;
   const until = await taskDay(args.until, db, "until");
   if (until !== undefined) {
     const d = patch.day ?? t.day;
@@ -2334,10 +2374,11 @@ async function updateTask(args: Record<string, unknown>, db: Db) {
   }
   const keys = Object.keys(patch).filter((k) => JSON.stringify((t as Record<string, unknown>)[k] ?? null) !== JSON.stringify((patch as Record<string, unknown>)[k] ?? null));
   if (!keys.length && was) return { task: short(r.text), note: "Nothing to change: it's already like that." };
-  if (!was && !("day" in patch) && !("est" in patch) && !("repeat" in patch)) throw new Bad("To make a line a task, give it a day or an estimate.");
+  if (!was && !("day" in patch) && !("est" in patch) && !("repeat" in patch) && !patch.span) throw new Bad("To make a line a task, give it a day, a when or an estimate.");
   const next: Task = { ...t, ...patch };
   const bits: string[] = [];
-  if (keys.includes("day")) bits.push(next.day ? `to ${next.day}` : "off its day");
+  if (keys.includes("day") && (next.day || !next.span)) bits.push(next.day ? `to ${next.day}` : "off its day");
+  if (keys.includes("span")) bits.push(next.span ? spanWord(next, now) ?? "loose" : "no longer loose");
   if (keys.includes("est")) bits.push(next.est ? `${next.est} min` : "no estimate");
   if (keys.includes("repeat")) bits.push(next.repeat ? repeatWord(next.repeat).toLowerCase() : "no longer repeating");
   if (keys.includes("until")) bits.push(next.until ? `through ${next.until}` : "one day");
