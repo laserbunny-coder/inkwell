@@ -199,10 +199,16 @@ export function drawCalendar(plan, day, tasks, events) {
   sheet.style.setProperty('--dc-bar', `${barH()}px`);
   if (!sheet.hidden) requestAnimationFrame(() => sheet.style.setProperty('--dc-bar', `${barH()}px`));
   if (plan.dcZoom === 'fit') requestAnimationFrame(() => { if (grid.isConnected) setZoom(grid, 'fit', box); });
-  if (plan.dcFocus) {
-    const id = plan.dcFocus;
-    requestAnimationFrame(() => { grid.querySelector(`.dc-blk[data-task="${CSS.escape(id)}"]`)?.focus(); });
-    plan.dcFocus = null;
+  // A block moved with the keys keeps the focus through the redraws that follow
+  // (the save, then sync): the block focused now, or the one just moved.
+  const was = document.activeElement?.classList?.contains('dc-blk') ? document.activeElement.dataset.task : null;
+  if (was) plan.dcFocus = { id: was, until: Date.now() + 1500 };
+  if (plan.dcFocus && plan.dcFocus.until > Date.now()) {
+    const want = plan.dcFocus;
+    requestAnimationFrame(() => {
+      const el = grid.isConnected && grid.querySelector(`.dc-blk[data-task="${CSS.escape(want.id)}"]`);
+      if (el && document.activeElement !== el && (document.activeElement === document.body || !document.activeElement || document.activeElement.closest?.('.dc'))) el.focus();
+    });
   }
   wire(plan, box, grid, day, { from, to, on, evs });
   return box;
@@ -289,7 +295,7 @@ function wire(plan, box, grid, day, ctx) {
       const step = e.key === 'ArrowUp' ? -SNAP : SNAP;
       const at0 = Number(blk.dataset.at);
       const len0 = Number(blk.dataset.len);
-      plan.dcFocus = blk.dataset.task;
+      plan.dcFocus = { id: blk.dataset.task, until: Date.now() + 1500 };
       if (e.shiftKey) { const len = Math.max(SNAP, Math.min(to - at0, len0 + step)); if (len !== len0) save(blk.dataset.task, { len }); }
       else { const a = Math.max(from, Math.min(to - len0, at0 + step)); if (a !== at0) save(blk.dataset.task, { on: { day, at: a } }); }
     }
