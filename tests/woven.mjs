@@ -99,7 +99,7 @@ try {
     await sleep(400);
     await p.keyboard.press('Control+O');
     await p.keyboard.type('Script · Rent Day');
-    await p.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('Script · Rent Day'));
+    await p.waitForFunction(() => document.querySelector('.palette[data-loaded]') && /^Script\s*chapter · Rent Day/.test(document.querySelector('#palette-list li.box-row')?.textContent || ''));
     await p.keyboard.press('Enter');
     await p.waitForSelector('html.script #editor p[data-el="scene"]');
     await p.locator('#editor p[data-el="scene"]').click();
@@ -109,8 +109,8 @@ try {
     await sleep(300);
     await run('Script view: Woven');
     await p.waitForFunction(() => document.documentElement.classList.contains('woven'));
+    await p.waitForFunction(() => document.querySelectorAll('.wv-line').length === 1);
     assert.equal(await p.locator('#editor p[data-el="scene"]').isVisible(), false);
-    assert.equal(await p.locator('.wv-line').count(), 1);
     const font = await p.locator('#editor .ProseMirror').evaluate((x) => getComputedStyle(x).fontFamily);
     assert.match(font, /Newsreader/);
     await sleep(800);
@@ -282,7 +282,8 @@ try {
     await sleep(400);
     await p.keyboard.press('Control+O');
     await p.keyboard.type('Script · Reel Five');
-    await p.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('Script · Reel Five'));
+    // Once the places are read, the chapter is on top ("Script", chapter · Reel Five).
+    await p.waitForFunction(() => document.querySelector('.palette[data-loaded]') && /^Script\s*chapter · Reel Five/.test(document.querySelector('#palette-list li.box-row')?.textContent || ''));
     await p.keyboard.press('Enter');
     await p.waitForFunction(() => document.documentElement.classList.contains('woven') && document.querySelectorAll('#editor .ProseMirror > p').length === 2);
     await p.locator('#editor p[data-el="action"]').click();
