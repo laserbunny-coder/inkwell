@@ -266,7 +266,7 @@ export class DeskPage {
     await this.load();
   }
 
-  // Projects changed underneath (a rename, a sync): draw again without asking Daybook.
+  // Projects changed underneath (a rename, a sync): draw again without asking the server.
   async refresh() { if (this.showing() && this.tab === 'stage' && this.now) await this.render({ now: this.now, failed: false }); }
 
   // How many calls are waiting, for the number beside Desk, without opening it.

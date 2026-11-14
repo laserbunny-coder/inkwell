@@ -2,16 +2,16 @@
 // words, added or taken out by hand, or by Claude), shots under each scene
 // with codes that never change, prompts and renders with a star on the one
 // that worked, the storyboard, the kit (bible pages as elements), shoot days
-// with a one-page call sheet that goes to Daybook, posting captions, and the
-// shot list and subtitles out to Resolve. window.__claude stands in for the
-// server and window.__daybook for Daybook.
+// with a one-page call sheet that becomes a task on its day, posting captions,
+// and the shot list and subtitles out to Resolve. window.__claude stands in
+// for the server.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { readFile } from 'node:fs/promises';
 import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
-import { shotCode, shotNumber, shotForName, findElements, sceneElements, withRenders, withPrompts, shotStage, toSrt, speechesIn, toCsv, dayTask, guessType, pad } from '../src/production.js';
+import { shotCode, shotNumber, shotForName, findElements, sceneElements, withRenders, withPrompts, shotStage, toSrt, speechesIn, toCsv, guessType, pad } from '../src/production.js';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -77,10 +77,6 @@ checkNow('subtitles: one per speech, in order, names left out unless asked', () 
 checkNow('the shot list is CSV that Excel and Resolve read', () => {
   assert.equal(toCsv([['a', 'b,c'], ['say "hi"', '']]), 'a,"b,c"\r\n"say ""hi""",\r\n');
 });
-checkNow('a shoot day goes to Daybook on its date at call time', () => {
-  const t = dayTask({ id: 'sd_1', fields: { date: '2027-02-03', call: '07:30', place: 'Echo Park', notes: 'Bring rain covers' } }, { title: 'Reel 4' }, 'https://x/inkwell/');
-  assert.deepEqual(t, { id: 'inkwell-sd_1', title: 'Shoot: Reel 4 at Echo Park', notes: 'Bring rain covers', link: 'https://x/inkwell/?open=sd_1', deleted: false, day: '2027-02-03', start_min: 450 });
-});
 checkNow('a bible page is guessed from the page it sits in', () => {
   assert.equal(guessType('Characters'), 'character');
   assert.equal(guessType('Places'), 'location');
@@ -97,7 +93,6 @@ const SHOTS = process.env.SHOTS || '';
 
 const table = new Map();
 const bucket = new Map();
-const tasks = [];
 let clock = Date.parse('2026-10-20T00:00:00Z');
 const tick = () => new Date((clock += 1000)).toISOString();
 function remote(op, arg) {
@@ -112,7 +107,6 @@ function remote(op, arg) {
   }
   if (op === 'upload') { bucket.set(arg.path, arg); return true; }
   if (op === 'download') return bucket.get(arg) || null;
-  if (op === 'task') { tasks.push(arg); return true; }
 }
 const fake = () => {
   const toB64 = (blob) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.readAsDataURL(blob); });
@@ -128,7 +122,6 @@ const fake = () => {
     },
     subscribe() {}, unsubscribe() {}
   };
-  window.__daybook = (task) => window.__remote('task', task);
   window.__asked = [];
   window.__claude = async (body) => {
     window.__asked.push(body);
@@ -415,7 +408,7 @@ try {
     assert.equal(await scene(laptop, 'pp_1').locator('.pd-changed').count(), 0);
   });
 
-  await check('a shoot day: one-page call sheet from the breakdown, sent to Daybook on its day', async () => {
+  await check('a shoot day: one-page call sheet from the breakdown, made a task on its day', async () => {
     await laptop.locator('.gv-levels .chip[data-tab="days"]').click();
     await laptop.locator('.pd-days .chip.add', { hasText: 'Shoot day' }).click();
     await laptop.waitForSelector('.pd-dayform');
@@ -446,13 +439,21 @@ try {
     await laptop.locator('.pd-daypick .chip', { hasText: 'DOJO' }).click();
     await sleep(400);
     await shot(laptop, 'production-callsheet');
-    await laptop.locator('.pd-dayform .pill', { hasText: 'Send to Daybook' }).click();
-    await laptop.waitForFunction(() => /Daybook plan/.test(document.querySelector('.toast')?.textContent || ''));
-    const t = tasks.at(-1);
-    assert.equal(t.day, '2027-02-03');
-    assert.equal(t.start_min, 450);
-    assert.equal(t.title, 'Shoot: Reel 4: Breakfast at Echo Park');
-    assert.match(t.link, /\?open=sd_/);
+    await laptop.locator('.pd-dayform .pill', { hasText: 'Make it a task' }).click();
+    await laptop.waitForFunction(() => /On your plan for Wednesday, February 3 at 7:30 am/.test(document.querySelector('.toast')?.textContent || ''));
+    const lines = () => laptop.evaluate(() => new Promise((res) => { const q = indexedDB.open('writing'); q.onsuccess = () => { const g = q.result.transaction('entries').objectStore('entries').getAll(); g.onsuccess = () => res(g.result); }; }));
+    const shoot = async () => (await lines()).filter((r) => r.kind === 'line' && r.fields?.task && !r.deleted && /^Shoot: /.test(r.text));
+    let made = await shoot();
+    assert.equal(made.length, 1);
+    const [t] = made;
+    assert.equal(t.fields.task.day, '2027-02-03');
+    assert.deepEqual(t.fields.task.on, { day: '2027-02-03', at: 450 }, 'in the Calendar at call time');
+    assert.match(t.text, /^Shoot: Reel 4: Breakfast at Echo Park/);
+    assert.match(t.links[0], /^sd_/, 'links back to the shoot day');
+    await laptop.locator('.pd-dayform .pill', { hasText: 'Update the task' }).click();
+    await sleep(500);
+    made = await shoot();
+    assert.equal(made.length, 1, 'sent again, the same task is kept up to date');
   });
 
   await check('posting (in Deliver now): Claude drafts a caption per platform, links are kept for later', async () => {

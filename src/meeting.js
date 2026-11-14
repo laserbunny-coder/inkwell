@@ -11,8 +11,8 @@ import { speechTerms } from './terms.js';
 // Inkwell, or a file added with Ctrl+K on the desk) lands on today's page,
 // and once there's a connection it becomes a meeting page: a short summary,
 // what was decided, the tasks with who's doing each, and the whole meeting
-// written out with each speaker named. Your own tasks go on to Daybook, in
-// Business or Filmmaking depending on what the meeting was about.
+// written out with each speaker named. A business meeting and its tasks go
+// to Acro HQ; otherwise your own tasks become tasks here.
 //
 // A shared recording with only one voice in it is an idea said out loud, so
 // it's written up like a Capture instead.
@@ -232,8 +232,8 @@ let retry = null;
 
 // Works through what's waiting: the recording goes up and comes back
 // written out (kept on the page at once), then Claude's notes go on, then
-// your tasks go to Daybook. `ask` sends a request to the server.
-export function meetingPending({ ask, canAsk, onRows, me = () => '', areas, base, sendPending, onDone }) {
+// your tasks become tasks (or go to Acro HQ). `ask` sends a request to the server.
+export function meetingPending({ ask, canAsk, onRows, me = () => '', base, onDone }) {
   busy ||= (async () => {
     clearTimeout(retry);
     const items = await waiting();
@@ -304,12 +304,11 @@ export function meetingPending({ ask, canAsk, onRows, me = () => '', areas, base
       await unqueue(it.line);
       setFileNote(it.file, '');
       onRows(rows);
-      sendPending?.();
       onDone?.(it, notes, to);
     }
   })().catch((e) => console.error(e)).finally(() => {
     busy = null;
-    waiting().then((left) => { if (left.length) retry = setTimeout(() => meetingPending({ ask, canAsk, onRows, me, areas, base, sendPending, onDone }), 3 * 60 * 1000); });
+    waiting().then((left) => { if (left.length) retry = setTimeout(() => meetingPending({ ask, canAsk, onRows, me, base, onDone }), 3 * 60 * 1000); });
   });
   return busy;
 }

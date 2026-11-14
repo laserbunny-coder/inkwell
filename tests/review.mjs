@@ -1,10 +1,10 @@
 // The day review: Ctrl + K on a day page asks Claude to look back over it.
-// A few sentences on the day, then a card for each thread with a choice: Add
-// to Daybook (words and area editable first), Keep thinking (onto the "Still
+// A few sentences on the day, then a card for each thread with a choice: Make
+// it a task (words editable first; it goes on the Tasks page), Keep thinking (onto the "Still
 // thinking about" page, with a link back), Split into parts, or Let go.
 // Things still being mulled come back in later reviews, and the 9 pm note's
 // link (?review=<date>) opens a day's review. window.__claude stands in for
-// Claude, window.__daybook for Daybook's table and window.__areas for its areas.
+// Claude.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -19,9 +19,7 @@ const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT
 await sleep(1500);
 const URL = `http://localhost:${PORT}/`;
 
-const tasks = new Map();
 const asked = [];
-function daybook(task) { tasks.set(task.id, { ...tasks.get(task.id), ...task }); return true; }
 function claude(body) {
   if (body.mode !== 'review') return {};
   asked.push(body);
@@ -48,8 +46,6 @@ function claude(body) {
 }
 const fake = () => {
   window.__claude = (body) => window.__toClaude(body);
-  window.__daybook = (task) => window.__toDaybook(task);
-  window.__areas = async () => [{ id: 'area-film', title: 'Filmmaking' }, { id: 'area-personal', title: 'Personal' }];
 };
 
 const all = (p) => p.evaluate(() => new Promise((res) => {
@@ -68,7 +64,6 @@ const card = (p, title) => p.locator('.dr-card', { has: p.locator('.dr-title', {
 const browser = withoutSync(await chromium.launch());
 const ctx = await browser.newContext({ colorScheme: 'dark' });
 await ctx.exposeFunction('__toClaude', claude);
-await ctx.exposeFunction('__toDaybook', daybook);
 await ctx.addInitScript(fake);
 const page = await ctx.newPage();
 page.errors = [];
@@ -109,12 +104,11 @@ try {
     await page.waitForSelector('.day-review .dr-card', { timeout: 5000 });
     assert.equal(asked.length, 1);
     assert.equal(asked[0].lines.length, 4, 'every line with words goes');
-    assert.deepEqual(asked[0].areas.map((a) => a.title), ['Filmmaking', 'Personal'], 'with Daybook’s areas');
     assert.match(await page.textContent('.dr-summary'), /Ninja Bunch/);
     assert.equal(await page.locator('.dr-summary p').count(), 2, 'a longer summary keeps its paragraphs');
     assert.equal(await page.locator('.dr-card').count(), 3);
     assert.match(await page.textContent('.dr-toggle'), /3 to sort/);
-    assert.equal(await card(page, 'Storyboards with Dana').locator('.dr-suggested').textContent(), 'Add to Daybook', 'Claude’s suggestion stands out');
+    assert.equal(await card(page, 'Storyboards with Dana').locator('.dr-suggested').textContent(), 'Make it a task', 'Claude’s suggestion stands out');
     assert.match(await card(page, 'Storyboards with Dana').locator('.dr-line').textContent(), /Call Dana/, 'with the line it came from');
     const review = (await all(page)).find((r) => r.kind === 'review');
     assert.equal(review.parent_id.slice(0, 4), 'day-', 'kept with its day');
@@ -122,25 +116,37 @@ try {
 
   if (shots) await page.screenshot({ path: `${shots}/desktop-6-day-review.png` });
 
-  await check('Add to Daybook: change the words and area first, then it goes, linked back to the line', async () => {
+  const reviewTasks = async () => (await all(page)).filter((r) => r.kind === 'line' && r.fields?.task && !r.deleted && r.parent_id === 'page-tasks');
+  await check('Make it a task: change the words first, then it goes on the Tasks page, linked back to the line', async () => {
     const c = card(page, 'Storyboards with Dana');
-    await c.locator('[data-choice="daybook"]').click();
+    await c.locator('[data-choice="task"]').click();
     await page.waitForSelector('.dr-task input');
     assert.equal(await page.inputValue('.dr-task input'), 'Call Dana about the storyboards');
-    assert.equal(await page.inputValue('.dr-task select'), 'area-film', 'Claude’s guess at the area');
+    assert.equal(await page.locator('.dr-task select').count(), 0, 'no areas to pick any more');
     if (shots) await page.screenshot({ path: `${shots}/desktop-7-review-task.png` });
     await page.fill('.dr-task input', 'Call Dana about the storyboards (Friday)');
-    await page.selectOption('.dr-task select', 'area-personal');
     await page.click('.dr-send');
-    await page.waitForFunction(() => /Sent to Daybook/.test(document.querySelector('.toast')?.textContent || ''), null, { timeout: 5000 });
-    assert.equal(tasks.size, 1);
-    const [task] = tasks.values();
-    assert.equal(task.title, 'Call Dana about the storyboards (Friday)');
-    assert.equal(task.area_id, 'area-personal');
-    const line = (await all(page)).find((r) => r.kind === 'line' && /Call Dana/.test(r.text));
-    assert.equal(task.link, `${URL}?open=${line.id}`);
-    assert.equal(line.fields.daybook.id, task.id);
-    assert.match(await card(page, 'Storyboards with Dana').textContent(), /In Daybook · Personal/);
+    await page.waitForFunction(() => /Made a task/.test(document.querySelector('.toast')?.textContent || ''), null, { timeout: 5000 });
+    const made = await reviewTasks();
+    assert.equal(made.length, 1);
+    const [task] = made;
+    assert.match(task.text, /^Call Dana about the storyboards \(Friday\)/);
+    assert.equal(task.fields.task.day, null, 'not on a day yet');
+    const line = (await all(page)).find((r) => r.kind === 'line' && /Call Dana about the Ninja/.test(r.text));
+    assert.deepEqual(task.links, [line.id], 'links back to the line it came from');
+    assert.ok(line.fields.sorted, 'the line counts as sorted');
+    assert.match(await card(page, 'Storyboards with Dana').textContent(), /A task, on the Tasks page/);
+  });
+
+  await check('Undo on a task card puts the task in the Trash and the card back', async () => {
+    await card(page, 'Storyboards with Dana').locator('.dr-outcome .ghost-btn').click();
+    await sleep(500);
+    assert.equal((await reviewTasks()).length, 0);
+    await card(page, 'Storyboards with Dana').locator('[data-choice="task"]').click();
+    await page.fill('.dr-task input', 'Call Dana about the storyboards (Friday)');
+    await page.click('.dr-send');
+    await sleep(600);
+    assert.equal((await reviewTasks()).length, 1);
   });
 
   await check('a card offers Claude’s link and tags: one tap puts them on the line, another takes them off', async () => {
@@ -222,12 +228,12 @@ try {
     await sleep(300);
     await card(page, 'Sea shanty theme song').locator('[data-choice="let_go"]').click();
     await sleep(300);
-    await card(page, 'Fix the bike').locator('[data-choice="daybook"]').click();
-    assert.equal(await page.inputValue('.dr-task select'), 'area-personal');
+    await card(page, 'Fix the bike').locator('[data-choice="task"]').click();
     await page.click('.dr-send');
     await sleep(600);
-    assert.equal(tasks.size, 2);
-    assert.ok([...tasks.values()].some((t) => t.title === 'Fix the bike' && t.area_id === 'area-personal'));
+    const made = await reviewTasks();
+    assert.equal(made.length, 2);
+    assert.ok(made.some((t) => t.text.startsWith('Fix the bike')));
     assert.equal((await page.textContent('.dr-toggle')).trim(), 'Day review', 'nothing left to sort');
   });
 
@@ -245,7 +251,7 @@ try {
     await sleep(800);
     assert.equal(asked.length, 2);
     assert.equal(asked[1].lines.length, 1, 'only the line not yet sorted goes');
-    assert.match(await card(page, 'Storyboards with Dana').textContent(), /In Daybook/);
+    assert.match(await card(page, 'Storyboards with Dana').textContent(), /A task, on the Tasks page/);
   });
 
   // An earlier day, for the link from the 9 pm note.
@@ -304,7 +310,6 @@ try {
   if (shots) {
     const phone = await browser.newContext({ colorScheme: 'dark', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
     await phone.exposeFunction('__toClaude', claude);
-    await phone.exposeFunction('__toDaybook', daybook);
     await phone.addInitScript(fake);
     const pp = await phone.newPage();
     await pp.goto(URL);

@@ -74,7 +74,6 @@ span.wp-edit:empty { display: inline-block; min-width: 12ch; }
 .pl-task:hover .pl-when.unset, .pl-when.unset:focus-visible { opacity: 1; }
 @media (--touch) { .pl-when.unset { opacity: 1; } }
 .pl-alldone { align-self: flex-start; margin: 6px 0 0 32px; }
-.wp-daybook { margin-top: 14px; max-width: 520px; }
 
 /* Crew and turns. */
 .hide-projcrew :is(#wh-crew, #wh-turns) { display: none; }

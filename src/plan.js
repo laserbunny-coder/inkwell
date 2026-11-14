@@ -1992,7 +1992,7 @@ export class Plan {
     this.took = null;
     if (done && row && !row.fields.task.habit) {
       // With the question switched off, a timed task still keeps its time.
-      if (this.hooks.off?.('estimates')) { const on = timed(row.fields.task); if (on) await tookTask(id, on); }
+      if (!this.estimates) { const on = timed(row.fields.task); if (on) await tookTask(id, on); }
       else if (this.dayShown) this.took = id;
     }
     await this.wrote(row);

@@ -281,7 +281,7 @@ export class StagePage {
   // hooks: go(place), openEntry(id), openBook(id), menu(anchor, items),
   // menuButton(fn, label), ask, askText, toast, askServer, canAsk,
   // changed(rows), board(el, world, pieces), revise(action, piece),
-  // newPage(parentId), newPiece(parentId), sendTask(task), base()
+  // newPage(parentId), newPiece(parentId), base()
   constructor(el, hooks) {
     this.el = el;
     this.hooks = hooks;

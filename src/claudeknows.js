@@ -2,7 +2,7 @@ import { getEntry, putEntries, byKind, CLAUDE } from './db.js';
 import { entry } from './model.js';
 
 // What Claude knows: the notes Claude keeps to find its way around Inkwell
-// (see the connector, inkwell-mcp in the Daybook repo). They're out of sight
+// (see the connector, supabase/functions/inkwell-mcp). They're out of sight
 // everywhere else; this is the one place to look at them.
 //
 // - A one-line "about" for a world, piece, page or chapter: an entry of kind

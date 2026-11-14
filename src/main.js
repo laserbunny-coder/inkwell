@@ -53,7 +53,6 @@ import { CaptureScreen, writeOutPending, recoverRecording, writeOutAgain, requeu
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, placeScribeWaiting, RAW } from './voice.js';
 import { takeShares, snapshotPending, tidyShareBlanks, keepShare } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
-import { sendPending, queueTask } from './daybook.js';
 import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker, speakersOn, mine, sendMeetingToAcro } from './meeting.js';
 import { DayReview, getReview } from './review.js';
 import { TagsPage, tagIndex, statsOf } from './tags.js';
@@ -3201,7 +3200,6 @@ const production = new ProductionView($('#prod-view'), {
   askServer: (body) => askServer(body),
   canAsk: () => canAskServer(),
   numberScenes: async (piece) => { await toggleNumbering(piece); await production.refresh(); },
-  sendTask: async (task) => { await queueTask(task); await sendPending({ send: sendTask, canSend: canSendTask }); },
   base: () => location.origin + location.pathname,
   files: (kind, piece) => filesOut(kind, piece),
   share: (piece) => openShare(piece),
@@ -5045,13 +5043,12 @@ async function writeLineOutAgain() {
 }
 function writeOut() {
   const opts = { ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows), typing: (id) => notebook.typingOn(id) };
-  return Promise.all([writeOutPending({ ...opts, draft: { context: draftContext, deliver: deliverDraft } }), snapshotPending(opts), meetingPending({ ...opts, ...meetingOpts }), sendPending({ send: sendTask, canSend: canSendTask })]);
+  return Promise.all([writeOutPending({ ...opts, draft: { context: draftContext, deliver: deliverDraft } }), snapshotPending(opts), meetingPending({ ...opts, ...meetingOpts })]);
 }
 // Meetings: your tasks become tasks here (a business one goes to Acro HQ).
 const meetingOpts = {
   me: () => sync.user?.user_metadata?.full_name || sync.user?.user_metadata?.name || '',
   base: () => location.origin + location.pathname,
-  sendPending: () => sendPending({ send: sendTask, canSend: canSendTask }),
   onDone: (it, notes, to) => {
     const sent = to === 'acro' ? notes.tasks.length : notes.tasks.filter((t) => mine(t.owner, meetingOpts.me())).length;
     const where = to === 'acro' ? 'Acro HQ' : 'your plan';
@@ -5107,10 +5104,7 @@ async function fixSpeaker() {
     await applyRemote(await renameSpeaker(pid, from, to));
   } })), menuSpot());
 }
-// Tasks still waiting to go to Daybook (the day review and shoot days still send there).
-const sendTask = (task) => (window.__daybook ? window.__daybook(task) : sync.backend.addTask(task));
-const canSendTask = () => !!window.__daybook || (!!sync.user && navigator.onLine && !!sync.backend?.addTask);
-// A link from Daybook (or anywhere) to ?open=<id> opens that line where it
+// A link from anywhere to ?open=<id> opens that line where it
 // lives, once this device has it.
 let asking = null;
 async function openAsked() {
@@ -5298,13 +5292,11 @@ async function openCapture(opts) {
 if (!inPane) window.addEventListener('online', () => writeOut());
 
 // The day review: Claude sums up a day's page and sorts what's on it, and you
-// decide each thing (Daybook, keep thinking, split, let go).
+// decide each thing (a task, keep thinking, split, let go).
 dayReview = new DayReview($('.day-review'), {
   card: $('.evening-card'),
   ask: askServer,
   canAsk: canAskServer,
-  areas: () => (window.__areas ? window.__areas() : sync.user && sync.backend?.areas ? sync.backend.areas() : null),
-  sendPending: () => sendPending({ send: sendTask, canSend: canSendTask }),
   base: () => location.origin + location.pathname,
   onRows: (rows) => applyRemote(rows),
   onOpen: (id) => openEntry(id),
@@ -5469,7 +5461,7 @@ plan = new Plan({
     // Weeks ahead: the lanes as the Desk seats them, and shoot days.
     ahead: () => aheadSource((since) => { const b = deskBackend(); return b ? b.desk(since) : null; }),
     talk: () => (inPane || !paneHost() || root.classList.contains('hide-panes') ? null : () => openTalk()),
-    // Google Calendar, read-only, through the reader Daybook's server already has.
+    // Google Calendar, read-only, through the server's calendar function.
     calendar: (from, to) => calendarEvents((a, b) => (window.__calendar ? window.__calendar(a, b) : sync.user && sync.invoke ? sync.invoke('calendar', { timeMin: a, timeMax: b }) : null), from, to),
     // Pull from a project: its lines open next to the plan, to drag in.
     pull: inPane ? null : () => pullFromProject(),
@@ -5559,7 +5551,7 @@ async function whenHere() {
   return false;
 }
 
-// Google Calendar, connected from Inkwell itself (it used to borrow Daybook's sign-in).
+// Google Calendar, connected from Inkwell itself.
 async function connectCalendar() {
   const b = sync.backend;
   if (!b?.connectCalendar || !sync.user) { toast('Sign in first (Ctrl + K, “Sign in”), then connect your calendar.'); return; }
@@ -5583,7 +5575,7 @@ const peekDesk = () => { if (inPane || document.hidden || Date.now() - deskPeeke
 if (!inPane) for (const ms of [4000, 20000]) setTimeout(() => { deskPeeked = Date.now(); deskPage.peek(); }, ms);
 setInterval(peekDesk, 300000);
 document.addEventListener('visibilitychange', peekDesk);
-// The 9 pm note in Daybook links to ?review=<date>: open that day and its
+// The 9 pm alert links to ?review=<date>: open that day and its
 // review, or ask Claude for one once this device has caught up.
 let reviewing = null;
 async function reviewAsked() {
@@ -6000,9 +5992,9 @@ async function start() {
     if (signedIn) { await go({ view: 'notebook', pageId: dayId(reviewing) }); if (await getReview(reviewing)) await reviewAsked(); } else await reviewAsked();
   }
   if (asked.get('capture')) openCapture();
-  // The Monday note in Daybook links to ?tidy=<Monday>: the pass opens, and fills in as this device catches up.
+  // The Monday alert links to ?tidy=<Monday>: the pass opens, and fills in as this device catches up.
   if (asked.has('tidy')) showTidy().catch((e) => console.error(e));
-  // The monthly note in Daybook links to ?summaries: What Claude knows, with the weekly and monthly summaries.
+  // The monthly alert links to ?summaries: What Claude knows, with the weekly and monthly summaries.
   if (asked.has('summaries')) showClaudeKnows(null).catch((e) => console.error(e));
   if (asked.get('open')) { asking = asked.get('open'); await openAsked(); }
   // A phone alert for Needs you or a note from Claude opens the Desk, where they're listed.

@@ -75,7 +75,7 @@ function supabaseBackend() {
       if (error) throw error;
       return !!data;
     },
-    // Calls one of the server functions (they live with Daybook's, in the same project).
+    // Calls one of the server functions (supabase/functions in this repository).
     async invoke(name, body) {
       const { data, error } = await sb.functions.invoke(name, { body });
       if (error) {
@@ -105,44 +105,6 @@ function supabaseBackend() {
       if (error) throw error;
       return data;
     },
-    // A task in Daybook's Inbox (same account, Daybook's own table). Sent
-    // again, only its words and link change: wherever it was moved, done or
-    // not, stays as Daybook has it. With an area, it goes straight into that
-    // area as a task of its own; without, to the Inbox.
-    // A task can sit on a day (a shoot day), at a time (its call time).
-    async addTask({ id, title, notes, link, area_id = null, day, start_min }) {
-      const when = { ...(day ? { day } : {}), ...(day && Number.isFinite(start_min) ? { start_min } : {}) };
-      const { error } = await sb.from('items').insert({ id, title, notes, link, parent_id: null, area_id, kind: null, sort: Date.now() / 1000, ...when });
-      if (!error) return;
-      if (error.code !== '23505') throw error;
-      const again = await sb.from('items').update({ title, notes, link, deleted: false, ...when }).eq('id', id);
-      if (again.error) throw again.error;
-    },
-    // Daybook tasks that link to an old note (a Thymer page) open its new home
-    // in Inkwell instead. Matched on the page's own id in the link. Returns how many.
-    async relinkTasks(from, to) {
-      const key = (String(from).match(/[?&]open=([^&#\s]+)/) || [])[1] || String(from).trim();
-      if (!key || key.length < 6) return 0;
-      const { data, error } = await sb.from('items').update({ link: to }).like('link', `%${key.replace(/[%_]/g, '\\$&')}%`).eq('deleted', false).select('id');
-      if (error) throw error;
-      return data?.length || 0;
-    },
-    // Daybook's areas (Business, Filmmaking…), for where a task should go.
-    async areas() {
-      const { data, error } = await sb.from('items').select('id,title,sort').eq('kind', 'area').eq('deleted', false).order('sort');
-      if (error) throw error;
-      return data.map(({ id, title }) => ({ id, title }));
-    },
-    // Everything in Daybook, for bringing it in. Only ever read.
-    async daybookItems() {
-      const out = [];
-      for (let from = 0; ; from += 1000) {
-        const { data, error } = await sb.from('items').select('*').order('id').range(from, from + 999);
-        if (error) throw error;
-        out.push(...data);
-        if (data.length < 1000) return out;
-      }
-    },
     // The Desk: Needs you items and the updates Claude threads logged. Both
     // are Daybook's tables, read-only here except a Needs you item's cleared
     // and set-aside times.
@@ -166,7 +128,7 @@ function supabaseBackend() {
       return { needs: needs.data || [], updates: updates.error ? [] : updates.data || [] };
     },
     // Phone alerts: this device's Web Push sign-up, and the switches (one set
-    // for the account, shared with Daybook while it's still around).
+    // for the account).
     async savePushSub(row) {
       const { error } = await sb.from('push_subs').upsert(row);
       if (error) throw error;
