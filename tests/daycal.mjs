@@ -157,13 +157,16 @@ try {
     await blk(page, 'Print the call sheet').focus();
     await page.keyboard.press('Alt+ArrowDown');
     await page.waitForFunction(() => /7:15 pm/.test(document.activeElement?.textContent || ''));
+    await sleep(300); // the redraws after a save settle
     assert.deepEqual(await placedAt(page, 'Print the call sheet'), { day: TODAY, at: 19 * 60 + 15 });
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), await blk(page, 'Print the call sheet').textContent(), 'it keeps the focus');
     await page.keyboard.press('Alt+Shift+ArrowDown');
-    await page.waitForFunction(() => /45 min/.test([...document.querySelectorAll('#plan-sheet .dc-blk')].find((b) => /Print the call/.test(b.textContent))?.textContent || ''));
+    await page.waitForFunction(() => /45 min/.test(document.activeElement?.textContent || ''));
+    await sleep(300);
     assert.equal((await named(page, 'Print the call sheet')).fields.task.len, 45);
     await page.keyboard.press('Alt+Shift+ArrowUp');
     await page.waitForFunction(() => /7:15 pm · 30 min/.test(document.activeElement?.textContent || ''));
+    await sleep(300);
     await page.keyboard.press('Alt+ArrowUp');
     await page.waitForFunction(() => /7 pm · 30 min/.test([...document.querySelectorAll('#plan-sheet .dc-blk')].find((b) => /Print the call/.test(b.textContent))?.textContent || ''));
     assert.deepEqual(await placedAt(page, 'Print the call sheet'), { day: TODAY, at: 19 * 60 });
