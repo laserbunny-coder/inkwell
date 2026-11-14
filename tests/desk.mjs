@@ -344,7 +344,7 @@ try {
     await sleep(300);
     await page.keyboard.press('Control+O');
     await page.waitForSelector('.palette.box', { state: 'visible' });
-    assert.deepEqual(await page.locator('.box-rooms .go-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up', 'Aa Look']);
+    assert.deepEqual(await page.locator('.box-rooms .go-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up']);
     await page.locator('.box-rooms .box-chip', { hasText: 'Desk' }).click();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'desk');
     await page.waitForSelector('.dk-chair');
@@ -437,12 +437,6 @@ try {
       assert.equal(await page.locator('.dk-thread .dk-rr').evaluate((e) => getComputedStyle(e).color), await page.locator('.dk-waits').first().evaluate((e) => getComputedStyle(e).color), 'in the signal colour');
       if (SHOTS) { await still(page); await page.screenshot({ path: `${SHOTS}/desk-history-closed.png` }); }
 
-      // Switched off under Look: no tag, no chip, and the thread reads as waiting on you.
-      const flip = (on) => page.evaluate((v) => { const c = document.querySelector('[data-show="closedtag"]'); c.checked = v; c.dispatchEvent(new Event('change')); }, on);
-      await flip(false);
-      await page.waitForFunction(() => !document.querySelector('.dk-filters [data-f="loose"]'));
-      assert.match(await page.locator('.dk-thread', { hasText: 'Six-dot' }).locator('.dk-rr').innerText(), /Waiting on you/);
-      await flip(true);
       await page.locator('.dk-filters button', { hasText: 'Everything' }).click();
 
       // Written in again: a newer line that isn't "Closed:" opens it, and the tag goes.
@@ -631,7 +625,7 @@ try {
   await check('the Go sheet ends with All commands, every command in groups', async () => {
     await phone.locator('.pb-place').tap();
     await phone.waitForSelector('.palette.box', { state: 'visible' });
-    assert.deepEqual(await phone.locator('.box-rooms .go-name').allInnerTexts(), ['Drawer', 'Tags', 'Catch-up', 'Aa Look', 'Outline']);
+    assert.deepEqual(await phone.locator('.box-rooms .go-name').allInnerTexts(), ['Drawer', 'Tags', 'Catch-up', 'Outline']);
     await phone.locator('.box-allrow').tap();
     await phone.waitForSelector('.palette.box-all', { state: 'visible' });
     assert.ok(await phone.locator('.box-fold').count() >= 8);

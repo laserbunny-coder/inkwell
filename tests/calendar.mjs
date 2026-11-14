@@ -208,16 +208,16 @@ try {
     await page.evaluate(() => localStorage.removeItem('cal-mode'));
   });
 
-  await check('under Look: the events and “left today” can each be switched off', async () => {
+  await check('under Look: the events can be switched off, and “left today” goes with Time estimates', async () => {
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
     await day(page, '2026-11-09');
     await page.waitForSelector('#plan .pl-ev');
-    await page.evaluate(() => document.documentElement.classList.add('hide-calendar', 'hide-hoursleft'));
+    await page.evaluate(() => document.documentElement.classList.add('hide-calendar', 'hide-estimates'));
     assert.ok(await page.locator('#plan .pl-cal').isHidden());
     assert.ok(await page.locator('#plan .pl-left').isHidden());
-    await page.evaluate(() => document.documentElement.classList.remove('hide-calendar', 'hide-hoursleft'));
-    assert.ok(await page.locator('input[data-show="calendar"]').count() && await page.locator('input[data-show="hoursleft"]').count());
+    await page.evaluate(() => document.documentElement.classList.remove('hide-calendar', 'hide-estimates'));
+    assert.ok(await page.locator('input[data-show="calendar"]').count() && await page.locator('input[data-show="estimates"]').count());
     assert.deepEqual(page.errors, []);
   });
 
@@ -260,9 +260,9 @@ try {
     await p.locator('.ask-input').fill('0');
     await p.locator('.ask .pill.primary').click();
     await p.waitForFunction(() => document.querySelector('.pa-row[data-area="area-filmmaking"] .pl-meter-v')?.textContent === '2 h');
-    await p.evaluate(() => document.documentElement.classList.add('hide-areahours'));
+    await p.evaluate(() => document.documentElement.classList.add('hide-estimates'));
     assert.ok(await p.locator('.pw-areas').isHidden());
-    assert.ok(await p.locator('input[data-show="areahours"]').count());
+    assert.ok(await p.locator('input[data-show="estimates"]').count());
     assert.deepEqual(p.errors, []);
     await p.context().close();
   });

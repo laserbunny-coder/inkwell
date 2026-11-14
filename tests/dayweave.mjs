@@ -148,13 +148,9 @@ try {
     await seqIs(page, ['Email Dana the boards', '@ Standup with Nate', 'Cut the trailer', '@ Dentist', 'Print the call sheet', '@ Call with Dana']);
   });
 
-  await check('Look: events apart puts them back on top; time estimates bring the lengths and hours back', async () => {
-    await look(page, 'woven', false);
-    await page.waitForFunction(() => !document.querySelector('#plan .pl-wev'));
-    assert.equal(await page.locator('#plan .pl-cal .pl-ev').count(), 4);
-    assert.deepEqual(await page.locator('#plan .pl-task:not(.done) .pl-words').allInnerTexts(), ['Email Dana the boards', 'Cut the trailer', 'Print the call sheet'], 'the order holds');
-    await look(page, 'woven', true);
+  await check('Look: time estimates bring the lengths and hours back (events are always woven in)', async () => {
     await page.waitForSelector('#plan .pl-wev');
+    assert.equal(await page.locator('[data-show="woven"]').count(), 0, 'no switch to put events apart');
     await look(page, 'estimates', true);
     await page.waitForFunction(() => /2 h to do/.test(document.querySelector('#plan .pl-sum')?.textContent || ''));
     assert.equal(await row(page, 'Cut the trailer').locator('.pl-est').innerText(), '2 h');

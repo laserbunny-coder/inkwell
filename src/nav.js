@@ -1,7 +1,8 @@
 // Getting around: always show where you are, and one tap on it gets you
 // anywhere.
 //
-// On a phone a bar sits along the bottom (hidden while the keyboard is up):
+// On a phone the bottom holds one thing: the writing row while the keyboard
+// is up, else the bar (or, when it's quiet, a tab that brings the bar up):
 // Today, Desk, the mic in the middle, Library and Go. Go opens the one box
 // (box.js) as a sheet: Jump back (the first is Back), this piece's or
 // world's pages, the rooms, Right here and All commands.
@@ -73,22 +74,28 @@ export class Nav {
     this.place = item('pb-place', 'go', 'Go');
     this.place.addEventListener('click', () => this.toggle());
     bar.append(this.today, this.desk, mic, this.lib, this.place);
-    // In focus mode the bar shrinks to a handle; a tap brings it back for a moment.
-    const handle = make('button', 'pb-handle');
-    handle.setAttribute('aria-label', 'Show the bar');
-    handle.append(make('span'));
-    handle.addEventListener('click', () => document.body.classList.add('bar-peek'));
-    document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.placebar, .pb-handle, .palette')) document.body.classList.remove('bar-peek'); });
+    // When it's quiet (Focus, or a draft) the bar rests as a small tab; a tap
+    // brings it up until the next touch on the page. It's a button, so it
+    // never brings up the keyboard. In Focus the bar comes with a way out.
+    const tab = make('button', 'pb-tab');
+    tab.setAttribute('aria-label', 'Show the bar');
+    tab.innerHTML = '<span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 14 5-5 5 5"/></svg></span>';
+    tab.addEventListener('click', () => document.body.classList.add('bar-peek'));
+    const chip = make('div', 'pb-focus');
+    chip.append(make('span', '', 'Focus is on'));
+    const leave = make('button', 'pb-leave', 'Leave Focus');
+    leave.addEventListener('click', () => { document.body.classList.remove('bar-peek'); this.hooks.leaveFocus?.(); });
+    chip.append(leave);
+    document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.placebar, .pb-tab, .pb-focus, .palette, .rail, .topbar')) document.body.classList.remove('bar-peek'); });
+    this.tab = tab;
 
     // The computer's back button, at the start of the top bar.
     this.lineBack = document.getElementById('tb-back');
     this.lineBack.addEventListener('click', () => this.jumpBack());
 
-    document.body.append(bar, handle);
+    document.body.append(bar, tab, chip);
     this.bar = bar;
-    // The keyboard is up while something on a touch screen is being typed in.
-    document.addEventListener('focusin', (e) => { if (this.hooks.isTouch() && this.typingIn(e.target)) document.body.classList.add('kb-up'); });
-    document.addEventListener('focusout', () => setTimeout(() => { if (!this.typingIn(document.activeElement)) document.body.classList.remove('kb-up'); }, 50));
+    // Whether the keyboard is up is keyboard.js's to say (body.kb-up).
   }
 
   typingIn(el) { return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) && !el.closest('.palette.box'); }

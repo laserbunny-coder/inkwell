@@ -144,7 +144,7 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 :root.script .scene-break:not(.has-synopsis):not(:focus-within) .scene-synopsis { display: none; }
 :root.script .scene-break.has-synopsis .scene-synopsis, :root.script .scene-break:focus-within .scene-synopsis { display: block; }
 .scene-synopsis:focus { outline: none; background: var(--tint); color: var(--ink); }
-:root.hide-synopsis .scene-break .scene-synopsis { display: none !important; }
+:root.hide-sections:not(.focus) .scene-break .scene-synopsis { display: none !important; }
 :root.reading .scene-break { display: none; }
 /* Focus is just the words: a script's sections and their summaries fold away entirely
    (they come back while selected, so nothing is deleted unseen), and
@@ -210,7 +210,7 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 .wv-line[data-status="missing"] .wv-dot { background: #d9a441; opacity: .9; }
 @media (max-width: 700px) { .wv-dot { left: -16px; } }
 /* Quiet: Focus keeps the line only (titles too with Ctrl + Shift + .), and no dots. */
-:root.focus .wv-dot, :root.reading .wv-dot, :root.hide-scenedots .wv-dot { display: none; }
+:root.focus .wv-dot, :root.reading .wv-dot { display: none; }
 :root.focus:not(.focus-sections) .wv-title, :root.reading .wv-title, :root.hide-sections:not(.focus) .wv-title { visibility: hidden; }
 :root.focus.focus-sections .wv-line.untitled:not(:hover) .wv-title { opacity: .45; }
 /* A title is the section just above the hidden heading: drawn on the line, so the section itself hides. */
@@ -320,6 +320,27 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 .page-settings .row { display: flex; justify-content: space-between; }
 .page-settings input[type=range] { width: 100%; accent-color: var(--accent); min-height: 32px; }
 .page-settings .actions { display: flex; justify-content: space-between; }
+/* The Aa panel's three tabs, and Show's folding groups. */
+.ps-tabs { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 999px; flex: none; }
+.ps-tab { flex: 1; border: 0; background: none; color: var(--muted); font: 13.5px var(--ui); padding: 7px 0; border-radius: 999px; cursor: pointer; }
+.ps-tab[aria-selected="true"] { background: var(--raise, var(--tint)); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.ps-pane { display: flex; flex-direction: column; gap: 14px; }
+.ps-pane[hidden] { display: none; }
+.ps-show { display: flex; flex-direction: column; }
+.ps-group { border-top: 1px solid var(--line); }
+.ps-group:last-child { border-bottom: 1px solid var(--line); }
+.ps-ghead { display: flex; width: 100%; justify-content: space-between; align-items: center; border: 0; background: none; color: var(--ink); font: 14.5px var(--ui); padding: 12px 2px; cursor: pointer; text-align: left; }
+.ps-gcount { color: var(--faint); font-size: 12px; }
+.ps-gcount::after { content: "  ▸"; }
+.ps-group.open .ps-gcount::after { content: "  ▾"; }
+.ps-gbody { display: none; flex-direction: column; gap: 4px; padding: 0 2px 12px 8px; }
+.ps-group.open .ps-gbody { display: flex; }
+.ps-gbody .switch { padding: 5px 0; font-size: 13.5px; }
+.ps-gbody .switch.sub { padding-left: 22px; color: var(--muted) !important; }
+.ps-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13.5px; color: var(--ink); padding: 5px 0; }
+.ps-chips > span { margin-right: 2px; }
+.ps-chip { border: 1px solid var(--line); background: none; color: var(--faint); border-radius: 999px; padding: 4px 11px; font: 12.5px var(--ui); cursor: pointer; }
+.ps-chip[aria-pressed="true"] { color: var(--ink); background: var(--tint); border-color: var(--accent); }
 .font-pick { display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--muted); }
 .font-groups { display: flex; gap: 2px; }
 .font-groups button { border: 0; background: transparent; padding: 3px 10px; border-radius: 99px; color: var(--muted); font-size: 12px; }
@@ -689,30 +710,30 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 #outline-editor .bullet .grip { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 10px; height: 16px; color: var(--faint); opacity: 0; transition: opacity .12s; pointer-events: none; }
 #outline-editor .bullet { border-radius: 6px; }
 @media (hover: hover) {
-  :root:not(.hide-handle):not(.focus) #outline-editor .line-gutter:hover .bullet .grip,
-  :root:not(.hide-handle):not(.focus) #outline-editor li:has(> p:hover) > .line-gutter .bullet .grip,
-  :root:not(.hide-handle):not(.focus) #outline-editor li.menu-open > .line-gutter .bullet .grip { opacity: 1; }
-  :root:not(.hide-handle):not(.focus) #outline-editor .line-gutter:hover .bullet::after,
-  :root:not(.hide-handle):not(.focus) #outline-editor li:has(> p:hover) > .line-gutter .bullet::after,
-  :root:not(.hide-handle):not(.focus) #outline-editor li.menu-open > .line-gutter .bullet::after { opacity: 0; }
-  :root:not(.hide-handle):not(.focus) #outline-editor .bullet:hover,
-  :root:not(.hide-handle):not(.focus) #outline-editor li.menu-open > .line-gutter .bullet { background: var(--tint); }
-  :root:not(.hide-handle):not(.focus) #outline-editor .bullet:hover .grip { color: var(--ink); }
+  :root:not(.focus) #outline-editor .line-gutter:hover .bullet .grip,
+  :root:not(.focus) #outline-editor li:has(> p:hover) > .line-gutter .bullet .grip,
+  :root:not(.focus) #outline-editor li.menu-open > .line-gutter .bullet .grip { opacity: 1; }
+  :root:not(.focus) #outline-editor .line-gutter:hover .bullet::after,
+  :root:not(.focus) #outline-editor li:has(> p:hover) > .line-gutter .bullet::after,
+  :root:not(.focus) #outline-editor li.menu-open > .line-gutter .bullet::after { opacity: 0; }
+  :root:not(.focus) #outline-editor .bullet:hover,
+  :root:not(.focus) #outline-editor li.menu-open > .line-gutter .bullet { background: var(--tint); }
+  :root:not(.focus) #outline-editor .bullet:hover .grip { color: var(--ink); }
 }
 /* On a phone, the line you're on shows its handle (tap for the menu) in the dot's spot. The fold arrow
    means "lines inside" on every line, this one too, so when it has one the handle steps left beside it. */
 @media (hover: none) {
-  :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .bullet { display: block; }
-  :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .bullet .grip { opacity: .6; }
-  :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .bullet::after { opacity: 0; }
-  :root.hide-bullets:not(.hide-handle):not(.focus) #outline-editor li.here.has-kids > .line-gutter .bullet { right: 1.4em; width: .7em; }
+  :root:not(.focus) #outline-editor li.here > .line-gutter .bullet { display: block; }
+  :root:not(.focus) #outline-editor li.here > .line-gutter .bullet .grip { opacity: .6; }
+  :root:not(.focus) #outline-editor li.here > .line-gutter .bullet::after { opacity: 0; }
+  :root.hide-bullets:not(.focus) #outline-editor li.here.has-kids > .line-gutter .bullet { right: 1.4em; width: .7em; }
   /* Every line shows its six dots, faintly, as a handle: a finger on them slides the line (as in Workflowy). */
-  :root:not(.hide-handle):not(.focus) #outline-editor .line-gutter .bullet { display: block; touch-action: none; -webkit-touch-callout: none; }
-  :root:not(.hide-handle):not(.focus) #outline-editor .line-gutter .bullet .grip { opacity: .35; }
-  :root:not(.hide-handle):not(.focus) #outline-editor li.here > .line-gutter .bullet .grip { opacity: .7; }
+  :root:not(.focus) #outline-editor .line-gutter .bullet { display: block; touch-action: none; -webkit-touch-callout: none; }
+  :root:not(.focus) #outline-editor .line-gutter .bullet .grip { opacity: .35; }
+  :root:not(.focus) #outline-editor li.here > .line-gutter .bullet .grip { opacity: .7; }
   /* The dots stand in for the dot (and for a loose line's ring, which a phone never showed). */
-  :root:not(.hide-handle):not(.focus) #outline-editor li > .line-gutter .bullet::after { opacity: 0 !important; }
-  :root.hide-bullets:not(.hide-handle):not(.focus) #outline-editor li.has-kids > .line-gutter .bullet { right: 1.4em; width: .7em; }
+  :root:not(.focus) #outline-editor li > .line-gutter .bullet::after { opacity: 0 !important; }
+  :root.hide-bullets:not(.focus) #outline-editor li.has-kids > .line-gutter .bullet { right: 1.4em; width: .7em; }
 }
 /* A line lifted under the finger while it moves. */
 .line-lift { position: fixed; z-index: 80; pointer-events: none; padding: 6px 10px; background: linear-gradient(var(--raise), var(--raise)), var(--bg); color: var(--ink); font: 16px/1.45 var(--prose); border-radius: 10px; box-shadow: 0 10px 28px rgba(0, 0, 0, .35), 0 0 0 1px var(--line2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transform: scale(1.02); transform-origin: left center; }
@@ -745,8 +766,8 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .view-label { margin-top: 4px; }
 .hide-links .backlinks, .hide-links .links-chip, .hide-links .links-pill,
 .focus .backlinks, .focus .links-chip, .focus .links-pill { display: none !important; }
-.hide-dots .note-gutter, .focus .note-gutter { display: none; }
-.hide-handle .block-handle, .focus .block-handle { display: none; }
+.focus .note-gutter { display: none; }
+.focus .block-handle { display: none; }
 #focus-toggle[aria-pressed="true"] { color: var(--accent); }
 
 /* Shortcuts sheet */
@@ -781,6 +802,16 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 .script-bar.no-alts [data-alt], .script-bar.no-alts .alt-gap,
 .script-bar.no-alts:not(.scripting) .ins-gap { display: none; }
 .script-bar button.idle { opacity: .4; }
+/* The row's right end never scrolls away: Focus, and the keyboard down. */
+.script-bar:has(.bar-end) { scroll-padding-inline-end: 100px; }
+.script-bar .bar-end { position: sticky; right: -8px; margin: -6px -8px -6px auto; padding: 6px 8px 6px 6px; display: flex; gap: 2px; align-items: center; flex: none; background: var(--panel); border-left: 1px solid var(--line); }
+.script-bar .bar-end button { flex: none; width: 40px; min-width: 40px; padding: 0; height: 36px; display: grid; place-items: center; color: var(--soft, var(--muted)); }
+.script-bar .bar-end svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.script-bar .bar-end button[aria-pressed="true"] { color: var(--accent); background: var(--tint); }
+/* In Focus on prose the row steps away and leaves only its end, floating. */
+.script-bar.only-end { left: auto; right: 8px; bottom: 8px; padding: 0; background: none; border: 0; overflow: visible; }
+.script-bar.only-end > :not(.bar-end) { display: none !important; }
+.script-bar.only-end .bar-end { position: static; margin: 0; padding: 3px; border: 1px solid var(--line); border-radius: 12px; }
 .outline-bar .bar-gap { flex: 0 0 1px; margin: 6px 4px; background: var(--line); }
 
 /* ---------- alternates ---------- */
@@ -1019,7 +1050,6 @@ html.capturing body { overflow: hidden; }
 /* Walk-and-talk: the chip on a capture that says how it was written up. */
 .voice-chip { display: inline-block; vertical-align: 0.1em; margin: 0 0.15em; padding: 0 0.55em; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--muted); font: 500 0.68em/1.7 var(--ui); letter-spacing: .02em; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
 .voice-chip:hover { color: var(--ink); border-color: var(--muted); }
-html.hide-voice .voice-chip { display: none; }
 /* Typewriter: the line you're on stays put and the page moves under it. */
 html.typewriter #editor, html.typewriter #outline-editor { padding-bottom: 50vh; }
 
@@ -1554,7 +1584,7 @@ body.beside-on .page, body.talk-on .page { padding-right: calc(min(44vw, 620px) 
 .pt-num { display: none; position: absolute; top: -5px; right: -3px; font-size: 10px; line-height: 1.4; padding: 0 4px; border-radius: 4px; background: var(--accent); color: var(--bg); font-weight: 600; }
 body.alt-held .pt-num { display: block; }
 .hide-pagetabs .page-tabs { display: none !important; }
-:root.focus .page-tabs { display: none !important; }
+:root.focus :is(.page-tabs, .tabs-pill) { display: none !important; }
 /* Faint on the pages you look at; full at the top edge or while Alt is held; never while typing or in focus. */
 body.looking:not(.typing) .topbar { transform: none; opacity: .55; transition: transform .2s ease, opacity .15s ease; }
 body.looking .topbar:hover, body.looking .topbar:focus-within, body.show-top .topbar, body.alt-held .topbar { transform: none; opacity: 1; }
@@ -1775,16 +1805,32 @@ button.st-from:hover { color: var(--ink); }
   .placebar .pb-mic svg { width: 24px; height: 24px; stroke-width: 1.6; }
   body.kb-up .placebar, body.script-bar-on .placebar, body.outline-bar-on .placebar, body.go-on .placebar { display: none; }
   body.kb-up { padding-bottom: 0; }
-  /* Focus: only a faint handle; a tap brings the bar back for a moment. */
-  :root.focus .placebar { display: none; }
-  :root.focus .pb-handle { display: flex; position: fixed; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); width: 88px; height: 44px; border: 0; background: none; z-index: 30; align-items: center; justify-content: center; }
-  .pb-handle span { display: block; width: 56px; height: 5px; border-radius: 5px; background: var(--line); }
-  :root.focus body.bar-peek .placebar { display: flex; }
-  :root.focus body.bar-peek .pb-handle, body.kb-up .pb-handle { display: none; }
+  /* Quiet (Focus, or a draft): the bar rests as a tab; a tap brings it up
+     until the next touch on the page. */
+  body.bar-quiet:not(.bar-peek) .placebar { display: none; }
+  body.bar-quiet:not(.bar-peek) { padding-bottom: calc(52px + env(safe-area-inset-bottom, 0px)); }
+  body.bar-quiet:not(.bar-peek):not(.kb-up):not(.script-bar-on):not(.outline-bar-on):not(.go-on) .pb-tab { display: grid; }
+  .pb-tab { left: 50%; bottom: calc(4px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; }
+  :root.focus body.bar-peek:not(.kb-up):not(.script-bar-on):not(.outline-bar-on):not(.go-on) .pb-focus { display: flex; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   .go-panel { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: auto; max-height: 86vh; border-radius: 20px 20px 0 0; border-bottom: 0; padding: 10px 16px calc(16px + env(safe-area-inset-bottom, 0px)); gap: 14px; }
   .go-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) { .go-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* The tab the bar rests as, and the way out of Focus that comes with it. */
+.pb-tab, .pb-focus { display: none; }
+.pb-tab { position: fixed; z-index: 31; width: 76px; height: 44px; place-items: center; border: 0; background: none; padding: 0; color: var(--muted); }
+.pb-tab > span { width: 48px; height: 24px; border-radius: 12px 12px 6px 6px; background: var(--panel); border: 1px solid var(--line2, var(--line)); display: grid; place-items: center; box-shadow: 0 2px 10px rgba(0, 0, 0, .25); }
+.pb-tab svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pb-tab:active > span { background: var(--tint); }
+.pb-focus { position: fixed; z-index: 32; left: 50%; translate: -50% 0; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border-radius: 999px; background: var(--raise, var(--panel)); border: 1px solid var(--line2, var(--line)); font: 13px var(--ui); color: var(--soft, var(--muted)); box-shadow: 0 6px 22px rgba(0, 0, 0, .4); white-space: nowrap; }
+.pb-leave { border: 0; border-radius: 999px; padding: 6px 12px; background: var(--ink); color: var(--bg); font: 500 12.5px var(--ui); }
+/* The computer: in Focus the tab sits in the bottom-left corner and brings
+   the rail and top bar back until the next click on the page. */
+@media (min-width: 701px) and (hover: hover) {
+  :root.focus body:not(.bar-peek) .pb-tab { display: grid; left: 10px; bottom: 10px; }
+  :root.focus body.bar-peek .pb-focus { display: flex; left: auto; right: 16px; translate: none; bottom: 16px; }
+}
 
 /* Stages dialog */
 .ask.stage-edit { width: min(640px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }
@@ -1898,7 +1944,6 @@ button.st-from:hover { color: var(--ink); }
 .dr-found { display: flex; flex-direction: column; align-items: flex-start; }
 .dr-found-one { border: 0; background: transparent; padding: 3px 0; color: var(--muted); font-size: 14px; text-align: left; cursor: pointer; }
 .dr-found-one.first, .dr-found-one:hover { color: var(--ink); }
-.hide-marks .dr-marks { display: none; }
 .dr-card.decided .dr-find { order: 4; flex-basis: 100%; }
 /* Save to Inkwell: the bookmark button for a computer's browser. */
 .save-steps { color: var(--muted); line-height: 1.5; margin: 0 0 16px; padding-left: 20px; }
@@ -1996,6 +2041,17 @@ html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
 .box-chip[aria-selected="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .box-chip[aria-current="page"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .box-chip.quiet { color: var(--muted); }
+/* Focus and Aa Look, side by side at the top of the box. */
+.box-quick { display: grid !important; grid-template-columns: 1.4fr 1fr; gap: 8px; }
+.box-quick .box-chip { border-radius: 12px; min-height: 52px; padding: 8px 14px; justify-content: space-between; gap: 10px; }
+.box-quick .bq-words { display: flex; flex-direction: column; min-width: 0; }
+.box-quick .go-name { font-weight: 500; }
+.box-quick .bq-ctx { font-size: 11.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.box-quick .box-focus[aria-pressed="true"] { border-color: var(--accent); background: var(--tint); }
+.bq-sw { flex: none; width: 34px; height: 20px; border-radius: 12px; background: var(--line2, var(--line)); position: relative; transition: background var(--t1, .12s); }
+.bq-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: translate var(--t1, .12s); }
+.box-focus[aria-pressed="true"] .bq-sw { background: var(--accent); }
+.box-focus[aria-pressed="true"] .bq-sw::after { translate: 14px 0; background: var(--bg); }
 .box-chip .keys { margin-left: 10px; font-size: 11px; color: var(--faint); }
 .box-chip[aria-current="page"] .keys { color: inherit; opacity: .8; }
 .palette li.box-row { align-items: center; }

@@ -247,10 +247,7 @@ try {
     await ph.evaluate(() => window.__outline.view.dispatch(window.__outline.state.tr.setMeta(window.__foldKey, { zoom: null })));
   });
 
-  await check('with the six-dot handle switched off under Look, the dots go away', async () => {
-    await ph.evaluate(() => document.documentElement.classList.add('hide-handle'));
-    assert.equal(await dots('Board reel 2').isVisible(), false);
-    await ph.evaluate(() => document.documentElement.classList.remove('hide-handle'));
+  await check('no page errors', async () => {
     assert.deepEqual(errors, []);
   });
 } finally {

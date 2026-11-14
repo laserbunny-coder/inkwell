@@ -174,7 +174,6 @@ html.has-rail .rail #desk-toggle[data-n]::after { margin-left: auto; }
 /* ---------- closed threads with a call still open ---------- */
 .dk-closed { display: inline-block; margin-left: 8px; padding: 0 7px; border: 1px solid var(--line2); border-radius: 99px; font: 500 10.5px/1.7 var(--ui); letter-spacing: .04em; color: var(--muted); vertical-align: 2px; white-space: nowrap; }
 .dk-thread.s-loose .dk-rr { color: var(--signal); }
-.hide-closedtag .dk-closed { display: none; }
 
 /* ---------- arranging by hand (drag; hold first on a phone) ---------- */
 .dk-moving, .dk-moving * { cursor: grabbing !important; -webkit-user-select: none; user-select: none; }

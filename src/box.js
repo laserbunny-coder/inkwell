@@ -333,6 +333,8 @@ export class Box {
     const touch = this.hooks.isTouch();
     const urgent = this.hooks.commands().filter((c) => c.urgent && this.hooks.usable(c));
     for (const c of urgent) this.row({ ...this.cmdRow(c), cls: 'urgent' });
+    // Focus and Look first, in every room: one tap each.
+    this.quick();
     const recent = this.hooks.recent().slice(0, touch ? 4 : 5);
     if (recent.length) {
       this.section('Jump back');
@@ -357,7 +359,41 @@ export class Box {
     this.row({ label: 'All commands', cls: 'box-allrow', side: touch ? '›' : `${this.hooks.keyLabel('⌘K')} again ›`, stay: true, run: () => this.setAll(true) });
     // Enter on a just-opened box takes you back (the first of Jump back).
     const first = this.items.findIndex((x) => x.cls === 'first');
-    this.index = urgent.length ? 0 : Math.max(0, first);
+    // (never Focus or Look: Enter on an empty box shouldn't flip a switch).
+    this.index = urgent.length ? 0 : first >= 0 ? first : Math.min(this.items.length - 1, 2);
+  }
+
+  // Focus (with its switch) and Aa Look, side by side at the top of the box.
+  quick() {
+    const touch = this.hooks.isTouch();
+    const on = !!this.hooks.focusOn?.();
+    const li = make('li', 'box-chips box-quick');
+    li.setAttribute('role', 'presentation');
+    const items = [
+      { label: 'Focus', ctx: touch ? 'just the text' : this.hooks.keyLabel('⌘.'), cls: 'box-focus', sw: on, run: () => this.hooks.toggleFocus() },
+      { label: 'Aa Look', ctx: touch ? 'colours, text, what shows' : '', cls: 'box-look', run: () => this.hooks.look() }
+    ];
+    for (const it of items) {
+      const b = make('button', `box-chip ${it.cls}`);
+      b.tabIndex = -1;
+      const words = make('span', 'bq-words');
+      words.append(make('span', 'go-name', it.label));
+      if (it.ctx) words.append(make('span', 'bq-ctx', it.ctx));
+      b.append(words);
+      if ('sw' in it) { b.setAttribute('aria-pressed', String(it.sw)); b.append(make('span', 'bq-sw')); }
+      const i = this.items.length;
+      it.el = b; it.chip = true;
+      this.items.push(it);
+      b.addEventListener('click', () => this.run(it));
+      b.addEventListener('mousemove', () => { if (this.index !== i) { this.index = i; this.mark(false); } });
+      li.append(b);
+    }
+    this.list.append(li);
+  }
+  // Focus changed while the box is open (a key): its switch follows.
+  refreshQuick() {
+    const b = this.list.querySelector('.box-focus');
+    if (b) b.setAttribute('aria-pressed', String(!!this.hooks.focusOn?.()));
   }
 
   // Everything that matches, best first.

@@ -232,10 +232,6 @@ try {
     assert.equal(await count(page), 1, 'Beside is as it was');
     await page.keyboard.press('Alt+ArrowLeft');
     await page.waitForFunction(() => !document.querySelector('#outline-editor li.zoom-root') && /Rhymes with katana/.test(document.querySelector('#plan .pl-kids')?.textContent || ''));
-    // Under Look the triangle (and the lines it shows) can go.
-    await page.evaluate(() => document.documentElement.classList.add('hide-tasknotes'));
-    assert.equal(await page.locator('#plan .pl-task', { hasText: 'second verse' }).locator('.pl-fold').isVisible(), false);
-    await page.evaluate(() => document.documentElement.classList.remove('hide-tasknotes'));
     await page.locator('#plan .pl-task', { hasText: 'second verse' }).locator('.pl-fold').click();
     await page.waitForFunction(() => !document.querySelector('#plan .pl-kids'));
   });

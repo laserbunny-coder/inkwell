@@ -136,7 +136,7 @@ try {
     await go(phone, { view: 'notebook', pageId: 'day-2026-11-14' });
     assert.equal(await phone.evaluate(() => document.querySelector('.notebook').dataset.tp), 'page', 'remembered');
     const cdp = await phone.context().newCDPSession(phone);
-    const y = 600;
+    const y = 400; // on the page: with no keyboard up it no longer leaves room for one
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 320, y }] });
     for (const x of [280, 220, 160, 110]) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] }); await sleep(16); }
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });

@@ -123,7 +123,7 @@ try {
     await q.reload();
     await q.waitForSelector('#outline-editor .ProseMirror');
     await sleep(600);
-    await q.evaluate(() => { window.__notebook.editor.commands.focus('end'); });
+    await q.evaluate(() => { window.__notebook.editor.commands.focus('end'); window.__keyboard.set(true); });
     await q.waitForFunction(() => !document.querySelector('.outline-bar').hidden);
     await q.locator('.outline-bar [data-do="insert"]').evaluate((b) => b.scrollIntoView({ inline: 'end' }));
     await sleep(100);

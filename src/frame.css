@@ -182,6 +182,9 @@ html, body { -webkit-font-smoothing: antialiased; }
   :root.focus.has-rail .topbar { left: 0; opacity: 0 !important; pointer-events: none; visibility: hidden; transition: left var(--t3) var(--e), opacity var(--t2) ease, visibility 0s var(--t2); }
   :root.focus.has-rail body.show-top .topbar, :root.focus.has-rail body.alt-held .topbar { opacity: 1 !important; pointer-events: auto; visibility: visible; transition: left var(--t3) var(--e), opacity var(--t2) ease, visibility 0s; }
   :root.focus.has-rail .outline { left: 0; }
+  /* The tab in the corner brings both back for a moment (until the next click on the page). */
+  :root.focus.has-rail body.bar-peek .rail { transform: none; opacity: 1; pointer-events: auto; visibility: visible; box-shadow: 8px 0 30px rgba(0, 0, 0, .35); transition: transform var(--t3) var(--e), opacity var(--t2) ease, visibility 0s; }
+  :root.focus.has-rail body.bar-peek .topbar { opacity: 1 !important; pointer-events: auto; visibility: visible; transition: left var(--t3) var(--e), opacity var(--t2) ease, visibility 0s; }
 }
 
 /* ---------- The Look part of the Aa panel ---------- */

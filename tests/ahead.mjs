@@ -501,14 +501,14 @@ try {
     await page.waitForFunction(() => !document.querySelector('.pane-frame') || document.querySelector('.panes')?.hidden !== false || !document.documentElement.classList.contains('has-panes'));
   });
 
-  await check('under Look: the hours line can be switched off; with Beside off there’s no “Plan it out” button', async () => {
-    await page.evaluate(() => { document.documentElement.classList.add('hide-aheadhours', 'hide-panes'); });
+  await check('under Look: the hours line goes with Time estimates; with Beside off there’s no “Plan it out” button', async () => {
+    await page.evaluate(() => { document.documentElement.classList.add('hide-estimates', 'hide-panes'); });
     assert.ok(await page.locator('.ah-hrs').first().isHidden());
     assert.ok(await page.locator('.ah-note').isHidden());
     assert.ok(await page.locator('.ah-talk').isHidden());
     assert.ok(await page.locator('.ah-week').first().isVisible());
-    await page.evaluate(() => { document.documentElement.classList.remove('hide-aheadhours', 'hide-panes'); });
-    assert.ok(await page.locator('input[data-show="aheadhours"]').count());
+    await page.evaluate(() => { document.documentElement.classList.remove('hide-estimates', 'hide-panes'); });
+    assert.ok(await page.locator('input[data-show="estimates"]').count());
   });
 
   await check('the command list knows it, and the path says where you are', async () => {

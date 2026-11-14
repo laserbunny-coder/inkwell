@@ -1,3 +1,4 @@
+import { keyboard } from './keyboard.js';
 import './style.css';
 import './frame.css';
 import './desk.css';
@@ -62,6 +63,7 @@ import { Pull } from './pull.js';
 import { closeWhen, whenOpen } from './when.js';
 import { Box } from './box.js';
 import { describe } from './commandinfo.js';
+import { SHOWS, SHOW_GROUPS, groupFor } from './shows.js';
 import { Through } from './through.js';
 import { looseOn } from './loose.js';
 import { PLAN_ID, dayWord, loadTasks, addTask, stepsHome } from './tasks.js';
@@ -232,13 +234,17 @@ const scriptBar = $('.script-bar');
 const touch = matchMedia('(hover: none)');
 function placeScriptBar() {
   const script = isScript();
-  const withAlts = !root.classList.contains('hide-alts') && !root.classList.contains('focus');
-  // The mic is always on it; only Focus with no script leaves just the text.
-  const show = touch.matches && (script || !root.classList.contains('focus')) && writing() && editor.isFocused;
+  const focus = root.classList.contains('focus');
+  const withAlts = !root.classList.contains('hide-alts') && !focus;
+  // Only while the keyboard is really up (keyboard.js). Focus with no script
+  // leaves just the row's end: Focus, and the keyboard down.
+  const show = touch.matches && keyboard.up && writing() && editor.isFocused;
   const back = show && scriptBar.hidden;
   scriptBar.hidden = !show;
   if (back) scriptBar.scrollLeft = 0; // a row that comes back starts with the mic in view
   scriptBar.classList.toggle('scripting', script);
+  scriptBar.classList.toggle('only-end', focus && !script);
+  scriptBar.querySelector('[data-end="focus"]').setAttribute('aria-pressed', String(focus));
   scriptBar.classList.toggle('no-alts', !withAlts);
   body.classList.toggle('script-bar-on', show);
   if (!show) return;
@@ -304,7 +310,8 @@ function tapBar(bar, selector, run) {
   });
   bar.addEventListener('pointercancel', () => { end(); start = null; });
 }
-tapBar(scriptBar, 'button[data-el], button[data-alt], button[data-ins], button[data-talk]', (b) => {
+tapBar(scriptBar, 'button[data-el], button[data-alt], button[data-ins], button[data-talk], button[data-end]', (b) => {
+  if (b.dataset.end) return rowEnd(b.dataset.end);
   const what = b.dataset.alt;
   if (b.dataset.talk) captureHere({ start: true });
   else if (b.dataset.ins) typeHere(editor, '/');
@@ -323,6 +330,14 @@ editor.on('focus', placeScriptBar);
 editor.on('blur', () => setTimeout(placeScriptBar, 50));
 window.visualViewport?.addEventListener('resize', placeScriptBar);
 window.visualViewport?.addEventListener('scroll', placeScriptBar);
+// The fixed end of both writing rows: Focus, and the keyboard down.
+function rowEnd(what) {
+  if (what === 'down') { keyboard.down(); return; }
+  toggleFocus();
+  placeScriptBar(); placeOutlineBar();
+}
+// The rows follow the keyboard, not the caret.
+keyboard.onChange(() => { placeScriptBar(); placeOutlineBar(); });
 
 // ---------- notebook ----------
 
@@ -374,11 +389,12 @@ const notebook = new Notebook({
 // Zoom and + wait at the end of the row.
 const outlineBar = $('.outline-bar');
 function placeOutlineBar() {
-  const show = touch.matches && inNotebook() && notebook.editor.isFocused;
+  const show = touch.matches && keyboard.up && inNotebook() && notebook.editor.isFocused;
   const back = show && outlineBar.hidden;
   outlineBar.hidden = !show;
   if (back) outlineBar.scrollLeft = 0; // a row that comes back starts with the mic in view
   body.classList.toggle('outline-bar-on', show);
+  outlineBar.querySelector('[data-end="focus"]').setAttribute('aria-pressed', String(root.classList.contains('focus')));
   if (!show) return;
   const vv = window.visualViewport;
   outlineBar.style.bottom = `${Math.max(0, vv ? window.innerHeight - (vv.offsetTop + vv.height) : 0)}px`;
@@ -390,7 +406,8 @@ function placeOutlineBar() {
   z.textContent = zoomOut ? 'Out' : 'Zoom';
   z.setAttribute('aria-label', zoomOut ? 'Zoom out' : 'Zoom in');
 }
-tapBar(outlineBar, 'button[data-do]', (b) => {
+tapBar(outlineBar, 'button[data-do], button[data-end]', (b) => {
+  if (b.dataset.end) return rowEnd(b.dataset.end);
   const ed = notebook.editor;
   const act = b.dataset.do;
   if (act === 'talk') captureHere({ start: true });
@@ -2908,13 +2925,11 @@ function toggleFreshEyes(on = !freshEyes()) {
   setFreshFont();
   root.classList.toggle('fresh-eyes', on);
   try { localStorage.setItem('freshEyes', on ? '1' : '0'); } catch { /* private window */ }
-  $('#fresh-eyes').checked = on;
+  const fe = $('#fresh-eyes'); if (fe) fe.checked = on;
   notes.layout();
   toast(on ? 'Fresh eyes on: a new font, page and colour, so it reads like someone else’s' : 'Fresh eyes off');
 }
 try { if (localStorage.getItem('freshEyes') === '1') { setFreshFont(); root.classList.add('fresh-eyes'); } } catch { /* private window */ }
-$('#fresh-eyes').checked = freshEyes();
-$('#fresh-eyes').addEventListener('change', () => toggleFreshEyes($('#fresh-eyes').checked));
 
 // The piece the revision tools are about, from where you are.
 async function revisionPiece() {
@@ -3254,6 +3269,7 @@ const nav = new Nav({
   search: (text) => { openPalette('go'); const input = $('#palette-input'); input.value = text; filterPalette(); },
   capture: () => captureHere({ start: true }),
   menu: () => openPalette(),
+  leaveFocus: () => { if (root.classList.contains('focus')) toggleFocus(); },
   look: () => { if ($('.page-settings').hidden) togglePageSettings(); $('.page-settings').scrollTop = 0; },
   outline: () => body.classList.add('show-outline'),
   isTouch: () => touch.matches,
@@ -3307,6 +3323,7 @@ const frame = new Frame({
   onDay: () => inNotebook() && !!notebook.page && notebook.page.kind === 'day'
 });
 lookPicker($('.page-settings'));
+lookPanel($('.page-settings'));
 // A phone has no keys, so the menu button says what it is.
 if (touch.matches) document.querySelectorAll('[data-cmd="palette"]').forEach((b) => { b.textContent = 'Menu'; });
 
@@ -3842,15 +3859,87 @@ function setPage(width, size) {
   notes.layout();
 }
 
-function togglePageSettings() {
+// The Aa panel in three tabs: Look (the looks, motion), Text (size, width,
+// font, a script's view) and Show (what shows, in five folded groups, opening
+// on the group for where you are). Made once, from what index.html and
+// frame.js put in it.
+function lookPanel(panel) {
+  const tabs = make('div', 'ps-tabs');
+  tabs.setAttribute('role', 'tablist');
+  const panes = {};
+  for (const [id, label] of [['look', 'Look'], ['text', 'Text'], ['show', 'Show']]) {
+    const b = make('button', 'ps-tab', label);
+    b.type = 'button';
+    b.dataset.pane = id;
+    b.setAttribute('role', 'tab');
+    b.addEventListener('click', () => lookTab(id));
+    tabs.append(b);
+    panes[id] = make('div', 'ps-pane');
+    panes[id].dataset.pane = id;
+  }
+  const show = panel.querySelector('.ps-show');
+  panes.look.append(panel.querySelector('.look-pick'));
+  for (const el of [panel.querySelector('.woven-pick'), $('#page-width').closest('label'), $('#text-size').closest('label'), panel.querySelector('.font-pick')]) panes.text.append(el);
+  panes.show.append(show);
+  panel.prepend(tabs, panes.look, panes.text, panes.show);
+  // Show: one folding group each, its switches made from shows.js.
+  const touchOnly = touch.matches;
+  for (const g of SHOW_GROUPS) {
+    const rows = SHOWS.filter((r) => r.group === g.id && (!r.phone || touchOnly));
+    const box = make('div', 'ps-group');
+    box.dataset.group = g.id;
+    const head = make('button', 'ps-ghead');
+    head.type = 'button';
+    head.setAttribute('aria-expanded', 'false');
+    head.append(make('span', '', g.label), make('span', 'ps-gcount'));
+    head.addEventListener('click', () => box.classList.toggle('open') ? head.setAttribute('aria-expanded', 'true') : head.setAttribute('aria-expanded', 'false'));
+    const body = make('div', 'ps-gbody');
+    let chipRow = null;
+    for (const r of rows) {
+      if (r.chip) {
+        if (!chipRow) { chipRow = make('div', 'ps-chips'); chipRow.append(make('span', '', 'On a project’s page:')); body.append(chipRow); }
+        const c = make('button', 'ps-chip', r.chip);
+        c.type = 'button';
+        c.dataset.show = r.id;
+        c.addEventListener('click', () => setShown(r.id, hidden().has(r.id)));
+        chipRow.append(c);
+        continue;
+      }
+      const label = make('label', `switch${r.under ? ' sub' : ''}`);
+      const input = make('input');
+      input.type = 'checkbox';
+      if (r.id === 'typewriter') input.id = 'typewriter-mode';
+      else if (r.id === 'manypanes') input.id = 'many-panes';
+      else input.dataset.show = r.id;
+      label.append(input, ` ${r.label}`);
+      if (r.keys) { const k = make('span', 'keys', keyLabel(r.keys)); label.append(' ', k); }
+      body.append(label);
+    }
+    head.querySelector('.ps-gcount').textContent = String(rows.filter((r) => !r.chip).length + (chipRow ? 1 : 0));
+    box.append(head, body);
+    show.append(box);
+  }
+}
+function lookTab(id) {
   const panel = $('.page-settings');
-  if (!panel.hidden) { panel.hidden = true; currentEditor().commands.focus(); return; }
+  panel.dataset.tab = id;
+  panel.querySelectorAll('.ps-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.pane === id)));
+  panel.querySelectorAll('.ps-pane').forEach((p) => { p.hidden = p.dataset.pane !== id; });
+  panel.scrollTop = 0;
+}
+function togglePageSettings(tab = 'look') {
+  const panel = $('.page-settings');
+  if (!panel.hidden) { panel.hidden = true; if (!touch.matches) currentEditor().commands.focus(); return; }
   setPage(currentWidth(), currentSize());
   loadPreviews();
   showFonts();
   wovenPick();
+  // Show opens on the group for where you are; the others are folded.
+  const here = groupFor(roomTags()[0]);
+  panel.querySelectorAll('.ps-group').forEach((g) => { const on = g.dataset.group === here; g.classList.toggle('open', on); g.querySelector('.ps-ghead').setAttribute('aria-expanded', String(on)); });
+  lookTab(tab);
   panel.hidden = false;
-  $('#page-width').focus();
+  if (!touch.matches) panel.querySelector('.ps-tab[aria-selected="true"]')?.focus();
 }
 
 // Display switches, per device: anything beyond the text can be turned off.
@@ -3883,8 +3972,10 @@ function toggleFocus() {
   if (!inPane) { panes?.layout(); syncBeside(); }
   localStorage.setItem('focus', on ? '1' : '0');
   edgesQuietUntil = Date.now() + 600;
-  body.classList.remove('show-outline', 'show-top');
+  body.classList.remove('show-outline', 'show-top', 'bar-peek');
   syncSwitches();
+  placeScriptBar(); placeOutlineBar();
+  box?.refreshQuick?.();
 }
 // A script's own section titles and summaries (not the INT./EXT. ones), on or
 // off where you are: in Focus they stay away unless you ask for them, outside
@@ -3899,13 +3990,24 @@ function toggleSections() {
   if (root.classList.contains('focus')) toggleFocusSections(!showing); else setShown('sections', !showing);
   if (writing() && isScript()) toast(showing ? 'Section titles hidden' : 'Section titles showing');
 }
+// The phone's bar rests as a tab in Focus, and in a draft (a chapter or a
+// script) unless "Quiet drafts" is off. The computer's rail never covers the
+// text, so there only Focus counts (the tab in the corner, frame.css).
+function syncQuiet() {
+  const draft = (root.dataset.view || 'write') === 'write';
+  const quiet = root.classList.contains('focus') || (touch.matches && draft && !hidden().has('quietdrafts'));
+  body.classList.toggle('bar-quiet', quiet);
+  if (!quiet) body.classList.remove('bar-peek');
+}
+new MutationObserver(syncQuiet).observe(root, { attributes: true, attributeFilter: ['class', 'data-view'] });
+touch.addEventListener?.('change', syncQuiet);
 function syncSwitches() {
   const h = hidden();
   document.querySelectorAll('[data-show]').forEach((c) => { c.checked = !h.has(c.dataset.show); });
-  $('#focus-mode').checked = root.classList.contains('focus');
   $('#many-panes').checked = localStorage.getItem('manyPanes') === '1';
-  $('#focus-sections').checked = root.classList.contains('focus-sections');
   $('#focus-toggle').setAttribute('aria-pressed', String(root.classList.contains('focus')));
+  document.querySelectorAll('.ps-show .switch input').forEach((c) => c.closest('.switch').classList.toggle('on', c.checked));
+  document.querySelectorAll('.ps-chip[data-show]').forEach((b) => b.setAttribute('aria-pressed', String(!hidden().has(b.dataset.show))));
 }
 
 // Next or previous chapter in the book, or day on a daily page.
@@ -3931,11 +4033,10 @@ $('#many-panes').addEventListener('change', (e) => {
   if (e.target.checked) localStorage.setItem('manyPanes', '1');
   else { localStorage.removeItem('manyPanes'); for (const p of (panes?.panes || []).slice(0, -1)) panes.close(p.id); }
 });
-$('#focus-mode').addEventListener('change', toggleFocus);
-$('#focus-sections').addEventListener('change', (e) => toggleFocusSections(e.target.checked));
 $('#typewriter-mode').checked = root.classList.contains('typewriter');
 $('#typewriter-mode').addEventListener('change', toggleTypewriter);
 syncSwitches();
+syncQuiet();
 
 $('#page-width').addEventListener('input', (e) => setPage(Number(e.target.value), currentSize()));
 $('#text-size').addEventListener('input', (e) => setPage(currentWidth(), Number(e.target.value)));
@@ -3974,7 +4075,7 @@ function pickFont(id) {
   showFonts();
   notes.layout();
 }
-$('#page-done').addEventListener('click', togglePageSettings);
+$('#page-done').addEventListener('click', () => togglePageSettings());
 
 // ---------- command menu (⌘K) and go-to (⌘O) ----------
 
@@ -3985,14 +4086,14 @@ function toggleTheme() { toggleLight(); }
 
 // Opens the Aa panel at the script's look.
 function openLook() {
-  if ($('.page-settings').hidden) togglePageSettings();
+  if ($('.page-settings').hidden) togglePageSettings('text'); else lookTab('text');
   $('.woven-pick')?.scrollIntoView({ block: 'start' });
   $('.woven-pick .wv-preset.current')?.focus({ preventScroll: true });
 }
 
 // Opens the Aa panel at its font list, on the current font, so a font is picked, not guessed.
 function openFontPicker() {
-  if ($('.page-settings').hidden) togglePageSettings();
+  if ($('.page-settings').hidden) togglePageSettings('text'); else lookTab('text');
   const pick = $('.font-pick');
   pick.scrollIntoView({ block: 'start' });
   (pick.querySelector('.font-list button.current') || pick.querySelector('.font-list button'))?.focus({ preventScroll: true });
@@ -4134,13 +4235,9 @@ const commands = [
   { group: 'view', label: 'Typewriter mode: the line you’re on stays put', words: ['scroll', 'center', 'middle'], run: () => toggleTypewriter() },
   { group: 'view', label: 'Show or hide earlier days (under the day page)', keys: '', run: () => notebook.togglePastDays(), when: () => inNotebook() && notebook.isDay },
   { group: 'view', label: 'Show or hide "Linked from"', keys: '', run: () => setShown('links', hidden().has('links')) },
-  { group: 'view', label: 'Show or hide note dots', keys: '', run: () => setShown('dots', hidden().has('dots')) },
   { group: 'view', label: 'Show or hide alternate marks', keys: '', run: () => setShown('alts', hidden().has('alts')) },
-  { group: 'view', label: 'Show or hide the six-dot handle', keys: '', run: () => setShown('handle', hidden().has('handle')) },
   { group: 'plan', label: 'Hide done tasks (or show them again, where they were)', keys: '', run: () => { const show = hidden().has('donetasks'); setShown('donetasks', show); toast(show ? 'Done tasks show again, where they were' : 'Done tasks are out of sight (tap “N done” to see them)'); } },
-  { group: 'view', label: 'Show or hide bullets on notebook lines', keys: '', run: () => setShown('bullets', hidden().has('bullets')) },
   { group: 'view', label: 'Show or hide pictures on shared links', keys: '', run: () => setShown('linkpics', hidden().has('linkpics')) },
-  { group: 'view', label: 'Show or hide mode chips on voice captures', keys: '', run: () => setShown('voice', hidden().has('voice')) },
   { group: 'view', label: 'Progress: words and pages over time (stats)', keys: `${mod}⇧P`, run: () => progressPanel.open() },
   { group: 'write', label: 'Move this line to another page or day…', keys: '', run: moveLinePicker, when: inNotebook },
   { group: 'write', label: 'Gather a #tag onto this page…', keys: '', run: gatherTagHere, when: inNotebook },
@@ -4185,7 +4282,6 @@ const commands = [
   { group: 'view', label: 'Production (shots, kit, shoot days, posting)', keys: `${mod}⇧S`, run: toggleProduction, when: () => view() !== 'production' && view() !== 'library' },
   { group: 'view', label: 'Back to the text from production', keys: `${mod}⇧S`, run: toggleProduction, when: () => view() === 'production' },
   { group: 'view', label: 'Show or hide section titles', keys: '⌘⇧.', run: () => toggleSections(), when: () => writing() && isScript() },
-  { group: 'view', label: 'Show or hide section summaries', keys: '', run: () => setShown('synopsis', hidden().has('synopsis')), when: () => writing() && isScript() },
   { group: 'view', label: 'Fresh eyes: a new font, page and colour, to reread it cold', keys: `${mod}⇧Y`, words: ['reread', 'revise', 'unfamiliar'], run: () => toggleFreshEyes() },
   { group: 'view', label: 'Show or hide Claude’s notes in the margin', keys: '', run: () => setShown('claude', hidden().has('claude')) },
   { group: 'view', label: 'Show or hide readers’ comments in the margin', keys: '', run: () => setShown('comments', hidden().has('comments')) },
@@ -4229,6 +4325,12 @@ const commands = [
 ];
 // Each one's group, its one line, more words that find it, the rooms it fits
 // and why it can't run (commandinfo.js).
+// The "Show or hide …" commands come from the same list as the Show tab
+// (shows.js); the ones written above by hand keep their own.
+for (const sh of SHOWS) {
+  if (!sh.cmd || commands.some((c) => c.label === sh.cmd)) continue;
+  commands.push({ group: 'view', label: sh.cmd, keys: sh.keys || '', hint: sh.hint, words: sh.words, run: () => { setShown(sh.id, hidden().has(sh.id)); toast(`${sh.label}: ${hidden().has(sh.id) ? 'off' : 'on'}`); }, when: sh.phone ? () => touch.matches : undefined, needs: sh.phone ? 'On a phone only' : undefined });
+}
 commands.forEach(describe);
 // For the tests: every command as the box lists it.
 window.__commandList = () => commands.map((c) => ({ label: c.label, group: c.group, hint: c.hint, words: c.words, where: c.where || [], needs: c.needs || '' }));
@@ -4313,7 +4415,7 @@ box = new Box($('.palette'), {
     const active = strip.ctx?.active || null;
     const inside = strip.tabs.some((t) => t.n != null);
     const on = (id) => !inside && (active === id || (id === 'library' && v === 'library') || (id === 'drawer' && v === 'drawer') || (id === 'tags' && v === 'tags') || (id === 'desk' && v === 'desk'));
-    const all = [['today', 'Today', '⌘J'], ['desk', 'Desk', '⌘⇧U'], ['library', 'Library', '⌘⇧O'], ['drawer', 'Drawer', ''], ['tags', 'Tags', ''], ['catchup', 'Catch-up', ''], ['look', 'Aa Look', '']];
+    const all = [['today', 'Today', '⌘J'], ['desk', 'Desk', '⌘⇧U'], ['library', 'Library', '⌘⇧O'], ['drawer', 'Drawer', ''], ['tags', 'Tags', ''], ['catchup', 'Catch-up', '']];
     // The phone's bottom bar has Today, Desk and Library already.
     const list = touch.matches ? all.filter(([id]) => !['today', 'desk', 'library'].includes(id)) : all;
     const out = list.map(([id, label, keys]) => ({ id, label, keys: keyLabel(keys), on: on(id) }));
@@ -4340,6 +4442,9 @@ box = new Box($('.palette'), {
   addLine: (text) => boxAddLine(text),
   search: (text) => openPalette('search', text),
   runCommand: (c) => c.run(),
+  focusOn: () => root.classList.contains('focus'),
+  toggleFocus: () => { toggleFocus(); toast(root.classList.contains('focus') ? 'Focus on' : 'Focus off'); },
+  look: () => { if ($('.page-settings').hidden) togglePageSettings(); },
   close: (refocus = true) => closePalette(refocus),
   isTouch: () => touch.matches,
   keyLabel: (t) => keyLabel(t),
