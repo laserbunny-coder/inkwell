@@ -97,7 +97,12 @@ try {
     await page.waitForSelector('#plan-sheet .pl-zoom');
     await page.locator('#plan-sheet .pl-zoom button[data-tab="calday"]').click();
     await page.waitForSelector('#plan-sheet .dc-grid');
-    assert.deepEqual(await chips(page), order, 'every open task waits above, yesterday’s too');
+    // What has no time yet waits behind one button.
+    assert.equal(await page.locator('#plan-sheet .dc-unsched').innerText(), `Unscheduled · ${order.length}`);
+    assert.equal(await page.locator('#plan-sheet .dc-sheet').isVisible(), false);
+    await page.locator('#plan-sheet .dc-unsched').click();
+    await page.waitForSelector('#plan-sheet .dc-sheet', { state: 'visible' });
+    assert.deepEqual(await chips(page), order, 'every open task waits there, yesterday’s too');
     assert.equal(await page.locator('#plan-sheet .dc-blk').count(), 0, 'yesterday’s time doesn’t carry over');
     assert.deepEqual(await page.locator('#plan-sheet .dc-ev .dc-w').allInnerTexts(), ['Standup with Nate', 'Dentist']);
     assert.equal(await page.locator('#plan-sheet .dc-now').count(), 1);
@@ -125,9 +130,13 @@ try {
     assert.ok(a.x >= b.x + b.width - 1 || b.x >= a.x + a.width - 1, 'overlaps sit side by side');
   });
 
-  await check('drag its bottom edge to make it longer', async () => {
-    const e = await blk(page, 'Cut the trailer').locator('.dc-edge').boundingBox();
-    await drag(page, e.x + e.width / 2, e.y + e.height / 2, e.y + e.height / 2 + 47 * PX);
+  await check('drag the handle on its bottom edge to make it longer', async () => {
+    // The handle shows when the pointer is over the block.
+    const c = await centre(blk(page, 'Cut the trailer'));
+    await page.mouse.move(c.x, c.y);
+    const e = await page.evaluate(() => { const h = [...document.querySelectorAll('#plan-sheet .dc-handle')].find((x) => document.querySelector(`#plan-sheet .dc-blk[data-task="${x.dataset.task}"]`)?.textContent.includes('Cut the trailer')); const r = h.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; });
+    await page.mouse.move(e.x + e.width / 2, e.y + 3);
+    await drag(page, e.x + e.width / 2, e.y + 3, e.y + 3 + 47 * PX);
     assert.equal((await named(page, 'Cut the trailer')).fields.task.len, 75);
     assert.match(await blk(page, 'Cut the trailer').locator('.dc-t').innerText(), /4:15 pm · 1 h 15 min/);
   });
@@ -137,6 +146,30 @@ try {
     await drag(page, c.x, c.y, await yOf(page, 19 * 60 + 5));
     assert.deepEqual(await placedAt(page, 'Print the call sheet'), { day: TODAY, at: 19 * 60 });
     assert.deepEqual(await chips(page), ['Back up the drives']);
+    assert.equal(await page.locator('#plan-sheet .dc-unsched').innerText(), 'Unscheduled · 1');
+    // Esc puts the sheet away.
+    await chip(page, 'Back up').focus();
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('#plan-sheet .dc-sheet', { state: 'hidden' });
+  });
+
+  await check('with the keyboard: Alt + Down moves a block 15 minutes, Alt + Shift + Down makes it longer', async () => {
+    await blk(page, 'Print the call sheet').focus();
+    await page.keyboard.press('Alt+ArrowDown');
+    await page.waitForFunction(() => /7:15 pm/.test(document.activeElement?.textContent || ''));
+    await sleep(300); // the redraws after a save settle
+    assert.deepEqual(await placedAt(page, 'Print the call sheet'), { day: TODAY, at: 19 * 60 + 15 });
+    assert.equal(await page.evaluate(() => document.activeElement?.textContent), await blk(page, 'Print the call sheet').textContent(), 'it keeps the focus');
+    await page.keyboard.press('Alt+Shift+ArrowDown');
+    await page.waitForFunction(() => /45 min/.test(document.activeElement?.textContent || ''));
+    await sleep(300);
+    assert.equal((await named(page, 'Print the call sheet')).fields.task.len, 45);
+    await page.keyboard.press('Alt+Shift+ArrowUp');
+    await page.waitForFunction(() => /7:15 pm · 30 min/.test(document.activeElement?.textContent || ''));
+    await sleep(300);
+    await page.keyboard.press('Alt+ArrowUp');
+    await page.waitForFunction(() => /7 pm · 30 min/.test([...document.querySelectorAll('#plan-sheet .dc-blk')].find((b) => /Print the call/.test(b.textContent))?.textContent || ''));
+    assert.deepEqual(await placedAt(page, 'Print the call sheet'), { day: TODAY, at: 19 * 60 });
   });
 
   await check('click an empty spot and write: a new task right there, and on the list at the end', async () => {
@@ -181,12 +214,45 @@ try {
     await page.waitForFunction(() => document.documentElement.dataset.view === 'plan' && !!document.querySelector('#plan-sheet .dc-grid'));
   });
 
+  const px = () => page.evaluate(() => parseFloat(document.querySelector('#plan-sheet .dc-grid').style.getPropertyValue('--px')));
+  await check('zoom: Fit day puts the whole day on the screen; − and +, and Ctrl + scroll', async () => {
+    await page.locator('#plan-sheet .dc-z-fit').click();
+    const g = await page.locator('#plan-sheet .dc-grid').boundingBox();
+    assert.ok(g.y + g.height <= 1000 + 1, `the day ends on the screen (${g.y + g.height})`);
+    assert.ok(g.height > 500, `and fills it (${g.height})`);
+    assert.equal(await page.locator('#plan-sheet .dc-z-fit').getAttribute('aria-pressed'), 'true');
+    const fit = await px();
+    await page.locator('#plan-sheet .dc-z-in').click();
+    assert.ok(Math.abs((await px()) - fit * 1.25) < 0.01, 'one step in');
+    await page.locator('#plan-sheet .dc-z-out').click();
+    await page.locator('#plan-sheet .dc-z-out').click();
+    assert.ok(Math.abs((await px()) - fit / 1.25) < 0.01, 'two steps out');
+    // Blocks follow the zoom.
+    const b = await blk(page, 'Print the call sheet').boundingBox();
+    assert.ok(Math.abs(b.height - (30 * (await px()) - 2)) < 1.5, `a half hour is ${b.height}px`);
+    const before = await px();
+    const gg = await page.locator('#plan-sheet .dc-grid').boundingBox();
+    await page.mouse.move(gg.x + gg.width * 0.6, gg.y + 100);
+    await page.keyboard.down('Control');
+    await page.mouse.wheel(0, -200);
+    await page.keyboard.up('Control');
+    await sleep(400);
+    assert.ok((await px()) > before * 1.3, 'Ctrl + scroll up zooms in');
+    // A drag still lands where it looks like it does, at any zoom.
+    await page.locator('#plan-sheet .dc-z-fit').click();
+    const c = await centre(blk(page, 'Print the call sheet'));
+    await drag(page, c.x, c.y, c.y + 60 * (await px()));
+    assert.deepEqual(await placedAt(page, 'Print the call sheet'), { day: TODAY, at: 20 * 60 });
+    assert.equal(await page.evaluate(() => localStorage.getItem('calHours')), 'fit');
+  });
+
   await check('Calendar opens on the zoom used last on this device', async () => {
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
     await go(page, { view: 'notebook', pageId: `day-${TODAY}` });
     await page.locator('.today-switch button', { hasText: 'Calendar' }).click();
     await page.waitForSelector('#plan-sheet .dc-grid');
+    await page.waitForFunction(() => document.querySelector('#plan-sheet .dc-z-fit')?.getAttribute('aria-pressed') === 'true');
     assert.deepEqual(page.errors, []);
   });
 
@@ -202,9 +268,14 @@ try {
     await sleep(600);
     await phone.locator('#plan-sheet .pl-zoom button[data-tab="calday"]').tap();
     await phone.waitForSelector('#plan-sheet .dc-grid');
-    // On a phone what isn't on the calendar waits below the hours, folded into one line.
-    assert.match(await phone.locator('#plan-sheet .dc-tray-fold').innerText(), /1 not on the calendar/);
-    await phone.locator('#plan-sheet .dc-tray-fold').tap();
+    // On a phone what isn't on the calendar waits in a sheet from the bottom.
+    assert.equal(await phone.locator('#plan-sheet .dc-unsched').innerText(), 'Unscheduled · 1');
+    await phone.locator('#plan-sheet .dc-unsched').tap();
+    await phone.waitForSelector('#plan-sheet .dc-sheet', { state: 'visible' });
+    const sb = await phone.locator('#plan-sheet .dc-sheet').boundingBox();
+    const barTop = await phone.evaluate(() => document.querySelector('.placebar').getBoundingClientRect().top);
+    assert.ok(Math.abs(sb.y + sb.height - barTop) < 2, `the sheet sits on the bar (${sb.y + sb.height} / ${barTop})`);
+    await shot(phone, 'daycal-phone-sheet');
     await phone.locator('#plan-sheet .dc-chip', { hasText: 'Charge' }).tap();
     await phone.waitForSelector('#plan-sheet .dc-blk');
     assert.equal((await placedAt(phone, 'Charge the batteries')).at, 14 * 60 + 30);
@@ -219,6 +290,40 @@ try {
     await phone.waitForFunction(() => /3:30 pm/.test(document.querySelector('#plan-sheet .dc-blk .dc-t')?.textContent || ''));
     assert.equal((await placedAt(phone, 'Charge the batteries')).at, 15 * 60 + 30);
     await shot(phone, 'daycal-phone');
+  });
+
+  await check('phone: the handle makes a block longer straight away, no hold', async () => {
+    const h = await phone.locator('#plan-sheet .dc-handle').boundingBox();
+    const x = h.x + h.width / 2;
+    const y = h.y + h.height / 2;
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    for (let k = 1; k <= 8; k++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + (30 * PX * k) / 8 }] }); await sleep(20); }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await phone.waitForFunction(() => /1 h/.test(document.querySelector('#plan-sheet .dc-blk .dc-t')?.textContent || ''));
+    assert.equal((await named(phone, 'Charge the batteries')).fields.task.len, 60);
+    assert.equal((await placedAt(phone, 'Charge the batteries')).at, 15 * 60 + 30, 'it didn’t move');
+  });
+
+  await check('phone: pinch the hours to zoom out, and in', async () => {
+    const pxp = () => phone.evaluate(() => parseFloat(document.querySelector('#plan-sheet .dc-grid').style.getPropertyValue('--px')));
+    const before = await pxp();
+    const g = await phone.locator('#plan-sheet .dc-grid').boundingBox();
+    const x = g.x + g.width * 0.7;
+    const mid = Math.min(g.y + g.height / 2, 500);
+    const pinch = async (from, to) => {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: mid - from, id: 1 }, { x: x + 10, y: mid + from, id: 2 }] });
+      for (let k = 1; k <= 8; k++) { const r = from + ((to - from) * k) / 8; await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: mid - r, id: 1 }, { x: x + 10, y: mid + r, id: 2 }] }); await sleep(20); }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await sleep(300);
+    };
+    await pinch(150, 60);
+    const out = await pxp();
+    assert.ok(out < before * 0.6, `fingers together: more of the day (${before} → ${out})`);
+    await pinch(60, 120);
+    assert.ok((await pxp()) > out * 1.5, 'fingers apart: zoom in');
+    assert.equal(await phone.evaluate(() => visualViewport.scale), 1, 'the page itself didn’t zoom');
+    assert.equal(await phone.evaluate(() => localStorage.getItem('calHours')), String(await pxp()));
+    assert.equal((await placedAt(phone, 'Charge the batteries')).at, 15 * 60 + 30, 'a pinch moves nothing');
     assert.deepEqual(phone.errors, []);
   });
 } finally {

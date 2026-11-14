@@ -324,18 +324,47 @@ html.hide-panes .ah-talk { display: none; }
 .hide-planview .pl-view { display: none; }
 
 /* The day's Calendar: arranged by hand, snapping to 15 minutes. */
-.dc { display: grid; gap: 10px; margin-bottom: 6px; }
-.dc-tray { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font: 12.5px var(--ui); color: var(--faint); }
-.dc-tray-l { margin-right: 2px; }
-.dc-chip { border: 1px solid var(--line2); background: none; color: var(--muted); font: 13px var(--ui); padding: 3px 10px; border-radius: 99px; cursor: grab; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; touch-action: manipulation; -webkit-touch-callout: none; user-select: none; }
-.dc-chip:hover, .dc-chip:focus-visible { color: var(--ink); border-color: var(--accent); outline: none; }
-.dc-grid { position: relative; cursor: cell; }
+.dc { display: grid; gap: 10px; margin-bottom: 6px; position: relative; }
+/* The bar above the hours: Unscheduled, and the zoom. */
+.dc-bar { display: flex; align-items: center; gap: 8px; min-height: 30px; font: 13px var(--ui); }
+.dc-unsched { border: 1px solid var(--line2); background: none; color: var(--muted); font: 13px var(--ui); padding: 4px 12px; border-radius: 99px; cursor: pointer; }
+.dc-unsched:hover, .dc-unsched:focus-visible, .dc-unsched[aria-expanded="true"] { color: var(--ink); border-color: var(--accent); outline: none; }
+.dc-unsched[hidden] { display: none; }
+.dc-zoom { margin-left: auto; display: inline-flex; gap: 2px; }
+.dc-z { border: 0; background: none; color: var(--faint); font: 13px var(--ui); padding: 4px 8px; border-radius: 6px; cursor: pointer; min-width: 28px; }
+.dc-z:hover:not([disabled]), .dc-z:focus-visible { color: var(--ink); background: var(--tint); outline: none; }
+.dc-z[aria-pressed="true"] { color: var(--ink); }
+.dc-z[disabled] { opacity: .35; cursor: default; }
+:root.hide-calzoom .dc-zoom { display: none; }
+/* Unscheduled: under the bar on a computer; a sheet from the bottom on a phone. */
+.dc-sheet { position: absolute; z-index: 6; top: 40px; left: 0; width: min(360px, 100%); max-height: min(60vh, 520px); display: flex; flex-direction: column; background: var(--panel, var(--bg)); border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / .28); padding: 6px 12px 12px; box-sizing: border-box; transition: transform .18s ease, opacity .18s ease; }
+.dc-sheet[hidden] { display: none; }
+.dc-sh-grab { display: none; }
+.dc-sh { display: flex; align-items: baseline; gap: 8px; padding: 4px 0 2px; font: 600 14px var(--ui); color: var(--ink); }
+.dc-sh-n { font-weight: 400; color: var(--faint); font-variant-numeric: tabular-nums; }
+.dc-sh-x { margin-left: auto; border: 0; background: none; color: var(--faint); font: 20px/1 var(--ui); padding: 2px 6px; cursor: pointer; border-radius: 6px; }
+.dc-sh-x:hover, .dc-sh-x:focus-visible { color: var(--ink); background: var(--tint); outline: none; }
+.dc-sh-tip { margin: 0 0 8px; font: 12px var(--ui); color: var(--faint); }
+.dc-rows { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; overscroll-behavior: contain; }
+.dc-chip { display: block; width: 100%; text-align: left; border: 0; border-radius: 8px; background: none; color: var(--ink); font: 14px var(--ui); padding: 8px 10px; cursor: grab; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; touch-action: pan-y; -webkit-touch-callout: none; user-select: none; }
+.dc-chip:hover, .dc-chip:focus-visible { background: var(--tint); outline: none; }
+.dc-chip.dc-held { background: var(--tint); box-shadow: inset 3px 0 0 var(--accent); }
+.dc-sheet.dc-sheet-low { opacity: .25; pointer-events: none; }
+@media (hover: none), (max-width: 899px) {
+  .dc-sheet { position: fixed; top: auto; left: 0; right: 0; width: auto; bottom: var(--dc-bar, 0px); max-height: 46vh; border-radius: 14px 14px 0 0; border-width: 1px 0 0; box-shadow: 0 -10px 30px rgb(0 0 0 / .25); padding: 4px 16px calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 36; }
+  .dc-sh-grab { display: block; width: 36px; height: 4px; border-radius: 4px; background: var(--line2); margin: 4px auto 6px; }
+  .dc-chip { padding: 11px 10px; font-size: 15px; }
+  .dc-sheet.dc-sheet-low { transform: translateY(40%); opacity: 0; }
+  .dc-z { min-width: 36px; padding: 6px 8px; }
+}
+.dc-grid { position: relative; cursor: cell; touch-action: pan-y; }
+.dc-grid.dc-tight .dc-hour span { font-size: 10px; top: -7px; }
 .dc-hour { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); pointer-events: none; }
 .dc-hour span { position: absolute; left: 0; top: -8px; padding-right: 6px; background: var(--bg); font: 11px var(--ui); color: var(--faint); font-variant-numeric: tabular-nums; }
 .dc-ev, .dc-blk, .dc-new { position: absolute; box-sizing: border-box; border-radius: var(--r, 6px); padding: 3px 8px; overflow: hidden; display: flex; flex-direction: column; font: 13px/1.3 var(--ui); min-height: 10px; }
 .dc-ev { border: 1px dashed var(--line2); color: var(--muted); background: color-mix(in srgb, var(--bg) 60%, transparent); cursor: default; }
 .dc-ev.past { opacity: .5; }
-.dc-blk { background: color-mix(in srgb, var(--accent) 16%, var(--raise)); border-left: 3px solid var(--accent); color: var(--ink); cursor: grab; touch-action: manipulation; -webkit-touch-callout: none; user-select: none; }
+.dc-blk { background: color-mix(in srgb, var(--accent) 16%, var(--raise)); border-left: 3px solid var(--accent); color: var(--ink); cursor: grab; touch-action: pan-y; -webkit-touch-callout: none; user-select: none; }
 .dc-blk:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .dc-blk.timing { border-left-color: var(--signal); }
 .dc-blk.dragging { cursor: grabbing; box-shadow: 0 6px 18px rgb(0 0 0 / .25); z-index: 3; opacity: .92; }
@@ -348,10 +377,15 @@ html.hide-panes .ah-talk { display: none; }
 .dc-w { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dc-t { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dc-blk .dc-t { color: var(--muted); }
-.dc-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: ns-resize; }
-.dc-edge::after { content: ''; position: absolute; left: 50%; bottom: 2px; width: 18px; height: 2px; margin-left: -9px; border-radius: 2px; background: var(--line2); opacity: 0; }
-.dc-blk:hover .dc-edge::after { opacity: 1; }
-@media (hover: none) { .dc-edge { height: 9px; } .dc-edge::after { opacity: .8; } }
+.tiny:is(.dc-ev, .dc-blk) .dc-t { display: none; }
+.tiny:is(.dc-ev, .dc-blk) { font-size: 11px; line-height: 1; padding-block: 0; }
+/* The handle on a block's bottom edge: drag it to change the length. */
+.dc-handle { position: absolute; height: 16px; z-index: 2; cursor: ns-resize; pointer-events: none; touch-action: none; }
+.dc-handle::after { content: ''; position: absolute; left: 50%; top: 3px; width: 28px; height: 4px; margin-left: -14px; border-radius: 4px; background: var(--accent); opacity: 0; transition: opacity .12s; }
+.dc-blk:hover + .dc-handle, .dc-handle:hover, .dc-handle.active { pointer-events: auto; }
+.dc-blk:hover + .dc-handle::after, .dc-handle:hover::after, .dc-handle.active::after, .dc-blk:focus-visible + .dc-handle::after { opacity: .9; }
+:root.dc-dragging .dc-handle:not(.active) { visibility: hidden; }
+@media (hover: none) { .dc-handle { pointer-events: auto; height: 20px; } .dc-handle::after { opacity: .5; top: 4px; width: 22px; margin-left: -11px; } }
 .dc-now { position: absolute; left: 44px; right: 0; border-top: 1.5px solid var(--accent); pointer-events: none; z-index: 2; }
 .dc-now::before { content: ''; position: absolute; left: -4px; top: -4.5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .dc-new { left: 52px; right: 4px; border: 1px solid var(--accent); background: var(--bg); padding: 2px 6px; z-index: 4; }
@@ -595,9 +629,6 @@ html.focus .notebook.plan-side > #plan, .notebook.plan-side.zoomed > #plan { dis
 .pw-past { grid-column: 1 / -1; margin: 0; padding: 10px 0; border-bottom: 1px solid var(--line); border-radius: 0; }
 .pw-late { margin: 16px 0 0; }
 /* Calendar (day) on a phone: what isn't on the calendar waits below the hours, in one folded line. */
-.dc-tray-fold { border: 0; background: none; padding: 6px 0; color: var(--muted); font: 13px var(--ui); cursor: pointer; width: 100%; text-align: left; }
-.dc-tray.folded .dc-chip { display: none; }
-@media (hover: none) { .dc > .dc-tray { margin-top: 12px; } }
 /* While the views keep their full names, the phone's switch scrolls inside itself rather than wrap. */
 .pl-switch-phone { overflow-x: auto; scrollbar-width: none; }
 .pl-switch-phone::-webkit-scrollbar { display: none; }
