@@ -39,7 +39,7 @@ const bottomIs = async (p, want, why) => {
 
 try {
   const H = 915;
-  const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 412, height: H }, hasTouch: true, isMobile: true, quietDrafts: true });
+  const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 412, height: H }, hasTouch: true, isMobile: true, quietDrafts: true, todayPage: false });
   await ctx.addInitScript((h) => {
     const vv = new EventTarget();
     Object.assign(vv, { width: 412, height: h, offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1 });
@@ -69,6 +69,8 @@ try {
     for (const gone of ['dots', 'handle', 'synopsis', 'plan', 'took']) assert.ok(!hide.includes(gone), `${gone} is on again`);
     assert.ok(hide.includes('loose'), 'a kept switch stays off');
     assert.ok(hide.includes('bullets'), 'bullets stay off');
+    // “Show the plan on Today” was off: the day still opens on its page.
+    assert.equal(await p.evaluate(() => localStorage.getItem('todayPhone')), 'page');
   });
 
   await check('a script: the keyboard brings the row, Android back brings the tab, the tab brings the bar', async () => {
@@ -147,6 +149,14 @@ try {
     await p.waitForSelector('.notebook', { state: 'visible' });
     await sleep(400);
     await bottomIs(p, { bar: true, tab: false }, 'Today');
+    // Focus on the day's Plan still shows the plan (Nov 14: it went blank).
+    await p.locator('.tp-switch button', { hasText: 'Plan' }).tap();
+    await p.waitForFunction(() => document.querySelector('.notebook').dataset.tp === 'plan');
+    await p.keyboard.press('Control+.');
+    await p.waitForFunction(() => document.documentElement.classList.contains('focus'));
+    assert.ok(await p.locator('#plan').isVisible(), 'the plan stays in Focus');
+    await p.keyboard.press('Control+.');
+    await p.locator('.tp-switch button', { hasText: 'Page' }).tap();
     await p.locator('.placebar .pb-desk').tap();
     await p.waitForFunction(() => document.documentElement.dataset.view === 'desk');
     await bottomIs(p, { bar: true, tab: false }, 'Desk');
