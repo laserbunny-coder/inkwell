@@ -781,7 +781,7 @@ try {
     await sleep(400);
     await p.keyboard.press('Control+O');
     await p.keyboard.type('Script · The Harbour');
-    await p.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('Script · The Harbour'));
+    await p.waitForFunction(() => document.querySelector('.palette[data-loaded]') && /^Script\s*chapter · The Harbour/.test(document.querySelector('#palette-list li.box-row')?.textContent || ''));
     await p.keyboard.press('Enter');
     await p.waitForSelector('html.script #editor p[data-el="scene"]');
     await p.locator('#editor p[data-el="scene"]').click();
@@ -849,8 +849,8 @@ try {
     await ph.keyboard.press('Control+O');
     await until('the box has the keys', () => document.activeElement?.id === 'palette-input');
     await ph.keyboard.type('Script · Pocket');
-    await until('the list shows Script · Pocket', () => document.querySelector('#palette-list li')?.textContent.includes('Script · Pocket'));
-    await ph.locator('#palette-list li').first().click();
+    await until('the list shows Script · Pocket', () => document.querySelector('.palette[data-loaded]') && /^Script\s*chapter · Pocket/.test(document.querySelector('#palette-list li.box-row')?.textContent || ''));
+    await ph.locator('#palette-list li.box-row').first().click();
     await ph.waitForSelector('html.script #editor p[data-el="scene"]');
     await ph.locator('#editor p[data-el="scene"]').tap();
     await ph.waitForSelector('.script-bar', { state: 'visible' });
