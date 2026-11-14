@@ -38,6 +38,15 @@
       if (!localStorage.getItem('linkPicsOff')) { hide.push('linkpics'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('linkPicsOff', '1'); }
       // Time estimates start off (Nov 2026): the plan is the order you'll do things in.
       if (!localStorage.getItem('estimatesOff')) { hide.push('estimates'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('estimatesOff', '1'); }
+      // Nov 2026: the Show tab's clean-up. Switches that went for good are simply on
+      // again (bullets stays off); keep this list the same as REMOVED in src/shows.js.
+      if (!localStorage.getItem('showsCleaned')) {
+        const gone = ['dots', 'handle', 'taskgrip', 'scenedots', 'voice', 'woven', 'taskchips', 'tasknotes', 'repeatmark', 'repeatahead', 'marks', 'closedtag', 'hoursleft', 'took', 'aheadhours', 'areahours', 'synopsis', 'plan', 'planview', 'projdaybook'];
+        for (let i = hide.length - 1; i >= 0; i--) if (gone.includes(hide[i])) hide.splice(i, 1);
+        if (!hide.includes('bullets')) hide.push('bullets');
+        localStorage.setItem('hide', JSON.stringify(hide));
+        localStorage.setItem('showsCleaned', '1');
+      }
       for (const h of hide) d.classList.add('hide-' + h);
       if (localStorage.getItem('focus') === '1') d.classList.add('focus');
       if (localStorage.getItem('focusSections') === '1') d.classList.add('focus-sections');
@@ -385,55 +394,7 @@
       <div class="font-groups" role="tablist" aria-label="Kind of font"></div>
       <div class="font-list" role="radiogroup" aria-label="Writing font"></div>
     </div>
-    <div class="panel-label view-label">Show</div>
-    <label class="switch"><input type="checkbox" data-show="links"> Linked from</label>
-    <label class="switch"><input type="checkbox" data-show="review"> Day review on day pages</label>
-    <label class="switch"><input type="checkbox" data-show="nudge"> After 9 pm, a reminder on today to review it</label>
-    <label class="switch"><input type="checkbox" data-show="marks"> Link and tag ideas in the day review</label>
-    <label class="switch"><input type="checkbox" data-show="tidy"> Tidy pass reminder on Today</label>
-    <label class="switch"><input type="checkbox" data-show="plan"> Show the plan on Today (and on a day’s page)</label>
-    <label class="switch tp-wide"><input type="checkbox" data-show="planside"> Plan at the side of the page on a wide screen (off: on top, one column) <span class="keys">Alt+P</span></label>
-    <label class="switch"><input type="checkbox" data-show="foldearlier"> Fold earlier days into one line (more than three)</label>
-    <label class="switch"><input type="checkbox" data-show="donetasks"> Done tasks stay in the list, where they were (off: they disappear, under a faint “3 done” line)</label>
-    <label class="switch"><input type="checkbox" data-show="took"> “How long did it take?” when you tick a task</label>
-    <label class="switch"><input type="checkbox" data-show="taskchips"> A task’s day and length after its words</label>
-    <label class="switch"><input type="checkbox" data-show="taskgrip"> Six dots on a task in the plan, to show it can be moved</label>
-    <label class="switch"><input type="checkbox" data-show="tasknotes"> A triangle on a task with lines under it, to show them right in the plan</label>
-    <label class="switch"><input type="checkbox" data-show="loose"> A ring on lines you haven’t filed, and their count under the day</label>
-    <label class="switch"><input type="checkbox" data-show="deskread"> Claude’s one-line read on the Desk</label>
-    <label class="switch"><input type="checkbox" data-show="deskcount"> How many things need you, beside Desk</label>
-    <label class="switch"><input type="checkbox" data-show="nextstep"> Next step on Desk cards</label>
-    <label class="switch"><input type="checkbox" data-show="closedtag"> “Thread closed” on calls from closed threads, and their filter in History</label>
-    <label class="switch"><input type="checkbox" data-show="aheadhours"> Each week’s hours at the top of Calendar’s six weeks</label>
-    <label class="switch"><input type="checkbox" data-show="areahours"> Each area’s hours under the week</label>
-    <label class="switch"><input type="checkbox" data-show="calendar"> Your Google Calendar’s events in the plan</label>
-    <label class="switch"><input type="checkbox" data-show="woven"> Calendar events among the tasks, at their place in the day (off: apart, on top)</label>
-    <label class="switch"><input type="checkbox" data-show="calzoom"> Zoom buttons (− Fit day +) on the Calendar’s Day (off: pinch, or Ctrl + scroll, still zoom)</label>
-    <label class="switch"><input type="checkbox" data-show="estimates"> Time estimates: how long each task takes, and the hours left today</label>
-    <label class="switch"><input type="checkbox" data-show="hoursleft"> “Left today” beside today’s plan</label>
-    <label class="switch"><input type="checkbox" data-show="repeatmark"> The ↻ after a task that repeats</label>
-    <label class="switch"><input type="checkbox" data-show="repeatahead"> A repeating task on the later days it comes round on</label>
-    <label class="switch"><input type="checkbox" data-show="projsteps"> Steps on a project’s page</label>
-    <label class="switch"><input type="checkbox" data-show="projcrew"> Crew and Turns on a project’s page</label>
-    <label class="switch"><input type="checkbox" data-show="projrecent"> “Recently” on a project’s page</label>
-    <label class="switch"><input type="checkbox" data-show="dots"> Note dots in the margin</label>
-    <label class="switch"><input type="checkbox" data-show="handle"> Six-dot handle</label>
-    <label class="switch"><input type="checkbox" data-show="bullets"> Bullets on notebook lines</label>
-    <label class="switch"><input type="checkbox" data-show="panes"> Beside: a pane next to the page <span class="keys">⌘\</span>, and middle-click opens things there</label>
-    <label class="switch"><input type="checkbox" id="many-panes"> More than one pane beside (up to three in a row)</label>
-    <label class="switch"><input type="checkbox" data-show="alts"> Marks on words and paragraphs with alternates</label>
-    <label class="switch"><input type="checkbox" data-show="voice"> Mode chips on voice captures</label>
-    <label class="switch"><input type="checkbox" data-show="linkpics"> Pictures on shared links</label>
-    <label class="switch"><input type="checkbox" data-show="sections"> Section titles in scripts <span class="keys">⌘⇧.</span></label>
-    <label class="switch"><input type="checkbox" data-show="synopsis"> Section summaries in scripts</label>
-    <label class="switch"><input type="checkbox" data-show="scenedots"> Scene dots beside Woven scripts</label>
-    <label class="switch"><input type="checkbox" data-show="claude"> Claude’s notes in the margin</label>
-    <label class="switch"><input type="checkbox" data-show="comments"> Readers’ comments in the margin</label>
-    <label class="switch"><input type="checkbox" id="fresh-eyes"> Fresh eyes: reread it in a new font, page and colour <span class="keys">⌘⇧Y</span></label>
-    <label class="switch"><input type="checkbox" id="typewriter-mode"> Typewriter: the line you’re on stays put</label>
-    <label class="switch"><input type="checkbox" data-show="pagetabs"> Page tabs at the top <span class="keys">⌥0–6</span></label>
-    <label class="switch"><input type="checkbox" id="focus-mode"> Focus: just the text <span class="keys">⌘.</span></label>
-    <label class="switch"><input type="checkbox" id="focus-sections"> Section titles in Focus too <span class="keys">⌘⇧.</span></label>
+    <div class="ps-show"></div>
     <div class="actions">
       <button type="button" class="ghost-btn" id="page-reset">Reset</button>
       <button type="button" class="pill" id="page-done">Done</button>
@@ -460,6 +421,10 @@
     <button type="button" data-alt="next" aria-label="Next alternate">›</button>
     <span class="bar-gap ins-gap" aria-hidden="true"></span>
     <button type="button" data-ins="1" aria-label="Insert (time, date, link…)">+</button>
+    <span class="bar-end">
+      <button type="button" data-end="focus" aria-label="Focus" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></svg></button>
+      <button type="button" data-end="down" aria-label="Put the keyboard away"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+    </span>
   </div>
 
   <div class="script-bar outline-bar" role="toolbar" aria-label="Outline" hidden>
@@ -481,6 +446,10 @@
     <button type="button" data-do="move" aria-label="Move to another page">Move to…</button>
     <button type="button" data-do="zoom" aria-label="Zoom in">Zoom</button>
     <button type="button" data-do="insert" aria-label="Insert (time, date, link…)">+</button>
+    <span class="bar-end">
+      <button type="button" data-end="focus" aria-label="Focus" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></svg></button>
+      <button type="button" data-end="down" aria-label="Put the keyboard away"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+    </span>
   </div>
 
   <div class="stats" role="dialog" aria-label="Progress" hidden>

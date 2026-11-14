@@ -70,7 +70,7 @@ try {
   await check('the box’s rooms reach Today, the Desk, the Library, the Drawer and Tags', async () => {
     await p.keyboard.press('Control+O');
     await p.waitForSelector('.palette.box', { state: 'visible' });
-    assert.deepEqual(await p.locator('.box-rooms .go-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up', 'Aa Look']);
+    assert.deepEqual(await p.locator('.box-rooms .go-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up']);
     await p.locator('.box-rooms .box-chip', { hasText: 'Tags' }).click();
     await p.waitForFunction(() => document.documentElement.dataset.view === 'tags');
     await p.keyboard.press('Control+O');
@@ -256,21 +256,21 @@ try {
     await ph.waitForSelector('.notebook', { state: 'visible' });
   });
 
-  await check('in focus the phone bar shrinks to a handle that brings it back', async () => {
+  await check('in focus the phone bar rests as a tab that brings it back', async () => {
     // The keyboard's own bar (and the outline buttons) sit there while typing, so put the keyboard away first.
     await settle(ph);
     await ph.evaluate(() => document.documentElement.classList.add('focus'));
     await sleep(200);
     assert.equal(await ph.locator('.placebar').isVisible(), false);
-    await ph.locator('.pb-handle').tap();
+    await ph.locator('.pb-tab').tap();
     await ph.waitForSelector('.placebar', { state: 'visible' });
-    await ph.evaluate(() => document.documentElement.classList.remove('focus'));
+    await ph.evaluate(() => { document.documentElement.classList.remove('focus'); document.body.classList.remove('bar-peek'); });
   });
   await check('on a phone the look is one tap from Go, and the menu finds it by name', async () => {
     await settle(ph);
     await ph.locator('.pb-place').tap();
     await ph.waitForSelector('.palette.box', { state: 'visible' });
-    await ph.locator('.box-rooms .box-chip', { hasText: 'Aa Look' }).tap();
+    await ph.locator('.box-quick .box-look').tap();
     await ph.waitForSelector('.page-settings', { state: 'visible' });
     assert.equal(await ph.locator('.palette').isVisible(), false);
     await ph.locator('.look-opt[data-look="ember"]').tap();

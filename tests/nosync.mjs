@@ -9,10 +9,13 @@ export function withoutSync(browser) {
     // showing, so they're on unless a test asks for a fresh device ({ estimates: false }).
     // A phone opens a day on its Plan the first time; most tests type in the
     // day's page, so it opens on the Page unless a test asks ({ todayPage: false }).
-    const { estimates = true, todayPage = true, ...rest } = opts;
+    // Drafts rest the phone's bar as a tab (Nov 14 2026); older tests tap the bar
+    // straight away, so it stays up in drafts unless a test asks ({ quietDrafts: true }).
+    const { estimates = true, todayPage = true, quietDrafts = false, ...rest } = opts;
     const ctx = await open(rest);
     if (todayPage) await ctx.addInitScript(() => { try { if (!localStorage.getItem('todayPhone')) localStorage.setItem('todayPhone', 'page'); } catch { /* no storage here */ } });
     await ctx.addInitScript(() => { if (!('__syncBackend' in window)) window.__syncBackend = null; });
+    if (!quietDrafts) await ctx.addInitScript(() => { try { if (!localStorage.getItem('hide')) localStorage.setItem('hide', '["quietdrafts"]'); } catch { /* no storage here */ } });
     if (estimates) await ctx.addInitScript(() => { try { if (!localStorage.getItem('estimatesOff')) localStorage.setItem('estimatesOff', '1'); } catch { /* no storage here */ } });
     return ctx;
   };

@@ -270,9 +270,6 @@ try {
     await page.keyboard.press('Alt+ArrowDown');
     await page.waitForFunction(() => document.querySelector('#plan .pl-task:not(.done) .pl-words')?.textContent === 'Board Reel 2');
     assert.equal((await taskNamed(page, 'Board Reel 2')).fields.task.order < (await taskNamed(page, 'Order the 8 TB storage drive')).fields.task.order, true, 'the order is saved');
-    await page.evaluate(() => document.documentElement.classList.add('hide-taskgrip'));
-    assert.equal(await r.locator('.pl-grip').isVisible(), false, 'Look can switch the dots off');
-    await page.evaluate(() => document.documentElement.classList.remove('hide-taskgrip'));
   });
 
   await check('a click on a task zooms into it, Alt + Left zooms back out to the plan, Ctrl + click opens it beside', async () => {
@@ -462,10 +459,7 @@ try {
     assert.ok(!(await words(page)).includes('Water the ferns'));
   });
 
-  await check('every part can be switched off under Look; Focus leaves only the words', async () => {
-    await page.evaluate(() => { const c = document.querySelector('[data-show="plan"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); });
-    assert.ok(await page.locator('#plan').isHidden());
-    await page.evaluate(() => { const c = document.querySelector('[data-show="plan"]'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); });
+  await check('“How long did it take?” goes with Time estimates; Focus leaves only the words', async () => {
     assert.ok(await page.locator('#plan').isVisible());
     await page.locator('#outline-editor').click();
     await page.keyboard.press('Control+End');
@@ -475,15 +469,12 @@ try {
     await sleep(500);
     const chip = page.locator('#outline-editor li', { hasText: 'Stretch' }).locator('.task-chip');
     assert.ok(await chip.isVisible());
-    await page.evaluate(() => { const c = document.querySelector('[data-show="taskchips"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); });
-    assert.ok(await chip.isHidden());
-    await page.evaluate(() => { const c = document.querySelector('[data-show="taskchips"]'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); });
-    // With the question off, ticking just ticks.
-    await page.evaluate(() => { const c = document.querySelector('[data-show="took"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); });
+    // With Time estimates off, ticking just ticks.
+    await page.evaluate(() => { const c = document.querySelector('[data-show="estimates"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); });
     await row(page, 'Stretch').locator('.pl-check').click();
     await sleep(400);
     assert.equal(await page.locator('#plan .pl-took').count(), 0);
-    await page.evaluate(() => { const c = document.querySelector('[data-show="took"]'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); });
+    await page.evaluate(() => { const c = document.querySelector('[data-show="estimates"]'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); });
     await page.keyboard.press('Control+.');
     await sleep(300);
     assert.ok(await page.locator('#plan').isHidden());

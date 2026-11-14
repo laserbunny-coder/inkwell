@@ -198,8 +198,8 @@ try {
     await ph.keyboard.type('She walked home.');
     await ph.waitForSelector('.script-bar', { state: 'visible' });
     // A prose chapter: the mic first, the alternates buttons, + (the insert menu) last; no script ones.
-    const shown = () => ph.locator('.script-bar button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => (b.dataset.ins ? 'insert' : b.dataset.talk ? 'talk' : b.dataset.alt || b.dataset.el)));
-    assert.deepEqual(await shown(), ['talk', 'word', 'ask', 'para', 'prev', 'next', 'insert']);
+    const shown = () => ph.locator('.script-bar button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => (b.dataset.ins ? 'insert' : b.dataset.talk ? 'talk' : b.dataset.end || b.dataset.alt || b.dataset.el)));
+    assert.deepEqual(await shown(), ['talk', 'word', 'ask', 'para', 'prev', 'next', 'insert', 'focus', 'down']);
     assert.equal(await ph.locator('.script-bar [data-alt="prev"]').evaluate((b) => b.classList.contains('idle')), true);
     // Alternates: the sheet opens for the word at the caret, and the keyboard stays up.
     await ph.evaluate(() => window.__editor.chain().focus().setTextSelection(7).run());
@@ -226,15 +226,15 @@ try {
     await sleep(500);
     await ph.locator('#editor .ProseMirror').tap();
     await sleep(300);
-    assert.deepEqual(await shown(), ['talk', 'insert']);
-    // In Focus, prose is just the text: no row at all.
+    assert.deepEqual(await shown(), ['talk', 'insert', 'focus', 'down']);
+    // In Focus, prose is just the text: only the row's end (Focus, keyboard down) floats there.
     await ph.evaluate(() => localStorage.setItem('focus', '1'));
     await ph.reload();
     await ph.waitForSelector('#editor .ProseMirror');
     await sleep(500);
     await ph.locator('#editor .ProseMirror').tap();
     await sleep(300);
-    assert.equal(await ph.locator('.script-bar:not(.outline-bar)').isHidden(), true);
+    assert.deepEqual(await shown(), ['focus', 'down']);
     await phoneCtx.close();
   });
 

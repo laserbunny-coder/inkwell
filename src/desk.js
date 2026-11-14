@@ -30,7 +30,7 @@ const STATUS = { waiting: 'Waiting on you', loose: 'Closed, still open', working
 // A thread is closed when its latest Catch-up line starts "Closed:"; any later line reopens it.
 export const closedLine = (text) => /^\s*closed:/i.test(String(text || ''));
 // The "thread closed" tag and the filter can be switched off under Look.
-const showClosed = () => !root.classList.contains('hide-closedtag');
+const showClosed = () => true;
 const showNext = () => !root.classList.contains('hide-nextstep');
 
 // A project's next step: the first open task on its Steps page, in order

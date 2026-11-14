@@ -253,10 +253,6 @@ try {
     await sleep(300);
     assert.deepEqual(await on('2026-11-16'), ['Review the week', 'Run', 'Standup', 'Stretch']);
     assert.equal(await page.locator('.pl-meter-v').innerText(), '4.4 h of 45 h');
-    await page.evaluate(() => document.documentElement.classList.add('hide-repeatahead', 'hide-repeatmark'));
-    assert.equal(await page.locator('.pw-task.ghost:visible').count(), 0);
-    await page.evaluate(() => document.documentElement.classList.remove('hide-repeatahead', 'hide-repeatmark'));
-    assert.ok(await page.locator('input[data-show="repeatahead"]').count() && await page.locator('input[data-show="repeatmark"]').count());
   });
 
   await check('on a later day’s page it’s there, fainter, and can’t be ticked before its day', async () => {

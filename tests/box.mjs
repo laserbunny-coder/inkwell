@@ -85,6 +85,7 @@ try {
     await p.keyboard.press('Control+K');
     await p.waitForSelector('.palette.box[data-loaded]:not([hidden])');
     assert.equal(await p.evaluate(() => document.activeElement?.id), 'palette-input');
+    await sleep(200);
     const k = await p.locator('#palette-list').innerText();
     assert.match(k, /JUMP BACK/i);
     assert.match(k, /ROOMS/i);
@@ -105,7 +106,7 @@ try {
     if (await boxOpen(p)) await p.keyboard.press('Escape');
     await p.keyboard.press('Control+K');
     await p.waitForSelector('.palette.box:not([hidden])');
-    assert.deepEqual(await p.locator('.box-rooms .go-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up', 'Aa Look']);
+    assert.deepEqual(await p.locator('.box-rooms .go-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up']);
     assert.match(await p.locator('#palette-list').innerText(), /RIGHT HERE, ON TODAY/i);
     const here = await rows(p);
     assert.ok(here.some((r) => /^Go through the tasks left/.test(r)), here.join(' | '));
@@ -343,7 +344,7 @@ try {
     assert.notEqual(await q.evaluate(() => document.activeElement?.id), 'palette-input', 'the keyboard stays down');
     const box = await q.locator('.palette').boundingBox();
     assert.ok(Math.abs(box.y + box.height - 915) < 2, 'a sheet from the bottom');
-    assert.deepEqual(await q.locator('.box-rooms .go-name').allInnerTexts(), ['Drawer', 'Tags', 'Catch-up', 'Aa Look', 'Outline']);
+    assert.deepEqual(await q.locator('.box-rooms .go-name').allInnerTexts(), ['Drawer', 'Tags', 'Catch-up', 'Outline']);
     if (SHOTS) await q.screenshot({ path: `${SHOTS}/phone-go.png` });
   });
 

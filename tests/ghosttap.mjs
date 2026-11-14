@@ -76,7 +76,13 @@ try {
 
   await check('the hold that opens the sheet presses nothing in it', async () => {
     // Every height the line can sit at, down to the row above the keyboard.
-    const floor = await ph.evaluate(() => document.querySelector('.outline-bar').getBoundingClientRect().top);
+    // The row above the keyboard, or the bar when the keyboard counts as down.
+    const floor = await ph.evaluate(() => {
+      const row = document.querySelector('.outline-bar');
+      if (row && !row.hidden && row.getBoundingClientRect().height) return row.getBoundingClientRect().top;
+      const bar = document.querySelector('.placebar');
+      return bar?.getBoundingClientRect().height ? bar.getBoundingClientRect().top : innerHeight;
+    });
     let tried = 0;
     for (let y = 120; y < floor - 30; y += 30) {
       if (!(await tapHandleAt(y))) continue;

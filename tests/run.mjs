@@ -180,6 +180,8 @@ try {
     const family = () => p.locator('#editor .ProseMirror').evaluate((el) => getComputedStyle(el).fontFamily);
     assert.match(await family(), /Newsreader/);
     await p.evaluate(() => document.querySelector('[data-cmd=page]').click());
+    // Fonts are on the panel's Text tab (Nov 14 2026).
+    await p.locator('.ps-tab[data-pane="text"]').click();
     assert.equal(await p.locator('.font-groups button.current').innerText(), 'Serif');
     await p.locator('.font-groups button', { hasText: 'Mono' }).click();
     await p.locator('.font-list button', { hasText: 'JetBrains Mono' }).click();
@@ -199,6 +201,7 @@ try {
     assert.match(await family(), /JetBrains Mono/);
     assert.equal(await p.evaluate(() => !!document.getElementById('font-jetbrains')), true);
     await p.evaluate(() => document.querySelector('[data-cmd=page]').click());
+    await p.locator('.ps-tab[data-pane="text"]').click();
     assert.equal(await p.locator('.font-groups button.current').innerText(), 'Mono');
     await p.locator('.font-groups button', { hasText: 'Serif' }).click();
     await p.locator('.font-list button', { hasText: 'Newsreader' }).click();
@@ -731,12 +734,6 @@ try {
     await top.locator(':scope > .line-gutter .bullet').click({ button: 'right' });
     await p.keyboard.press('Escape');
     assert.equal(await p.locator('.handle-menu').count(), 0);
-    // Switched off, the line goes back to a plain dot.
-    await p.evaluate(() => document.documentElement.classList.add('hide-handle'));
-    await top.locator(':scope > p').hover({ position: { x: 12, y: 10 } });
-    await sleep(300);
-    assert.equal(await top.locator(':scope > .line-gutter .grip').evaluate((g) => getComputedStyle(g).opacity), '0');
-    await p.evaluate(() => document.documentElement.classList.remove('hide-handle'));
   });
 
   await check('Ctrl + K twice opens All commands in groups, and typing still finds everything', async () => {
@@ -870,15 +867,15 @@ try {
     await ph.locator('.script-bar button[data-el="character"]').tap();
     await ph.waitForSelector('#editor p[data-el="character"]');
     // The mic first, then the script buttons, the alternates, and + (the insert menu) last.
-    const row = await ph.locator('.script-bar:not(.outline-bar) button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => (b.dataset.ins ? 'insert' : b.dataset.talk ? 'talk' : b.dataset.alt || b.dataset.el)));
-    assert.deepEqual(row, ['talk', 'scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'section', 'word', 'ask', 'para', 'prev', 'next', 'insert']);
+    const row = await ph.locator('.script-bar:not(.outline-bar) button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => (b.dataset.ins ? 'insert' : b.dataset.talk ? 'talk' : b.dataset.end || b.dataset.alt || b.dataset.el)));
+    assert.deepEqual(row, ['talk', 'scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'section', 'word', 'ask', 'para', 'prev', 'next', 'insert', 'focus', 'down']);
 
     // Outlines get their own row: indent, outdent, move, tag.
     await ph.keyboard.press('Control+J');
     await ph.waitForFunction(() => document.querySelector('#nb-kind')?.textContent === 'Today');
     // The page takes the caret itself; a tap on it could land on the row above
     // the keyboard (which is up by then) and press one of its buttons.
-    await ph.evaluate(() => window.__notebook.editor.commands.focus('end'));
+    await ph.evaluate(() => { window.__notebook.editor.commands.focus('end'); window.__keyboard.set(true); });
     await ph.waitForSelector('.outline-bar', { state: 'visible' });
     await ph.keyboard.type('Boats');
     await ph.keyboard.press('Enter');
@@ -902,7 +899,7 @@ try {
     assert.equal(await ph.evaluate(() => document.activeElement?.closest('#outline-editor') !== null), true, 'keyboard stays up');
     // The mic comes first in the row, then Undo and Redo, the moves, # and link;
     // Done, Move to, Zoom and + (the insert menu) wait at the end.
-    assert.deepEqual(await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do)), ['talk', 'undo', 'redo', 'outdent', 'indent', 'up', 'down', 'tag', 'link', 'done', 'when', 'move', 'zoom', 'insert']);
+    assert.deepEqual(await ph.locator('.outline-bar button[data-do]').evaluateAll((bs) => bs.map((b) => b.dataset.do)), ['talk', 'undo', 'redo', 'outdent', 'indent', 'up', 'down', 'tag', 'link', 'done', 'when', 'move', 'zoom', 'insert']);
     assert.equal(await ph.locator('.outline-bar [data-do="link"]').evaluate((b) => b.getBoundingClientRect().right <= innerWidth), true, 'link fits on the first screen');
     // The line you're on shows its handle; holding it still brings its menu up
     // from the bottom (a tap zooms in, as on every line). Move down keeps the
@@ -958,7 +955,7 @@ try {
     assert.equal(moved[0].parent_id, tomorrow);
     assert.equal(moved[0].deleted, false);
     // Holding a button doesn't press it (holding is for scrolling the row); a quick tap does.
-    const order2 = await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do));
+    const order2 = await ph.locator('.outline-bar button[data-do]').evaluateAll((bs) => bs.map((b) => b.dataset.do));
     assert.ok(order2.indexOf('zoom') > order2.indexOf('link'), order2.join(','));
     assert.equal(order2.includes('fold'), false);
     await ph.evaluate(() => window.__outline.commands.focus('end'));

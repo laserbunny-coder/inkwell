@@ -49,6 +49,8 @@ async function device() {
   const ctx = await browser.newContext();
   await ctx.exposeFunction('__remote', remote);
   await ctx.addInitScript(fake);
+  // “How long did it take?” comes with Time estimates (Nov 14 2026), which start off.
+  await ctx.addInitScript(() => { if (!localStorage.getItem('estimatesOff')) localStorage.setItem('estimatesOff', '1'); });
   const page = await ctx.newPage();
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));

@@ -408,7 +408,7 @@ Rehearsal notes`));
 
   // On a phone: the same keys come from the keyboard, and the bar's buttons.
   const ph = await open({ viewport: { width: 390, height: 780 }, hasTouch: true, isMobile: true });
-  const bar = async (what) => { await ph.locator(`.outline-bar button[data-do="${what}"]`).tap(); await sleep(250); };
+  const bar = async (what) => { await ph.evaluate(() => window.__keyboard.set(true)); await ph.locator(`.outline-bar button[data-do="${what}"]`).tap(); await sleep(250); };
 
   await check('phone: Enter at the end of a folded line adds a line after the group', async () => {
     await setOutline(ph, 'Shared from Instagram| [+]\n  Kenji clip\n  Caption idea\nEnd');

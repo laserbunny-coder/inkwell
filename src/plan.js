@@ -126,7 +126,7 @@ export class Plan {
     this.day = page?.kind === 'day' ? page.title : null;
     this.took = this.just = null;
     this.box.hidden = !this.day;
-    this.phoneShow(!!this.day && !hover.matches && !this.hooks.off?.('plan'));
+    this.phoneShow(!!this.day && !hover.matches);
     this.dock();
     if (this.day) await this.refresh();
     else this.box.replaceChildren();
@@ -438,7 +438,7 @@ export class Plan {
     const showOld = !early || early.open;
     // Woven: timed events sit among the tasks, at their place in the day; all-day
     // ones (and every event, with "Events among the tasks" off) stay on top.
-    const woven = !this.hooks.off?.('woven');
+    const woven = true;
     const timed = woven ? evs.filter((e) => !e.allDay) : [];
     const top = woven ? evs.filter((e) => e.allDay) : evs;
     const cal = make('div', 'pl-cal');
@@ -587,7 +587,7 @@ export class Plan {
     const day = this.today;
     const p = dayPlan(this.items, day, day);
     const evs = this.cal.filter((e) => e.day === day);
-    const woven = !this.hooks.off?.('woven');
+    const woven = true;
     const top = woven ? evs.filter((e) => e.allDay) : evs;
     const cal = make('div', 'pl-cal');
     for (const e of top) cal.append(this.eventLine(e, 'pl-ev'));
@@ -1991,7 +1991,7 @@ export class Plan {
     this.took = null;
     if (done && row && !row.fields.task.habit) {
       // With the question switched off, a timed task still keeps its time.
-      if (this.hooks.off?.('took')) { const on = timed(row.fields.task); if (on) await tookTask(id, on); }
+      if (this.hooks.off?.('estimates')) { const on = timed(row.fields.task); if (on) await tookTask(id, on); }
       else if (this.dayShown) this.took = id;
     }
     await this.wrote(row);
