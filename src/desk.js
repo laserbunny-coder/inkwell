@@ -16,6 +16,7 @@ import { getEntry, putEntries, byKind } from './db.js';
 import { entry } from './model.js';
 import { areas, areaColor, editedAt } from './library.js';
 import { popMenu } from './menu.js';
+import { deskDrags, inOrder, mergeOrder } from './deskdrag.js';
 
 export const DESK_ID = 'settings-desk';
 const KIND = { decision: 'Decide', blocked: 'Do', review: 'Try' };
@@ -108,7 +109,7 @@ const linksIn = (text) => [...new Set((text || '').match(/https?:\/\/[^\s)>\]]+/
 export async function deskSettings() {
   const row = await getEntry(DESK_ID);
   const f = row && !row.deleted ? row.fields || {} : {};
-  return { stage: f.stage || {}, ties: f.ties || {} };
+  return { stage: f.stage || {}, ties: f.ties || {}, order: f.order || {} };
 }
 export async function saveDeskSettings(next) {
   const prev = await getEntry(DESK_ID);
@@ -163,6 +164,10 @@ export function seatsFor({ worlds, needs, updates, settings, now }) {
   for (const seat of seats.values()) {
     seat.calls.sort((a, b) => (a.kind === 'review') - (b.kind === 'review') || a.at - b.at);
     seat.crew.sort((a, b) => b.at - a.at);
+    // Where you've dragged them to, inside the card.
+    const order = settings.order || {};
+    seat.calls = inOrder(seat.calls, (c) => c.id, order.calls?.[seat.key]);
+    seat.crew = inOrder(seat.crew, (c) => c.link, order.crew?.[seat.key]);
     seat.turns.sort((a, b) => b.at - a.at);
     seat.at = Math.max(seat.at, seat.last?.at || 0, ...seat.calls.map((c) => c.at));
     const busy = seat.calls.length > 0 || seat.crew.some((c) => !c.quiet) || (seat.last && now - seat.last.at < 3 * DAY);
@@ -172,8 +177,10 @@ export function seatsFor({ worlds, needs, updates, settings, now }) {
     seat.stage = seat.pinned || seat.auto;
     out.push(seat);
   }
-  // Whatever needs you comes first, then whatever moved last.
-  return out.sort((a, b) => (b.calls.length > 0) - (a.calls.length > 0) || b.at - a.at || a.name.localeCompare(b.name));
+  // Whatever needs you comes first, then whatever moved last, until you
+  // arrange them yourself: then as you left them, anything new first.
+  out.sort((a, b) => (b.calls.length > 0) - (a.calls.length > 0) || b.at - a.at || a.name.localeCompare(b.name));
+  return inOrder(out, (s) => s.key, settings.order?.seats);
 }
 
 // Every thread there has been, newest activity first.
@@ -228,6 +235,8 @@ export class DeskPage {
     this.filter = 'all';
     this.query = '';
     this.triesOpen = new Set();
+    // Everything on stage can be dragged into place (held first on a phone).
+    deskDrags(this.sheet, { drop: (m) => this.moved(m), busy: (on) => { this.dragging = on; if (!on && this.redraw) { this.redraw = false; this.render({ now: this.now, failed: false }); } } });
     document.addEventListener('visibilitychange', () => { if (!document.hidden && this.showing()) this.load({ quiet: true }); });
   }
 
@@ -339,9 +348,12 @@ export class DeskPage {
     const keep = this.sheet.dataset.tab === this.tab ? main?.scrollTop || 0 : 0;
     const typing = document.activeElement?.closest?.('.dk-search') ? document.activeElement.selectionStart : null;
     this.sheet.dataset.tab = this.tab;
+    // Something is being dragged: draw again once it's let go.
+    if (this.dragging) { this.redraw = true; return; }
     const parts = this.tab === 'history' ? this.historyParts({ now, failed }) : await this.stageParts({ now, failed });
     // Someone is writing a north star: don't pull the page out from under them.
     if (this.sheet.querySelector('.dk-star:focus')) return;
+    if (this.dragging) { this.redraw = true; return; }
     this.sheet.replaceChildren(...parts);
     if (main) main.scrollTop = keep;
     if (typing != null) { const i = this.sheet.querySelector('.dk-search input'); i?.focus(); i?.setSelectionRange(typing, typing); }
@@ -427,6 +439,8 @@ export class DeskPage {
 
     const on = seats.filter((s) => s.stage === 'on');
     const chairs = make('div', 'dk-chairs');
+    chairs.dataset.drop = 'seat';
+    chairs.dataset.stage = 'on';
     chairs.dataset.n = String(Math.min(on.length, 3));
     for (const s of on) chairs.append(this.chair(s, now, isNew));
     if (on.length) parts.push(chairs);
@@ -449,6 +463,8 @@ export class DeskPage {
       const sec = make('section', `dk-sec dk-${stage}`);
       sec.append(make('h2', 'dk-label', label));
       const box = make('div', 'dk-rows');
+      box.dataset.drop = 'seat';
+      box.dataset.stage = stage;
       for (const s of rows) box.append(this.row(s, now));
       sec.append(box);
       parts.push(sec);
@@ -462,6 +478,7 @@ export class DeskPage {
   chair(seat, now, isNew) {
     const el = make('section', 'dk-chair');
     el.dataset.key = seat.key;
+    el.dataset.drag = 'seat';
     const h = make('h3');
     const dot = make('i', 'dk-dot');
     if (seat.color) dot.style.background = seat.color;
@@ -479,7 +496,10 @@ export class DeskPage {
       // Answers first. A pile of things to try folds into one line, so it never buries them.
       const tries = seat.calls.filter((c) => c.kind === 'review');
       const fold = tries.length > FOLD_TRIES;
-      for (const c of seat.calls) if (!fold || c.kind !== 'review') el.append(this.call(c, now, isNew));
+      const list = make('div', 'dk-list');
+      list.dataset.drop = 'call';
+      for (const c of seat.calls) if (!fold || c.kind !== 'review') list.append(this.call(c, now, isNew));
+      el.append(list);
       if (fold) {
         const box = make('details', 'dk-tries');
         box.open = this.triesOpen.has(seat.key);
@@ -489,18 +509,26 @@ export class DeskPage {
         const fresh = tries.filter((c) => isNew(c.at)).length;
         if (fresh) sum.append(make('span', 'dk-call-m', `${fresh} new`));
         box.append(sum);
-        for (const c of tries) box.append(this.call(c, now, isNew));
+        const inner = make('div', 'dk-list');
+        inner.dataset.drop = 'call';
+        for (const c of tries) inner.append(this.call(c, now, isNew));
+        box.append(inner);
         el.append(box);
       }
     }
     if (seat.crew.length || seat.finished) {
       el.append(make('div', 'dk-sub', 'Crew'));
+      const list = make('div', 'dk-list');
+      list.dataset.drop = 'crew';
       for (const c of seat.crew) {
         const row = make('a', 'dk-crew');
         row.href = web(c.link); row.target = '_blank'; row.rel = 'noopener';
+        row.dataset.drag = 'crew';
+        row.dataset.key = c.link;
         row.append(make('i', `dk-pulse${c.quiet ? ' off' : ''}`), make('span', 'dk-crew-t', c.title), make('span', 'dk-crew-s', c.quiet ? `quiet since ${shortDay(c.at)}` : when(c.at, now)));
-        el.append(row);
+        list.append(row);
       }
+      if (seat.crew.length) el.append(list);
       if (seat.finished) {
         const f = make('button', 'dk-crew dk-done', seat.finished === 1 ? '1 thread finished this week' : `${seat.finished} threads finished this week`);
         f.addEventListener('click', () => { this.filter = 'finished'; this.query = seat.claude[0] || ''; this.go({ view: 'desk', tab: 'history' }); });
@@ -549,6 +577,8 @@ export class DeskPage {
     const a = make('a', 'dk-call');
     a.href = web(c.link); a.target = '_blank'; a.rel = 'noopener';
     a.dataset.id = c.id;
+    a.dataset.drag = 'call';
+    a.dataset.key = c.id;
     const text = make('span', 'dk-call-t');
     text.append(make('span', 'dk-kind', KIND[c.kind] || 'Look'), document.createTextNode(c.title));
     // Its thread was closed with this still open: say so, so it isn't mistaken for live work.
@@ -598,6 +628,12 @@ export class DeskPage {
       };
       const items = Object.entries(STAGES).map(([id, label]) => ({ label, current: seat.stage === id, run: put(id) }));
       if (seat.pinned) items.push({ label: 'Let Inkwell decide', run: put(null) });
+      // Arranging by hand, without a drag.
+      items.push('sep', { label: 'Move to the top', run: () => this.toTop(seat) });
+      const o = this.settings.order || {};
+      if (o.seats?.length || Object.keys(o.calls || {}).length || Object.keys(o.crew || {}).length) {
+        items.push({ label: 'Let Inkwell order the Desk', run: () => this.arrange({ seats: [], calls: {}, crew: {} }, 'Back in Inkwell’s order') });
+      }
       if (!seat.world && this.worlds.length) {
         items.push('sep', { label: 'This is one of my projects…', sub: [...this.worlds].sort((a, b) => (a.title || '').localeCompare(b.title || '')).map((w) => ({ label: w.title || 'Untitled', run: tie(seat.claude[0] || seat.name, w.id) })) });
       }
@@ -609,10 +645,43 @@ export class DeskPage {
     return b;
   }
 
+  // Something was dragged to a new place: keep it there, on every device.
+  async moved({ kind, key, from, to, keys }) {
+    const o = this.settings?.order || {};
+    if (kind === 'seat') {
+      const shown = [...this.sheet.querySelectorAll('[data-drag="seat"]')].map((x) => x.dataset.key);
+      const next = { ...o, seats: mergeOrder(shown, o.seats) };
+      // Into another list: it sits there now, until you say otherwise.
+      const stage = to.dataset.stage;
+      if (stage && stage !== from?.dataset.stage) {
+        const pins = { ...this.settings.stage, [key]: stage };
+        this.changed?.([await saveDeskSettings({ stage: pins })]);
+        return this.arrange(next, `Now ${STAGES[stage].toLowerCase()}`);
+      }
+      return this.arrange(next);
+    }
+    const card = to.closest('.dk-chair')?.dataset.key;
+    if (!card) return;
+    const shown = [...to.closest('.dk-chair').querySelectorAll(`[data-drag="${kind}"]`)].map((x) => x.dataset.key);
+    const field = kind === 'call' ? 'calls' : 'crew';
+    return this.arrange({ ...o, [field]: { ...(o[field] || {}), [card]: mergeOrder(shown, o[field]?.[card]) } });
+  }
+  async toTop(seat) {
+    const o = this.settings?.order || {};
+    const shown = [...this.sheet.querySelectorAll('[data-drag="seat"]')].map((x) => x.dataset.key).filter((k) => k !== seat.key);
+    return this.arrange({ ...o, seats: mergeOrder([seat.key, ...shown], o.seats) });
+  }
+  async arrange(order, said) {
+    this.changed?.([await saveDeskSettings({ order })]);
+    if (said) this.toast?.(said);
+    await this.render({ now: this.now, failed: false });
+  }
+
   // A project waiting in the wings or backstage: one line.
   row(seat, now) {
     const row = make('div', `dk-row s-${seat.stage}`);
     row.dataset.key = seat.key;
+    row.dataset.drag = 'seat';
     const name = make('span', 'dk-rn');
     const dot = make('i', 'dk-dot');
     if (seat.color) dot.style.background = seat.color;

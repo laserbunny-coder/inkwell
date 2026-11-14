@@ -230,7 +230,7 @@ try {
     const harbor = () => page.locator('[data-key]', { has: page.locator('.dk-name', { hasText: 'Harbor spot' }) });
     assert.equal(await harbor().evaluate((e) => e.className), 'dk-chair');
     await harbor().locator('.dk-more').click();
-    assert.deepEqual(await page.locator('.pop-menu .pop-item').allInnerTexts(), ['On stage', 'In the wings', 'Backstage']);
+    assert.deepEqual(await page.locator('.pop-menu .pop-item').allInnerTexts(), ['On stage', 'In the wings', 'Backstage', 'Move to the top']);
     assert.equal(await page.locator('.pop-menu .pop-item.current').innerText(), 'On stage');
     await pick(page, 'Backstage');
     await page.waitForSelector('.dk-back .dk-row');
@@ -461,6 +461,85 @@ try {
     }
   });
 
+  // ---- arranging by hand ----
+  const drag = async (p, from, to, { after = false, side = false } = {}) => {
+    const a = await from.boundingBox(), b = await to.boundingBox();
+    await p.mouse.move(a.x + Math.min(40, a.width / 2), a.y + Math.min(14, a.height / 2));
+    await p.mouse.down();
+    const x = side ? (after ? b.x + b.width - 10 : b.x + 10) : b.x + b.width / 2;
+    const y = side ? b.y + b.height / 2 : after ? b.y + b.height - 6 : b.y + 6;
+    await p.mouse.move(x, y, { steps: 12 });
+    await sleep(60);
+    await p.mouse.up();
+    await sleep(400);
+  };
+  const chairNames = (p) => p.locator('.dk-chair h3 .dk-name').allInnerTexts();
+  const deskRow = async (p) => (await all(p)).find((r) => r.id === 'settings-desk');
+
+  await check('drag a project card to another place in the grid; it stays there', async () => {
+    const before = await chairNames(page);
+    const last = before.at(-1);
+    await drag(page, page.locator('.dk-chair h3').last(), page.locator('.dk-chair').first(), { side: true });
+    const after = await chairNames(page);
+    assert.equal(after[0], last, `${last} moved to the front: ${after.join(', ')}`);
+    assert.deepEqual(after.slice(1), before.slice(0, -1));
+    const set = await deskRow(page);
+    assert.ok(set.fields.order.seats.length >= after.length, 'kept in the Desk’s settings, which sync');
+    // Drawn again from what was kept: the same order.
+    await page.locator('.desk-switch button', { hasText: 'History' }).click();
+    await page.waitForSelector('.dk-thread');
+    await page.locator('.desk-switch button', { hasText: 'On stage' }).click();
+    await page.waitForSelector('.dk-chair');
+    assert.deepEqual(await chairNames(page), after);
+    assert.equal(await page.locator('.pop-menu').count(), 0, 'the drag didn’t click open a menu');
+  });
+
+  await check('drag a call inside its card, and a click still opens its menu', async () => {
+    const nb = page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: 'The Ninja Bunch' }) });
+    assert.deepEqual(await nb.locator('.dk-call').evaluateAll((e) => e.map((x) => x.dataset.id)), ['n1', 'n2']);
+    await drag(page, nb.locator('.dk-call[data-id="n2"]'), nb.locator('.dk-call[data-id="n1"]'));
+    assert.deepEqual(await nb.locator('.dk-call').evaluateAll((e) => e.map((x) => x.dataset.id)), ['n2', 'n1']);
+    assert.equal(await page.locator('.pop-menu').count(), 0);
+    assert.deepEqual((await deskRow(page)).fields.order.calls['w:' + (await all(page)).find((r) => r.kind === 'world' && r.title === 'The Ninja Bunch').id], ['n2', 'n1']);
+    // Dropped in another card, a call goes back home.
+    await drag(page, nb.locator('.dk-call[data-id="n1"]'), page.locator('.dk-chair').first().locator('h3'));
+    assert.deepEqual(await nb.locator('.dk-call').evaluateAll((e) => e.map((x) => x.dataset.id)), ['n2', 'n1']);
+    await nb.locator('.dk-call[data-id="n1"]').click();
+    await page.waitForSelector('.pop-menu');
+    await page.keyboard.press('Escape');
+  });
+
+  await check('drag a project from backstage into the grid: it comes on stage there', async () => {
+    const card = page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: 'Harbor spot' }) });
+    if (await card.count()) { await card.locator('.dk-more').click(); await pick(page, 'Backstage'); }
+    const harbor = page.locator('.dk-back .dk-row', { hasText: 'Harbor spot' });
+    await harbor.waitFor();
+    // Tall enough that the grid and backstage are both on screen.
+    const size = page.viewportSize();
+    await page.setViewportSize({ width: size.width, height: 2400 });
+    await sleep(200);
+    await drag(page, harbor.locator('.dk-rd'), page.locator('.dk-chair').nth(1), { side: true });
+    await page.setViewportSize(size);
+    await page.waitForFunction(() => [...document.querySelectorAll('.dk-chair h3 .dk-name')].some((e) => e.textContent === 'Harbor spot'));
+    assert.equal((await chairNames(page))[1], 'Harbor spot');
+    const set = await deskRow(page);
+    assert.equal(Object.values(set.fields.stage).filter((v) => v === 'on').length, 1);
+    if (SHOTS) { await still(page); await page.screenshot({ path: `${SHOTS}/desk-arranged.png` }); }
+  });
+
+  await check('⋯ Move to the top, and Let Inkwell order the Desk puts it all back', async () => {
+    const names = await chairNames(page);
+    await page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: names.at(-1) }) }).locator('.dk-more').click();
+    await pick(page, 'Move to the top');
+    assert.equal((await chairNames(page))[0], names.at(-1));
+    await page.locator('.dk-chair').first().locator('.dk-more').click();
+    await pick(page, 'Let Inkwell order the Desk');
+    const set = await deskRow(page);
+    assert.deepEqual(set.fields.order, { seats: [], calls: {}, crew: {} });
+    const auto = await chairNames(page);
+    assert.deepEqual(auto.slice(0, 2).sort(), ['Inkwell', 'The Ninja Bunch'], 'what needs you first again');
+  });
+
   await check('no page errors on desktop', async () => { assert.deepEqual(page.errors, []); });
 
   // ---- a narrower window: two columns ----
@@ -490,6 +569,37 @@ try {
     const wide = await phone.evaluate(() => document.documentElement.scrollWidth);
     assert.ok(wide <= 391, `page is ${wide} wide`);
     if (SHOTS) { await phone.waitForSelector('.dk-read:not([hidden])'); await still(phone); await phone.screenshot({ path: `${SHOTS}/desk-phone.png` }); }
+  });
+
+  await check('on a phone, hold a card until it lifts, then slide it; a quick swipe still scrolls', async () => {
+    const cdp = await phone.context().newCDPSession(phone);
+    const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+    const names = await chairNames(phone);
+    // A quick swipe: no lift, nothing moves.
+    let a = await phone.locator('.dk-chair').nth(1).locator('h3').boundingBox();
+    await touch('touchStart', a.x + 60, a.y + 10);
+    for (let k = 1; k <= 6; k += 1) { await touch('touchMove', a.x + 60, a.y + 10 - k * 8); await sleep(16); }
+    await touch('touchEnd');
+    await sleep(300);
+    assert.equal(await phone.locator('.dk-lift').count(), 0);
+    assert.deepEqual(await chairNames(phone), names);
+    // Held: the second card goes above the first.
+    await phone.evaluate(() => window.scrollTo(0, 0));
+    await sleep(100);
+    a = await phone.locator('.dk-chair').nth(1).locator('h3').boundingBox();
+    const b = await phone.locator('.dk-chair').first().boundingBox();
+    await touch('touchStart', a.x + 60, a.y + 10);
+    await sleep(520);
+    assert.equal(await phone.locator('.dk-chair.dk-armed').count(), 1, 'it lifts');
+    const to = b.y + 20;
+    for (let k = 1; k <= 10; k += 1) { await touch('touchMove', a.x + 60, a.y + 10 + ((to - a.y - 10) * k) / 10); await sleep(30); }
+    assert.equal(await phone.locator('.dk-lift').count(), 1);
+    if (SHOTS) await phone.screenshot({ path: `${SHOTS}/desk-phone-drag.png` });
+    await touch('touchEnd');
+    await sleep(500);
+    assert.deepEqual(await chairNames(phone), [names[1], names[0], ...names.slice(2)]);
+    assert.equal(await phone.locator('.pop-menu').count(), 0, 'nothing under the finger was tapped');
+    assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth), 390);
   });
 
   await check('on a phone the switch is on the page, and History stacks', async () => {
