@@ -9,6 +9,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { readFile } from 'node:fs/promises';
+import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 import { estimate, spent, runsOf, toEdl, timecode, cutEvents, priceOf, priceList, toolIdsOf, SEED_PRICES, money } from '../src/production.js';
 
@@ -169,7 +170,7 @@ put({ id: 'pg_katana', kind: 'page', parent_id: 'pg_props', title: 'Katana', sor
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDK+mmyAAAAABJRU5ErkJggg==', 'base64');
 
-const browser = await chromium.launch();
+const browser = pageFirst(await chromium.launch());
 async function device(opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, colorScheme: 'dark', acceptDownloads: true, ...opts });
   await ctx.exposeFunction('__remote', remote);

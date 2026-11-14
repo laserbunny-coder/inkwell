@@ -481,3 +481,124 @@ html:not(.pulling-phone) .pull-zones { display: none; }
 .wp-ok, .wp-cancel { border: 1px solid var(--line2); background: none; color: var(--ink); border-radius: 99px; padding: 8px 16px; font: 14px var(--ui); cursor: pointer; }
 .wp-ok { border-color: var(--accent); }
 @media (max-width: 700px) { .pl-head .pl-pull { margin-left: 0; } }
+
+/* ---------- Today rebalanced (Nov 14) ---------- */
+
+/* A task's details: what it is (sub) and what to do with it (acts). */
+.pl-sub, .pl-acts { display: contents; }
+.pl-today { border: 1px solid var(--line2); background: none; color: var(--soft, var(--muted)); font: 12px var(--ui); padding: 3px 10px; border-radius: 99px; cursor: pointer; white-space: nowrap; margin-left: 4px; }
+.pl-today:hover, .pl-today:focus-visible { border-color: var(--accent); color: var(--ink); outline: none; }
+.pl-task.carried .pl-from { padding: 0 4px; }
+
+/* Earlier days: one line with its own ways out. */
+.pl-early { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; padding: 6px 8px; margin: 0 -8px 2px; border-radius: var(--r, 6px); color: var(--muted); font: 13px var(--ui); }
+.pl-early-n { display: flex; align-items: baseline; gap: 8px; border: 0; background: none; padding: 2px 0; color: var(--soft, var(--muted)); font: 13.5px var(--ui); cursor: pointer; }
+.pl-early-n:disabled { cursor: default; }
+.pl-early-n:hover:not(:disabled) { color: var(--ink); }
+.pl-early-tri { color: var(--faint); font-size: 11px; width: 10px; display: inline-block; }
+.pl-early-acts { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.pl-early-b { border: 0; background: none; color: var(--accent); font: 13px var(--ui); padding: 4px 8px; border-radius: 99px; cursor: pointer; white-space: nowrap; }
+.pl-early-b:hover, .pl-early-b:focus-visible { background: var(--raise); outline: none; }
+.pl-early-more { color: var(--faint); font-size: 16px; line-height: 1; }
+.pl-early.open { border-bottom: 1px solid var(--line); border-radius: 0; margin-bottom: 4px; }
+
+/* "From a project", at the end of the add row. */
+.pl-add.with-pull { grid-template-columns: 22px minmax(0, 1fr) auto; }
+.pl-add.with-pull input { grid-column: 2; }
+.pl-from-project { border: 0; background: none; color: var(--faint); font: 12.5px var(--ui); padding: 3px 6px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.pl-from-project:hover, .pl-from-project[aria-pressed="true"] { color: var(--accent); }
+
+/* Picking several: tick boxes, and a bar of what to do with them. */
+.picking .pl-check { border-radius: 4px; }
+.pl-task.sel { background: var(--tint); }
+.pl-task.sel .pl-check { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.picking .pl-task.sel .pl-check::after { content: ""; }
+.pl-pickbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 18px; z-index: 60; display: flex; align-items: center; gap: 2px; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 24px); padding: 6px 8px 6px 14px; background: var(--panel, var(--raise)); border: 1px solid var(--line2); border-radius: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); font: 13px var(--ui); color: var(--ink); }
+.pl-pick-n { font-weight: 500; margin-right: 8px; white-space: nowrap; }
+.pl-pick-b { border: 0; background: none; color: var(--soft, var(--ink)); font: 13px var(--ui); padding: 7px 10px; border-radius: 9px; cursor: pointer; white-space: nowrap; }
+.pl-pick-b:hover:not(:disabled) { background: var(--raise); color: var(--ink); }
+.pl-pick-b:first-of-type { color: var(--accent); }
+.pl-pick-b.danger { color: var(--signal, #e5484d); }
+.pl-pick-b:disabled { opacity: .4; cursor: default; }
+@media (hover: none) {
+  .pl-pickbar { left: 8px; right: 8px; transform: none; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  body.kb-up .pl-pickbar { bottom: 8px; }
+}
+
+/* The plan flips between beside the page and on top of it. */
+.pl-flip { font: 12px var(--ui); padding: 3px 8px; opacity: .7; white-space: nowrap; }
+.pl-flip:hover { opacity: 1; }
+.pl-head { flex-wrap: wrap; row-gap: 6px; }
+.notebook.plan-side { gap: 44px; align-items: flex-start; }
+/* Room on the left for the lines' dots and fold arrows, clear of the rail. */
+.notebook.plan-side > .nb-sheet { margin-left: 48px; }
+.notebook.plan-side > .nb-sheet { flex: 0 1 var(--page-width, 660px); width: auto; min-width: 0; }
+.notebook.plan-side > #plan { flex: 0 0 330px; width: 330px; position: sticky; top: 64px; max-height: calc(100vh - 88px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; margin: 4px 0 0; padding: 0 2px 20px 26px; border-bottom: 0; border-left: 1px solid var(--line); }
+.notebook.plan-side > #plan .pl-task, .notebook.plan-side > #plan .pl-add, .notebook.plan-side > #plan .pl-early { margin-right: 0; }
+.notebook.plan-side > #plan .pl-words { font-size: 14.5px; }
+.notebook.plan-side > #plan .pl-place { max-width: 11ch; font-size: 11.5px; }
+.notebook.plan-side > #plan .pl-early { font-size: 12.5px; }
+.notebook.plan-side > #plan .pl-early-acts { margin-left: 0; }
+.notebook.plan-side > #plan .pl-cal { margin-bottom: 6px; }
+html.focus .notebook.plan-side > #plan, .notebook.plan-side.zoomed > #plan { display: none; }
+.tp-wide { display: none; }
+@media (hover: hover) and (min-width: 1100px) { .tp-wide { display: flex; } }
+
+/* ---------- the day on a phone: Page | Plan | When | Week | Ahead ---------- */
+.tp-switch[hidden] { display: none !important; }
+.pl-switch-phone { display: flex; width: 100%; margin: 0; gap: 0; }
+.pl-switch-phone button { flex: 1 1 0; padding: 7px 0; font-size: 13.5px; white-space: nowrap; min-width: 0; }
+.tp-switch { margin: -6px 0 14px; }
+@media (hover: none) {
+  html.has-rail .pl-switch { display: flex; }
+  .pl-head .pl-switch { display: none; }
+  .pl-top + .pl-switch-phone, .pl-sheet > .pl-switch-phone { margin: 0 0 16px; }
+  .notebook.tp-on .nb-date, .notebook.tp-on #nb-kind:empty, .notebook.tp-on #nb-kind { display: none; }
+  .notebook.tp-on .nb-head { margin-bottom: 12px; }
+  .notebook.tp-on #nb-title { font-family: var(--title, var(--prose)); font-weight: var(--title-w, 500); font-size: 26px; white-space: nowrap; }
+  /* Plan: the plan alone. Page: the page alone, full height. */
+  .notebook.tp-on[data-tp="plan"]:not(.zoomed) .nb-sheet > :is(#outline-editor, .loose-foot, .tidy-nudge, .day-review, .backlinks, .past-days, .evening-card, #nb-links) { display: none !important; }
+  .notebook.tp-on[data-tp="plan"] .plan { border-bottom: 0; }
+  .notebook.tp-on[data-tp="page"] .plan { display: none; }
+  .notebook.zoomed .tp-switch { display: none; }
+  .nb-zoom .nb-back { font: 15px var(--ui); color: var(--ink); padding: 6px 8px 6px 0; }
+  .nb-zoom .nb-back + button::before { content: '·'; }
+}
+
+/* One row per task on a narrow screen: the details go under the words only
+   when there's something to say, as one small line. */
+@media (max-width: 700px) {
+  .pl-task { grid-template-columns: 22px minmax(0, 1fr) auto; row-gap: 0; align-items: center; padding-block: 6px; }
+  .pl-task .pl-check { margin-top: 0; }
+  .pl-task:not(.one-row) { align-items: start; }
+  .pl-task:not(.one-row) .pl-check { margin-top: 3px; }
+  .pl-meta { display: contents; }
+  .pl-sub { display: flex; align-items: baseline; gap: 2px 8px; flex-wrap: wrap; grid-column: 2; grid-row: 2; margin: 1px 0 0 -4px; min-width: 0; font-size: 11.5px; }
+  .pl-sub:empty { display: none; }
+  .pl-acts { display: flex; align-items: center; gap: 2px; grid-column: 3; grid-row: 1; }
+  .pl-meta .pl-more { margin-left: 0; }
+  .pl-sub .pl-place { max-width: none; padding: 0 4px; font-size: 11.5px; }
+  .pl-early { gap: 4px 6px; }
+  .pl-early-b { padding: 6px 8px; }
+}
+.hide-estimates [data-cmd="pace"] { display: none !important; }
+@media (max-width: 700px) {
+  .pl-task:not(.one-row) .pl-acts { grid-row: 1 / span 2; align-self: center; }
+}
+/* What's when: Not planned, grouped by project, each folded with its count. */
+.ww-none .ww-fold { color: var(--muted); }
+.ww-group { display: flex; align-items: baseline; gap: 8px; width: 100%; border: 0; background: none; padding: 7px 0; color: var(--soft, var(--muted)); font: 14px var(--ui); cursor: pointer; text-align: left; }
+.ww-group:hover .ww-name { color: var(--ink); }
+.ww-group .ww-n { color: var(--faint); font-size: 12px; }
+.ww-group + .pl-task, .ww-group ~ .pl-task { margin-left: 10px; }
+/* Week: the days before today fold into one line on a phone; what's left from before this week sits above. */
+.pw-past { grid-column: 1 / -1; margin: 0; padding: 10px 0; border-bottom: 1px solid var(--line); border-radius: 0; }
+.pw-late { margin: 16px 0 0; }
+/* Calendar (day) on a phone: what isn't on the calendar waits below the hours, in one folded line. */
+.dc-tray-fold { border: 0; background: none; padding: 6px 0; color: var(--muted); font: 13px var(--ui); cursor: pointer; width: 100%; text-align: left; }
+.dc-tray.folded .dc-chip { display: none; }
+@media (hover: none) { .dc > .dc-tray { margin-top: 12px; } }
+/* While the views keep their full names, the phone's switch scrolls inside itself rather than wrap. */
+.pl-switch-phone { overflow-x: auto; scrollbar-width: none; }
+.pl-switch-phone::-webkit-scrollbar { display: none; }
+.pl-switch-phone button { flex: 1 0 auto; padding-inline: 10px; }

@@ -268,7 +268,7 @@ try {
   });
 
   await check('on a phone the events fit, and nothing spills', async () => {
-    const phone = await open(undefined, { ...devices['Pixel 7'] });
+    const phone = await open(undefined, { ...devices['Pixel 7'], todayPage: false });
     await day(phone, '2026-11-09');
     await phone.waitForSelector('#plan .pl-ev');
     await add(phone, 'Cut the trailer 2h');

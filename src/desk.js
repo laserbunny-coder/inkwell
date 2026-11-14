@@ -484,7 +484,9 @@ export class DeskPage {
     if (seat.color) dot.style.background = seat.color;
     h.append(dot, this.nameLink(seat), this.more(seat));
     el.append(h);
-    if (seat.world) el.append(this.star(seat));
+    // The north star shows on the card once it's written; the prompt to write
+    // it lives on the project's own page.
+    if (seat.world?.star) el.append(this.star(seat));
     const nowLine = make('p', 'dk-now');
     if (seat.last) {
       nowLine.append(document.createTextNode(`${seat.last.text} `), make('span', 'dk-when', when(seat.last.at, now)));

@@ -194,13 +194,16 @@ try {
   });
 
   // The phone: hold, then slide.
-  const phone = await open({ width: 412, height: 915 }, { hasTouch: true, isMobile: true });
+  const phone = await open({ width: 412, height: 915 }, { hasTouch: true, isMobile: true, todayPage: false });
   const cdp = await phone.ctx.newCDPSession(phone);
   await check('phone: the calendar fits, and a block moves after a hold', async () => {
     await go(phone, { view: 'notebook', pageId: `day-${TODAY}` });
     await add(phone, 'Charge the batteries');
     await phone.locator('#plan .pl-view button', { hasText: 'Calendar' }).tap();
     await phone.waitForSelector('#plan .dc-grid');
+    // On a phone what isn't on the calendar waits below the hours, folded into one line.
+    assert.match(await phone.locator('#plan .dc-tray-fold').innerText(), /1 not on the calendar/);
+    await phone.locator('#plan .dc-tray-fold').tap();
     await phone.locator('#plan .dc-chip', { hasText: 'Charge' }).tap();
     await phone.waitForSelector('#plan .dc-blk');
     assert.equal((await placedAt(phone, 'Charge the batteries')).at, 14 * 60 + 30);

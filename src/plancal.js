@@ -74,7 +74,15 @@ export function drawCalendar(plan, day, tasks, events) {
   box.dataset.day = day;
   const tray = make('div', 'dc-tray');
   tray.hidden = !off.length;
-  tray.append(make('span', 'dc-tray-l', 'Not on the calendar:'));
+  // On a phone they wait below the hours, folded into one line.
+  const small = matchMedia('(hover: none)').matches;
+  if (small) {
+    const t = make('button', 'dc-tray-l dc-tray-fold', `${plan.calTrayOpen ? '▾' : '▸'} ${off.length} not on the calendar`);
+    t.setAttribute('aria-expanded', String(!!plan.calTrayOpen));
+    t.addEventListener('click', (e) => { e.stopPropagation(); plan.calTrayOpen = !plan.calTrayOpen; plan.redraw(); });
+    tray.append(t);
+    tray.classList.toggle('folded', !plan.calTrayOpen);
+  } else tray.append(make('span', 'dc-tray-l', 'Not on the calendar:'));
   for (const i of off) {
     const c = make('button', 'dc-chip', i.row.text || 'Untitled');
     c.dataset.task = i.row.id;
@@ -137,7 +145,7 @@ export function drawCalendar(plan, day, tasks, events) {
       grid.append(line);
     }
   }
-  box.append(tray, grid);
+  if (small) box.append(grid, tray); else box.append(tray, grid);
   wire(plan, box, grid, day, { from, to, on, evs });
   return box;
 }

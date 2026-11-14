@@ -350,15 +350,15 @@ try {
   assert.deepEqual(page.errors, []);
 
   // ---------- a phone ----------
-  const { ctx: pctx, page: phone } = await open({ viewport: { width: 360, height: 780 }, hasTouch: true, isMobile: true });
+  const { ctx: pctx, page: phone } = await open({ viewport: { width: 360, height: 780 }, hasTouch: true, isMobile: true, todayPage: false });
   const cdp = await pctx.newCDPSession(phone);
   const touch = async (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
 
   await check('phone: What’s when, and Pull from a project opens the project in the bottom half', async () => {
     await phone.evaluate(() => document.querySelector('#view-toggle').click());
     await phone.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
-    await phone.waitForSelector('#plan .pl-switch [data-cmd="when"]');
-    await phone.evaluate(() => document.querySelector('#plan .pl-switch [data-cmd="when"]').click());
+    await phone.waitForSelector('.tp-switch .pl-switch [data-cmd="when"]');
+    await phone.evaluate(() => document.querySelector('.tp-switch .pl-switch [data-cmd="when"]').click());
     await phone.waitForSelector('.ww-sec');
     await phone.locator('.pl-pull:visible').click();
     await phone.waitForSelector('.pull:not([hidden]) .pu-line');

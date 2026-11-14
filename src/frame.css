@@ -260,3 +260,5 @@ html, body { -webkit-font-smoothing: antialiased; }
 /* A ticked box pops and settles. */
 @keyframes tick-pop { 0% { scale: .7; } 55% { scale: 1.18; } 100% { scale: 1; } }
 :root[data-motion="full"] #outline-editor .line-box[aria-checked="true"] { animation: tick-pop var(--t2) var(--e); }
+/* Today's keys beside their names, where there's room. */
+@media (min-width: 1500px) { .today-switch .tb-btn[data-key]::after { content: attr(data-key); margin-left: 7px; font: 10.5px var(--mono, monospace); color: var(--faint); } }

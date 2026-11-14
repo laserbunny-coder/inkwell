@@ -33,7 +33,26 @@ const ICON = {
   check: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M3 8.500l3.200 3.200L13 4.800" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 };
 const ESTS = [5, 10, 15, 30, 45, 60, 90, 120, 180];
-const TABS = [['day', 'Day', 'today'], ['when', 'What’s when', 'when'], ['week', 'Week', 'week'], ['ahead', 'Weeks ahead', 'ahead'], ['pace', 'Pace', 'pace']];
+// The views of Today, with their keys on a computer (Alt + 1 to 4). On a
+// phone the day itself is two of them, Page and Plan, and the names are short
+// so the switch never wraps. Pace shows only while time estimates are on.
+// HELD (Nov 14): the planning views are being rethought (likely Page, Plan,
+// Calendar). Until Michael picks, the views past Page and Plan keep their
+// names, there are no Alt + digit keys for them, Week on a phone doesn't fold
+// its earlier days and What's when has no "Not planned". Each is one switch
+// here, so the follow-up is cheap.
+export const HELD = { names: true, keys: true, weekFold: true, unplanned: true };
+// One list of entries for the switch: [id, name, phone name, command, key].
+const VIEWS = [
+  ['page', null, 'Page', 'today-page', ''],
+  ['day', 'Day', 'Plan', 'today', 'Alt+1'],
+  ['when', 'What’s when', 'When', 'when', 'Alt+2'],
+  ['week', 'Week', 'Week', 'week', 'Alt+3'],
+  ['ahead', 'Weeks ahead', 'Ahead', 'ahead', 'Alt+4'],
+  ['pace', 'Pace', 'Pace', 'pace', '']
+];
+const TABS = VIEWS.filter((v) => v[1]).map(([id, name, , cmd, key]) => [id, name, cmd, HELD.keys ? '' : key]);
+const PHONE_TABS = VIEWS.map(([id, name, short, cmd]) => [id, id === 'page' || id === 'day' || !HELD.names ? short : name, id === 'day' ? 'today-plan' : cmd]);
 const clip = (t, n = 40) => { const s = String(t || 'Untitled').replace(/\s+/g, ' ').trim() || 'Untitled'; return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
 const hover = matchMedia('(hover: hover)');
 const long = (iso, opts) => dateOf(iso).toLocaleDateString('en-US', opts);
@@ -81,6 +100,14 @@ export class Plan {
       });
       if (el !== steps) this.drags(el);
     }
+    // On a phone: Page, Plan, When, Week, Ahead, in one row above the day.
+    this.phoneSw = make('nav', 'tp-switch');
+    this.phoneSw.hidden = true;
+    box.before(this.phoneSw);
+    this.swipes(box.closest('.notebook'));
+    // The plan beside the page needs a wide window: crossing 1100 px moves it.
+    matchMedia('(min-width: 1100px)').addEventListener('change', () => { if (this.dayShown) this.redraw(); });
+    this.swipes(sheet);
     this.aheadSrc = null; // the lanes and dates Weeks ahead was last drawn with
     this.aheadAdd = null; // { world, week, day } while something is being typed into a lane
     aheadDrags(this, sheet);
@@ -104,6 +131,8 @@ export class Plan {
     this.day = page?.kind === 'day' ? page.title : null;
     this.took = this.just = null;
     this.box.hidden = !this.day;
+    this.phoneShow(!!this.day && !hover.matches && !this.hooks.off?.('plan'));
+    this.dock();
     if (this.day) await this.refresh();
     else this.box.replaceChildren();
   }
@@ -155,8 +184,20 @@ export class Plan {
     this.tickClock();
   }
 
+  // On a computer, at 1100 px and wider, the plan can sit in its own column
+  // beside the day's page (Alt + P flips it back on top, as on a phone).
+  dock() {
+    const main = this.box.closest('.notebook') || this.phoneSw.closest('.notebook');
+    if (!main) return;
+    const side = this.dayShown && hover.matches && this.hooks.layout?.() === 'side';
+    if (side && this.box.parentElement !== main) main.append(this.box);
+    else if (!side && this.box.parentElement === main) this.phoneSw.after(this.box);
+    main.classList.toggle('plan-side', side);
+  }
+
   redraw() {
     if (this.renaming) return;
+    this.dock();
     if (this.dayShown) this.drawDay();
     if (this.stepsShown) this.drawSteps();
     if (this.pageShown) { if (this.tab === 'pace') this.drawPace(); else if (this.tab === 'ahead') drawAhead(this); else if (this.tab === 'day') this.drawDay(this.sheet, this.today); else if (this.tab === 'when') this.drawWhen(); else this.drawWeek(); }
@@ -260,16 +301,87 @@ export class Plan {
   }
 
   switchRow(current) {
-    const row = make('div', 'pl-switch');
+    const small = !hover.matches;
+    const row = make('div', `pl-switch${small ? ' pl-switch-phone' : ''}`);
     row.setAttribute('role', 'group');
     row.setAttribute('aria-label', 'Views of Today');
-    for (const [id, label, cmd] of TABS) {
+    for (const [id, label, cmd, keys] of small ? PHONE_TABS : TABS) {
+      if (id === 'pace' && !this.estimates) continue;
       const b = make('button', '', label);
       b.dataset.cmd = cmd;
+      if (keys) b.title = `${label} (${keys.replace('+', ' + ')})`;
       if (id === current) b.setAttribute('aria-current', 'page');
       row.append(b);
     }
     return row;
+  }
+
+  // ---------- the day on a phone: Page or Plan ----------
+
+  // Page or Plan, the last one picked on this device (Plan the first time).
+  get phoneDay() { try { return localStorage.getItem('todayPhone') === 'page' ? 'page' : 'plan'; } catch { return 'plan'; } }
+  set phoneDay(v) { try { localStorage.setItem('todayPhone', v); } catch { /* no storage here */ } }
+  // On a phone a day's page opens on one of the two, with the switch above it.
+  phoneShow(on) {
+    const nb = this.box.closest('.notebook');
+    const sw = this.phoneSw;
+    if (!nb) return;
+    nb.classList.toggle('tp-on', !!on);
+    if (on) nb.dataset.tp = this.phoneDay; else delete nb.dataset.tp;
+    if (sw) {
+      sw.hidden = !on;
+      if (on) sw.replaceChildren(this.switchRow(this.phoneDay === 'page' ? 'page' : 'day'));
+    }
+  }
+  // A sideways swipe on a phone flips to the view next door. A hold on a task
+  // (to move it), a hold on a line, picked words and Weeks ahead's own sideways
+  // scroll all keep the finger.
+  swipes(root) {
+    if (!root) return;
+    let s = null;
+    root.addEventListener('touchstart', (e) => {
+      s = null;
+      if (hover.matches || e.touches.length !== 1) return;
+      if (e.target.closest?.('.ah-wrap, .dc, .pu, input, textarea, .pop-menu, .pl-pickbar')) return;
+      s = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+    }, { passive: true });
+    root.addEventListener('touchend', (e) => {
+      const was = s;
+      s = null;
+      if (!was) return;
+      const html = document.documentElement;
+      if (['pl-touchdrag', 'line-holding', 'pl-calm', 'pull-dropping'].some((c) => html.classList.contains(c))) return;
+      const dx = e.changedTouches[0].clientX - was.x;
+      const dy = e.changedTouches[0].clientY - was.y;
+      if (Date.now() - was.t > 700 || Math.abs(dx) < 70 || Math.abs(dx) < 2 * Math.abs(dy)) return;
+      if (getSelection && !getSelection()?.isCollapsed) return;
+      this.flipBy(dx < 0 ? 1 : -1);
+    }, { passive: true });
+  }
+  flipBy(n) {
+    const order = ['page', 'day', 'when', 'week', 'ahead', ...(this.estimates ? ['pace'] : [])];
+    const here = this.dayShown ? (this.day === this.today ? (this.phoneDay === 'page' ? 'page' : 'day') : null) : this.pageShown ? this.tab : null;
+    const at = order.indexOf(here);
+    const to = order[at + n];
+    if (at < 0 || !to) return false;
+    this.goTab(to);
+    return true;
+  }
+  // Open one of Today's views (Page and Plan are the day's page on a phone).
+  goTab(id) {
+    if (id === 'page' || id === 'day') {
+      const v = id === 'page' ? 'page' : 'plan';
+      if (this.dayShown) return this.setPhoneDay(v);
+      this.phoneDay = v;
+      return this.hooks.go({ view: 'notebook', pageId: `day-${this.today}` });
+    }
+    return this.hooks.go({ view: 'plan', tab: id });
+  }
+  setPhoneDay(v) {
+    if (v !== 'page' && v !== 'plan') return;
+    this.phoneDay = v;
+    if (this.dayShown && !hover.matches) this.phoneShow(true);
+    document.scrollingElement?.scrollTo?.(0, 0);
   }
 
   // "Pull from a project": a project's lines open next to the plan (beside
@@ -310,14 +422,25 @@ export class Plan {
     }
     // List | Calendar: the same tasks as an order, or placed by hand on the day's hours.
     const asCal = this.dayView === 'cal' && !this.hooks.off?.('planview');
-    head.append(this.viewSwitch(asCal), ...[this.pullButton()].filter(Boolean), this.switchRow('day'));
-    // A pile left from earlier days: go through it one at a time.
-    if (day === today && p.carried.length >= 5 && this.hooks.goThrough && box === this.box) {
-      const b = make('button', 'pl-thru', `${p.carried.length} from earlier days · Go through`);
-      b.dataset.act = 'thru-carried';
-      b.title = 'One at a time: keep it for today, take it off the day, or delete it';
+    head.append(this.viewSwitch(asCal));
+    // On a computer the plan sits beside the page or on top of it: one click flips it.
+    const flip = this.hooks.layout && box === this.box && hover.matches ? this.hooks.layout() : null;
+    if (flip) {
+      const b = make('button', 'ghost-btn pl-flip', flip === 'side' ? '⤒ On top' : '⇥ To the side');
+      b.dataset.act = 'flip';
+      b.title = flip === 'side' ? 'The plan on top of the page, in one column (Alt + P)' : 'The plan in a column beside the page (Alt + P)';
       head.append(b);
     }
+    head.append(this.switchRow('day'));
+    // Tasks left from earlier days: more than three fold into one line that
+    // carries its own ways out (To today, Go through, ⋯). The tasks inside stay
+    // ordinary tasks in the same list.
+    // A repeat's missed day stays in sight on top: it isn't stuck, it comes
+    // round again by itself, so it never hides in the fold.
+    const missed = p.carried.filter((i) => isRepeat(i.task));
+    const old = p.carried.filter((i) => !isRepeat(i.task));
+    const early = day === today ? this.earlyLine(old) : null;
+    const showOld = !early || early.open;
     // Woven: timed events sit among the tasks, at their place in the day; all-day
     // ones (and every event, with "Events among the tasks" off) stay on top.
     const woven = !this.hooks.off?.('woven');
@@ -329,7 +452,9 @@ export class Plan {
     cal.hidden = !top.length;
     const row = (i) => this.taskRow(i, { next: day === today && i === p.next });
     const above = [
-      ...p.carried.flatMap((i) => this.taskRow(i, { carried: true, next: day === today && i === p.next })),
+      ...missed.flatMap((i) => this.taskRow(i, { carried: true, next: day === today && i === p.next })),
+      ...(early ? [early.el] : []),
+      ...(showOld ? old.flatMap((i) => this.taskRow(i, { carried: true, next: day === today && i === p.next })) : []),
       ...(timed.length ? weave(p.open, timed, day, Date.now(), today).flatMap((x) => (x.event ? [this.wovenEvent(x.event, x.at)] : row(x.item))) : p.open.flatMap(row))
     ];
     const below = p.done.flatMap((i) => this.taskRow(i, {}));
@@ -345,13 +470,151 @@ export class Plan {
     } else {
       const list = make('div', 'pl-list');
       list.dataset.day = day;
-      list.append(...above, this.addRow(day, 'Add a task'), ...below);
+      list.append(...above, this.addRow(day, 'Add a task', { pull: true }), ...below);
       box.replaceChildren(head, cal, list);
       this.restore(box, held);
     }
     box.dataset.n = String(p.todo.length + p.done.length);
     this.just = null;
     if (box === this.box) this.backAgain();
+  }
+
+  // ---------- earlier days: one line, never a place tasks get stuck ----------
+
+  // Open (unfolded) for the rest of today, once tapped.
+  get earlyOpen() { try { return localStorage.getItem('earlyOpen') === this.today; } catch { return false; } }
+  set earlyOpen(on) { try { if (on) localStorage.setItem('earlyOpen', this.today); else localStorage.removeItem('earlyOpen'); } catch { /* no storage here */ } }
+
+  // The ones the line's actions move: not a repeat's missed day (it comes
+  // round again by itself), and never Nate's.
+  earlyIds(carried = dayPlan(this.items, this.today, this.today).carried) {
+    return carried.filter((i) => !i.ghost && !i.occ && !isRepeat(i.task) && this.canRemove(i)).map((i) => i.row.id);
+  }
+
+  // The line: "▸ 8 from earlier days", To today, Go through, ⋯. Three or fewer
+  // never fold; with "Fold earlier days" off under Look they're always open.
+  earlyLine(carried, { fold = true } = {}) {
+    if (carried.length <= 3) return null;
+    const foldable = fold && !this.hooks.off?.('foldearlier');
+    const open = !foldable || this.earlyOpen;
+    const el = make('div', `pl-early${open ? ' open' : ''}`);
+    el.setAttribute('role', 'group');
+    el.setAttribute('aria-label', 'From earlier days');
+    const n = make('button', 'pl-early-n');
+    n.dataset.act = 'early-fold';
+    n.append(make('span', 'pl-early-tri', foldable ? (open ? '▾' : '▸') : ''), make('span', '', `${carried.length} from earlier days`));
+    if (foldable) { n.setAttribute('aria-expanded', String(open)); n.title = open ? 'Fold them into this line' : 'Show them here'; } else if (fold) n.disabled = true;
+    else { n.dataset.act = 'open-today'; n.title = 'They wait at the top of today’s plan: open it'; }
+    const acts = make('span', 'pl-early-acts');
+    const btn = (act, label, title) => { const b = make('button', 'pl-early-b', label); b.dataset.act = act; b.title = title; acts.append(b); return b; };
+    btn('early-today', 'To today', `Every one onto today, at the top${hover.matches ? ' (Alt + Shift + T)' : ''}`);
+    if (this.hooks.goThrough) btn('thru-carried', 'Go through', 'One at a time: keep it for today, take it off the day, check it off or delete it');
+    const more = btn('early-more', '⋯', 'More for these');
+    more.classList.add('pl-early-more');
+    more.setAttribute('aria-label', 'More for the tasks from earlier days');
+    more.setAttribute('aria-haspopup', 'menu');
+    el.append(n, acts);
+    return { el, open };
+  }
+
+  earlyMenu(anchor) {
+    const ids = this.earlyIds();
+    if (!ids.length) return;
+    popMenu(anchor, [
+      { label: `All to today${hover.matches ? '  (Alt + Shift + T)' : ''}`, run: () => this.bringToday() },
+      { label: 'All to another day…', run: () => this.pickWhenFor(ids, { anchor }) },
+      { label: 'All off the day (they wait under Not planned)', run: () => this.applyWhen(ids, null, '') },
+      'sep',
+      { label: 'Pick several', run: () => this.startPicking() },
+      { label: 'Always show them open', current: !!this.hooks.off?.('foldearlier'), run: () => this.hooks.show?.('foldearlier', !!this.hooks.off?.('foldearlier')) }
+    ]);
+  }
+
+  // To today: every one from earlier days (or just `ids`) onto today, at the
+  // top of today's list in the order they had. Undo puts each one back.
+  async bringToday(ids = null) {
+    if (!this.items?.length) await this.refresh();
+    const today = this.today;
+    const p = dayPlan(this.items, today, today);
+    const moving = ids || this.earlyIds(p.carried);
+    if (!moving.length) { this.hooks.toast?.('Nothing left from earlier days'); return; }
+    const rest = p.open.filter((i) => !i.ghost && !moving.includes(i.row.id)).map((i) => i.row.id);
+    const seq = [...moving, ...rest];
+    const snaps = (await Promise.all(seq.map((id) => whenSnap(id)))).filter(Boolean);
+    await this.wrote(await arrange(seq, today));
+    this.unselect();
+    const words = moving.length === 1 ? `“${clip((await getEntry(moving[0]))?.text)}” moved to today` : `${moving.length} moved to today`;
+    this.hooks.toast?.(words, { label: 'Undo', run: async () => {
+      const back = [];
+      for (const x of snaps) back.push(await whenBack(x));
+      await this.wrote(back.filter(Boolean));
+      this.hooks.toast?.('Put back as they were');
+    } });
+  }
+
+  // ---------- picking several ----------
+
+  // On a phone, "Pick several" turns the circles into tick boxes; on a
+  // computer Shift + click picks. Either way a bar offers what to do with them.
+  startPicking() {
+    this.picking = true;
+    if (this.dayShown && this.box.querySelector('.pl-early') && !this.earlyOpen && !this.hooks.off?.('foldearlier')) this.earlyOpen = true;
+    this.redraw();
+    this.pickBar();
+  }
+  stopPicking() {
+    this.picking = false;
+    this.unselect();
+    this.redraw();
+  }
+
+  pickBar() {
+    const n = this.sel?.size || 0;
+    let bar = document.querySelector('.pl-pickbar');
+    for (const el of [this.box, this.sheet, this.steps].filter(Boolean)) el.classList.toggle('picking', !!this.picking);
+    if (!n && !this.picking) { bar?.remove(); return; }
+    if (!bar) {
+      bar = make('div', 'pl-pickbar');
+      bar.setAttribute('role', 'toolbar');
+      bar.setAttribute('aria-label', 'The tasks picked');
+      bar.addEventListener('click', (e) => this.pickAct(e));
+      document.body.append(bar);
+    }
+    const said = make('b', 'pl-pick-n', n ? `${n} picked` : 'Tap tasks to pick them');
+    const b = (act, label, title = '') => { const x = make('button', `pl-pick-b${act === 'del' ? ' danger' : ''}`, label); x.dataset.pick = act; if (title) x.title = title; x.disabled = !n && act !== 'stop'; return x; };
+    bar.replaceChildren(said,
+      b('today', 'Today'), b('tomorrow', 'Tomorrow'), b('when', 'When…', 'Alt + W'), b('off', 'Off the day', 'Not planned: they wait in What’s when'),
+      b('done', 'Done'), b('del', 'Delete', 'Ctrl + Shift + Backspace'), b('stop', this.picking ? 'Done picking' : '✕', hover.matches ? 'Let go (Esc)' : 'Stop picking'));
+  }
+
+  async pickAct(e) {
+    const el = e.target.closest('[data-pick]');
+    if (!el) return;
+    const act = el.dataset.pick;
+    const ids = [...(this.sel || [])];
+    const today = this.today;
+    if (act === 'stop') return this.stopPicking();
+    if (!ids.length) return;
+    const done = () => { this.picking = false; this.pickBar(); };
+    if (act === 'today') {
+      // Ones from earlier days land on top of today, the rest at the end.
+      await this.applyWhen(ids, { day: today }, 'Today');
+    } else if (act === 'tomorrow') await this.applyWhen(ids, { day: addDays(today, 1) }, 'Tomorrow');
+    else if (act === 'when') return this.pickWhenFor(ids, { anchor: el });
+    else if (act === 'off') await this.applyWhen(ids, null, '');
+    else if (act === 'done') {
+      const list = ids.map((x) => this.item(x)).filter((i) => i && !i.ghost && !i.occ && !(i.task.owner && i.task.owner !== 'me'));
+      const rows = [];
+      for (const i of list) rows.push(await tickTask(i.row.id, true, Date.now()));
+      this.unselect();
+      await this.wrote(rows.filter(Boolean));
+      this.hooks.toast?.(list.length === 1 ? `“${clip(list[0].row.text)}” done` : `${list.length} done`, { label: 'Undo', run: async () => {
+        const back = [];
+        for (const i of list) back.push(await tickTask(i.row.id, false, Date.now()));
+        await this.wrote(back.filter(Boolean));
+      } });
+    } else if (act === 'del') await this.remove(ids.map((x) => this.item(x)).filter(Boolean));
+    done();
   }
 
   // Back out of a task zoomed into from here: the page is where it was.
@@ -407,13 +670,13 @@ export class Plan {
     this.hooks.steps?.();
   }
 
-  addRow(day, placeholder) {
+  addRow(day, placeholder, { pull = false } = {}) {
     // A form, so a phone keyboard's Enter (or Go) sends it like a desktop Enter does.
     const row = make('form', 'pl-add');
     row.noValidate = true;
     row.addEventListener('submit', (e) => { e.preventDefault(); this.add(input); });
     // A click anywhere on the row goes into the box, as it did when the row was a label.
-    row.addEventListener('click', (e) => { if (e.target !== input) input.focus(); });
+    row.addEventListener('click', (e) => { if (e.target !== input && !e.target.closest('.pl-from-project')) input.focus(); });
     const ring = make('span', 'pl-check ghost');
     ring.setAttribute('aria-hidden', 'true');
     const input = make('input');
@@ -425,6 +688,16 @@ export class Plan {
     input.setAttribute('aria-label', day ? `Add a task for ${dayWord(day, this.today)}` : 'Add a task for any day this week');
     input.dataset.add = day || 'tray';
     row.append(ring, input);
+    // "From a project", where you'd add a task: a project's lines open next
+    // to the plan, to drag in.
+    if (pull && this.hooks.pull) {
+      const b = make('button', 'pl-from-project', 'From a project');
+      b.dataset.act = 'pull';
+      b.title = 'Open a project next to the plan and drag its lines in';
+      b.setAttribute('aria-pressed', String(!!this.hooks.pulling?.()));
+      row.classList.add('with-pull');
+      row.append(b);
+    }
     return row;
   }
 
@@ -478,19 +751,25 @@ export class Plan {
       mark.setAttribute('aria-label', `${repeatWord(t.repeat)}${t.habit ? ', a habit' : ''}: how it’s going`);
       title.append(mark);
     }
-    if (carried) title.append(make('span', 'pl-from', `from ${dayWord(t.day, this.today)}`));
     if (tag) title.append(make('span', 'pl-from ww-date', tag));
+    // Its details in two parts: what it is (where it's written, whose, the day
+    // it was planned for), which a phone puts on a small line under the words
+    // only when there's something to say; and what to do with it, at the end
+    // of the first row.
     const meta = make('div', 'pl-meta');
+    const sub = make('span', 'pl-sub');
+    const acts = make('span', 'pl-acts');
+    if (carried) sub.append(make('span', 'pl-from', `from ${long(t.day, { weekday: 'short', month: 'short', day: 'numeric' })}`));
     const where = place ?? this.placeOf(i);
     if (where) {
       const a = make('button', 'pl-place', where);
       a.dataset.act = 'open';
       a.title = 'Open it where it’s written';
-      meta.append(a);
+      sub.append(a);
     }
     // A task kept in step with the Acro HQ board: whose it is (when it isn't
     // yours), and a way to its card there.
-    if (t.owner && t.owner !== 'me') meta.append(make('span', 'pl-owner', String(t.owner)));
+    if (t.owner && t.owner !== 'me') sub.append(make('span', 'pl-owner', String(t.owner)));
     const hq = i.row.fields?.hq;
     if (hq?.link && /^https:\/\//.test(hq.link)) {
       const a = make('a', 'pl-hq', 'HQ');
@@ -498,7 +777,7 @@ export class Plan {
       a.target = '_blank';
       a.rel = 'noopener';
       a.title = 'Open it on the Acro HQ board';
-      meta.append(a);
+      sub.append(a);
     }
     // On a project's page a step says its day; click to move it.
     if (when && !done) {
@@ -510,14 +789,23 @@ export class Plan {
       const d = make('button', `pl-when${t.day || loose ? (late ? ' late' : '') : ' unset'}${loose ? ' loose' : ''}${t.mark === 'hard' ? ' hard' : ''}`, word);
       d.dataset.act = 'day';
       d.setAttribute('aria-label', stretch ? `From ${word}; click to move it` : loose ? `${word}; click to change when (Alt + W)` : t.day ? `${t.mark ? 'A date to hit: ' : 'Planned for '}${dayWord(t.day, this.today)}${t.mark === 'hard' ? ', and it can’t move' : ''}; click to change when (Alt + W)` : 'Not planned; click to say when (Alt + W)');
-      meta.append(d);
+      sub.append(d);
     }
-    if (!done && !ghost && !t.habit) {
+    // From an earlier day: one tap puts it on today.
+    if (carried && !ghost && !rep) {
+      const b = make('button', 'pl-today', 'Today');
+      b.dataset.act = 'one-today';
+      b.title = 'Put it on today, at the top';
+      b.setAttribute('aria-label', `Put “${i.row.text || 'Untitled'}” on today`);
+      acts.append(b);
+    }
+    // The timer goes with time estimates: with them off it isn't there at all.
+    if (!done && !ghost && !t.habit && (this.estimates || t.run)) {
       const play = make('button', 'pl-play');
       play.innerHTML = t.run ? ICON.pause : ICON.play;
       play.dataset.act = 'timer';
       play.setAttribute('aria-label', t.run ? 'Stop the timer' : 'Start the timer');
-      meta.append(play);
+      acts.append(play);
     }
     const est = make('button', 'pl-est');
     est.dataset.act = 'est';
@@ -533,7 +821,9 @@ export class Plan {
     more.dataset.act = 'more';
     more.setAttribute('aria-label', 'More for this task');
     more.setAttribute('aria-haspopup', 'menu');
-    meta.append(est, more);
+    acts.append(est, more);
+    meta.append(sub, acts);
+    if (!sub.childElementCount) row.classList.add('one-row');
     row.append(check, title, meta);
     const out = [row];
     if (open) out.push(this.kidsBox(id));
@@ -679,9 +969,54 @@ export class Plan {
       sec.append(hd, list);
       parts.push(sec);
     }
+    if (!HELD.unplanned) parts.push(this.unplannedSec(h));
     if (!heads.some((x) => x.items.length)) parts.push(make('p', 'pl-note', 'Nothing planned yet. Pull from a project and drag its lines onto a heading, or press Alt + W on any line.'));
     this.sheet.replaceChildren(...parts);
     this.just = null;
+  }
+
+  // Not planned: every open task of yours with no day and no time, grouped by
+  // project, each group folded with its count. Folded until opened; it never
+  // counts toward Today and never nags. Drag one onto a heading, or Alt + W.
+  unplannedSec(h) {
+    const list = this.items.filter((i) => i.mine && !i.row.fields?.done && !isStretch(i.task) && !i.ghost && !whenOf(i.task, h));
+    const groups = new Map();
+    for (const i of list) {
+      const key = i.world?.id || '';
+      if (!groups.has(key)) groups.set(key, { key, title: i.world?.title || 'Tasks with no project', items: [] });
+      groups.get(key).items.push(i);
+    }
+    const sorted = [...groups.values()].sort((a, b) => (!a.key) - (!b.key) || String(a.title).localeCompare(String(b.title)));
+    let open = false;
+    try { open = localStorage.getItem('unplannedOpen') === '1'; } catch { /* no storage here */ }
+    this.groupsOpen ||= new Set();
+    const sec = make('section', `ww-sec ww-none${open ? '' : ' folded'}`);
+    sec.dataset.bucket = 'none';
+    const hd = make('h2', 'ww-h');
+    const fold = make('button', 'ww-fold');
+    fold.dataset.act = 'ww-none';
+    fold.setAttribute('aria-expanded', String(open));
+    fold.setAttribute('aria-label', `${open ? 'Fold' : 'Unfold'} Not planned`);
+    fold.append(make('span', 'ww-tri', open ? '▾' : '▸'), make('span', 'ww-name', 'Not planned'), make('span', 'ww-n', list.length ? String(list.length) : ''));
+    hd.append(fold);
+    const body = make('div', 'pl-list ww-list');
+    body.dataset.bucket = 'none';
+    body.hidden = !open;
+    if (open) {
+      for (const g of sorted) {
+        const on = this.groupsOpen.has(g.key);
+        const gb = make('button', 'ww-group');
+        gb.dataset.act = 'ww-group';
+        gb.dataset.group = g.key;
+        gb.setAttribute('aria-expanded', String(on));
+        gb.append(make('span', 'ww-tri', on ? '▾' : '▸'), make('span', 'ww-name', g.title), make('span', 'ww-n', String(g.items.length)));
+        body.append(gb);
+        if (on) body.append(...g.items.sort((a, b) => (a.row.created_at || 0) - (b.row.created_at || 0)).flatMap((i) => this.taskRow(i, { place: '' })));
+      }
+      if (!list.length) body.append(make('div', 'ww-empty', 'Everything has a time'));
+    }
+    sec.append(hd, body);
+    return sec;
   }
 
   // The ones a move carries: all that are picked, when the one moved is one of them.
@@ -691,6 +1026,8 @@ export class Plan {
   // order). One already under it keeps its exact day; the rest get the
   // heading's time. A plain line becomes a task. Says so, with Undo.
   async placeIn(bucket, seq, moved) {
+    // Onto Not planned: off its day and out of its time.
+    if (bucket === 'none') return this.applyWhen(moved, null, '');
     const h = horizon(this.today);
     const head = whenHeadings(h).find((x) => x.id === bucket);
     if (!head) return;
@@ -926,17 +1263,42 @@ export class Plan {
     next.dataset.act = 'week-next';
     next.setAttribute('aria-label', 'The week after');
     nav.append(prev, now, next);
-    side.append(this.meter(w.min, this.free * 60), nav, ...[this.pullButton()].filter(Boolean), this.switchRow('week'));
+    side.append(...(this.estimates ? [this.meter(w.min, this.free * 60)] : []), nav, ...[this.pullButton()].filter(Boolean), this.switchRow('week'));
     head.append(left, side);
 
     const grid = make('div', 'pw-week');
+    // On a phone this week opens on today: the days before it fold into one line.
+    const small = !hover.matches;
+    const past = small && thisWeek && !this.weekPast && !HELD.weekFold ? w.days.filter((d) => d.iso < today) : [];
+    if (past.length) {
+      const open = past.reduce((a, d) => a + d.open.filter((i) => !i.ghost).length, 0);
+      const line = make('div', 'pl-early pw-past');
+      const n = make('button', 'pl-early-n');
+      n.dataset.act = 'week-past';
+      n.setAttribute('aria-expanded', 'false');
+      const span1 = long(past[0].iso, { weekday: 'short' });
+      const span2 = long(past.at(-1).iso, { weekday: 'short' });
+      n.append(make('span', 'pl-early-tri', '▸'), make('span', '', `${past.length > 1 ? `${span1} to ${span2}` : span1}${open ? ` · ${open} not done` : ''}`));
+      line.append(n);
+      if (open && this.hooks.goThrough) {
+        const acts = make('span', 'pl-early-acts');
+        const t = make('button', 'pl-early-b', 'To today');
+        t.dataset.act = 'early-today';
+        const g = make('button', 'pl-early-b', 'Go through');
+        g.dataset.act = 'thru-carried';
+        acts.append(t, g);
+        line.append(acts);
+      }
+      grid.append(line);
+    }
     for (const d of w.days) {
+      if (past.some((x) => x.iso === d.iso)) continue;
       const col = make('section', `pw-day${d.today ? ' today' : ''}${d.iso < today ? ' past' : ''}`);
       col.dataset.day = d.iso;
       const h = make('button', 'pw-h');
       h.dataset.act = 'open-day';
       h.title = 'Open this day';
-      h.append(make('b', '', String(dateOf(d.iso).getDate())), make('span', '', `${long(d.iso, { weekday: 'short' })}${d.min ? ` · ${span(d.min)}` : ''}`));
+      h.append(make('b', '', String(dateOf(d.iso).getDate())), make('span', '', `${long(d.iso, { weekday: 'short' })}${d.min && this.estimates ? ` · ${span(d.min)}` : ''}`));
       col.append(h);
       for (const e of this.cal.filter((x) => x.day === d.iso)) col.append(this.eventLine(e, 'pw-ev'));
       for (const i of d.open) col.append(this.chip(i));
@@ -952,9 +1314,16 @@ export class Plan {
     chips.append(this.addRow(null, 'Add'));
     tray.append(chips);
     const parts = [head, grid, tray];
-    const byArea = this.areaRows(first);
+    // Hours by area go with time estimates: with them off, no hours anywhere.
+    const byArea = this.estimates ? this.areaRows(first) : null;
     if (byArea) parts.push(byArea);
-    if (w.late && thisWeek) parts.push(make('p', 'pl-note', `${w.late} still open from before this week. ${w.late === 1 ? 'It waits' : 'They wait'} at the top of today’s plan.`));
+    // Left from before this week: the same line as on today's plan, with its ways out.
+    if (w.late && thisWeek) {
+      const before = dayPlan(this.items, today, today).carried.filter((i) => i.task.day < first);
+      const line = this.earlyLine(before, { fold: false });
+      if (line) { line.el.classList.add('pw-late'); line.el.querySelector('.pl-early-n span:last-child').textContent = `${before.length} from before this week`; parts.splice(1, 0, line.el); }
+      else parts.push(make('p', 'pl-note', `${w.late} still open from before this week. ${w.late === 1 ? 'It waits' : 'They wait'} at the top of today’s plan.`));
+    }
     this.sheet.replaceChildren(...parts);
     this.restore(this.sheet, held);
   }
@@ -968,7 +1337,7 @@ export class Plan {
     if (i.ghost) { b.dataset.ghost = i.ghost; b.title = `${repeatWord(i.task.repeat)}: it comes round on this day`; }
     if (!done && !i.ghost) { b.dataset.move = '1'; if (hover.matches) b.draggable = true; }
     b.append(make('span', 'pw-t', i.row.text || 'Untitled'));
-    const mins = i.task.habit ? 0 : done ? i.task.actual || i.task.est : i.task.est;
+    const mins = i.task.habit || !this.estimates ? 0 : done ? i.task.actual || i.task.est : i.task.est;
     if (mins) b.append(make('small', '', span(mins)));
     else if (isRepeat(i.task) && !done) b.append(make('small', 'pw-rep', '↻'));
     return b;
@@ -1128,6 +1497,12 @@ export class Plan {
     if (act === 'open-day') return this.hooks.go({ view: 'notebook', pageId: `day-${el.closest('[data-day]').dataset.day}` });
     if (act === 'view-list' || act === 'view-cal') { this.dayView = act.slice(5); return this.redraw(); }
     if (act === 'thru-carried') return this.hooks.goThrough?.();
+    if (act === 'week-past') { this.weekPast = true; return this.drawWeek(); }
+    if (act === 'open-today') return this.hooks.go({ view: 'notebook', pageId: `day-${this.today}` });
+    if (act === 'early-fold') { this.earlyOpen = !this.earlyOpen; return this.redraw(); }
+    if (act === 'early-today') return this.bringToday();
+    if (act === 'early-more') return this.earlyMenu(el);
+    if (act === 'flip') return this.hooks.flip?.();
     if (act === 'free') return this.askFree();
     if (act === 'dayend') return this.askDayEnd();
     if (act === 'area-target') return this.askTarget(el.closest('[data-area]').dataset.area);
@@ -1137,6 +1512,8 @@ export class Plan {
     }
     if (act === 'all-done') { this.allDone = !this.allDone; return this.drawSteps(); }
     if (act === 'pull') return this.hooks.pull?.();
+    if (act === 'ww-none') { const open = el.getAttribute('aria-expanded') !== 'true'; try { localStorage.setItem('unplannedOpen', open ? '1' : '0'); } catch { /* no storage here */ } return this.drawWhen(); }
+    if (act === 'ww-group') { this.groupsOpen ||= new Set(); const k = el.dataset.group; if (this.groupsOpen.has(k)) this.groupsOpen.delete(k); else this.groupsOpen.add(k); return this.drawWhen(); }
     if (act === 'ww-fold') { const sec = el.closest('.ww-sec'); this.whenFold(sec.dataset.bucket, !sec.classList.contains('folded')); return this.drawWhen(); }
     if (act === 'kid') {
       if (e.target.closest('a[href]')) return;
@@ -1145,6 +1522,9 @@ export class Plan {
       return of && this.hooks.openTask?.(of, el.dataset.line);
     }
     if (!i) return;
+    // Picking several: a tap on the box or the words picks it.
+    if (this.picking && (act === 'tick' || act === 'words') && !i.ghost && !i.occ) return this.select(i.row.id, row);
+    if (act === 'one-today') return this.bringToday([i.row.id]);
     if (act === 'day') return this.pickWhenFor(this.movingIds(i.row.id), { anchor: el });
     if (act === 'history') return popMenu(el, this.historyItems(i));
     if (act === 'tick' && i.ghost) return this.hooks.toast?.(`It comes round on ${long(i.ghost, { weekday: 'long' })}. Tick it then, or tick the one that’s due.`);
@@ -1213,12 +1593,17 @@ export class Plan {
   select(id, row, on = !this.sel?.has(id)) {
     this.sel ||= new Set();
     if (on) this.sel.add(id); else this.sel.delete(id);
-    (row || this.box.querySelector(`[data-task="${CSS.escape(id)}"]`))?.classList.toggle('sel', on);
-    if (this.sel.size) this.hooks.toast?.(`${this.sel.size} picked · Ctrl + Shift + Backspace deletes, Esc lets go`);
+    for (const r of document.querySelectorAll(`.pl-task[data-task="${CSS.escape(id)}"]`)) {
+      r.classList.toggle('sel', on);
+      r.querySelector('.pl-check')?.setAttribute('aria-pressed', String(on));
+    }
+    row?.classList.toggle('sel', on);
+    this.pickBar();
   }
   unselect() {
     for (const id of this.sel || []) for (const r of document.querySelectorAll(`[data-task="${CSS.escape(id)}"]`)) r.classList.remove('sel');
     this.sel = new Set();
+    this.pickBar();
   }
 
   // Nate's tasks are his to finish or remove on the board; a repeat's single day isn't a line.
@@ -1351,7 +1736,7 @@ export class Plan {
       next.querySelector('.pl-words')?.focus();
       return;
     }
-    if (e.key === 'Escape' && this.sel?.size && !e.target.closest?.('input')) { this.unselect(); return; }
+    if (e.key === 'Escape' && (this.sel?.size || this.picking) && !e.target.closest?.('input')) { if (this.picking) this.stopPicking(); else this.unselect(); return; }
     // Ctrl + Z right after a delete here brings it back.
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && this.lastGone && !e.target.closest?.('input, textarea, [contenteditable="true"]')) {
       e.preventDefault();

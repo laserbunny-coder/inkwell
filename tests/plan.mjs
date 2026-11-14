@@ -414,7 +414,7 @@ try {
     const list = await words(page);
     assert.deepEqual(list, ['Headlamp for Arrow', 'Email the storyboard notes to Dana']);
     assert.ok(await row(page, 'Headlamp for Arrow').evaluate((el) => el.classList.contains('carried')));
-    assert.equal(await row(page, 'Headlamp for Arrow').locator('.pl-from').innerText(), 'from Yesterday');
+    assert.equal(await row(page, 'Headlamp for Arrow').locator('.pl-from').innerText(), 'from Mon, Nov 9');
     assert.equal(await row(page, 'Email the storyboard notes').locator('.pl-place').innerText(), 'Nov 9', 'a task written on another day says where');
     assert.ok(await row(page, 'Headlamp for Arrow').evaluate((el) => el.classList.contains('next')));
     // Yesterday's page still shows what was done that day.
@@ -546,12 +546,13 @@ try {
   await mid.context().close();
 
   // ---------- phone ----------
-  const phone = await open({ width: 412, height: 915 }, { hasTouch: true, isMobile: true });
+  const phone = await open({ width: 412, height: 915 }, { hasTouch: true, isMobile: true, todayPage: false });
   await today(phone);
   await phone.waitForFunction(() => { document.activeElement?.blur(); return !document.body.classList.contains('kb-up'); });
   await check('phone: the plan sits on top of today, with Day, Week, Weeks ahead, Pace in the page', async () => {
     assert.ok(await phone.locator('#plan').isVisible());
-    assert.deepEqual(await phone.locator('#plan .pl-switch button').allInnerTexts(), ['Day', 'What’s when', 'Week', 'Weeks ahead', 'Pace']);
+    // Above the plan: Page and Plan, then the other views.
+    assert.deepEqual(await phone.locator('.tp-switch .pl-switch button').allInnerTexts(), ['Page', 'Plan', 'What’s when', 'Week', 'Weeks ahead', 'Pace']);
     await add(phone, 'Call Dana 30m');
     await add(phone, 'Order the storage drive');
     assert.deepEqual(await words(phone), ['Call Dana', 'Order the storage drive']);
@@ -574,7 +575,7 @@ try {
     assert.equal((await taskNamed(phone, 'Order the storage drive')).fields.task.day, '2026-11-10');
   });
   await check('phone: Week is one day under another, and nothing spills', async () => {
-    await phone.locator('#plan .pl-switch button[data-cmd="week"]').tap();
+    await phone.locator('.tp-switch .pl-switch button[data-cmd="week"]').tap();
     await phone.waitForFunction(() => document.documentElement.dataset.view === 'plan');
     await still(phone);
     await sleep(300);
@@ -589,7 +590,7 @@ try {
     await phone.locator('#plan-sheet .pl-switch button', { hasText: 'Pace' }).tap();
     await sleep(500);
     assert.equal(await phone.locator('#plan-sheet h1').innerText(), 'Pace');
-    await phone.locator('#plan-sheet .pl-switch button', { hasText: 'Day' }).tap();
+    await phone.locator('#plan-sheet .pl-switch button', { hasText: 'Plan' }).tap();
     await phone.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
     assert.deepEqual(phone.errors, []);
   });

@@ -44,7 +44,7 @@ const lift = (cdp) => cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', t
 const centre = async (loc) => { const b = await loc.boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
 
 try {
-  const ctx = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true });
+  const ctx = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true, todayPage: false });
   const phone = await ctx.newPage();
   phone.errors = [];
   phone.on('pageerror', (e) => phone.errors.push(e.message));
@@ -189,7 +189,7 @@ try {
   // Tasks left from earlier days sit on top of Today: they can be put in a
   // new order among themselves (keeping their day), up as well as down.
   {
-    const c = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true });
+    const c = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true, todayPage: false });
     const p = await c.newPage();
     p.errors = [];
     p.on('pageerror', (e) => p.errors.push(e.message));

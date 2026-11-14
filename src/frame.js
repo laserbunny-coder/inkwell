@@ -171,6 +171,8 @@ export class Frame {
     this.paceBtn = make('button', 'tb-btn', 'Pace');
     this.paceBtn.dataset.cmd = 'pace';
     this.paceBtn.title = 'Pace: what you planned against what it really took';
+    // Alt + 1 to 4 in Today, said quietly beside each name.
+    // (Alt + 1 to 4 for these are held while the planning views are rethought.)
     this.todaySwitch.append(this.tdPill, this.dayBtn, this.whenBtn, this.weekBtn, this.aheadBtn, this.paceBtn);
     this.todaySwitch.hidden = true;
     // Page tabs are redrawn each time, so their highlight lives beside them and slides.

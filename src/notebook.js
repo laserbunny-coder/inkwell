@@ -266,15 +266,25 @@ export class Notebook {
         const b = document.createElement('button');
         b.type = 'button';
         b.textContent = label;
-        b.addEventListener('click', () => { this.zoomTo(target); this.editor.commands.focus(); });
+        b.addEventListener('click', () => { this.zoomTo(target); if (!matchMedia('(hover: none)').matches) this.editor.commands.focus(); });
         trail.append(b);
       };
-      crumb(this.page ? titleOf(this.page) : 'Page', null);
+      // On a phone the way back out is a plain "‹ Today" at the top left.
+      if (matchMedia('(hover: none)').matches) {
+        const today = this.isDay && this.page?.title === isoDate();
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'nb-back';
+        b.textContent = '‹ Today';
+        b.addEventListener('click', () => { if (today) this.zoomTo(null); else this.openDay(); });
+        trail.append(b);
+        if (!today) crumb(this.page ? titleOf(this.page) : 'Page', null);
+      } else crumb(this.page ? titleOf(this.page) : 'Page', null);
       for (const li of path) {
         const t = li.firstChild?.textContent.trim() || 'Untitled line';
         crumb(t.length > 40 ? `${t.slice(0, 38)}…` : t, li.attrs.eid);
       }
-      this.editor.commands.focus();
+      if (!matchMedia('(hover: none)').matches) this.editor.commands.focus();
     }
     this.onZoom(eid);
   }
@@ -339,6 +349,12 @@ export class Notebook {
   renderHead() {
     const title = $('#nb-title');
     title.textContent = this.page ? titleOf(this.page) : '';
+    // On a phone a day's head is one line: "Sat, Nov 14", its arrows and its ⋯.
+    if (this.isDay && matchMedia('(hover: none)').matches) {
+      const [y, m, d] = this.page.title.split('-').map(Number);
+      title.textContent = new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      title.title = titleOf(this.page);
+    } else title.removeAttribute('title');
     title.contentEditable = this.isDay ? 'false' : 'true';
     $('#nb-prev').hidden = $('#nb-next').hidden = !this.isDay;
     // Today is one button away everywhere; here it only means "back to today" from another day.

@@ -31,7 +31,7 @@ function remote(op, arg, where) {
 const fake = () => {
   // These checks are about a row of panes: Look → "More than one pane beside".
   // (One pane, Plan and Notes are in tests/beside.mjs.)
-  try { localStorage.setItem('manyPanes', '1'); } catch { /* no storage yet */ }
+  try { localStorage.setItem('manyPanes', '1'); localStorage.setItem('todayPhone', 'page'); } catch { /* no storage yet */ }
   window.__syncBackend = {
     user: async () => ({ id: 'u1' }),
     onAuth() {}, signIn() {}, signOut() {}, subscribe() {}, unsubscribe() {},
@@ -234,7 +234,7 @@ try {
 
   // ---------- a phone ----------
   const phone = await browser.newContext({ ...devices['Pixel 7'], colorScheme: 'dark' });
-  await phone.addInitScript(() => { window.__syncBackend = null; try { localStorage.setItem('manyPanes', '1'); } catch { /* no storage yet */ } });
+  await phone.addInitScript(() => { window.__syncBackend = null; try { localStorage.setItem('manyPanes', '1'); localStorage.setItem('todayPhone', 'page'); } catch { /* no storage yet */ } });
   const ph = await phone.newPage();
   ph.on('pageerror', (e) => errors.push(e.message));
   await ph.goto(URL);

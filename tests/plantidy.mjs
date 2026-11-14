@@ -164,11 +164,14 @@ try {
   await page.reload();
   await page.waitForFunction(() => document.documentElement.dataset.started === '1');
   await go(page, { view: 'notebook', pageId: 'day-2026-11-11' });
+  // More than three fold into one line; a click unfolds them in place.
+  await page.waitForSelector('#plan .pl-early');
+  await page.locator('#plan .pl-early-n').click();
   await page.waitForFunction(() => document.querySelectorAll('#plan .pl-task.carried').length === 7);
 
-  await check('Go through: the pile left from earlier days is offered in the plan’s head', async () => {
-    assert.equal(await page.locator('#plan .pl-thru').innerText(), '7 from earlier days · Go through');
-    await page.locator('#plan .pl-thru').click();
+  await check('Go through: the pile left from earlier days is offered on its line', async () => {
+    assert.match(await page.locator('#plan .pl-early-n').innerText(), /7 from earlier days/);
+    await page.locator('#plan .pl-early-b', { hasText: 'Go through' }).click();
     await page.waitForSelector('.thru-card');
     const opts = await page.evaluate(() => [...document.querySelectorAll('.thru-opt')].map((b) => `${b.dataset.key} ${b.querySelector('.thru-label').textContent}`));
     assert.deepEqual(opts.filter((o) => !/HQ/.test(o)), ['K Keep it for today', 'C Done: check it off', 'N Not today: off the day, still where it’s written', 'D Delete it', 'S Skip for now']);

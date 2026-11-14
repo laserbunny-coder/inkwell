@@ -541,7 +541,7 @@ try {
     const phone = await open(undefined, { ...devices['Pixel 7'] });
     await go(phone, { view: 'plan', tab: 'ahead' });
     await phone.waitForSelector('.ah .ah-lane');
-    assert.deepEqual(await phone.locator('.pl-switch button').allInnerTexts(), ['Day', 'What’s when', 'Week', 'Weeks ahead', 'Pace']);
+    assert.deepEqual(await phone.locator('.pl-switch button').allInnerTexts(), ['Page', 'Plan', 'What’s when', 'Week', 'Weeks ahead', 'Pace']);
     const wide = await phone.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     assert.ok(wide <= 1, `the page spills ${wide}`);
     assert.ok(await phone.locator('.ah-wrap').evaluate((w) => w.scrollWidth > w.clientWidth + 100));

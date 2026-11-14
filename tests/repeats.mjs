@@ -276,7 +276,7 @@ try {
     assert.ok(await row(page, 'Stretch').evaluate((el) => !el.classList.contains('carried') && !el.classList.contains('ghost')));
     assert.ok(await row(page, 'Morning pages').evaluate((el) => !el.classList.contains('carried') && !el.classList.contains('ghost')));
     assert.ok(await row(page, 'Review the week').evaluate((el) => el.classList.contains('carried')));
-    assert.equal(await row(page, 'Review the week').locator('.pl-from').innerText(), 'from Yesterday');
+    assert.equal(await row(page, 'Review the week').locator('.pl-from').innerText(), 'from Mon, Nov 9');
     // Run is Monday, Wednesday and Friday: yesterday's is still open, and waits.
     assert.ok(await row(page, 'Run').evaluate((el) => el.classList.contains('carried')));
     await row(page, 'Stretch').locator('.pl-check').click();
@@ -325,7 +325,7 @@ try {
   });
 
   await check('on a phone: tap the ↻ for how it’s going; nothing spills', async () => {
-    const phone = await open(undefined, { ...devices['Pixel 7'] });
+    const phone = await open(undefined, { ...devices['Pixel 7'], todayPage: false });
     await day(phone, '2026-11-09');
     await phone.waitForSelector('#plan .pl-task');
     await phone.locator('#plan .pl-task', { hasText: 'Morning pages' }).locator('.pl-rep').tap();
