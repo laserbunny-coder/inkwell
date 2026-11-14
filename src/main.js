@@ -37,18 +37,16 @@ import { moveLine, canMoveLine, indentLines, outdentLines, removeLine, toggleDon
 import { SlashMenu, setSlashItems, slashOpen } from './slash.js';
 import { Woven, ScenePop, newScene, guessAll, redraw as redrawWoven, placeList, sceneAt, scenesOf, ensureHeading, setMarker, KINDS as SCENE_KINDS } from './woven.js';
 import { applyLook, renderLook, cleanLook, DEFAULT_LOOK } from './wovenlook.js';
-import { prepareForShoot } from './wovenprep.js';
 import { elementsIn, plainPages, newElement } from './production.js';
 import { openHandleMenu } from './handlemenu.js';
 import { openAlerts } from './alerts.js';
 import { showSaveButton } from './savebutton.js';
 import { openPicker } from './picker.js';
 import { PlotGrid, threadsOf, worldPromises } from './grid.js';
-import { ProductionView } from './prodview.js';
 import { PageStrip, TodayPanel, isLife, taskHint, personalArea } from './pages.js';
 import { Nav } from './nav.js';
 import { Frame, lookPicker, startLook, toggleLight } from './frame.js';
-import { StagePage, intoDrawer, gatherItems } from './stages.js';
+import { intoDrawer, gatherItems } from './stages.js';
 import { CaptureScreen, writeOutPending, recoverRecording, writeOutAgain, requeueBlank, addLine } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, placeScribeWaiting, RAW } from './voice.js';
 import { takeShares, snapshotPending, tidyShareBlanks, keepShare } from './share.js';
@@ -69,7 +67,6 @@ import { looseOn } from './loose.js';
 import { PLAN_ID, dayWord, loadTasks, addTask, stepsHome } from './tasks.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { pieceDoc, pageDoc, startDraft, draftHolding } from './drafts.js';
-import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
 import { inPane, PANE_ID, PaneHost, host as paneHost, sendChanged, onChanged, BESIDE_PLACES } from './panes.js';
 import { SideNotes } from './sidenotes.js';
@@ -81,7 +78,6 @@ import { events as calendarEvents, forgetCalendar } from './calendar.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
-import { openBringIn } from './bringin.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, nextLabel, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, dropOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
 import { make } from './dom.js';
@@ -749,11 +745,11 @@ async function go(place) {
   } else if (place.view === 'production' || place.view === 'deliver') {
     state.prodId = place.id;
     remember({ view: place.view, id: place.id });
-    await production.show(place.id, { ...place, mode: place.view === 'deliver' ? 'deliver' : 'make' });
+    await (await loadProduction()).show(place.id, { ...place, mode: place.view === 'deliver' ? 'deliver' : 'make' });
   } else if (place.view === 'stage' || place.view === 'drawer') {
     state.stage = place;
     remember(place);
-    await stagePage.show(place);
+    await (await loadStagePage()).show(place);
   } else if (place.view === 'compare') {
     state.compareId = place.id;
     await comparer.show(place.id, place);
@@ -1041,8 +1037,8 @@ async function applyRemote(rows) {
   if (rows.some((r) => r.kind === 'note' && r.fields?.chapter_id === state.chapterId)) await notes.load(state.chapterId);
   if (view() === 'sidenotes' && rows.some((r) => ['note', 'para', 'scene', 'heading', 'chapter', 'settings'].includes(r.kind))) sideNotes.soon();
   if (view() === 'grid' && rows.some((r) => ['note', 'thread', 'para', 'scene', 'chapter', 'act', 'project', 'world'].includes(r.kind))) grid.refresh();
-  if ((view() === 'production' || view() === 'deliver') && rows.some((r) => ['shot', 'breakdown', 'shootday', 'file', 'page', 'note', 'para', 'scene', 'chapter', 'act', 'project', 'world', 'share'].includes(r.kind))) production.refresh();
-  if (stagePage.isOpen && rows.some((r) => ['line', 'page', 'project', 'world', 'event', 'tie', 'shootday', 'note', 'share'].includes(r.kind))) stagePage.refresh();
+  if ((view() === 'production' || view() === 'deliver') && rows.some((r) => ['shot', 'breakdown', 'shootday', 'file', 'page', 'note', 'para', 'scene', 'chapter', 'act', 'project', 'world', 'share'].includes(r.kind))) production?.refresh();
+  if (stagePage?.isOpen && rows.some((r) => ['line', 'page', 'project', 'world', 'event', 'tie', 'shootday', 'note', 'share'].includes(r.kind))) stagePage.refresh();
   if (todayPanel.isOpen && rows.some((r) => r.kind === 'line' || r.kind === 'day')) todayPanel.refresh();
   await notebook.applyRemote(rows);
   if (inNotebook() && notebook.isDay && rows.some((r) => r.kind === 'review' || r.parent_id === notebook.page.id || r.parent_id === 'pg_mulling')) dayReview?.refresh();
@@ -1232,6 +1228,7 @@ function markScene(kind) {
 async function prepareShoot() {
   if (!isWoven()) return;
   const world = state.project ? await worldOf(state.project) : null;
+  const { prepareForShoot } = await import('./wovenprep.js');
   await prepareForShoot({
     editor,
     places: (doc) => placeList(biblePlaces, doc),
@@ -1727,8 +1724,8 @@ async function refreshViews() {
   if (view() === 'library') await renderLibrary();
   if (view() === 'project') await renderProject();
   if (view() === 'world') await renderWorld();
-  if (stagePage.isOpen) await stagePage.refresh();
-  if (view() === 'production' || view() === 'deliver') await production.refresh();
+  if (stagePage?.isOpen) await stagePage.refresh();
+  if (view() === 'production' || view() === 'deliver') await production?.refresh();
   if (inNotebook() && notebook.page && !notebook.isDay) {
     const p = await getEntry(notebook.page.id);
     if (p && !gone(p)) { notebook.page = notebook.store.page = p; notebook.renderHead(); }
@@ -2939,7 +2936,7 @@ async function printCurrent() {
   if (inNotebook() && notebook.page && !notebook.isDay) {
     await notebook.close();
     const doc = await pageDoc(notebook.page);
-    printPiece({ title: titleOf(notebook.page), type: 'page', chapters: doc, author: await accountName() });
+    printLater({ title: titleOf(notebook.page), type: 'page', chapters: doc, author: await accountName() });
     return;
   }
   const b = await revisionPiece();
@@ -2947,7 +2944,7 @@ async function printCurrent() {
   if (state.project?.id === b.id) await store.close(editor.state.doc);
   const chapters = await pieceDoc(b.id);
   const words = chapters.reduce((n, ch) => n + ch.blocks.reduce((m, x) => m + wordCount(x.text), 0), 0);
-  printPiece({ title: b.title, type: bookType(b), chapters, words, author: await accountName() });
+  printLater({ title: b.title, type: bookType(b), chapters, words, author: await accountName() });
 }
 const accountName = async () => (window.__claude ? 'Michael' : (await sync.backend?.name?.().catch(() => '')) || '');
 
@@ -3181,9 +3178,33 @@ async function openShare(target) {
   await draw();
 }
 
+// The rooms loaded on demand (Make and Deliver, a world's pages and the Drawer, print, Woven's prep for the
+// shoot, Bring in) are fetched a little after start, when the app is idle,
+// so the service worker keeps them and they open offline too. Fetching runs
+// each module's top level only, which just defines things.
+function warmRooms() {
+  const later = window.requestIdleCallback || ((fn) => setTimeout(fn, 1));
+  setTimeout(() => later(() => Promise.all([import('./prodview.js'), import('./stagepage.js'), import('./print.js'), import('./wovenprep.js'), import('./bringin.js')]).catch(() => { /* offline: next time */ })), 4000);
+}
+
+// Print (or save as PDF), loaded when first asked for.
+const printLater = async (what) => (await import('./print.js')).printPiece(what);
+
 // ---------- production: shots, the kit, shoot days, posting ----------
 
-const production = new ProductionView($('#prod-view'), {
+// The Make and Deliver rooms load the first time one opens (prodview.js is
+// big and most days don't need it); rooms.js fetches it once the app has
+// started (warmRooms), so it's there offline too.
+let production = null;
+async function loadProduction() {
+  if (!production) {
+    const { ProductionView } = await import('./prodview.js');
+    production ||= new ProductionView($('#prod-view'), productionHooks);
+    window.__production = production;
+  }
+  return production;
+}
+const productionHooks = {
   open: (r) => grid.hooks.open(r),
   openPage: (id) => go({ view: 'notebook', pageId: id }),
   go: (place) => go(place),
@@ -3194,14 +3215,13 @@ const production = new ProductionView($('#prod-view'), {
   ask, askText, toast,
   askServer: (body) => askServer(body),
   canAsk: () => canAskServer(),
-  numberScenes: async (piece) => { await toggleNumbering(piece); await production.refresh(); },
+  numberScenes: async (piece) => { await toggleNumbering(piece); await production?.refresh(); },
   base: () => location.origin + location.pathname,
   files: (kind, piece) => filesOut(kind, piece),
   share: (piece) => openShare(piece),
   shareOf: async (piece) => { const sh = await sharing.current(piece); return sh ? { url: linkFor(sh.fields.token), comments: !!sh.fields.comments } : null; },
   moved: (place) => remember(place)
-});
-window.__production = production;
+};
 
 // The piece production is for, from where you are.
 async function productionOwner() {
@@ -3453,7 +3473,7 @@ async function printRow(b) {
   if (state.project?.id === b.id) await store.close(editor.state.doc);
   const chapters = await pieceDoc(b.id);
   const words = chapters.reduce((n, ch) => n + ch.blocks.reduce((m, x) => m + wordCount(x.text), 0), 0);
-  printPiece({ title: b.title, type: bookType(b), chapters, words, author: await accountName() });
+  printLater({ title: b.title, type: bookType(b), chapters, words, author: await accountName() });
 }
 
 async function filesOut(kind, b) {
@@ -3468,7 +3488,18 @@ async function filesOut(kind, b) {
   if (kind === 'markdown') return download(`${b.title || 'Untitled'}.md`, await bookMarkdown(b, acts));
 }
 
-const stagePage = new StagePage($('#stage-view'), {
+// A world's pages (Gather, Shape, Write…) and the Drawer: loaded the first
+// time one opens, and fetched after start by warmRooms.
+let stagePage = null;
+async function loadStagePage() {
+  if (!stagePage) {
+    const { StagePage } = await import('./stagepage.js');
+    stagePage ||= new StagePage($('#stage-view'), stageHooks);
+    window.__stages = stagePage;
+  }
+  return stagePage;
+}
+const stageHooks = {
   go: (place) => go(place),
   openEntry: (id) => openEntry(id),
   openBook: (id) => openBook(id),
@@ -3484,8 +3515,7 @@ const stagePage = new StagePage($('#stage-view'), {
   revise: (action, piece, note) => revisePiece(action, piece, note),
   newPage: async (parentId) => { await go({ view: 'notebook' }); await notebook.newPage(parentId); },
   newPiece: (parentId) => addPiece(parentId)
-});
-window.__stages = stagePage;
+};
 
 // Ctrl + Shift + J: today's lines beside whatever you're doing.
 const todayPanel = new TodayPanel($('.today-panel'), {
@@ -4544,6 +4574,7 @@ async function knowsThing() {
 // Bring in old notes: a section pasted or dropped from another app becomes a page.
 async function bringInOld() {
   const base = location.origin + location.pathname;
+  const { openBringIn } = await import('./bringin.js');
   await openBringIn({
     ask: askServer, canAsk: canAskServer, toast, base,
     open: (row) => openEntry(row.id),
@@ -5950,6 +5981,7 @@ async function start() {
   // Opened where it belongs (tests wait for this before moving around).
   root.classList.remove('starting');
   root.dataset.started = '1';
+  warmRooms();
   // The panes that were open beside come back.
   panes?.restore();
   // A recording cut short (the app closed, the phone died) is kept, not lost.
