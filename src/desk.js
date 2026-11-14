@@ -846,8 +846,11 @@ export class DeskPage {
       if (!line) return;
       ls.set('deskRead', JSON.stringify({ key, line }));
       if (root.classList.contains('hide-deskread')) return;
-      const now2 = this.sheet.querySelector('.dk-read');
-      if (now2) { now2.textContent = line; now2.classList.remove('stale'); now2.hidden = false; }
+      // The line drawn now, and this one too: the answer can come back
+      // before this draw is on the page (the cards' next steps are read first).
+      for (const now2 of new Set([this.sheet.querySelector('.dk-read'), el])) {
+        if (now2) { now2.textContent = line; now2.classList.remove('stale'); now2.hidden = false; }
+      }
     }).catch((e) => console.warn(e)).finally(() => { if (this.asking === key) this.asking = null; });
   }
 
