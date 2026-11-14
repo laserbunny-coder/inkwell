@@ -369,6 +369,7 @@ try {
     await sleep(500);
     const toCal = (p) => p.evaluate(() => { const pl = { view: 'plan', tab: 'calday' }; history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); });
     await toCal(laptop);
+    await laptop.locator('#plan-sheet .dc-unsched').click();
     await laptop.locator('#plan-sheet .dc-chip', { hasText: 'Pack the tripod' }).click();
     await laptop.waitForSelector('#plan-sheet .dc-blk');
     await syncNow(laptop);
