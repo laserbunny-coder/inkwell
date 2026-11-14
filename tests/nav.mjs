@@ -58,42 +58,42 @@ try {
 
   await check('Ctrl + O then Enter flips straight back', async () => {
     await p.keyboard.press('Control+O');
-    await p.waitForSelector('.go-panel', { state: 'visible' });
-    assert.equal(await p.evaluate(() => document.activeElement?.className), 'go-find');
-    assert.equal(await p.locator('.go-chip.first .go-name').innerText(), 'Today');
+    await p.waitForSelector('.palette.box', { state: 'visible' });
+    assert.equal(await p.evaluate(() => document.activeElement?.id), 'palette-input');
+    assert.equal(await p.locator('.box-recent .box-chip.first .go-name').innerText(), 'Today');
     await p.keyboard.press('Enter');
     await p.waitForSelector('.notebook', { state: 'visible' });
-    assert.equal(await p.locator('.go-panel').isVisible(), false);
+    assert.equal(await p.locator('.palette').isVisible(), false);
     await p.waitForFunction(() => document.querySelector('#tb-back')?.textContent === '‹ Library');
   });
 
-  await check('the Go panel’s rooms reach Today, the Desk, the Library, the Drawer and Tags', async () => {
+  await check('the box’s rooms reach Today, the Desk, the Library, the Drawer and Tags', async () => {
     await p.keyboard.press('Control+O');
-    await p.waitForSelector('.go-panel', { state: 'visible' });
-    assert.deepEqual(await p.locator('.go-desk .go-tab-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up']);
-    await p.locator('.go-desk .go-tab', { hasText: 'Tags' }).click();
+    await p.waitForSelector('.palette.box', { state: 'visible' });
+    assert.deepEqual(await p.locator('.box-rooms .go-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up', 'Aa Look']);
+    await p.locator('.box-rooms .box-chip', { hasText: 'Tags' }).click();
     await p.waitForFunction(() => document.documentElement.dataset.view === 'tags');
     await p.keyboard.press('Control+O');
-    await p.waitForSelector('.go-panel', { state: 'visible' });
-    await p.locator('.go-desk .go-tab', { hasText: 'Drawer' }).click();
+    await p.waitForSelector('.palette.box', { state: 'visible' });
+    await p.locator('.box-rooms .box-chip', { hasText: 'Drawer' }).click();
     await p.waitForFunction(() => document.documentElement.dataset.view === 'drawer');
   });
 
-  await check('typing in the Go panel finds anything', async () => {
+  await check('typing in the box finds anything', async () => {
     await p.keyboard.press('Control+O');
-    await p.waitForSelector('.go-panel', { state: 'visible' });
+    await p.waitForSelector('.palette.box', { state: 'visible' });
     await p.keyboard.type('Library');
-    await p.waitForSelector('.palette', { state: 'visible' });
+    await sleep(200);
     assert.equal(await p.locator('#palette-input').inputValue(), 'Library');
-    assert.equal(await p.locator('.go-panel').isVisible(), false);
+    assert.match(await p.locator('#palette-list li').first().innerText(), /^Library/);
     await p.keyboard.press('Escape');
   });
 
-  await check('Escape closes the Go panel; the rail holds the rooms and the tools, and the bar above the page stays put', async () => {
+  await check('Escape closes the box; the rail holds the rooms and the tools, and the bar above the page stays put', async () => {
     await p.keyboard.press('Control+O');
-    await p.waitForSelector('.go-panel', { state: 'visible' });
+    await p.waitForSelector('.palette.box', { state: 'visible' });
     await p.keyboard.press('Escape');
-    await p.waitForSelector('.go-panel', { state: 'hidden' });
+    await p.waitForSelector('.palette', { state: 'hidden' });
     await toToday(p);
     assert.equal(await p.locator('.corner').count(), 0, 'no corner strip');
     assert.equal(await p.locator('.placeline').count(), 0, 'no place line');
@@ -102,7 +102,7 @@ try {
     await sleep(300);
     assert.equal(await p.locator('.rail').isVisible(), true);
     assert.deepEqual(await p.locator('.rail-rooms button').allInnerTexts(), ['Today', 'Desk', 'Library']);
-    assert.deepEqual(await p.locator('.rail-tools button').allInnerTexts(), ['Capture', 'Go', 'Everything', 'Look']);
+    assert.deepEqual(await p.locator('.rail-tools button').allInnerTexts(), ['Capture', 'Go', 'Look']);
     // The bar doesn't hide and come down any more: where you are is always in view.
     const bar = await p.locator('.topbar').evaluate((el) => ({ top: Math.round(el.getBoundingClientRect().top), opacity: getComputedStyle(el).opacity }));
     assert.deepEqual(bar, { top: 0, opacity: '1' });
@@ -110,10 +110,10 @@ try {
     // The page starts to the right of the rail, never under it.
     const edges = await p.evaluate(() => ({ rail: document.querySelector('.rail').getBoundingClientRect().right, page: document.querySelector('.notebook').getBoundingClientRect().left }));
     assert.ok(edges.page >= edges.rail, `page ${edges.page} starts under the rail ${edges.rail}`);
-    await p.locator('#go-toggle').click();
-    await p.waitForSelector('.go-panel', { state: 'visible' });
+    await p.locator('#palette-toggle').click();
+    await p.waitForSelector('.palette.box', { state: 'visible' });
     await p.keyboard.press('Escape');
-    await p.waitForSelector('.go-panel', { state: 'hidden' });
+    await p.waitForSelector('.palette', { state: 'hidden' });
   });
 
   await check('the rail’s words stay in the same places everywhere, and the room you’re in is lit', async () => {
@@ -219,18 +219,20 @@ try {
 
   await check('on a phone the Go sheet opens from the place, and Back returns', async () => {
     await ph.locator('.pb-place').tap();
-    await ph.waitForSelector('.go-panel', { state: 'visible' });
-    assert.equal(await ph.locator('.placebar').isVisible(), false, 'the bar steps aside for the sheet');
-    assert.notEqual(await ph.evaluate(() => document.activeElement?.className), 'go-find', 'no keyboard over the sheet');
-    await ph.locator('.go-desk .go-tab', { hasText: 'Library' }).tap();
+    await ph.waitForSelector('.palette.box', { state: 'visible' });
+    assert.notEqual(await ph.evaluate(() => document.activeElement?.id), 'palette-input', 'no keyboard over the sheet');
+    assert.equal(await ph.locator('.box-rooms .box-chip', { hasText: 'Library' }).count(), 0, 'the bar has the rooms already');
+    await ph.keyboard.press('Escape');
+    await ph.waitForSelector('.palette', { state: 'hidden' }).catch(async () => { throw new Error(`still open: ${await ph.evaluate(() => `${document.body.className} | ${document.documentElement.className}`)}`); });
+    await ph.locator('.pb-lib').tap();
     await ph.waitForFunction(() => document.documentElement.dataset.view === 'library');
     await settle(ph);
     assert.equal(await ph.locator('.pb-lib').getAttribute('aria-current'), 'page', 'Library is lit');
     // Back is the first thing in the Go sheet.
     await ph.locator('.pb-place').tap();
-    await ph.waitForSelector('.go-panel', { state: 'visible' });
-    assert.match(await ph.locator('.go-chip.first .go-name').innerText(), /^Today/);
-    await ph.locator('.go-chip.first').tap();
+    await ph.waitForSelector('.palette.box', { state: 'visible' });
+    assert.match(await ph.locator('.box-recent .box-chip.first .go-name').innerText(), /^Today/);
+    await ph.locator('.box-recent .box-chip.first').tap();
     await ph.waitForSelector('.notebook', { state: 'visible' });
     assert.equal(await viewOf(ph), 'notebook');
     const wide = await ph.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -267,10 +269,10 @@ try {
   await check('on a phone the look is one tap from Go, and the menu finds it by name', async () => {
     await settle(ph);
     await ph.locator('.pb-place').tap();
-    await ph.waitForSelector('.go-panel', { state: 'visible' });
-    await ph.locator('.go-look').tap();
+    await ph.waitForSelector('.palette.box', { state: 'visible' });
+    await ph.locator('.box-rooms .box-chip', { hasText: 'Aa Look' }).tap();
     await ph.waitForSelector('.page-settings', { state: 'visible' });
-    assert.equal(await ph.locator('.go-panel').isVisible(), false);
+    assert.equal(await ph.locator('.palette').isVisible(), false);
     await ph.locator('.look-opt[data-look="ember"]').tap();
     assert.equal(await ph.evaluate(() => document.documentElement.dataset.look), 'ember');
     await ph.locator('.look-opt[data-look="midnight"]').tap();
@@ -280,9 +282,7 @@ try {
     for (const word of ['theme', 'look', 'candle', 'night shift']) {
       await settle(ph);
       await ph.locator('.pb-place').tap();
-      await ph.waitForSelector('.go-panel', { state: 'visible' });
-      await ph.locator('.go-all').tap();
-      await ph.waitForSelector('.palette', { state: 'visible' });
+      await ph.waitForSelector('.palette.box', { state: 'visible' });
       await ph.fill('#palette-input', word);
       await sleep(150);
       assert.match(await ph.locator('#palette-list').innerText(), /Look, page and text settings/, `"${word}" finds the look`);
@@ -301,8 +301,8 @@ try {
     await ph.waitForFunction(() => document.documentElement.dataset.view === 'drawer');
     await settle(ph);
     await ph.locator('.pb-place').tap();
-    await ph.waitForSelector('.go-panel', { state: 'visible' });
-    await ph.locator('.go-desk .go-tab', { hasText: 'Catch-up' }).tap();
+    await ph.waitForSelector('.palette.box', { state: 'visible' });
+    await ph.locator('.box-rooms .box-chip', { hasText: 'Catch-up' }).tap();
     await ph.waitForFunction(() => document.documentElement.dataset.view === 'desk');
     const wide = await ph.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     assert.ok(wide <= 0, `page is ${wide}px too wide`);

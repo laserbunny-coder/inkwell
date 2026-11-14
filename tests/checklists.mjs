@@ -66,6 +66,7 @@ const command = async (p, label) => {
   await p.locator('#palette-input').fill(label);
   await p.locator('#palette-list li', { hasText: label }).first().click();
   await sleep(200);
+  if (await p.locator('.palette').isVisible()) throw new Error(`the box stayed open after “${label}”: ${await p.locator('#palette-list').innerText()} | ${await p.locator('.toast').allInnerTexts()}`);
 };
 const line = (p, text) => p.locator('#outline-editor li', { has: p.locator(':scope > p', { hasText: new RegExp(`^${text}(\\d+/\\d+)?$`) }) });
 
@@ -114,8 +115,9 @@ try {
 
   await check('Ctrl + Enter still strikes a line through, and ticks its box', async () => {
     await caretOn(laptop, 'Stove');
+    const where = await laptop.evaluate(() => `${document.activeElement?.tagName} ${document.activeElement?.outerHTML.slice(0, 120)} ${document.querySelector('.palette')?.hidden}`);
     await laptop.keyboard.press('Control+Enter');
-    assert.deepEqual(await boxes(laptop), ['[ ] Tent', '[x] Stove', '[ ] Lantern']);
+    assert.deepEqual(await boxes(laptop), ['[ ] Tent', '[x] Stove', '[ ] Lantern'], `${where} | ${await laptop.locator('.toast').allInnerTexts()}`);
     await caretOn(laptop, 'Bring the good tent, the old one leaks');
     await laptop.keyboard.press('Control+Enter');
     assert.equal(await line(laptop, 'Bring the good tent, the old one leaks').getAttribute('data-done'), '');

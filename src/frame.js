@@ -200,8 +200,8 @@ export class Frame {
       const k = (text) => this.hooks.keyLabel?.(text) || text;
       const tool = (el, label, keys) => { this.move(el, this.tools, label); if (el && keys) el.dataset.keys = k(keys); };
       tool($('#mic-toggle'), 'Capture', '⌥C');
-      tool($('#go-toggle'), 'Go', '⌘O');
-      tool($('#palette-toggle'), 'Everything', '⌘K');
+      // Go and Everything are one box now: one entry, Ctrl + K (Ctrl + O opens it too).
+      tool($('#palette-toggle'), 'Go', '⌘K');
       tool($('.tb-view [data-cmd="page"]'), 'Look');
       this.switch.append(this.swPill, this.shelves);
       this.move($('#drawer-toggle'), this.switch);

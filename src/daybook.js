@@ -1,42 +1,14 @@
-import { putEntries, getEntry, getMeta, setMeta } from './db.js';
+import { getMeta, setMeta } from './db.js';
 
-// Send a line to Daybook: it lands in Daybook's Inbox as a task, with a link
-// back to the line here (?open=<id>), so a capture that turns into something
-// to do keeps its notes in Inkwell. Sending again updates the same task
-// rather than making another. Offline, it waits and goes with the next sync.
-
-const TITLE_MAX = 140;
-
-// The task Daybook gets: the line's words without its #tags as the title, the
-// whole line in the notes when it's long, and the link back.
-export function taskFor(line, base) {
-  const words = (line.text || '').replace(/(^|\s)#[\p{L}\p{N}_-]+/gu, '').replace(/\s+/g, ' ').trim();
-  const title = words.length > TITLE_MAX ? `${words.slice(0, TITLE_MAX - 1).replace(/\s+\S*$/, '')}…` : words;
-  return {
-    id: `inkwell-${line.id}`,
-    title: title || 'From Inkwell',
-    notes: words.length > TITLE_MAX ? words : null,
-    link: `${base}?open=${encodeURIComponent(line.id)}`,
-    deleted: false
-  };
-}
+// The queue of tasks still going to Daybook. Daybook is retired: only the
+// day review and a shoot day still send there, until they move over too.
+// Offline, a task waits and goes with the next sync.
 
 async function waiting() { return (await getMeta('daybookQueue')) || []; }
 
 // Puts a task in the queue for Daybook (replacing one with the same id).
 export async function queueTask(task) {
   await setMeta('daybookQueue', [...(await waiting()).filter((t) => t.id !== task.id), task]);
-}
-
-// Marks the line as sent (fields.daybook) and queues the task. Returns the row.
-export async function sendToDaybook(lineId, base) {
-  const line = await getEntry(lineId);
-  if (!line || line.deleted || !(line.text || '').trim()) return null;
-  const task = taskFor(line, base);
-  await queueTask(task);
-  const row = { ...line, fields: { ...line.fields, daybook: { id: task.id, at: Date.now() } }, updated_at: Date.now() };
-  await putEntries([row]);
-  return row;
 }
 
 let busy = null;

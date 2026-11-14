@@ -33,7 +33,8 @@ export class Pull {
     this.id = read('pullFrom', null);
     this.picked = new Set();
     this.folds = new Set(read('pullOpen', []));
-    this.closedKids = new Set();
+    // Lines with lines under them start folded; ▸ opens one (remembered on this device).
+    this.openKids = new Set(read('pullKids', []));
     this.build();
     phone.addEventListener('change', () => this.layout());
     const bar = document.querySelector('.placebar');
@@ -185,9 +186,14 @@ export class Pull {
       if (out.length >= MAX_LINES) return;
       if (r.kind !== 'line' || r.fields?.mirror || r.fields?.done) continue;
       const text = String(r.text || '').trim();
-      if (text) out.push({ row: r, depth });
-      if (depth < 6 && !this.closedKids.has(r.id)) await this.lines(r.id, text ? depth + 1 : depth, out);
-      else if (this.closedKids.has(r.id) && out.at(-1)?.row === r) out.at(-1).folded = true;
+      if (!text) { if (depth < 6) await this.lines(r.id, depth, out); continue; }
+      const item = { row: r, depth, kids: 0 };
+      out.push(item);
+      if (depth >= 6) continue;
+      const under = [];
+      await this.lines(r.id, depth + 1, under);
+      item.kids = under.filter((x) => x.depth === depth + 1).length;
+      if (this.openKids.has(r.id)) out.push(...under);
     }
   }
 
@@ -209,7 +215,7 @@ export class Pull {
       if (!open) continue;
       const out = [];
       await this.lines(sec.id, 0, out);
-      for (const { row, depth } of out) parts.push(this.line(row, depth, today));
+      for (const { row, depth, kids } of out) parts.push(this.line(row, depth, today, kids));
       if (!out.length && !sec.title) parts.push(make('p', 'pu-empty', 'No open lines here yet.'));
     }
     if (turn !== this.turn) return;
@@ -224,7 +230,7 @@ export class Pull {
     this.showPicks();
   }
 
-  line(row, depth, today) {
+  line(row, depth, today, kids = 0) {
     const t = taskOf(row);
     const el = make('div', `pu-line${t ? ' task' : ''}${this.picked.has(row.id) ? ' sel' : ''}`);
     el.dataset.id = row.id;
@@ -232,11 +238,20 @@ export class Pull {
     const grip = make('span', 'pu-grip', '⠿');
     grip.setAttribute('aria-hidden', 'true');
     grip.title = phone.matches ? 'Slide up onto the plan' : 'Drag onto the plan';
-    const kids = this.closedKids.has(row.id);
     el.append(grip, make('span', `pu-ring${t ? '' : ' plain'}`), make('span', 'pu-words', row.text || ''));
     const word = t ? whenWord(t, today) : '';
     if (word) el.append(make('span', 'pu-whenis', word));
-    if (kids) el.classList.add('folded');
+    if (kids) {
+      // ▸ 12: what's under it, folded until asked for.
+      const open = this.openKids.has(row.id);
+      const f = make('button', 'pu-fold');
+      f.dataset.fold = row.id;
+      f.setAttribute('aria-expanded', String(open));
+      f.setAttribute('aria-label', `${open ? 'Fold' : 'Show'} the ${kids} line${kids === 1 ? '' : 's'} under it`);
+      f.append(make('span', 'pu-tri', open ? '▾' : '▸'), make('span', 'pu-kn', String(kids)));
+      el.append(f);
+      el.classList.add(open ? 'kids-open' : 'folded');
+    }
     el.setAttribute('role', 'option');
     el.setAttribute('aria-selected', String(this.picked.has(row.id)));
     el.tabIndex = -1;
@@ -250,6 +265,14 @@ export class Pull {
     if (sec) {
       if (this.folds.has(sec.dataset.sec)) this.folds.delete(sec.dataset.sec); else this.folds.add(sec.dataset.sec);
       keep('pullOpen', [...this.folds].slice(-60));
+      this.draw();
+      return;
+    }
+    const fold = e.target.closest('.pu-fold');
+    if (fold) {
+      const k = fold.dataset.fold;
+      if (this.openKids.has(k)) this.openKids.delete(k); else this.openKids.add(k);
+      keep('pullKids', [...this.openKids].slice(-200));
       this.draw();
       return;
     }
@@ -290,7 +313,7 @@ export class Pull {
   down(e) {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     const line = e.target.closest('.pu-line');
-    if (!line) return;
+    if (!line || e.target.closest('.pu-fold')) return;
     const grip = !!e.target.closest('.pu-grip');
     if (e.pointerType !== 'mouse' && !grip) return;
     const id = line.dataset.id;

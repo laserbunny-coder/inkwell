@@ -34,6 +34,7 @@ const lit = (p, sel, text) => p.waitForFunction(([s, t]) => document.querySelect
 const browser = withoutSync(await chromium.launch());
 async function open(viewport, extra = {}) {
   const ctx = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', viewport, ...extra });
+  await ctx.addInitScript(() => { try { if (localStorage.getItem('planRest') === null) localStorage.setItem('planRest', '1'); } catch { /* no storage */ } }); // the rest of Plan shown, as before its line
   const page = await ctx.newPage();
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));
@@ -63,6 +64,8 @@ const pick = async (p, label) => {
   await sleep(300);
 };
 const words = (p, root = '#plan') => p.locator(`${root} .pl-task .pl-words`).allInnerTexts();
+// Only the ones still to do (a done one stays at its place among them).
+const todo = (p, root = '#plan') => p.locator(`${root} .pl-task:not(.done) .pl-words`).allInnerTexts();
 const row = (p, text) => p.locator('#plan .pl-task', { hasText: text });
 const today = async (p) => {
   await p.evaluate(() => document.querySelector('#view-toggle').click());
@@ -160,7 +163,7 @@ try {
     assert.equal(t.fields.task.run, null);
     assert.equal(t.fields.task.log.length, 1);
     assert.ok(t.fields.task.done_at > 0);
-    assert.deepEqual(await words(page), ['Board Reel 2', 'Order the storage drive', 'Call Dana about the storyboards'], 'done sinks under the open ones');
+    assert.deepEqual(await words(page), ['Call Dana about the storyboards', 'Board Reel 2', 'Order the storage drive'], 'done stays where it was');
   });
 
   await check('unticking brings it back, with nothing kept of the answer', async () => {
@@ -256,16 +259,16 @@ try {
     await sleep(200);
     assert.equal(await op(), '1');
     assert.equal(await row(page, 'Call Dana').locator('.pl-grip').count(), 0, 'a done task has none');
-    assert.deepEqual((await words(page)).slice(0, 2), ['Board Reel 2', 'Order the 8 TB storage drive']);
+    assert.deepEqual((await todo(page)).slice(0, 2), ['Board Reel 2', 'Order the 8 TB storage drive']);
     await r.locator('.pl-words').focus();
     await page.keyboard.press('Alt+ArrowUp');
-    await page.waitForFunction(() => document.querySelector('#plan .pl-task .pl-words')?.textContent === 'Order the 8 TB storage drive');
+    await page.waitForFunction(() => document.querySelector('#plan .pl-task:not(.done) .pl-words')?.textContent === 'Order the 8 TB storage drive');
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Order the 8 TB storage drive', 'the keyboard stays on it');
     await page.keyboard.press('Alt+ArrowUp');
     await sleep(300);
-    assert.equal((await words(page))[0], 'Order the 8 TB storage drive', 'the top is the top');
+    assert.equal((await words(page))[0], 'Order the 8 TB storage drive', 'past the done one, to the very top');
     await page.keyboard.press('Alt+ArrowDown');
-    await page.waitForFunction(() => document.querySelector('#plan .pl-task .pl-words')?.textContent === 'Board Reel 2');
+    await page.waitForFunction(() => document.querySelector('#plan .pl-task:not(.done) .pl-words')?.textContent === 'Board Reel 2');
     assert.equal((await taskNamed(page, 'Board Reel 2')).fields.task.order < (await taskNamed(page, 'Order the 8 TB storage drive')).fields.task.order, true, 'the order is saved');
     await page.evaluate(() => document.documentElement.classList.add('hide-taskgrip'));
     assert.equal(await r.locator('.pl-grip').isVisible(), false, 'Look can switch the dots off');
@@ -290,14 +293,14 @@ try {
   });
 
   await check('dragging a task up changes the day’s order, and it holds after a reload', async () => {
-    assert.deepEqual((await words(page)).slice(0, 2), ['Board Reel 2', 'Order the 8 TB storage drive']);
+    assert.deepEqual((await todo(page)).slice(0, 2), ['Board Reel 2', 'Order the 8 TB storage drive']);
     await row(page, 'Order the 8 TB').dragTo(row(page, 'Board Reel 2'), { targetPosition: { x: 200, y: 4 } });
     await sleep(500);
-    assert.deepEqual((await words(page)).slice(0, 2), ['Order the 8 TB storage drive', 'Board Reel 2']);
+    assert.deepEqual((await todo(page)).slice(0, 2), ['Order the 8 TB storage drive', 'Board Reel 2']);
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
     await today(page);
-    assert.deepEqual((await words(page)).slice(0, 2), ['Order the 8 TB storage drive', 'Board Reel 2']);
+    assert.deepEqual((await todo(page)).slice(0, 2), ['Order the 8 TB storage drive', 'Board Reel 2']);
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/plan-day.png` });
   });
 

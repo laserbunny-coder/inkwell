@@ -1699,7 +1699,6 @@ button.st-from:hover { color: var(--ink); }
 .wh-stage { border: 0; min-width: 0; padding: 0 8px; font-size: 11.5px; color: var(--bg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: color-mix(in srgb, var(--accent) calc(40% + var(--i) * 12%), var(--panel)); }
 .wh-stage:hover { filter: brightness(1.12); }
 .wh-next li.hint { padding: 4px 0; }
-.wh-task { width: 100%; margin: 8px 0 4px; }
 .wh-recent li { display: flex; gap: 10px; align-items: center; }
 .wh-recent .loose-title { flex: 1; text-align: left; }
 .st-form-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
@@ -1981,3 +1980,67 @@ html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
 .al-words small { color: var(--muted); line-height: 1.4; }
 
 @media (hover: none) { .line-drop { height: 3px; } .line-drop::before { content: ''; position: absolute; left: -7px; top: -3px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--accent); background: var(--bg); box-sizing: border-box; } }
+
+/* ---------- The one box (box.js): Ctrl + K, Ctrl + O, the phone's Go ---------- */
+.palette.box { width: min(680px, calc(100% - 32px)); top: 12vh; display: flex; flex-direction: column; max-height: 78vh; font-family: var(--ui); }
+.palette.box ul#palette-list { max-height: none; flex: 1 1 auto; min-height: 0; padding: 6px 10px 10px; }
+.palette .box-cols { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.palette .box-cols > #palette-list { flex: 1 1 auto; overflow-y: auto; }
+.palette .box-head, .palette .box-foot { display: none; }
+.palette li.box-sec { display: block; cursor: default; padding: 12px 8px 6px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.palette li.box-sec:first-child { padding-top: 6px; }
+.palette li.box-chips { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 6px; padding: 2px 4px; cursor: default; }
+.palette li.box-chips[aria-selected] { background: none; }
+.box-chip { min-height: 36px; padding: 0 13px; border-radius: 99px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: 14px var(--ui); display: inline-flex; align-items: center; cursor: pointer; max-width: 100%; text-align: left; }
+.box-chip.first { background: var(--tint); border-color: transparent; color: var(--accent); }
+.box-chip[aria-selected="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.box-chip[aria-current="page"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.box-chip.quiet { color: var(--muted); }
+.box-chip .keys { margin-left: 10px; font-size: 11px; color: var(--faint); }
+.box-chip[aria-current="page"] .keys { color: inherit; opacity: .8; }
+.palette li.box-row { align-items: center; }
+.palette li.box-row .box-name { overflow-wrap: anywhere; }
+.palette li.box-row .keys { white-space: nowrap; text-align: right; flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+.palette li.box-row.dim .box-name { color: var(--faint); }
+.palette li.box-row.dim .hint { color: var(--faint); font-style: italic; }
+.palette li.box-add .box-name { color: var(--accent); }
+.palette li.box-add.line .box-name, .palette li.box-deep .box-name { color: var(--muted); }
+.palette li.box-allrow { margin-top: 6px; border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; padding-top: 12px; }
+.palette li.box-allrow .box-name { font-weight: 600; }
+.palette li.box-none { text-transform: none; letter-spacing: 0; font-size: 13px; }
+.palette li.urgent .box-name { color: var(--accent); font-weight: 600; }
+/* All commands on a computer: wider, two columns. */
+.palette.box.box-all { width: min(900px, calc(100% - 32px)); height: 78vh; }
+.palette.box-all .box-groups { list-style: none; margin: 0; padding: 8px; width: 220px; max-height: none; flex: none; overflow-y: auto; border-right: 1px solid var(--line); }
+.palette.box-all .box-group { padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--muted); }
+.palette.box-all .box-group[aria-current="true"] { color: var(--ink); background: var(--tint); font-weight: 600; }
+.palette.box-all .box-group[aria-selected="true"] { outline: 1px solid var(--accent); }
+.palette.box-all li.box-row .hint { font-size: 12.5px; }
+.palette.box-all li.box-gh { padding-top: 14px; }
+.palette.box-all .box-foot { display: block; margin: 0; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--faint); }
+.palette.box-all .box-foot[hidden] { display: none; }
+@media (hover: none) {
+  /* The phone: a sheet from the bottom; while you type it rises above the keyboard. */
+  .palette.box { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: auto; max-height: 86vh; border-radius: 20px 20px 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .palette.box::before { content: ''; display: block; align-self: center; width: 40px; height: 4px; border-radius: 4px; background: var(--line); margin: 10px 0 0; flex: none; }
+  .palette.box input { font-size: 16px; padding: 14px 18px; }
+  .palette.box.box-typing { top: 0; bottom: auto; border-radius: 0 0 20px 20px; max-height: calc(var(--box-vh, 100vh) - 8px); }
+  .palette.box.box-typing::before { display: none; }
+  .palette li.box-row { min-height: 44px; }
+  .palette.box li.box-row .keys { display: inline; font-size: 11.5px; }
+  .box-chip { min-height: 42px; }
+  .box-chip[aria-selected="true"] { box-shadow: none; border-color: var(--line); }
+  .box-chip.first[aria-selected="true"] { border-color: transparent; }
+  /* All commands: the whole height, groups folding open in place. */
+  .palette.box.box-all { top: 0; bottom: 0; height: auto; max-height: none; border-radius: 0; width: auto; }
+  .palette.box.box-all::before { display: none; }
+  .palette.box-all .box-head { display: flex; align-items: center; gap: 10px; padding: 10px 10px 4px; flex: none; }
+  .palette.box-all .box-head[hidden] { display: none; }
+  .box-back { border: 0; background: none; color: var(--accent); font: 600 15px var(--ui); min-height: 44px; padding: 0 10px; }
+  .box-title { font: 600 16px var(--ui); color: var(--ink); }
+  .palette.box-all .box-groups { display: none; }
+  .palette li.box-fold { font-weight: 600; border-bottom: 1px solid var(--line); border-radius: 0; }
+  .palette li.box-fold .keys { display: inline !important; color: var(--muted); }
+  .palette li.box-in { padding-left: 18px; }
+  .palette.box-all.box-typing { top: 0; bottom: auto; height: calc(var(--box-vh, 100vh)); }
+}

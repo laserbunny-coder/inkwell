@@ -61,6 +61,9 @@ const clock = (task, now) => {
 // open that entry beside (null when there's none), ahead() → the lanes and
 // dates for Weeks ahead, talk() → a way to open Claude beside (or null).
 // steps is where a project's own tasks show on its page.
+// Your order on a day's list (the same as tasks.js keeps it).
+const orderOf = (a, b) => (a.task.order || 0) - (b.task.order || 0) || (a.row.created_at || 0) - (b.row.created_at || 0) || (a.row.id < b.row.id ? -1 : 1);
+
 export class Plan {
   constructor({ box, sheet, steps = null, hooks }) {
     this.box = box;
@@ -132,7 +135,7 @@ export class Plan {
   // A project's page calls this when it opens: its own tasks, wherever in
   // the project they're written.
   async showSteps(world) {
-    if (this.world?.id !== world?.id) this.allDone = false;
+    if (this.world?.id !== world?.id) { this.allDone = false; this.peekDone = false; }
     this.world = world || null;
     if (this.world) await this.refresh();
     else this.steps?.replaceChildren();
@@ -442,15 +445,41 @@ export class Plan {
     cal.setAttribute('aria-label', 'On your calendar');
     for (const e of top) cal.append(this.eventLine(e, 'pl-ev'));
     cal.hidden = !top.length;
-    const row = (i) => this.taskRow(i, { next: day === today && i === p.next });
+    const row = (i) => this.taskRow(i, { next: day === today && i === p.next, inplace: !!i.row.fields?.done });
+    // Done tasks stay where they were in your order; with "Done tasks in the
+    // list" off they're out of sight, under one faint "3 done" line.
+    const { list: open, hid } = this.withDone(p.open, p.done, (i) => i.task.day === day || (i.ghost && i.occ === day));
     const above = [
       ...missed.flatMap((i) => this.taskRow(i, { carried: true, next: day === today && i === p.next })),
       ...(early ? [early.el] : []),
       ...(showOld ? old.flatMap((i) => this.taskRow(i, { carried: true, next: day === today && i === p.next })) : []),
-      ...(timed.length ? weave(p.open, timed, day, Date.now(), today).flatMap((x) => (x.event ? [this.wovenEvent(x.event, x.at)] : row(x.item))) : p.open.flatMap(row))
+      ...(timed.length ? weave(open, timed, day, Date.now(), today).flatMap((x) => (x.event ? [this.wovenEvent(x.event, x.at)] : row(x.item))) : open.flatMap(row))
     ];
-    const below = p.done.flatMap((i) => this.taskRow(i, {}));
+    const below = hid ? [this.doneLine(hid)] : [];
     return { p, evs, cal, above, below };
+  }
+
+  // Open tasks with the done ones among them, each at its place in your order
+  // (`here`: done ones that belong to this list's order; the rest go after, in
+  // the order they were done). Hidden: only the open ones, and how many are done
+  // (a just-ticked one stays in sight for its Undo and "How long?").
+  withDone(open, done, here = () => true, by = orderOf) {
+    const hide = this.hooks.off?.('donetasks') && !this.peekDone;
+    const keep = hide ? done.filter((i) => i.row.id === this.just || i.row.id === this.took) : done;
+    const inOrder = keep.filter(here);
+    const after = keep.filter((i) => !here(i));
+    const list = [...open, ...inOrder].sort(by).concat(after);
+    const hid = this.hooks.off?.('donetasks') ? done.length - keep.length || (this.peekDone ? done.length : 0) : 0;
+    return { list, hid };
+  }
+
+  // "3 done": tap to see them for a moment (until you leave), again to put them away.
+  doneLine(n) {
+    const b = make('button', `pl-doneline${this.peekDone ? ' open' : ''}`, this.peekDone ? `Hide the ${n} done` : `${n} done`);
+    b.dataset.act = 'peek-done';
+    b.title = this.peekDone ? 'Put the done tasks out of sight again' : 'Show the done tasks for now (Look: “Done tasks in the list” shows them always)';
+    b.setAttribute('aria-expanded', String(!!this.peekDone));
+    return b;
   }
 
   // The list itself, kept in place while something is being typed into it.
@@ -733,21 +762,17 @@ export class Plan {
     const today = this.today;
     const mine = this.items.filter((i) => i.world?.id === w.id);
     const at = (i) => i.task.day || spanOf(i.task)?.start || (spanOf(i.task) ? '9998' : '9999');
-    const open = mine.filter((i) => !i.row.fields?.done).sort((a, b) => at(a).localeCompare(at(b)) || (a.task.order || 0) - (b.task.order || 0) || (a.row.created_at || 0) - (b.row.created_at || 0));
-    const done = mine.filter((i) => i.row.fields?.done).sort((a, b) => (b.task.done_at || 0) - (a.task.done_at || 0));
+    const by = (a, b) => at(a).localeCompare(at(b)) || (a.task.order || 0) - (b.task.order || 0) || (a.row.created_at || 0) - (b.row.created_at || 0);
+    const done = mine.filter((i) => i.row.fields?.done);
+    // Done steps stay where they were among the rest (or out of sight, under "N done").
+    const { list: open, hid } = this.withDone(mine.filter((i) => !i.row.fields?.done), done, () => true, by);
     const held = this.held(box);
     const head = make('h2', 'wp-sec', 'Steps');
     if (mine.length) head.append(make('span', 'wp-more', `${done.length} of ${mine.length} done`));
     // Where a step is written, unless it's the project's own Steps page.
     const place = (i) => (i.root.id === stepsPage(w.id) ? '' : i.root.title || 'Untitled');
     const above = open.flatMap((i) => this.taskRow(i, { when: true, drag: false, place: place(i) }));
-    const few = 3;
-    const below = (this.allDone ? done : done.slice(0, few)).flatMap((i) => this.taskRow(i, { when: true, drag: false, place: place(i) }));
-    if (done.length > few) {
-      const b = make('button', 'wp-link pl-alldone', this.allDone ? 'Fewer' : `${done.length - few} more done`);
-      b.dataset.act = 'all-done';
-      below.push(b);
-    }
+    const below = hid ? [this.doneLine(hid)] : [];
     const typing = this.typingIn(box, 'steps');
     if (typing) {
       for (const el of [...box.children]) if (el !== typing.list) el.remove();
@@ -755,7 +780,8 @@ export class Plan {
       this.fillAround(typing.list, typing.row, above, below);
     } else {
       const list = make('div', 'pl-list');
-      const add = this.addRow(null, 'Add a step');
+      // A life project suggests a first step that fits it ("Book the campsite…").
+      const add = this.addRow(null, (w.fields?.life && this.hooks.stepHint?.(w)) || 'Add a step');
       add.querySelector('input').dataset.add = 'steps';
       add.querySelector('input').setAttribute('aria-label', `Add a step to ${w.title || 'this project'}`);
       list.append(...above, add, ...below);
@@ -799,7 +825,7 @@ export class Plan {
     return row;
   }
 
-  taskRow(i, { carried = false, next = false, when = false, drag = true, place = null, tag = '' }) {
+  taskRow(i, { carried = false, next = false, when = false, drag = true, place = null, tag = '', inplace = false }) {
     const t = i.task;
     const id = i.row.id;
     const done = !!i.row.fields?.done;
@@ -807,6 +833,7 @@ export class Plan {
     const ghost = !!i.ghost;
     const row = make('div', `pl-task${done ? ' done' : ''}${next ? ' next' : ''}${t.run ? ' timing' : ''}${carried ? ' carried' : ''}${this.just === id && !ghost ? ' justdone' : ''}${ghost ? ' ghost' : ''}${t.habit ? ' habit' : ''}`);
     row.dataset.task = id;
+    if (inplace) row.classList.add('inplace');
     if (this.sel?.has(id)) row.classList.add('sel');
     if (i.occ) row.dataset.occ = i.occ;
     if (ghost) row.dataset.ghost = i.ghost;
@@ -1037,6 +1064,19 @@ export class Plan {
     try { localStorage.setItem('planOpen', JSON.stringify([...all])); } catch { /* no storage here */ }
   }
 
+  // Tomorrow, the weeks, later and Not planned: shown or not, on this device.
+  restOpen() { try { return localStorage.getItem('planRest') === '1'; } catch { return false; } }
+  restLine(n) {
+    const open = this.restOpen();
+    const b = make('button', `past-toggle pl-restline${open ? ' open' : ''}`);
+    b.dataset.act = 'pl-restline';
+    b.setAttribute('aria-expanded', String(open));
+    b.setAttribute('aria-label', `${open ? 'Hide' : 'Show'} tomorrow, the weeks ahead, later and not planned${n ? ` (${n})` : ''}`);
+    b.title = open ? 'Back to just today' : 'Tomorrow, this week, next week, this month, later, not planned';
+    b.append(make('span', '', open ? 'Just today' : `Tomorrow and later${n ? ` · ${n}` : ''}`));
+    return b;
+  }
+
   // Every open task of yours with no day and no time.
   unplanned(h = horizon(this.today)) {
     return this.items.filter((i) => i.mine && !i.row.fields?.done && !isStretch(i.task) && !i.ghost && !whenOf(i.task, h));
@@ -1091,6 +1131,14 @@ export class Plan {
       rest.push(s.el);
     }
     rest.push(this.unplannedSec(h, opens.has('none')));
+    // The rest waits behind one thin line, so Plan opens on Today alone.
+    // A drag opens it for as long as it lasts, so every heading takes a drop.
+    const later = heads.slice(1).reduce((a, x) => a + x.items.length, 0) + this.unplanned(h).length;
+    const more = this.restLine(later);
+    const wrap = make('div', `pl-rest${this.restOpen() ? ' open' : ''}`);
+    wrap.append(...rest);
+    rest.length = 0;
+    rest.push(more, wrap);
     if (typing) {
       // Adding one after another: Today stays where it is, the rest is drawn around it.
       const keep = list.closest('.ww-sec');
@@ -1260,7 +1308,7 @@ export class Plan {
     if (!el) return null;
     const zone = el.closest?.('.pz');
     if (zone) return { pz: zone };
-    const rowsOf = (list) => [...list.querySelectorAll('.pl-task:not(.done):not(.ghost)')].filter((r) => !list.hidden && r.getClientRects().length);
+    const rowsOf = (list) => [...list.querySelectorAll('.pl-task:is(:not(.done), .inplace):not(.ghost)')].filter((r) => !list.hidden && r.getClientRects().length);
     const afterIn = (rows) => { let after = null; for (const r of rows) { const b = r.getBoundingClientRect(); if (y > b.top + b.height / 2) after = r; } return after; };
     // A heading of Plan (or one of the lines under today's list): open or folded.
     {
@@ -1676,6 +1724,8 @@ export class Plan {
     if (act === 'all-done') { this.allDone = !this.allDone; return this.drawSteps(); }
     if (act === 'pull') return this.hooks.pull?.();
     if (act === 'ww-group') { this.groupsOpen ||= new Set(); const k = el.dataset.group; if (this.groupsOpen.has(k)) this.groupsOpen.delete(k); else this.groupsOpen.add(k); return this.redraw(); }
+    if (act === 'peek-done') { this.peekDone = !this.peekDone; return this.redraw(); }
+    if (act === 'pl-restline') { try { localStorage.setItem('planRest', this.restOpen() ? '0' : '1'); } catch { /* no storage here */ } return this.redraw(); }
     if (act === 'ww-fold') { const sec = el.closest('.ww-sec'); this.planFold(sec.dataset.bucket, sec.classList.contains('folded')); return this.redraw(); }
     if (act === 'kid') {
       if (e.target.closest('a[href]')) return;
@@ -1848,7 +1898,7 @@ export class Plan {
       if (top) ids.unshift(id); else ids.push(id);
       return arrangeCarried(ids).then((rows) => this.wrote(rows));
     }
-    const seq = [...list.querySelectorAll('.pl-task[data-move]:not(.carried):not(.ghost), .pl-wev')].filter((x) => x.dataset.task !== id);
+    const seq = [...list.querySelectorAll('.pl-task:is([data-move], .inplace):not(.carried):not(.ghost), .pl-wev')].filter((x) => x.dataset.task !== id);
     if (top) seq.unshift({ id }); else seq.push({ id });
     return this.settle(list, seq, id);
   }
@@ -1860,11 +1910,15 @@ export class Plan {
     if (!row) return false;
     const list = row.closest('.pl-list');
     const old = row.classList.contains('carried');
-    const seq = [...list.querySelectorAll(old ? '.pl-task.carried[data-move]' : '.pl-task[data-move]:not(.carried):not(.ghost), .pl-wev')];
+    const seq = [...list.querySelectorAll(old ? '.pl-task.carried[data-move]' : '.pl-task:is([data-move], .inplace):not(.carried):not(.ghost), .pl-wev')];
     const at = seq.indexOf(row);
-    const to = at + (e.key === 'ArrowUp' ? -1 : 1);
+    // Done ones keep their places: one press steps past them to the next open task.
+    const dir = e.key === 'ArrowUp' ? -1 : 1;
+    let to = at + dir;
+    while (to >= 0 && to < seq.length && seq[to].classList?.contains('done')) to += dir;
+    to = Math.max(0, Math.min(seq.length - 1, to));
     e.preventDefault();
-    if (at < 0 || to < 0 || to >= seq.length) return true;
+    if (at < 0 || to === at) return true;
     seq.splice(to, 0, ...seq.splice(at, 1));
     const id = row.dataset.task;
     const which = e.target.dataset.act || 'words';
@@ -1941,6 +1995,10 @@ export class Plan {
       else if (this.dayShown) this.took = id;
     }
     await this.wrote(row);
+    // Out of sight once ticked: Undo is right there, in case it was the wrong one.
+    if (done && row && this.hooks.off?.('donetasks')) {
+      this.hooks.toast?.(`“${clip(i.row.text)}” done, and out of sight`, { label: 'Undo', run: async () => { this.just = null; await this.wrote(await tickTask(id, false, Date.now(), i.occ || null)); } });
+    }
   }
 
   async tookFor(i, minutes) {
@@ -2162,7 +2220,7 @@ export class Plan {
       }
       if (!list) return null;
       // In a woven plan the events count as places too: a task can go just above or below one.
-      const all = [...list.querySelectorAll('.pl-task:not(.done):not(.ghost), .pl-wev')].filter((r) => r.dataset.task !== id);
+      const all = [...list.querySelectorAll('.pl-task:is(:not(.done), .inplace):not(.ghost), .pl-wev')].filter((r) => r.dataset.task !== id);
       let after = null;
       for (const r of all) { const b = r.getBoundingClientRect(); if (e.clientY > b.top + b.height / 2) after = r; }
       // Tasks from earlier days sit on top. One of those can move among them
@@ -2216,9 +2274,17 @@ export class Plan {
       id = row.dataset.task;
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', row.textContent.trim());
-      requestAnimationFrame(() => row.classList.add('dragging'));
+      requestAnimationFrame(() => { row.classList.add('dragging'); document.documentElement.classList.add('pl-dragging'); });
     });
-    root.addEventListener('dragend', () => { id = null; clear(); root.querySelectorAll('.dragging').forEach((x) => x.classList.remove('dragging')); });
+    // The row may be drawn anew before the drag ends, so its dragend never comes: any drop, or the mouse moving free again, ends it too.
+    if (!Plan.dragEnds) {
+      Plan.dragEnds = true;
+      const end = () => document.documentElement.classList.remove('pl-dragging');
+      document.addEventListener('drop', end, true);
+      document.addEventListener('dragend', end, true);
+      document.addEventListener('mousemove', (e) => { if (!e.buttons && document.documentElement.classList.contains('pl-dragging')) end(); }, true);
+    }
+    root.addEventListener('dragend', () => { id = null; clear(); document.documentElement.classList.remove('pl-dragging'); root.querySelectorAll('.dragging').forEach((x) => x.classList.remove('dragging')); });
     root.addEventListener('dragover', (e) => {
       if (!id) return;
       const s = spot(e);

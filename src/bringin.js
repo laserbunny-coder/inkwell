@@ -2,7 +2,6 @@ import { putEntries, getEntry, byKind, children } from './db.js';
 import { entry, newId, tagsIn } from './model.js';
 import { worlds, worldTree } from './library.js';
 import { setAbout } from './claudeknows.js';
-import { taskFor, queueTask } from './daybook.js';
 import { trash, inTrash } from './trash.js';
 
 // Bring in old notes: a section copied (or exported) out of Thymer, Tana,
@@ -16,7 +15,7 @@ import { trash, inTrash } from './trash.js';
 // lines under it (kind 'line', nested), the page's tags, and its about line.
 // "Into the drawer" makes one #drawer line holding the whole thing on the loose
 // page "Brought in" instead. Old to-dos never come in as checkboxes; the live
-// ones can go to Daybook's Inbox from the same box.
+// ones can come in as tasks (not planned yet) from the same box.
 
 export const APPS = [['thymer', 'Thymer'], ['tana', 'Tana'], ['workflowy', 'Workflowy'], ['onenote', 'OneNote'], ['other', 'Somewhere else']];
 const APP_NAME = Object.fromEntries(APPS);
@@ -290,11 +289,11 @@ async function drawerPage() {
 
 /**
  * Brings it in. `into` is a world, life project or page id, '' for a loose
- * page, or 'drawer'. `toDaybook` lists the to-do lines (from `got.lines`) to
- * send. Returns { page, line, rows, tasks }: `line` is the drawer line when
- * it went to the drawer.
+ * page, or 'drawer'. `asTasks` lists the to-do lines (from `got.lines`) to
+ * make tasks (not planned yet). Returns { page, line, rows, tasks }: `line` is
+ * the drawer line when it went to the drawer.
  */
-export async function bringIn(got, { into = '', title = '', about = '', tags = [], app = 'other', name = '', toDaybook = [], base = '' } = {}) {
+export async function bringIn(got, { into = '', title = '', about = '', tags = [], app = 'other', name = '', asTasks = [] } = {}) {
   const now = Date.now();
   const from = { app, at: new Date(now).toISOString(), ...(name ? { name } : {}) };
   const name0 = (title || got.title || 'Untitled').trim();
@@ -316,15 +315,13 @@ export async function bringIn(got, { into = '', title = '', about = '', tags = [
   }
   const { rows, map } = rowsFor(got.lines, holder.id);
   const tasks = [];
-  for (const l of toDaybook) {
+  for (const l of asTasks) {
     const r = map.get(l);
     if (!r) continue;
-    const task = taskFor(r, base);
-    r.fields = { ...r.fields, daybook: { id: task.id, at: now } };
-    tasks.push(task);
+    r.fields = { ...r.fields, box: true, task: { v: 1, day: null, est: null, done_at: null, actual: null, log: [], run: null, order: 0, span: null } };
+    tasks.push(r);
   }
   await putEntries([...pre, ...rows]);
-  for (const t of tasks) await queueTask(t);
   if (into !== 'drawer' && about.trim()) await setAbout(page, { text: about });
   return { page, line: into === 'drawer' ? holder : null, rows: [...pre, ...rows], tasks };
 }
@@ -343,7 +340,7 @@ export async function broughtIn() {
 
 /**
  * Opens the Bring in box. hooks: { ask, canAsk, toast, open(row), applied(rows),
- * sendTasks(), relink(fromLink, toLink), base, tags() }.
+ * base, tags() }.
  */
 export async function openBringIn(hooks) {
   document.querySelector('.bi-backdrop')?.remove();
@@ -474,9 +471,6 @@ export async function openBringIn(hooks) {
   const tagsIn_ = make('input', 'ask-input bi-tags');
   tagsIn_.setAttribute('aria-label', 'Tags');
   tagsIn_.placeholder = 'Tags, like ninja-bunch, songs';
-  const thymerIn = make('input', 'ask-input bi-thymer');
-  thymerIn.setAttribute('aria-label', 'Thymer link');
-  thymerIn.placeholder = 'The Thymer page’s link (optional): Daybook tasks pointing there will open this instead';
   const status = make('p', 'hint bi-status');
   let todoBoxes = [];
 
@@ -490,10 +484,8 @@ export async function openBringIn(hooks) {
   }
   for (const el of [titleIn, placeSel, aboutIn, tagsIn_]) el.addEventListener('input', () => { el.dataset.touched = '1'; });
   placeSel.addEventListener('change', () => { placeSel.dataset.touched = '1'; });
-  appPick.addEventListener('change', () => { thymerRow.hidden = appPick.value !== 'thymer'; });
 
   const field = (label, el) => { const l = make('label', 'bi-field'); l.append(make('span', '', label), el); return l; };
-  const thymerRow = field('Thymer link', thymerIn);
   const todoBox = make('div', 'bi-todos');
   const tree = make('ul', 'bi-tree');
   const go = make('button', 'pill primary bi-go', 'Bring it in');
@@ -508,7 +500,7 @@ export async function openBringIn(hooks) {
     const all = got ? todosIn(got.lines) : [];
     if (!all.length) return;
     const live = new Set(asked?.todoLines || []);
-    todoBox.append(make('p', 'bi-sub', `Old to-dos (${all.length}). They come in as plain lines. Tick any to send to Daybook’s Inbox too${asked ? '; Claude ticked the ones that still look alive' : ''}.`));
+    todoBox.append(make('p', 'bi-sub', `Old to-dos (${all.length}). They come in as plain lines. Tick any to make them tasks too (not planned yet, in Plan)${asked ? '; Claude ticked the ones that still look alive' : ''}.`));
     for (const l of all.slice(0, 30)) {
       const row = make('label', 'bi-todo');
       const cb = make('input');
@@ -527,7 +519,6 @@ export async function openBringIn(hooks) {
     if (!titleIn.dataset.touched) titleIn.value = got.title || '';
     const g = guessApp(src);
     if (g) appPick.value = g;
-    thymerRow.hidden = appPick.value !== 'thymer';
     tree.replaceChildren();
     let shown = 0;
     const walk = (list, ul) => {
@@ -545,7 +536,7 @@ export async function openBringIn(hooks) {
     actions.append(again, go);
     preview.append(
       make('p', 'bi-sub', `${n} line${n === 1 ? '' : 's'}${n > shown ? `, first ${shown} shown` : ''}`), tree,
-      field('Title', titleIn), field('Goes in', placeSel), field('About', aboutIn), field('Tags', tagsIn_), field('Came from', appPick), thymerRow,
+      field('Title', titleIn), field('Goes in', placeSel), field('About', aboutIn), field('Tags', tagsIn_), field('Came from', appPick),
       todoBox, status, actions
     );
     drawTodos();
@@ -560,21 +551,17 @@ export async function openBringIn(hooks) {
       const res = await bringIn(got, {
         into: placeSel.value, title: titleIn.value, about: aboutIn.value,
         tags: tagsIn_.value.split(/[,\s]+/), app: appPick.value, name: src.file,
-        toDaybook: todoBoxes.filter(([cb]) => cb.checked).map(([, l]) => l), base: hooks.base
+        asTasks: todoBoxes.filter(([cb]) => cb.checked).map(([, l]) => l)
       });
       await hooks.applied?.(res.rows);
       let note = '';
-      if (res.tasks.length) { const sent = await hooks.sendTasks?.(); note = sent ? `, ${res.tasks.length} to Daybook` : ', to-dos go to Daybook once you’re online'; }
-      const link = thymerIn.value.trim();
-      if (appPick.value === 'thymer' && link && into(res) && hooks.relink) {
-        try { const n = await hooks.relink(link, `${hooks.base}?open=${encodeURIComponent(into(res).id)}`); if (n) note += `, ${n} Daybook task${n === 1 ? '' : 's'} now open it`; } catch (e) { console.warn(e); note += ', couldn’t switch the Daybook links (try again online)'; }
-      }
+      if (res.tasks.length) note = `, ${res.tasks.length === 1 ? '1 task' : `${res.tasks.length} tasks`} in Plan (not planned yet)`;
       hooks.toast(`“${(res.line || res.page).title || titleIn.value || 'It'}” is in${note}`.replace(/“”/, 'It'));
       // Ready for the next one.
       got = null; asked = null; src = { text: '', html: '', name: '', file: '' };
       area.value = '';
       for (const el of [titleIn, placeSel, aboutIn, tagsIn_]) delete el.dataset.touched;
-      aboutIn.value = ''; tagsIn_.value = ''; thymerIn.value = ''; titleIn.value = '';
+      aboutIn.value = ''; tagsIn_.value = ''; titleIn.value = '';
       preview.replaceChildren();
       await drawDone();
       if (files.length) await takeFile(files.shift());

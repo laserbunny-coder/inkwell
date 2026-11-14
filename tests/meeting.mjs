@@ -1,9 +1,10 @@
 // Meetings: a recording shared into Inkwell (or added with Ctrl + K) is
 // written out with each speaker told apart, and becomes a meeting page with a
-// summary, what was decided, the tasks and the write-out; your own tasks go
-// to Daybook in the meeting's area. A shared recording with one voice is an
-// idea, written up like a Capture. window.__claude stands in for the server,
-// window.__daybook for Daybook's table and window.__areas for its areas.
+// summary, what was decided, the tasks and the write-out; your own tasks
+// become tasks here (a business meeting goes to Acro HQ once that's set up).
+// A shared recording with one voice is an idea, written up like a Capture.
+// window.__claude stands in for the server; window.__daybook only checks
+// nothing goes to Daybook any more.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -164,13 +165,20 @@ try {
     assert.equal(said[1].content[0].marks[0].type, 'bold');
   });
 
-  await check('your tasks and nobody’s go to Daybook in Business; Nate’s stay on the page', async () => {
-    await page.waitForFunction(() => true);
-    for (let i = 0; i < 40 && sent.length < 2; i++) await sleep(150);
-    assert.deepEqual(sent.map((t) => t.title).sort(), ['Decide the sibling price', 'Send the camp flyer to parents']);
-    assert.ok(sent.every((t) => t.area_id === 'area-biz'));
-    assert.match(sent.find((t) => /flyer/.test(t.title)).notes, /By Oct 30\. From Summer camp with Nate\./);
-    assert.match(sent[0].link, /\?open=pg_meet-/);
+  await check('your tasks and nobody’s become tasks here (on their due day); Nate’s stay plain lines', async () => {
+    const meeting = (await entries(page, 'page')).find((p) => p.fields?.meeting);
+    let lines = [];
+    for (let i = 0; i < 40; i++) {
+      lines = (await entries(page, 'line')).filter((l) => l.parent_id === `${meeting.id}-do`);
+      if (lines.filter((l) => l.fields?.task).length >= 2) break;
+      await sleep(150);
+    }
+    const tasks = lines.filter((l) => l.fields?.task).map((l) => l.text).sort();
+    assert.deepEqual(tasks, ['Decide the sibling price', 'Send the camp flyer to parents · Michael · by Oct 30']);
+    assert.equal(lines.find((l) => /flyer/.test(l.text)).fields.task.day, '2026-10-30');
+    assert.equal(lines.find((l) => /sibling/.test(l.text)).fields.task.day, null, 'no due day: not planned yet');
+    assert.ok(!lines.find((l) => /gym/.test(l.text)).fields?.task, 'Nate’s stays a plain line');
+    assert.equal(sent.length, 0, 'nothing to Daybook');
   });
 
   await check('a speaker’s name can be fixed on every line they said', async () => {
@@ -202,7 +210,7 @@ try {
   });
 
   let second;
-  await check('once Acro HQ is set up, a business meeting and all its tasks go there, not to Daybook', async () => {
+  await check('once Acro HQ is set up, a business meeting and all its tasks go there', async () => {
     acro.on = true;
     const before = sent.length;
     const had = new Set((await entries(page, 'page')).filter((p) => p.fields?.meeting).map((p) => p.id));
@@ -223,6 +231,7 @@ try {
     assert.match(b.tasks[1].notes, /\?open=/);
     await sleep(300);
     assert.equal(sent.length, before, 'nothing to Daybook');
+    assert.ok(!(await entries(page, 'line')).some((l) => l.parent_id === `${second.id}-do` && l.fields?.task), 'Acro HQ has them; no tasks here');
     const p = (await entries(page, 'page')).find((x) => x.id === second.id);
     assert.ok(p.fields.meeting.acro, 'the page knows it went');
     const lines = (await entries(page, 'line')).filter((l) => l.parent_id === `${second.id}-do`);

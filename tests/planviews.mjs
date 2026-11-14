@@ -21,7 +21,7 @@ const browser = withoutSync(await chromium.launch());
 
 let failed = 0;
 async function check(name, fn) {
-  try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message.split('\n').slice(0, 8).join('\n     ')}`); }
+  try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message.split('\n').slice(0, 30).join('\n     ')}`); }
 }
 const started = (p) => p.waitForFunction(() => document.documentElement.dataset.started === '1');
 const go = async (p, place) => {
@@ -40,6 +40,7 @@ const TODAY = ['Pick up the drives', 'Grade reel 1', 'Call Dana', 'Book the hall
 
 async function device(opts, { estimates = false, todayPage = false } = {}) {
   const ctx = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', estimates, todayPage, ...opts });
+  await ctx.addInitScript(() => { try { if (localStorage.getItem('planRest') === null) localStorage.setItem('planRest', '1'); } catch { /* no storage */ } }); // the rest of Plan shown, as before its line
   await ctx.addInitScript(() => { try { if (!sessionStorage.getItem('pv')) { sessionStorage.setItem('pv', '1'); localStorage.setItem('todayPhone', 'plan'); } } catch { /* no storage */ } });
   const p = await ctx.newPage();
   p.errors = [];
@@ -63,6 +64,7 @@ async function device(opts, { estimates = false, todayPage = false } = {}) {
   return p;
 }
 const heads = (p, root) => p.locator(`${root} .ww-sec .ww-name`).allInnerTexts();
+const spanKind = (t) => t?.span?.kind || (t?.later ? 'later' : '');
 const HEADS = ['Today', 'Tomorrow', 'This week', 'Next week', 'This month', 'Later', 'Not planned'];
 
 try {
@@ -173,6 +175,79 @@ try {
     assert.deepEqual(pc.errors, []);
   });
 
+  await check('computer: Plan opens on Today alone, with one thin line for the rest; it opens, closes and is remembered', async () => {
+    await pc.evaluate(() => localStorage.setItem('planRest', '0'));
+    await go(pc, { view: 'plan', tab: 'plan' });
+    await pc.waitForSelector('#plan-sheet .pl-restline');
+    assert.deepEqual(await pc.locator('#plan-sheet .ww-sec:visible > .ww-h .ww-name').allInnerTexts(), ['Today'], await pc.evaluate(() => `${document.documentElement.className} | ${document.querySelector('#plan-sheet .pl-rest')?.className} | ${localStorage.getItem('planRest')}`));
+    assert.match(await pc.locator('#plan-sheet .pl-restline').innerText(), /Tomorrow and later/i);
+    await pc.locator('#plan-sheet .pl-restline').click();
+    await pc.waitForSelector('#plan-sheet .pl-rest.open');
+    assert.deepEqual(await pc.locator('#plan-sheet .ww-sec:visible > .ww-h .ww-name').allInnerTexts(), HEADS);
+    await pc.reload();
+    await started(pc);
+    await go(pc, { view: 'plan', tab: 'plan' });
+    await pc.waitForSelector('#plan-sheet .pl-rest.open');
+    assert.match(await pc.locator('#plan-sheet .pl-restline').innerText(), /Just today/i);
+    await pc.locator('#plan-sheet .pl-restline').click();
+    await pc.waitForSelector('#plan-sheet .pl-rest:not(.open)', { state: 'attached' });
+    assert.equal(await pc.locator('#plan-sheet .ww-sec[data-bucket="later"]').isVisible(), false);
+  });
+
+  await check('computer: while a task is dragged the rest opens, and a drop on Later works', async () => {
+    const row = pc.locator('#plan-sheet .ol-today .pl-task', { hasText: 'Grade reel 1' });
+    const b = await row.boundingBox();
+    await pc.mouse.move(b.x + 40, b.y + b.height / 2);
+    await pc.mouse.down();
+    await pc.mouse.move(b.x + 60, b.y + b.height / 2 + 20, { steps: 4 });
+    await sleep(150);
+    assert.ok(await pc.locator('#plan-sheet .ww-sec[data-bucket="later"]').isVisible(), 'Later shows during the drag');
+    const later = await pc.locator('#plan-sheet .ww-sec[data-bucket="later"] .ww-fold').boundingBox();
+    await pc.mouse.move(later.x + 30, later.y + later.height / 2, { steps: 6 });
+    await pc.mouse.up();
+    await sleep(600);
+    assert.equal(spanKind((await named(pc, 'Grade reel 1')).fields.task), 'later');
+    await pc.locator('.toast button', { hasText: 'Undo' }).click();
+    await sleep(500);
+    assert.equal(await pc.locator('#plan-sheet .ww-sec[data-bucket="later"]').isVisible(), false, 'closed again after');
+    await pc.evaluate(() => localStorage.setItem('planRest', '1'));
+  });
+
+  await check('computer: a ticked task stays where it was; “Done tasks in the list” off hides it under “1 done”, with Undo', async () => {
+    await pc.keyboard.press('Alt+1');
+    await pc.waitForSelector('#plan .pl-task');
+    const words = () => pc.locator('#plan .pl-list .pl-task:not(.carried) .pl-words').allInnerTexts();
+    const before = await words();
+    const second = before[1];
+    await pc.locator('#plan .pl-task', { hasText: second }).locator('.pl-check').click();
+    await sleep(500);
+    await pc.keyboard.press('Escape'); // no "How long?" in the way
+    assert.deepEqual(await words(), before, 'same order after the tick');
+    assert.ok(await pc.locator('#plan .pl-task.done', { hasText: second }).count());
+    await pc.evaluate(() => { const c = document.querySelector('[data-show="donetasks"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); });
+    await sleep(300);
+    assert.equal(await pc.locator('#plan .pl-task', { hasText: second }).count(), 0, 'out of sight');
+    assert.equal(await pc.locator('#plan .pl-doneline').innerText(), '1 done');
+    await pc.locator('#plan .pl-doneline').click();
+    await sleep(200);
+    assert.deepEqual(await words(), before, 'a tap shows it, in its place');
+    await pc.locator('#plan .pl-doneline').click();
+    const third = before[2];
+    await pc.locator('#plan .pl-task', { hasText: third }).locator('.pl-check').click();
+    await sleep(400);
+    await pc.keyboard.press('Escape');
+    assert.match(await pc.locator('.toast').innerText(), /out of sight/);
+    await pc.locator('.toast button', { hasText: 'Undo' }).click();
+    await sleep(500);
+    assert.ok(!(await named(pc, third)).fields.done, 'Undo unticks it');
+    await pc.locator('#plan .pl-task', { hasText: second }).count();
+    await pc.locator('#plan .pl-doneline').click();
+    await pc.locator('#plan .pl-task', { hasText: second }).locator('.pl-check').click();
+    await sleep(400);
+    await pc.evaluate(() => { const c = document.querySelector('[data-show="donetasks"]'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); });
+    assert.deepEqual(pc.errors, []);
+  });
+
   // ---------- phone ----------
   const phone = await device({ viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true });
 
@@ -181,6 +256,18 @@ try {
     await go(phone, { view: 'notebook', pageId: 'day-2026-11-14' });
     assert.deepEqual(await phone.locator('.tp-switch .pl-switch button').allInnerTexts(), ['Page', 'Plan', 'Calendar']);
     assert.deepEqual(await heads(phone, '#plan'), HEADS);
+    assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth - innerWidth), 0);
+  });
+
+  await check('phone: Plan opens on Today alone; a tap on the thin line shows the rest', async () => {
+    await phone.evaluate(() => localStorage.setItem('planRest', '0'));
+    await go(phone, { view: 'desk' });
+    await go(phone, { view: 'notebook', pageId: 'day-2026-11-14' });
+    await phone.waitForSelector('#plan .pl-restline');
+    assert.deepEqual(await phone.locator('#plan .ww-sec:visible > .ww-h .ww-name').allInnerTexts(), ['Today']);
+    await phone.locator('#plan .pl-restline').tap();
+    await phone.waitForSelector('#plan .pl-rest.open');
+    assert.deepEqual(await phone.locator('#plan .ww-sec:visible > .ww-h .ww-name').allInnerTexts(), HEADS);
     assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth - innerWidth), 0);
   });
 

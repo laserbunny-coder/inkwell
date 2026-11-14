@@ -85,6 +85,7 @@ async function check(name, fn) {
 const browser = withoutSync(await chromium.launch());
 async function open(opts) {
   const ctx = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', ...opts });
+  await ctx.addInitScript(() => { try { if (localStorage.getItem('planRest') === null) localStorage.setItem('planRest', '1'); } catch { /* no storage */ } }); // the rest of Plan shown, as before its line
   const page = await ctx.newPage();
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));
@@ -175,7 +176,12 @@ try {
     assert.equal(await page.locator('.pu-name').innerText(), 'The Ninja Bunch');
     assert.ok(await page.evaluate(() => document.documentElement.classList.contains('pulling')));
     const lines = await page.locator('.pu-line .pu-words').allInnerTexts();
-    assert.deepEqual(lines.slice(0, 4), ['Pick the stills', 'Board Reel 3', 'Kenji close-up', 'Write Kenji’s verse']);
+    assert.deepEqual(lines.slice(0, 3), ['Pick the stills', 'Board Reel 3', 'Write Kenji’s verse'], 'a line’s lines start folded');
+    assert.match(await page.locator('.pu-line[data-id="st_2"] .pu-fold').innerText(), /^▸\s*1$/);
+    await page.locator('.pu-line[data-id="st_2"] .pu-fold').click();
+    await page.waitForSelector('.pu-line[data-id="st_2a"]');
+    assert.deepEqual((await page.locator('.pu-line .pu-words').allInnerTexts()).slice(0, 4), ['Pick the stills', 'Board Reel 3', 'Kenji close-up', 'Write Kenji’s verse']);
+    assert.equal(await page.locator('.pu-line.sel').count(), 0, 'opening it picks nothing');
     assert.equal(await page.locator('.pu-line[data-id="st_4"] .pu-whenis').innerText(), 'Next week');
     const after = await page.locator('.ww-sec').first().boundingBox();
     assert.ok(after.x <= before.x + 1 && after.width > 300, 'the plan keeps its place on the left');

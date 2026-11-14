@@ -47,11 +47,11 @@ import { PageStrip, TodayPanel, isLife, taskHint, personalArea } from './pages.j
 import { Nav } from './nav.js';
 import { Frame, lookPicker, startLook, toggleLight } from './frame.js';
 import { StagePage, intoDrawer, gatherItems } from './stages.js';
-import { CaptureScreen, writeOutPending, recoverRecording, writeOutAgain, requeueBlank } from './capture.js';
+import { CaptureScreen, writeOutPending, recoverRecording, writeOutAgain, requeueBlank, addLine } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, placeScribeWaiting, RAW } from './voice.js';
 import { takeShares, snapshotPending, tidyShareBlanks, keepShare } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
-import { sendToDaybook, sendPending, queueTask } from './daybook.js';
+import { sendPending, queueTask } from './daybook.js';
 import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker, speakersOn, mine, sendMeetingToAcro } from './meeting.js';
 import { DayReview, getReview } from './review.js';
 import { TagsPage, tagIndex, statsOf } from './tags.js';
@@ -60,9 +60,11 @@ import { ProjectPage } from './projectpage.js';
 import { Plan, tabFor, isCal, ZOOMS } from './plan.js';
 import { Pull } from './pull.js';
 import { closeWhen, whenOpen } from './when.js';
+import { Box } from './box.js';
+import { describe } from './commandinfo.js';
 import { Through } from './through.js';
 import { looseOn } from './loose.js';
-import { PLAN_ID, dayWord, loadTasks } from './tasks.js';
+import { PLAN_ID, dayWord, loadTasks, addTask, stepsHome } from './tasks.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { pieceDoc, pageDoc, startDraft, draftHolding } from './drafts.js';
 import { printPiece } from './print.js';
@@ -78,7 +80,6 @@ import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
 import { openBringIn } from './bringin.js';
-import { openDaybookIn } from './daybookin.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, nextLabel, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, dropOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
 
@@ -599,6 +600,8 @@ async function paneStep(dir) {
 }
 
 window.addEventListener('popstate', async (e) => {
+  // Back on a phone while All commands is open: back to the short box.
+  if (box?.popped()) return;
   if (!e.state?.view) return;
   historyMode = 'replace';
   try { await go(e.state); } finally { historyMode = 'push'; }
@@ -975,6 +978,8 @@ async function applyRemote(rows) {
   if (rows.some((r) => r.kind === 'tidy' || r.kind === 'change')) { redrawTidy(); tidyNudge(); }
   if (view() === 'tags' && tagsPage && rows.some((r) => r.tags?.length || r.id === 'settings-tag-groups')) tagsPage.refresh();
   if (view() === 'desk' && rows.some((r) => r.kind === 'world' || r.kind === 'area' || r.id === DESK_ID)) deskPage?.refresh();
+  // Projects come in your Desk order everywhere: the rail follows a drag there.
+  if (rows.some((r) => r.id === DESK_ID || r.kind === 'world')) frame.drawProjects();
   // Where a project sits changed somewhere else (the Desk beside, a talk with Claude).
   if (view() === 'world' && rows.some((r) => r.id === DESK_ID) && !rows.some((r) => r.kind === 'world')) renderWorld();
   if (rows.some((r) => r.kind === 'line' || r.id === PLAN_ID)) { plan?.soon(); looseSoon(); }
@@ -2800,19 +2805,6 @@ async function renderWorld() {
   // Steps: the project's own tasks, wherever in it they're written.
   await plan?.showSteps(w);
 
-  // Until Daybook is retired, a life project can still send it a task.
-  $('#wh-task-box').hidden = !life;
-  const task = $('#wh-task');
-  task.placeholder = taskHint(w);
-  task.onkeydown = async (e) => {
-    if (e.key !== 'Enter' || !task.value.trim()) return;
-    e.preventDefault();
-    const title = task.value.trim();
-    task.value = '';
-    await queueTask({ id: `inkwell-${newIdLocal()}`, title, notes: `From ${w.title || 'Inkwell'}`, link: `${location.origin + location.pathname}?open=${encodeURIComponent(w.id)}`, deleted: false });
-    await sendPending({ send: sendTask, canSend: canSendTask });
-    toast(`“${title}” is in your Daybook inbox`);
-  };
 
   // Next: what's waiting, from each page.
   const next = [];
@@ -3248,7 +3240,12 @@ const PAGE_NAMES = { gather: 'Gather', shape: 'Shape', write: 'Write', revise: '
 // Views you look at rather than type in: the tabs sit faintly at the top there.
 const LOOKING = ['library', 'tags', 'desk', 'plan', 'world', 'project', 'grid', 'production', 'deliver', 'compare', 'stage', 'drawer'];
 const strip = new PageStrip($('#page-tabs'), { pick: (id) => goPage(id) });
+// The one box (box.js), made once the commands are listed.
+let box = null;
 const nav = new Nav({
+  openBox: (o) => openBox(o),
+  closeBox: (refocus) => closePalette(refocus),
+  boxOpen: () => boxOpen(),
   go: (place) => go(place),
   goPage: (id) => goPage(id),
   tabs: () => strip.tabs,
@@ -3276,10 +3273,22 @@ async function currentWorldId() {
   return id ? (await worldAround(await getEntry(id)))?.id || null : null;
 }
 const RAIL_PROJECTS = 7;
+// Every project in your Desk order (what's on stage first, as you dragged
+// them): the one order projects come in everywhere.
+async function projectOrder() {
+  const list = (await byKind('world')).filter((w) => !gone(w));
+  const order = deskPage ? await deskPage.order() : [];
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return list.sort((a, b) => (rank.get(a.id) ?? 1e6) - (rank.get(b.id) ?? 1e6) || editedAt(b) - editedAt(a));
+}
+// The rail: the first seven in your Desk order, and the project you're in
+// as an eighth while you're in it.
 async function railProjects() {
-  const [all, list, here] = [await areas(), (await byKind('world')).filter((w) => !gone(w)), await currentWorldId()];
+  const [all, list, here] = [await areas(), await projectOrder(), await currentWorldId()];
   const byId = new Map(all.map((a) => [a.id, a]));
-  return list.sort((a, b) => editedAt(b) - editedAt(a)).slice(0, RAIL_PROJECTS)
+  const top = list.slice(0, RAIL_PROJECTS);
+  const extra = here && !top.some((w) => w.id === here) ? list.find((w) => w.id === here) : null;
+  return [...top, ...(extra ? [extra] : [])]
     .map((w) => ({ id: w.id, title: w.title, color: areaColor(byId.get(w.area_id)), current: w.id === here }));
 }
 // Which of a project's pages a place is, so its rooms slide in work order.
@@ -3855,7 +3864,8 @@ function setShown(name, on) {
   if (name === 'linkpics') resetLinkPics();
   if (name === 'panes') { if (!on) panes?.closeAll(); panes?.layout(); }
   if (name === 'closedtag' && deskPage?.showing() && deskPage.now) deskPage.render({ now: deskPage.now, failed: false });
-  if (['estimates', 'woven', 'planview', 'foldearlier', 'areahours', 'aheadhours'].includes(name)) plan?.refresh();
+  if (['estimates', 'woven', 'planview', 'foldearlier', 'areahours', 'aheadhours', 'donetasks'].includes(name)) { if (plan) { plan.peekDone = false; plan.just = null; plan.took = null; } plan?.refresh(); }
+  if (name === 'nextstep') deskPage?.refresh();
   syncSwitches();
 }
 // Reading a script through: only the script pages, no sections, notes or tools.
@@ -4053,8 +4063,8 @@ async function exportBook() {
 
 const writing = () => view() === 'write';
 const commands = [
-  { group: 'go', label: 'Go: back to the last place, this piece’s pages, the rooms', keys: `${mod}O`, words: ['back', 'recent', 'jump', 'switch'], run: () => setTimeout(() => nav.open(), 60) },
-  { group: 'go', label: 'Go to… a book, chapter or page', keys: '', run: () => openPalette('go') },
+  { group: 'go', label: 'Back to the last place', keys: '', words: ['recent', 'jump', 'switch'], run: () => nav.jumpBack(), when: () => nav.recent.length > 0 },
+  { group: 'plan', label: 'Add a task', keys: `${mod}K`, run: () => setTimeout(() => openPalette('commands', null, 'Type the task, then Enter (a day at the end: fri, tomorrow, next week)'), 60) },
   { group: 'go', label: 'Search inside all your writing', keys: `${mod}⇧F`, run: () => openPalette('search') },
   { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
   { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
@@ -4127,6 +4137,7 @@ const commands = [
   { group: 'view', label: 'Show or hide note dots', keys: '', run: () => setShown('dots', hidden().has('dots')) },
   { group: 'view', label: 'Show or hide alternate marks', keys: '', run: () => setShown('alts', hidden().has('alts')) },
   { group: 'view', label: 'Show or hide the six-dot handle', keys: '', run: () => setShown('handle', hidden().has('handle')) },
+  { group: 'plan', label: 'Hide done tasks (or show them again, where they were)', keys: '', run: () => { const show = hidden().has('donetasks'); setShown('donetasks', show); toast(show ? 'Done tasks show again, where they were' : 'Done tasks are out of sight (tap “N done” to see them)'); } },
   { group: 'view', label: 'Show or hide bullets on notebook lines', keys: '', run: () => setShown('bullets', hidden().has('bullets')) },
   { group: 'view', label: 'Show or hide pictures on shared links', keys: '', run: () => setShown('linkpics', hidden().has('linkpics')) },
   { group: 'view', label: 'Show or hide mode chips on voice captures', keys: '', run: () => setShown('voice', hidden().has('voice')) },
@@ -4201,12 +4212,10 @@ const commands = [
   { group: 'view', label: 'Close all the panes beside', words: ['pane', 'side by side', 'close'], when: () => !!panes?.count, run: () => panes.closeAll() },
   { group: 'new', label: 'Save links from your browser (Save to Inkwell button)…', keys: '', words: ['bookmark', 'bookmarklet', 'share', 'save link', 'twitter', 'x', 'web page', 'computer', 'desktop'], run: () => showSaveButton(), when: () => !matchMedia('(pointer: coarse)').matches },
   { group: 'new', label: 'Bring in old notes (from Thymer, Tana, Workflowy, OneNote)…', keys: '', words: ['import', 'paste', 'opml', 'markdown', 'migrate', 'old apps'], run: () => bringInOld() },
-  { group: 'new', label: 'Bring in Daybook (its projects, tasks and repeats)…', keys: '', words: ['import', 'migrate', 'tasks', 'move over'], run: () => bringInDaybook() },
   { group: 'sync', label: 'Connect Scribe, the dictation keyboard…', keys: '', run: () => connectScribe() },
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
   ...Object.entries(LISTS).map(([list, name]) => ({ group: 'page', label: `Make this page a ${name.toLowerCase()} (Claude links each title)`, keys: '', run: () => makeList(list), when: () => inNotebook() && notebook.page?.kind === 'page' && listOf(notebook.page) !== list })),
   { group: 'tidy', label: 'Review the day with Claude (what to plan, what to keep thinking about)', keys: '', run: () => dayReview.run(), when: () => inNotebook() && notebook.isDay },
-  { group: 'tidy', label: 'Send this line to Daybook (a task in its Inbox, linked back here)', keys: '', run: sendLineToDaybook, when: () => inNotebook() && !!notebook.currentLine() },
   { group: 'new', label: 'Make meeting notes from a recording (summary, decisions, tasks, who said what)…', keys: '', run: () => setTimeout(makeMeeting, 120) },
   { group: 'tidy', label: 'Send this meeting to Acro HQ (summary and tasks, for you and Nate)', keys: '', run: () => setTimeout(meetingToAcro, 120), when: () => inNotebook() && !!notebook.page?.fields?.meeting && canAskServer() },
   { group: 'tidy', label: 'Fix a speaker’s name in this meeting…', keys: '', run: () => setTimeout(fixSpeaker, 120), when: () => inNotebook() && !!notebook.page?.fields?.meeting },
@@ -4218,6 +4227,124 @@ const commands = [
   { group: 'tidy', label: 'Trash: bring things back', keys: '', run: showTrash },
   { group: 'sync', label: 'Two versions to check', urgent: true, keys: '', run: () => conflicts.open(), when: () => !$('#versions').hidden }
 ];
+// Each one's group, its one line, more words that find it, the rooms it fits
+// and why it can't run (commandinfo.js).
+commands.forEach(describe);
+// For the tests: every command as the box lists it.
+window.__commandList = () => commands.map((c) => ({ label: c.label, group: c.group, hint: c.hint, words: c.words, where: c.where || [], needs: c.needs || '' }));
+
+// Where you are, as the rooms commands say they fit (commandinfo.js).
+function roomTags() {
+  const v = view();
+  if (v === 'plan') return ['plan', 'when', 'day'].includes(tabFor(lastPlace?.tab)) ? ['plan'] : ['calendar'];
+  if (inNotebook() && notebook.page) return notebook.isDay ? ['today'] : ['page'];
+  if (v === 'desk') return ['desk'];
+  if (['library', 'drawer', 'tags'].includes(v)) return ['library'];
+  if (writing()) return isScript() ? ['script', 'write'] : ['write'];
+  if (['world', 'project', 'grid', 'production', 'deliver', 'stage'].includes(v)) return ['world'];
+  return [];
+}
+// Every place to go, for typing in the box: projects, pieces, areas,
+// chapters, pages and the last month of days, each saying what it is.
+async function boxPlaces() {
+  const [allAreas, allBooks, allWorlds, allPages] = await Promise.all([areas(), books(), worlds(), byKind('page')]);
+  const out = [];
+  const worldName = new Map(allWorlds.map((w) => [w.id, w.title || 'Untitled']));
+  for (const w of await projectOrder()) out.push({ label: w.title || 'Untitled', what: 'project', run: () => go({ view: 'world', id: w.id }) });
+  for (const b of allBooks.sort((a, c) => c.updated_at - a.updated_at)) {
+    const w = worldName.get(b.parent_id);
+    if (w === (b.title || 'Untitled') && allBooks.filter((x) => x.parent_id === b.parent_id).length === 1) continue;
+    out.push({ label: b.title || 'Untitled', what: w ? `piece · ${w}` : kindName(b).toLowerCase(), run: () => go({ view: 'project', id: b.id }) });
+  }
+  for (const a of allAreas) out.push({ label: a.title, what: 'area', run: () => go({ view: 'library', area: a.id }) });
+  const [allActs, allChapters] = await Promise.all([byKind('act'), byKind('chapter')]);
+  const under = new Map();
+  for (const r of [...allActs, ...allChapters]) (under.get(r.parent_id) || under.set(r.parent_id, []).get(r.parent_id)).push(r);
+  const inOrder = (id) => (under.get(id) || []).sort(bySort);
+  for (const b of allBooks.filter(hasManuscript)) {
+    for (const act of inOrder(b.id)) if (act.kind === 'act') for (const ch of inOrder(act.id)) out.push({ label: ch.title || 'Untitled', what: `chapter · ${b.title || 'Untitled'}`, run: () => go({ view: 'write', chapterId: ch.id }) });
+  }
+  for (const p of allPages.filter((x) => !gone(x))) out.push({ label: p.title || 'Untitled page', what: worldName.get(p.parent_id) ? `page · ${worldName.get(p.parent_id)}` : 'page', run: () => go({ view: 'notebook', pageId: p.id }) });
+  const days = (await byKind('day')).filter((d) => !d.deleted).sort((a, c) => (a.title < c.title ? 1 : -1)).slice(0, 30);
+  for (const d of days) out.push({ label: titleOf(d), what: 'day', run: () => go({ view: 'notebook', pageId: d.id }) });
+  return out;
+}
+// Every open task (from the task index), saying when and where it is.
+async function boxTasks() {
+  const today = isoToday();
+  const list = (await loadTasks(today)).filter((i) => !i.row.fields?.done && i.mine);
+  return list.map((i) => {
+    const day = i.task.day ? (i.task.day < today ? 'from earlier' : dayWord(i.task.day, today).toLowerCase()) : '';
+    return { label: i.row.text || 'Untitled task', what: ['task', day, i.world?.title].filter(Boolean).join(' · '), run: () => openEntry(i.row.id) };
+  });
+}
+// The Desk's Catch-up lines, once the Desk has read them.
+function boxCatchup() {
+  const ups = deskPage?.data?.updates || [];
+  const now = Date.now();
+  return ups.slice(-60).reverse().map((u) => ({ label: u.text, what: `Catch-up · ${ago(u.at, now)}`, run: () => goCatchup() }));
+}
+// A task typed into the box: on its day (or week, month, later), like one
+// typed into the plan. A toast offers Undo and Open it.
+async function boxAddTask(title, choice) {
+  if (!title.trim()) return;
+  const when = choice?.when || { day: isoToday() };
+  const day = when.day || null;
+  const rows = await addTask({ text: title.trim(), day, span: when.span || null, order: plan?.lastOrder?.(day) ?? 0 });
+  await applyRemote(rows);
+  const line = rows.at(-1);
+  const said = !day ? choice.label.toLowerCase() : day === isoToday() ? 'today' : dayWord(day, isoToday()) === 'Tomorrow' ? 'tomorrow' : new Date(`${day}T12:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  toast(`Task added for ${said}: “${title.trim()}”`, { label: 'Undo', run: async () => { const row = await getEntry(line.id); if (row) { const gone = { ...row, deleted: true, updated_at: Date.now() }; await putEntries([gone]); await applyRemote([gone]); } } }, { label: 'Open it', run: () => openEntry(line.id) });
+}
+// Shift + Enter in the box: the words as a line at the end of today's page.
+async function boxAddLine(text) {
+  if (!text.trim()) return;
+  const { line, rows } = await addLine([{ type: 'text', text: text.trim() }], {});
+  await applyRemote(rows);
+  toast('Added to today’s page', { label: 'Undo', run: async () => { const row = await getEntry(line.id); if (row) { const gone = { ...row, deleted: true, updated_at: Date.now() }; await putEntries([gone]); await applyRemote([gone]); } } }, { label: 'Open it', run: () => openEntry(line.id) });
+}
+box = new Box($('.palette'), {
+  commands: () => commands,
+  usable: (c) => !c.when || c.when(),
+  recent: () => nav.recent,
+  jump: (place) => go(place),
+  rooms: () => {
+    const v = view();
+    const active = strip.ctx?.active || null;
+    const inside = strip.tabs.some((t) => t.n != null);
+    const on = (id) => !inside && (active === id || (id === 'library' && v === 'library') || (id === 'drawer' && v === 'drawer') || (id === 'tags' && v === 'tags') || (id === 'desk' && v === 'desk'));
+    const all = [['today', 'Today', '⌘J'], ['desk', 'Desk', '⌘⇧U'], ['library', 'Library', '⌘⇧O'], ['drawer', 'Drawer', ''], ['tags', 'Tags', ''], ['catchup', 'Catch-up', ''], ['look', 'Aa Look', '']];
+    // The phone's bottom bar has Today, Desk and Library already.
+    const list = touch.matches ? all.filter(([id]) => !['today', 'desk', 'library'].includes(id)) : all;
+    const out = list.map(([id, label, keys]) => ({ id, label, keys: keyLabel(keys), on: on(id) }));
+    if (touch.matches) out.push({ id: 'outline', label: 'Outline', quiet: true });
+    return out;
+  },
+  room: (id) => {
+    if (id === 'look') { if ($('.page-settings').hidden) togglePageSettings(); $('.page-settings').scrollTop = 0; return; }
+    if (id === 'outline') { body.classList.add('show-outline'); return; }
+    return goPage(id);
+  },
+  tabs: () => {
+    if (!strip.tabs.some((t) => t.n != null)) return null;
+    const active = strip.ctx?.active || null;
+    return { title: nav.titleOfOwner(), tabs: strip.tabs.map((t) => ({ label: t.label, keys: t.n != null ? keyLabel(`⌥${t.n}`) : '', on: t.id === active, run: () => goPage(t.id) })) };
+  },
+  here: () => roomTags(),
+  projects: () => railProjects(),
+  openProject: (id) => go({ view: 'world', id }),
+  places: () => boxPlaces(),
+  tasks: () => boxTasks(),
+  catchup: () => boxCatchup(),
+  addTask: (title, choice) => boxAddTask(title, choice),
+  addLine: (text) => boxAddLine(text),
+  search: (text) => openPalette('search', text),
+  runCommand: (c) => c.run(),
+  close: (refocus = true) => closePalette(refocus),
+  isTouch: () => touch.matches,
+  keyLabel: (t) => keyLabel(t),
+  toast: (t) => toast(t)
+});
 
 // The command menu opens on these, so the phone doesn't need a long scroll; typing searches everything.
 async function showSpace() {
@@ -4298,16 +4425,6 @@ function pickFiles() {
   input.click();
 }
 
-const GROUPS = [
-  { id: 'go', label: 'Go', hint: 'Library, today, chapters, back' },
-  { id: 'new', label: 'New', hint: 'Book, page, chapter, area' },
-  { id: 'write', label: 'Write', hint: 'Links, notes, scene breaks, history' },
-  { id: 'view', label: 'View', hint: 'Focus, sidebar, notes, what shows' },
-  { id: 'page', label: 'Page and text', hint: 'Width, text size, font, light or dark' },
-  { id: 'revise', label: 'Revise and share', hint: 'Compare drafts, new draft, Claude’s notes, print, share a link' },
-  { id: 'tidy', label: 'Organize', hint: 'Rename, move, change kind, Trash' },
-  { id: 'sync', label: 'Sync and backup', hint: 'Sync, export, back up' }
-];
 
 // The piece you're in, wherever you are in it.
 function currentBookId() {
@@ -4333,18 +4450,10 @@ async function bringInOld() {
     ask: askServer, canAsk: canAskServer, toast, base,
     open: (row) => openEntry(row.id),
     applied: async (rows) => { if (rows.length) await applyRemote(rows); await refreshViews(); },
-    sendTasks: () => sendPending({ send: sendTask, canSend: canSendTask }),
-    relink: (from, to) => (window.__relink ? window.__relink(from, to) : sync.backend?.relinkTasks ? sync.backend.relinkTasks(from, to) : Promise.reject(new Error('offline'))),
     tags: async () => statsOf(await tagIndex()).sort((a, b) => b.count - a.count).map((t) => t.tag)
   });
 }
-// Bring in Daybook: its projects, steps, tasks, repeats and done history
-// become Inkwell's own (src/daybookin.js). Daybook is only read.
-const bringInDaybook = () => openDaybookIn({
-  read: () => (window.__daybookItems ? window.__daybookItems() : sync.user && navigator.onLine && sync.backend?.daybookItems ? sync.backend.daybookItems() : null),
-  applied: async (rows) => { if (rows.length) await applyRemote(rows); await refreshViews(); },
-  toast
-});
+
 const showClaudeKnows = async (thing) => openClaudeKnows(thing === undefined ? await knowsThing() : thing, { toast });
 
 // Claude's tidy pass (src/tidypass.js): its suggestions to tick yes or no, and
@@ -4529,10 +4638,13 @@ async function openHit(row) {
 
 async function openPalette(mode = 'commands', only, placeholder) {
   // Open and focus at once so nothing typed is lost; the list fills in after.
+  box.stop();
+  // Commands, places and adding a task: the one box (box.js).
+  if (mode === 'commands') return openBox({ all: only === 'all', placeholder });
   paletteMode = mode;
   paletteGroup = null;
   const listed = mode === 'move' || mode === 'pick';
-  paletteSource = mode === 'go' || listed || mode === 'search' ? [] : commands;
+  paletteSource = [];
   paletteReady = Promise.resolve();
   $('.palette').hidden = false;
   $('.palette-backdrop').hidden = false;
@@ -4561,39 +4673,37 @@ async function openPalette(mode = 'commands', only, placeholder) {
   }
 }
 
+// The one box: Ctrl + K or Ctrl + O, the Go button on a phone. find: put the
+// caret in it (a phone keeps its keyboard down until you tap the box).
+function openBox({ all = false, find = !touch.matches, placeholder = '' } = {}) {
+  paletteMode = 'box';
+  paletteGroup = null;
+  body.classList.remove('show-outline', 'show-top');
+  $('.palette').hidden = false;
+  $('.palette-backdrop').hidden = false;
+  body.classList.add('go-on');
+  const input = $('#palette-input');
+  input.value = '';
+  if (find) input.focus();
+  box.start({ all, find });
+  if (placeholder) input.placeholder = placeholder;
+}
+const boxOpen = () => !$('.palette').hidden && paletteMode === 'box';
+
 function closePalette(refocus = true) {
+  box.stop();
+  body.classList.remove('go-on');
   $('.palette').hidden = true;
   $('.palette-backdrop').hidden = true;
   if (refocus && (writing() || inNotebook())) currentEditor().commands.focus();
 }
 
-function openGroup(id) {
-  paletteGroup = id;
-  const input = $('#palette-input');
-  input.placeholder = id ? `${GROUPS.find((g) => g.id === id).label}…` : 'Type a command…';
-  input.value = '';
-  input.focus();
-  filterPalette();
-}
-
 function filterPalette() {
   // Straight and curly apostrophes are the same thing here ("what's when").
   const norm = (t) => t.toLowerCase().replace(/[’‘']/g, '');
+  if (paletteMode === 'box') return;
   const q = norm($('#palette-input').value.trim());
-  const usable = (c) => !c.when || c.when();
-  if (paletteMode === 'commands' && !q && !paletteGroup) {
-    // Anything waiting on you stays at the top; then the categories.
-    paletteItems = [
-      ...commands.filter((c) => c.urgent && usable(c)),
-      ...GROUPS.map((g) => ({ label: g.label, hint: g.hint, keys: '›', stay: true, run: () => openGroup(g.id) })),
-      { label: 'Keyboard shortcuts', hint: 'Every key, named for this computer', keys: `${mod}/`, run: toggleShortcuts }
-    ];
-  } else if (paletteMode === 'commands' && !q) {
-    paletteItems = [
-      { label: '‹ All commands', keys: '', stay: true, back: true, run: () => openGroup(null) },
-      ...commands.filter((c) => c.group === paletteGroup && usable(c))
-    ];
-  } else if (paletteMode === 'search') {
+  if (paletteMode === 'search') {
     const raw = $('#palette-input').value;
     const hits = searchIdx ? searchIdx.find(raw) : [];
     paletteItems = hits.map((h) => ({ label: h.snippet, hint: h.where, keys: KIND_LABEL[h.row.kind] || '', run: () => openHit(h.row) }));
@@ -4602,7 +4712,6 @@ function filterPalette() {
       paletteItems = [{ label: note, keys: '', stay: true, run: () => {} }];
     }
   } else {
-    const inGroup = (c) => !paletteGroup || paletteMode !== 'commands' || c.group === paletteGroup;
     // Best matches first: the whole name, then names starting with it, then a
     // word starting with it, then anywhere (so "Page 3" isn't lost behind "Page 30").
     const rank = (label) => {
@@ -4616,8 +4725,8 @@ function filterPalette() {
     // Several words find a name holding them all, in any order ("calendar week").
     const words = q.split(/\s+/).filter(Boolean);
     const allIn = (l) => words.length > 1 && words.every((w) => l.includes(w));
-    const hit = (c) => norm(c.label).includes(q) || allIn(norm(c.label)) || (paletteMode === 'commands' && (c.words || []).some((w) => norm(w).startsWith(q)));
-    paletteItems = paletteSource.filter((c) => usable(c) && inGroup(c) && hit(c))
+    const hit = (c) => norm(c.label).includes(q) || allIn(norm(c.label));
+    paletteItems = paletteSource.filter((c) => hit(c))
       .map((c, i) => ({ c, i, r: q ? rank(c.label) : 0 })).sort((a, b) => a.r - b.r || a.i - b.i).slice(0, 60).map((x) => x.c);
     // Not a title? Offer to look inside the writing too.
     if (paletteMode === 'go' && q.length > 1) {
@@ -4638,8 +4747,7 @@ function filterPalette() {
     if (c.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = c.hint; li.firstChild.append(h); }
     if (c.back) li.classList.add('back');
     if (c.stay) li.classList.add('opens');
-    // While searching, say which category a command without a shortcut lives in.
-    li.lastChild.textContent = keyLabel(c.keys) || (q && c.group ? GROUPS.find((g) => g.id === c.group).label : '');
+    li.lastChild.textContent = keyLabel(c.keys);
     li.addEventListener('click', () => runCommand(c));
     li.addEventListener('mousemove', () => selectPalette(i));
     list.append(li);
@@ -4660,6 +4768,7 @@ function runCommand(c) {
 
 $('#palette-input').addEventListener('input', filterPalette);
 $('#palette-input').addEventListener('keydown', (e) => {
+  if (paletteMode === 'box') return;
   if (e.key === 'ArrowDown') { e.preventDefault(); selectPalette(Math.min(paletteIndex + 1, paletteItems.length - 1)); }
   if (e.key === 'ArrowUp') { e.preventDefault(); selectPalette(Math.max(paletteIndex - 1, 0)); }
   if (e.key === 'Enter') {
@@ -4675,10 +4784,7 @@ $('#palette-input').addEventListener('keydown', (e) => {
       runCommand(c);
     });
   }
-  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (paletteGroup && !e.target.value) openGroup(null); else closePalette(); }
-  if (e.key === 'Backspace' && paletteGroup && !e.target.value) { e.preventDefault(); openGroup(null); }
-  if (e.key === 'ArrowRight' && !e.target.value && paletteItems[paletteIndex]?.stay && !paletteItems[paletteIndex].back) { e.preventDefault(); runCommand(paletteItems[paletteIndex]); }
-  if (e.key === 'ArrowLeft' && !e.target.value && paletteGroup) { e.preventDefault(); openGroup(null); }
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePalette(); }
 });
 $('.palette-backdrop').addEventListener('click', () => closePalette());
 
@@ -4733,7 +4839,8 @@ document.addEventListener('keydown', (e) => {
   const m = e.metaKey || e.ctrlKey;
   const k = e.key.toLowerCase();
   if (paneKeys(e, m)) return;
-  if (m && k === 'k') { e.preventDefault(); $('.palette').hidden ? openPalette() : closePalette(); }
+  // Ctrl + K: the box; again while it's open and empty, All commands.
+  if (m && !e.shiftKey && k === 'k') { e.preventDefault(); if ($('.palette').hidden) openBox({ find: true }); else if (boxOpen() && !box.all && !$('#palette-input').value) box.setAll(true); else closePalette(); }
   else if (m && e.shiftKey && !e.altKey && e.code === 'Period') { e.preventDefault(); toggleSections(); }
   else if (m && e.key === '.') { e.preventDefault(); toggleFocus(); }
   else if (m && !e.shiftKey && !e.altKey && e.code === 'Backslash') { e.preventDefault(); toggleBesidePane(); }
@@ -4752,7 +4859,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.altKey && !m && !e.shiftKey && !inPane && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); if (e.key === 'ArrowLeft') history.back(); else history.forward(); }
   else if (m && e.shiftKey && k === 'f') { e.preventDefault(); openPalette('search'); }
   else if (m && e.shiftKey && k === 'o') { e.preventDefault(); go({ view: 'library', area: null }); }
-  else if (m && k === 'o') { e.preventDefault(); if (!$('.palette').hidden) closePalette(false); nav.toggle(true); }
+  else if (m && k === 'o') { e.preventDefault(); if (boxOpen()) closePalette(); else { if (!$('.palette').hidden) closePalette(false); openBox({ find: true }); } }
   else if (m && e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); step(e.key === 'ArrowDown' ? 1 : -1); }
   else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketLeft') { e.preventDefault(); if (inPane) paneStep(-1); else history.back(); }
   else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketRight') { e.preventDefault(); if (inPane) paneStep(1); else history.forward(); }
@@ -4834,16 +4941,14 @@ function writeOut() {
   const opts = { ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows), typing: (id) => notebook.typingOn(id) };
   return Promise.all([writeOutPending({ ...opts, draft: { context: draftContext, deliver: deliverDraft } }), snapshotPending(opts), meetingPending({ ...opts, ...meetingOpts }), sendPending({ send: sendTask, canSend: canSendTask })]);
 }
-// Meetings: your tasks go to Daybook in the meeting's area (Business, Filmmaking).
-const daybookAreas = () => (window.__areas ? window.__areas() : sync.user && sync.backend?.areas ? sync.backend.areas() : null);
+// Meetings: your tasks become tasks here (a business one goes to Acro HQ).
 const meetingOpts = {
   me: () => sync.user?.user_metadata?.full_name || sync.user?.user_metadata?.name || '',
-  areas: daybookAreas,
   base: () => location.origin + location.pathname,
   sendPending: () => sendPending({ send: sendTask, canSend: canSendTask }),
   onDone: (it, notes, to) => {
     const sent = to === 'acro' ? notes.tasks.length : notes.tasks.filter((t) => mine(t.owner, meetingOpts.me())).length;
-    const where = to === 'acro' ? 'Acro HQ' : 'Daybook';
+    const where = to === 'acro' ? 'Acro HQ' : 'your plan';
     toast(`Meeting notes ready: ${notes.title}${sent ? ` (${sent} task${sent === 1 ? '' : 's'} to ${where})` : to === 'acro' ? ' (sent to Acro HQ)' : ''}`, { label: 'Open', run: () => openEntry(`pg_meet-${it.file}`) });
   }
 };
@@ -4896,19 +5001,9 @@ async function fixSpeaker() {
     await applyRemote(await renameSpeaker(pid, from, to));
   } })), menuSpot());
 }
-// Send a line to Daybook, as a task in its Inbox that links back here.
+// Tasks still waiting to go to Daybook (the day review and shoot days still send there).
 const sendTask = (task) => (window.__daybook ? window.__daybook(task) : sync.backend.addTask(task));
 const canSendTask = () => !!window.__daybook || (!!sync.user && navigator.onLine && !!sync.backend?.addTask);
-async function sendLineToDaybook() {
-  const id = notebook.currentLine();
-  if (!id) return;
-  await notebook.close();
-  const row = await sendToDaybook(id, location.origin + location.pathname);
-  if (!row) { toast('Write something on the line first'); return; }
-  await applyRemote([row]);
-  const sent = await sendPending({ send: sendTask, canSend: canSendTask });
-  toast(sent ? 'Sent to Daybook’s Inbox' : 'It’ll go to Daybook’s Inbox once you’re online and signed in');
-}
 // A link from Daybook (or anywhere) to ?open=<id> opens that line where it
 // lives, once this device has it.
 let asking = null;
@@ -5141,6 +5236,16 @@ deskPage = new DeskPage({
   base: () => location.origin + location.pathname,
   changed: (rows) => applyRemote(rows),
   onCount: (n) => { frame.count(n); nav.count(n); },
+  // The Desk's order changed (a drag, or what's on stage): the rail follows.
+  ordered: () => frame.drawProjects(),
+  // "Add one" under "No next step yet": the project's Steps page, the caret on a new step.
+  addStep: async (id) => {
+    const world = await getEntry(id);
+    if (!world) return;
+    const rows = await addTask({ text: '', home: stepsHome(world) });
+    await applyRemote(rows);
+    await openEntry(rows.at(-1).id);
+  },
   through: () => through.open('calls'),
   // A call answered from a project's own page: that page looks again.
   acted: () => { projectPage?.stale(); if (view() === 'world') renderWorld(); },
@@ -5229,6 +5334,7 @@ plan = new Plan({
   sheet: $('#plan-sheet'),
   steps: $('#wh-steps'),
   hooks: {
+    stepHint: (w) => taskHint(w),
     view,
     changed: (rows) => applyRemote(rows),
     // Beside, a task's place opens in the main window and the plan stays.
@@ -5279,11 +5385,9 @@ function planningView() {
 }
 pull = inPane ? null : new Pull({
   sources: async () => {
-    const [all, worldList, pages, onRail] = [await areas(), (await byKind('world')).filter((w) => !gone(w)), (await byKind('page')).filter((p) => !gone(p)), await railProjects()];
+    const [all, worldsSorted, pages] = [await areas(), await projectOrder(), (await byKind('page')).filter((p) => !gone(p))];
     const byId = new Map(all.map((a) => [a.id, a]));
-    const railIds = onRail.map((r) => r.id);
-    const rank = (w) => { const n = railIds.indexOf(w.id); return n < 0 ? 999 : n; };
-    const worldsSorted = worldList.sort((a, b) => rank(a) - rank(b) || String(a.title).localeCompare(String(b.title)));
+    const worldList = worldsSorted;
     const titles = new Map(worldList.map((w) => [w.id, w.title || 'Untitled']));
     const out = worldsSorted.map((w) => ({ id: w.id, title: w.title || 'Untitled', kind: 'world', color: areaColor(byId.get(w.area_id)), hint: 'project' }));
     for (const pg of pages.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))) {
@@ -5297,8 +5401,7 @@ pull = inPane ? null : new Pull({
   // (never an empty one), else the project you were last in.
   first: async () => {
     const open = new Set((await loadTasks()).filter((i) => i.world && !i.row.fields?.done).map((i) => i.world.id));
-    const order = ((await deskSettings()).order?.seats || []).filter((k) => String(k).startsWith('w:')).map((k) => k.slice(2));
-    for (const id of [...order, ...(await railProjects()).map((r) => r.id)]) if (open.has(id) && !gone(await getEntry(id))) return id;
+    for (const w of await projectOrder()) if (open.has(w.id)) return w.id;
     let id = null;
     try { id = localStorage.getItem('lastWorld'); } catch { /* none */ }
     if (id && !gone(await getEntry(id))) return id;
@@ -5564,8 +5667,8 @@ function paneKeys(e, m) {
 
 // Middle-click opens it beside, the way a browser opens a link in a new tab:
 // a line's or paragraph's six dots, a [[link]], a #tag, a card in the Library
-// or a world, a chapter in the outline, a part of the path, a result in Go.
-const BESIDE = 'a[data-ref], .line-gutter, .block-handle, .tag[data-tag], [data-id], .tree-chapter, .crumb-part, #palette-list > li, .past-list [data-line]';
+// or a world, a chapter in the outline, a part of the path, a row or chip in the box.
+const BESIDE = 'a[data-ref], .line-gutter, .block-handle, .tag[data-tag], [data-id], .tree-chapter, .crumb-part, #palette-list > li:not(.box-chips), #palette-list .box-chip, .past-list [data-line]';
 const besideTarget = (e) => (e.button === 1 && !root.classList.contains('hide-panes') && paneHost() ? e.target.closest?.(BESIDE) : null);
 // (No auto-scroll from the middle button on these.)
 document.addEventListener('mousedown', (e) => { if (besideTarget(e)) { e.preventDefault(); e.stopPropagation(); } }, true);

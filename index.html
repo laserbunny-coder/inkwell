@@ -74,7 +74,7 @@
           <button type="button" class="tb-btn" data-cmd="drawer" id="drawer-toggle" title="The Drawer: ideas with no home yet">Drawer</button>
           <button type="button" class="tb-btn" data-cmd="library" id="library-toggle" title="Library (⌘⇧O)">Library</button>
           <button type="button" class="tb-btn" data-cmd="tags" id="tags-toggle" title="Tags: every #tag, grouped">Tags</button>
-          <button type="button" class="tb-btn" data-cmd="go" id="go-toggle" title="Go: the last place, this piece’s pages, the rooms (⌘O)">Go</button>
+          <button type="button" class="tb-btn" data-cmd="go" id="go-toggle" hidden title="Go: the one box (⌘K)">Go</button>
         </span>
         <span class="tb-group tb-view">
           <button type="button" class="tb-btn" data-cmd="notes" id="notes-toggle" title="Notes beside the text (⌘2)">Notes</button>
@@ -82,7 +82,7 @@
           <button type="button" class="tb-btn" data-cmd="beside" id="beside-toggle" aria-pressed="false" title="Beside: today’s plan, notes or another page next to this one (⌘\)">Beside</button>
           <button type="button" class="tb-btn" data-cmd="page" aria-label="Page width and text size" title="Page width, text size, what to show">Aa</button>
         </span>
-        <button type="button" class="pill" data-cmd="palette" id="palette-toggle" title="Everything you can do (⌘K). Shortcuts: ⌘/">⌘K</button>
+        <button type="button" class="pill" data-cmd="palette" id="palette-toggle" title="Go anywhere, do anything, or add a task (⌘K; again for All commands)">Go ⌘K</button>
       </div>
     </div>
   </header>
@@ -211,10 +211,6 @@
         <div class="hint" id="wh-pieces-empty">Anything you make in this world, at any size: a gag, a short, an episode, a novel, a film.</div>
       </section>
       <section class="wp-part" id="wh-steps"></section>
-      <div class="wp-daybook" id="wh-task-box" hidden>
-        <input type="text" id="wh-task" class="st-input wh-task" placeholder="Call the contractor about the cabinets" aria-label="A task for this project">
-        <div class="hint">Enter sends this one to your Daybook inbox, with a link back here.</div>
-      </div>
       <section class="wp-part" id="wh-next-box" hidden>
         <h2 class="wp-sec">Next <span class="wp-more">waiting in its pages</span></h2>
         <ul id="wh-next" class="ref-list wh-next"></ul>
@@ -398,6 +394,7 @@
     <label class="switch"><input type="checkbox" data-show="plan"> Show the plan on Today (and on a day’s page)</label>
     <label class="switch tp-wide"><input type="checkbox" data-show="planside"> Plan at the side of the page on a wide screen (off: on top, one column) <span class="keys">Alt+P</span></label>
     <label class="switch"><input type="checkbox" data-show="foldearlier"> Fold earlier days into one line (more than three)</label>
+    <label class="switch"><input type="checkbox" data-show="donetasks"> Done tasks stay in the list, where they were (off: they disappear, under a faint “3 done” line)</label>
     <label class="switch"><input type="checkbox" data-show="took"> “How long did it take?” when you tick a task</label>
     <label class="switch"><input type="checkbox" data-show="taskchips"> A task’s day and length after its words</label>
     <label class="switch"><input type="checkbox" data-show="taskgrip"> Six dots on a task in the plan, to show it can be moved</label>
@@ -405,6 +402,7 @@
     <label class="switch"><input type="checkbox" data-show="loose"> A ring on lines you haven’t filed, and their count under the day</label>
     <label class="switch"><input type="checkbox" data-show="deskread"> Claude’s one-line read on the Desk</label>
     <label class="switch"><input type="checkbox" data-show="deskcount"> How many things need you, beside Desk</label>
+    <label class="switch"><input type="checkbox" data-show="nextstep"> Next step on Desk cards</label>
     <label class="switch"><input type="checkbox" data-show="closedtag"> “Thread closed” on calls from closed threads, and their filter in History</label>
     <label class="switch"><input type="checkbox" data-show="aheadhours"> Each week’s hours at the top of Calendar’s six weeks</label>
     <label class="switch"><input type="checkbox" data-show="areahours"> Each area’s hours under the week</label>
@@ -417,7 +415,6 @@
     <label class="switch"><input type="checkbox" data-show="projsteps"> Steps on a project’s page</label>
     <label class="switch"><input type="checkbox" data-show="projcrew"> Crew and Turns on a project’s page</label>
     <label class="switch"><input type="checkbox" data-show="projrecent"> “Recently” on a project’s page</label>
-    <label class="switch"><input type="checkbox" data-show="projdaybook"> On a life project, a box that sends a task to Daybook</label>
     <label class="switch"><input type="checkbox" data-show="dots"> Note dots in the margin</label>
     <label class="switch"><input type="checkbox" data-show="handle"> Six-dot handle</label>
     <label class="switch"><input type="checkbox" data-show="bullets"> Bullets on notebook lines</label>

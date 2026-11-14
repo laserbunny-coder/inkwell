@@ -87,8 +87,8 @@ try {
     await p.keyboard.type('keeper');
     await sleep(300);
     const r = await results();
-    assert.match(r.at(-1), /Search inside your writing for “keeper”/);
-    await p.keyboard.press('Enter');
+    assert.match(r.at(-1), /Search every word of your writing for “keeper”/, r.join(' | '));
+    await p.locator('#palette-list li').last().click(); // Enter would add it as a task: the last row searches
     await sleep(500);
     assert.match((await results())[0], /lighthouse keeper/);
     await p.keyboard.press('Escape');

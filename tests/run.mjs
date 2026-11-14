@@ -501,7 +501,7 @@ try {
     await p.keyboard.type('Ferry tickets for Dad #gift');
     await sleep(900);
     await p.keyboard.press('Control+O');
-    await p.waitForSelector('.go-panel', { state: 'visible' });
+    await p.waitForSelector('.palette.box', { state: 'visible' });
     await sleep(300);
     await p.keyboard.type('Gift');
     await sleep(300);
@@ -660,10 +660,12 @@ try {
     assert.equal(await p.locator('#focus-toggle').getAttribute('title'), 'Focus: just the text (Ctrl+.)');
     await p.keyboard.press('Escape');
     assert.equal(await p.locator('.shortcuts').isVisible(), false);
-    // The empty command menu has a row for the same list.
+    // The box finds the same list by name.
     await sleep(300);
     await p.keyboard.press('Control+K');
-    await p.locator('.palette li', { hasText: 'Keyboard shortcuts' }).click();
+    await p.keyboard.type('shortcuts');
+    await sleep(300);
+    await p.locator('.palette li', { hasText: 'Keyboard shortcuts' }).first().click();
     assert.equal(await p.locator('.shortcuts').isVisible(), true);
     assert.equal(await p.locator('.palette').isVisible(), false);
     await p.keyboard.press('Escape');
@@ -737,20 +739,16 @@ try {
     await p.evaluate(() => document.documentElement.classList.remove('hide-handle'));
   });
 
-  await check('the command menu opens on categories, and typing still finds everything', async () => {
+  await check('Ctrl + K twice opens All commands in groups, and typing still finds everything', async () => {
     await sleep(600);
     await p.keyboard.press('Control+K');
-    await p.waitForSelector('.palette', { state: 'visible' });
-    const top = await p.locator('#palette-list li .label').allInnerTexts();
-    assert.equal(top.length, 9, top.join(' | '));
-    assert.match(top[3], /^View/);
-    assert.match(top[8], /^Keyboard shortcuts/);
-    await p.keyboard.press('ArrowDown'); await p.keyboard.press('ArrowDown'); await p.keyboard.press('ArrowDown');
-    await p.keyboard.press('Enter');
-    await p.waitForFunction(() => document.querySelector('#palette-input').placeholder === 'View…');
-    assert.match(await p.locator('#palette-list li[aria-selected="true"]').innerText(), /Sidebar/);
-    await p.keyboard.press('Backspace');
-    await p.waitForFunction(() => document.querySelectorAll('#palette-list li').length === 9);
+    await p.waitForSelector('.palette.box', { state: 'visible' });
+    await p.keyboard.press('Control+K');
+    await p.waitForSelector('.palette.box-all', { state: 'visible' });
+    const groups = await p.locator('.box-groups .box-group').allInnerTexts();
+    assert.ok(groups.includes('View') && groups.includes('Sync and backup'), groups.join(' | '));
+    await p.keyboard.press('Escape');
+    await p.waitForSelector('.palette.box-all', { state: 'hidden' });
     await p.keyboard.type('light / dark');
     assert.match(await p.locator('#palette-list li').first().innerText(), /Light \/ dark/);
     await p.keyboard.press('Escape');
@@ -849,7 +847,7 @@ try {
     await until('the new screenplay opens on its Idea', () => document.querySelector('#nb-title')?.textContent === 'Idea');
     await sleep(400);
     await ph.keyboard.press('Control+O');
-    await until('Go’s find box has the keys', () => document.activeElement?.classList.contains('go-find'));
+    await until('the box has the keys', () => document.activeElement?.id === 'palette-input');
     await ph.keyboard.type('Script · Pocket');
     await until('the list shows Script · Pocket', () => document.querySelector('#palette-list li')?.textContent.includes('Script · Pocket'));
     await ph.locator('#palette-list li').first().click();
@@ -1117,7 +1115,7 @@ try {
     await p.keyboard.type('A ship in a bottle for Dad. #gift');
     await sleep(900);
     await p.keyboard.press('Control+O');
-    await p.waitForSelector('.go-panel', { state: 'visible' });
+    await p.waitForSelector('.palette.box', { state: 'visible' });
     await sleep(300);
     await p.keyboard.type('Gift');
     await sleep(300);

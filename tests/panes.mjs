@@ -221,12 +221,12 @@ try {
     await p.evaluate(() => { const c = document.querySelector('[data-show="panes"]'); c.checked = true; c.dispatchEvent(new Event('change')); });
   });
 
-  await check('Shift + Enter in Ctrl + K opens the result beside', async () => {
+  await check('a middle-click on a result in Ctrl + K opens it beside (Shift + Enter there adds a line to today)', async () => {
     await p.keyboard.press('Control+K');
     await p.waitForSelector('.palette:not([hidden])');
     await p.keyboard.type('Library');
     await sleep(400);
-    await p.keyboard.press('Shift+Enter');
+    await p.locator('#palette-list > li').first().click({ button: 'middle' });
     await paneReady(p, 1);
     assert.equal(await p.evaluate(() => document.documentElement.dataset.view), 'notebook', 'the main view stays');
     await p.evaluate(() => window.__panes.closeAll());
