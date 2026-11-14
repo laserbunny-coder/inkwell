@@ -223,6 +223,21 @@ await call("undo_change", { change_id: rn.change_id });
 assert.equal(get("li-a2").text, "Order the NAS");
 assert.deepEqual(get("li-a2").tags, []);
 
+// Loose time: a week, a month or "later", with no day. A day and a when never go together.
+const mon = addDays(TODAY, 1 - dow(TODAY));
+const lw = await call("update_task", { id: "li-plain", when: "next week" });
+assert.ok(!lw.error, JSON.stringify(lw));
+assert.deepEqual(get("li-plain").fields.task.span, { kind: "week", start: addDays(mon, 7) });
+assert.equal(get("li-plain").fields.task.day, null);
+let ll = await call("list_tasks", { loose: true });
+assert.ok(ll.loose.some((x: any) => x.id === "li-plain" && /next week/i.test(x.when)), JSON.stringify(ll.loose.map((x: any) => [x.id, x.when])));
+await call("update_task", { id: "li-plain", day: "today" });
+assert.equal(get("li-plain").fields.task.span, null, "a day clears the loose time");
+assert.ok((await call("update_task", { id: "li-plain", when: "soonish" })).error, "a when it can't read is refused");
+const lt = await call("add_task", { text: "Song for Reel 4", when: "later" });
+assert.ok(!lt.error, JSON.stringify(lt));
+assert.ok((await call("add_task", { text: "x", day: "today", when: "later" })).error, "a day or a when, not both");
+
 // Delete: to the Trash with what's under it; Undo brings it all back. Nate's stay his.
 assert.ok((await call("delete_line", { line_id: "li-nate" })).error);
 const del = await call("delete_line", { line_id: "li-a2" });

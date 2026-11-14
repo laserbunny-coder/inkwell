@@ -39,7 +39,18 @@ const tasks = async (p) => (await all(p)).filter((r) => r.fields?.task && !r.del
 const taskNamed = async (p, text) => (await tasks(p)).find((r) => r.text === text);
 const viewOf = (p) => p.evaluate(() => document.documentElement.dataset.view || 'write');
 const still = (p) => p.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {}))));
-const pick = async (p, label) => { await p.locator('.pop-menu .pop-item', { hasText: label }).first().click(); await sleep(300); };
+// Today, Tomorrow and the rest of the times are in the When picker (from "When…" in the menu).
+const WHEN = { Today: 'Today', Tomorrow: 'Tomorrow', 'Not on a day yet': 'Not planned' };
+const pick = async (p, label) => {
+  if (WHEN[label]) {
+    // A step's label opens the picker straight away; a menu has "When…".
+    await p.waitForSelector('.when-pick, .pop-menu');
+    if (!(await p.locator('.when-pick').count())) await p.locator('.pop-menu .pop-item', { hasText: 'When' }).first().click();
+    await p.waitForSelector('.when-pick');
+    await p.locator('.when-pick .wp-opt', { hasText: WHEN[label] }).first().click();
+  } else await p.locator('.pop-menu .pop-item', { hasText: label }).first().click();
+  await sleep(300);
+};
 const words = (p, root = '#plan') => p.locator(`${root} .pl-task .pl-words`).allInnerTexts();
 const row = (p, text) => p.locator('#plan .pl-task', { hasText: text });
 const today = async (p) => {
@@ -68,7 +79,7 @@ try {
     assert.ok(await page.locator('#plan').isVisible());
     assert.equal(await page.locator('#plan .pl-label').innerText(), 'PLAN');
     assert.equal(await page.locator('#plan input[data-add]').getAttribute('placeholder'), 'Add a task');
-    assert.deepEqual(await page.locator('.today-switch button').allInnerTexts(), ['Day', 'Week', 'Weeks ahead', 'Pace']);
+    assert.deepEqual(await page.locator('.today-switch button').allInnerTexts(), ['Day', 'What’s when', 'Week', 'Weeks ahead', 'Pace']);
     await lit(page, '.today-switch [aria-current="page"]', 'Day');
     assert.ok(await page.locator('.place-switch:not(.desk-switch):not(.today-switch)').isHidden(), 'the Library’s switch is away');
     assert.ok(await page.locator('#plan .pl-switch').isHidden(), 'with the rail, no second switch in the page');
@@ -540,7 +551,7 @@ try {
   await phone.waitForFunction(() => { document.activeElement?.blur(); return !document.body.classList.contains('kb-up'); });
   await check('phone: the plan sits on top of today, with Day, Week, Weeks ahead, Pace in the page', async () => {
     assert.ok(await phone.locator('#plan').isVisible());
-    assert.deepEqual(await phone.locator('#plan .pl-switch button').allInnerTexts(), ['Day', 'Week', 'Weeks ahead', 'Pace']);
+    assert.deepEqual(await phone.locator('#plan .pl-switch button').allInnerTexts(), ['Day', 'What’s when', 'Week', 'Weeks ahead', 'Pace']);
     await add(phone, 'Call Dana 30m');
     await add(phone, 'Order the storage drive');
     assert.deepEqual(await words(phone), ['Call Dana', 'Order the storage drive']);

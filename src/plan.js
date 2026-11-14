@@ -10,8 +10,10 @@ import { trash, restore } from './trash.js';
 import {
   loadTasks, dayPlan, weekPlan, pace, planSettings, savePlanSettings, setTask, unTask, tickTask, tookTask, startTimer, stopTimer,
   addTask, renameTask, arrange, arrangeCarried, weave, plainLine, parseEst, readSpan, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE, stepsPage, stepsHome,
-  moveTask, isStretch, stretchWord, isRepeat, repeatWord, readDays, parseAdd, history, occItem, setRepeat, skipTask, rollTicked, dow, areaHours
+  moveTask, isStretch, stretchWord, isRepeat, repeatWord, readDays, parseAdd, history, occItem, setRepeat, skipTask, rollTicked, dow, areaHours,
+  setWhen, whenSnap, whenBack, rankAll, horizon, whenHeadings, whenOf, whenWord, spanOf, taskOf
 } from './tasks.js';
+import { pickWhen, currentChoice } from './when.js';
 import { areas, areaColor } from './library.js';
 import { drawAhead, aheadClick, aheadContext, aheadDrags } from './ahead.js';
 import { clockWord, freeLeft } from './calendar.js';
@@ -31,7 +33,8 @@ const ICON = {
   check: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M3 8.500l3.200 3.200L13 4.800" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 };
 const ESTS = [5, 10, 15, 30, 45, 60, 90, 120, 180];
-const TABS = [['day', 'Day', 'today'], ['week', 'Week', 'week'], ['ahead', 'Weeks ahead', 'ahead'], ['pace', 'Pace', 'pace']];
+const TABS = [['day', 'Day', 'today'], ['when', 'What’s when', 'when'], ['week', 'Week', 'week'], ['ahead', 'Weeks ahead', 'ahead'], ['pace', 'Pace', 'pace']];
+const clip = (t, n = 40) => { const s = String(t || 'Untitled').replace(/\s+/g, ' ').trim() || 'Untitled'; return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
 const hover = matchMedia('(hover: hover)');
 const long = (iso, opts) => dateOf(iso).toLocaleDateString('en-US', opts);
 // "12:04" while a timer runs.
@@ -116,7 +119,7 @@ export class Plan {
 
   async showPage(place) {
     // 'day' is today's plan on its own: what "Plan" shows beside another page.
-    this.tab = ['pace', 'day', 'ahead'].includes(place.tab) ? place.tab : 'week';
+    this.tab = ['pace', 'day', 'ahead', 'when'].includes(place.tab) ? place.tab : 'week';
     this.week = place.week || null;
     this.aheadAdd = null;
     this.aheadHeld = false;
@@ -156,7 +159,8 @@ export class Plan {
     if (this.renaming) return;
     if (this.dayShown) this.drawDay();
     if (this.stepsShown) this.drawSteps();
-    if (this.pageShown) { if (this.tab === 'pace') this.drawPace(); else if (this.tab === 'ahead') drawAhead(this); else if (this.tab === 'day') this.drawDay(this.sheet, this.today); else this.drawWeek(); }
+    if (this.pageShown) { if (this.tab === 'pace') this.drawPace(); else if (this.tab === 'ahead') drawAhead(this); else if (this.tab === 'day') this.drawDay(this.sheet, this.today); else if (this.tab === 'when') this.drawWhen(); else this.drawWeek(); }
+    this.hooks.redrawn?.();
   }
 
   // Calendar events for the days showing: what's kept draws at once, and the
@@ -268,6 +272,17 @@ export class Plan {
     return row;
   }
 
+  // "Pull from a project": a project's lines open next to the plan (beside
+  // it on a computer, in the bottom half on a phone), to drag onto it.
+  pullButton() {
+    if (!this.hooks.pull) return null;
+    const b = make('button', 'ghost-btn pl-pull', 'Pull from a project');
+    b.dataset.act = 'pull';
+    b.title = 'Open a project next to the plan and drag its lines in';
+    b.setAttribute('aria-pressed', String(!!this.hooks.pulling?.()));
+    return b;
+  }
+
   // ---------- Day ----------
 
   drawDay(box = this.box, day = this.day) {
@@ -295,7 +310,7 @@ export class Plan {
     }
     // List | Calendar: the same tasks as an order, or placed by hand on the day's hours.
     const asCal = this.dayView === 'cal' && !this.hooks.off?.('planview');
-    head.append(this.viewSwitch(asCal), this.switchRow('day'));
+    head.append(this.viewSwitch(asCal), ...[this.pullButton()].filter(Boolean), this.switchRow('day'));
     // A pile left from earlier days: go through it one at a time.
     if (day === today && p.carried.length >= 5 && this.hooks.goThrough && box === this.box) {
       const b = make('button', 'pl-thru', `${p.carried.length} from earlier days · Go through`);
@@ -356,7 +371,7 @@ export class Plan {
     const w = this.world;
     const today = this.today;
     const mine = this.items.filter((i) => i.world?.id === w.id);
-    const at = (i) => i.task.day || '9999';
+    const at = (i) => i.task.day || spanOf(i.task)?.start || (spanOf(i.task) ? '9998' : '9999');
     const open = mine.filter((i) => !i.row.fields?.done).sort((a, b) => at(a).localeCompare(at(b)) || (a.task.order || 0) - (b.task.order || 0) || (a.row.created_at || 0) - (b.row.created_at || 0));
     const done = mine.filter((i) => i.row.fields?.done).sort((a, b) => (b.task.done_at || 0) - (a.task.done_at || 0));
     const held = this.held(box);
@@ -407,13 +422,13 @@ export class Plan {
     input.autocomplete = 'off';
     // "Enter", not "Done": the keyboard stays up for the next one.
     input.setAttribute('enterkeyhint', 'enter');
-    input.setAttribute('aria-label', day ? `Add a task for ${dayWord(day, this.today)}` : 'Add a task, not on a day yet');
+    input.setAttribute('aria-label', day ? `Add a task for ${dayWord(day, this.today)}` : 'Add a task for any day this week');
     input.dataset.add = day || 'tray';
     row.append(ring, input);
     return row;
   }
 
-  taskRow(i, { carried = false, next = false, when = false, drag = true, place = null }) {
+  taskRow(i, { carried = false, next = false, when = false, drag = true, place = null, tag = '' }) {
     const t = i.task;
     const id = i.row.id;
     const done = !!i.row.fields?.done;
@@ -464,6 +479,7 @@ export class Plan {
       title.append(mark);
     }
     if (carried) title.append(make('span', 'pl-from', `from ${dayWord(t.day, this.today)}`));
+    if (tag) title.append(make('span', 'pl-from ww-date', tag));
     const meta = make('div', 'pl-meta');
     const where = place ?? this.placeOf(i);
     if (where) {
@@ -488,11 +504,12 @@ export class Plan {
     if (when && !done) {
       const stretch = isStretch(t);
       const late = stretch ? t.until < this.today : t.day && t.day < this.today;
-      const word = stretch ? stretchWord(t) : `${t.mark ? '◆ ' : ''}${dayWord(t.day, this.today)}`;
+      const loose = !stretch && spanOf(t);
+      const word = stretch ? stretchWord(t) : loose ? whenWord(t, this.today) : t.day ? `${t.mark ? '◆ ' : ''}${dayWord(t.day, this.today)}` : 'When?';
       if (rep) row.dataset.repeat = repeatWord(t.repeat);
-      const d = make('button', `pl-when${t.day ? (late ? ' late' : '') : ' unset'}${t.mark === 'hard' ? ' hard' : ''}`, word);
+      const d = make('button', `pl-when${t.day || loose ? (late ? ' late' : '') : ' unset'}${loose ? ' loose' : ''}${t.mark === 'hard' ? ' hard' : ''}`, word);
       d.dataset.act = 'day';
-      d.setAttribute('aria-label', stretch ? `From ${word}; click to move it` : t.day ? `${t.mark ? 'A date to hit: ' : 'Planned for '}${dayWord(t.day, this.today)}${t.mark === 'hard' ? ', and it can’t move' : ''}; click to move it` : 'Not on a day yet; click to pick one');
+      d.setAttribute('aria-label', stretch ? `From ${word}; click to move it` : loose ? `${word}; click to change when (Alt + W)` : t.day ? `${t.mark ? 'A date to hit: ' : 'Planned for '}${dayWord(t.day, this.today)}${t.mark === 'hard' ? ', and it can’t move' : ''}; click to change when (Alt + W)` : 'Not planned; click to say when (Alt + W)');
       meta.append(d);
     }
     if (!done && !ghost && !t.habit) {
@@ -596,6 +613,293 @@ export class Plan {
     return i.root.title || 'Untitled';
   }
 
+  // ---------- What's when ----------
+
+  // The six headings and what's under each: Today and Tomorrow as on their
+  // day's plan, the rest in the order you put them.
+  whenModel() {
+    const today = this.today;
+    const h = horizon(today);
+    const heads = whenHeadings(h).map((x) => ({ ...x, items: [] }));
+    const by = new Map(heads.map((x) => [x.id, x]));
+    for (const i of this.items) {
+      if (!i.mine || i.row.fields?.done || isStretch(i.task)) continue;
+      const w = whenOf(i.task, h);
+      if (w && w !== 'today' && w !== 'tomorrow') by.get(w).items.push(i);
+    }
+    const p = dayPlan(this.items, today, today);
+    by.get('today').items = [...p.carried, ...p.open.filter((i) => !i.ghost)];
+    by.get('tomorrow').items = dayPlan(this.items, h.tomorrow, today).open.filter((i) => !i.ghost);
+    const at = (i) => i.task.day || spanOf(i.task)?.start || '';
+    for (const x of heads.slice(2)) {
+      const n = (i) => (i.task.rank?.h === x.key && Number.isFinite(i.task.rank?.n) ? i.task.rank.n : Infinity);
+      x.items.sort((a, b) => n(a) - n(b) || at(a).localeCompare(at(b)) || (a.task.order || 0) - (b.task.order || 0) || (a.row.created_at || 0) - (b.row.created_at || 0));
+    }
+    return { h, heads };
+  }
+
+  whenFolds() { try { return new Set(JSON.parse(localStorage.getItem('whenFold') || '[]')); } catch { return new Set(); } }
+  whenFold(id, on) {
+    const all = this.whenFolds();
+    if (on) all.add(id); else all.delete(id);
+    try { localStorage.setItem('whenFold', JSON.stringify([...all])); } catch { /* no storage here */ }
+  }
+
+  drawWhen() {
+    const { h, heads } = this.whenModel();
+    const head = make('header', 'pl-top');
+    const left = make('div');
+    left.append(make('div', 'pl-eyebrow', long(h.today, { weekday: 'long', month: 'long', day: 'numeric' })), make('h1', '', 'What’s when'));
+    const side = make('div', 'pl-side');
+    side.append(...[this.pullButton()].filter(Boolean), this.switchRow('when'));
+    head.append(left, side);
+    const folds = this.whenFolds();
+    const parts = [head];
+    const shortDay = (iso) => `${long(iso, { weekday: 'short' })} ${dateOf(iso).getDate()}`;
+    for (const x of heads) {
+      const folded = folds.has(x.id);
+      const sec = make('section', `ww-sec${folded ? ' folded' : ''}`);
+      sec.dataset.bucket = x.id;
+      const hd = make('h2', 'ww-h');
+      const fold = make('button', 'ww-fold');
+      fold.dataset.act = 'ww-fold';
+      fold.setAttribute('aria-expanded', String(!folded));
+      fold.setAttribute('aria-label', `${folded ? 'Unfold' : 'Fold'} ${x.label}`);
+      fold.append(make('span', 'ww-tri', folded ? '▸' : '▾'), make('span', 'ww-name', x.label), make('span', 'ww-n', x.items.length ? String(x.items.length) : ''));
+      hd.append(fold);
+      const list = make('div', 'pl-list ww-list');
+      list.dataset.bucket = x.id;
+      list.hidden = folded;
+      const rows = x.items.flatMap((i) => this.taskRow(i, {
+        carried: x.id === 'today' && !!i.task.day && i.task.day < h.today,
+        tag: i.task.day && x.id !== 'today' && x.id !== 'tomorrow' ? shortDay(i.task.day) : x.id === 'later' && spanOf(i.task) && spanOf(i.task).kind !== 'later' ? whenWord(i.task, h.today) : ''
+      }));
+      list.append(...rows);
+      if (!rows.length) list.append(make('div', 'ww-empty', 'Nothing yet'));
+      sec.append(hd, list);
+      parts.push(sec);
+    }
+    if (!heads.some((x) => x.items.length)) parts.push(make('p', 'pl-note', 'Nothing planned yet. Pull from a project and drag its lines onto a heading, or press Alt + W on any line.'));
+    this.sheet.replaceChildren(...parts);
+    this.just = null;
+  }
+
+  // The ones a move carries: all that are picked, when the one moved is one of them.
+  movingIds(id) { return this.sel?.size > 1 && this.sel.has(id) ? [...this.sel] : [id]; }
+
+  // Lines put under a heading of What's when, in `seq` (every id under it, in
+  // order). One already under it keeps its exact day; the rest get the
+  // heading's time. A plain line becomes a task. Says so, with Undo.
+  async placeIn(bucket, seq, moved) {
+    const h = horizon(this.today);
+    const head = whenHeadings(h).find((x) => x.id === bucket);
+    if (!head) return;
+    const snaps = (await Promise.all([...new Set([...moved, ...seq])].map((id) => whenSnap(id)))).filter(Boolean);
+    const rows = [];
+    let made = 0;
+    let changed = 0;
+    for (const id of moved) {
+      const t = taskOf(await getEntry(id));
+      if (!t) made += 1;
+      if (t && whenOf(t, h) === bucket) continue;
+      changed += 1;
+      rows.push(await setWhen(id, head.when));
+    }
+    if (head.when.day) {
+      // Ones still carried over from an earlier day keep their place among those.
+      const day = head.when.day;
+      const fresh = [];
+      for (const id of seq) { const t = taskOf(await getEntry(id)); if (t?.day && t.day < day && !moved.includes(id)) continue; fresh.push(id); }
+      rows.push(...(await arrange(fresh, day)));
+    } else rows.push(...(await rankAll(seq, head.key)));
+    await this.wrote(rows.filter(Boolean));
+    this.unselect();
+    const words = moved.length === 1 ? `“${clip((await getEntry(moved[0]))?.text)}”` : `${moved.length} lines`;
+    this.saidWhen(snaps, changed || made ? `${words} → ${head.label}` : `${words} moved`, made, moved.length);
+  }
+
+  // When for some lines, from the picker (or a drop on a day or a week).
+  async applyWhen(ids, when, label) {
+    const list = [];
+    let theirs = 0;
+    for (const id of ids) {
+      const r = await getEntry(id);
+      const t = taskOf(r);
+      if (!r || r.deleted) continue;
+      if (t?.owner && t.owner !== 'me') { theirs += 1; continue; }
+      list.push(id);
+    }
+    if (!list.length) { if (theirs) this.hooks.toast?.('That’s Nate’s task: it stays as he has it'); return []; }
+    const snaps = (await Promise.all(list.map((id) => whenSnap(id)))).filter(Boolean);
+    const made = snaps.filter((x) => !x.task).length;
+    const rows = [];
+    const day = when?.day || null;
+    let n = day ? this.lastOrder(day) : 0;
+    for (const id of list) rows.push(await setWhen(id, when, day ? { order: n++ } : {}));
+    await this.wrote(rows.filter(Boolean));
+    this.unselect();
+    const words = list.length === 1 ? `“${clip((await getEntry(list[0]))?.text)}”` : `${list.length} lines`;
+    this.saidWhen(snaps, when ? `${words} → ${label}` : `${words}: not planned`, made);
+    return rows;
+  }
+
+  saidWhen(snaps, text, made, n = snaps.length) {
+    const task = made ? (n === 1 ? ' · now a task' : made === n ? ' · now tasks' : ` · ${made} now tasks`) : '';
+    this.hooks.toast?.(`${text}${task}`, { label: 'Undo', run: async () => {
+      const back = [];
+      for (const x of snaps) back.push(await whenBack(x));
+      await this.wrote(back.filter(Boolean));
+      this.hooks.toast?.('Put back as it was');
+    } });
+  }
+
+  // The When picker for some lines (Alt + W, the menu, the label on a step).
+  async pickWhenFor(ids, { anchor = null, at = null } = {}) {
+    ids = [...new Set(ids.filter(Boolean))];
+    if (!ids.length) return;
+    const t = taskOf(await getEntry(ids[0]));
+    await pickWhen({
+      anchor, at,
+      title: ids.length > 1 ? `When · ${ids.length} lines` : 'When',
+      current: ids.length === 1 ? currentChoice(t, this.today) : null,
+      pick: (c) => this.applyWhen(ids, c.when, c.label)
+    });
+  }
+
+  // Alt + W where the keyboard is: the tasks picked, or the one it's on.
+  whenKey() {
+    const row = document.activeElement?.closest?.('[data-task]');
+    const ids = this.sel?.size ? [...this.sel] : row && (this.box.contains(row) || this.sheet.contains(row) || this.steps?.contains(row)) ? [row.dataset.task] : [];
+    if (!ids.length) return false;
+    this.pickWhenFor(ids, { anchor: row || null });
+    return true;
+  }
+
+  // ---------- lines pulled in from a project ----------
+
+  // Where a line dragged from the project pane would land, under (x, y).
+  pullSpot(x, y) {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    const zone = el.closest?.('.pz');
+    if (zone) return { pz: zone };
+    const rowsOf = (list) => [...list.querySelectorAll('.pl-task:not(.done):not(.ghost)')].filter((r) => !list.hidden && r.getClientRects().length);
+    const afterIn = (rows) => { let after = null; for (const r of rows) { const b = r.getBoundingClientRect(); if (y > b.top + b.height / 2) after = r; } return after; };
+    if (this.pageShown && this.tab === 'when') {
+      const sec = el.closest?.('.ww-sec');
+      if (sec && this.sheet.contains(sec)) {
+        const list = sec.querySelector('.ww-list');
+        const all = rowsOf(list);
+        // Over the heading itself: at the end of it.
+        const onHead = !!el.closest('.ww-h') || list.hidden;
+        const rest = all.filter((r) => !r.classList.contains('carried'));
+        const after = onHead ? all.at(-1) || null : afterIn(all);
+        return { bucket: sec.dataset.bucket, list, rows: rest, after: after && after.classList.contains('carried') ? null : after, sec };
+      }
+      return null;
+    }
+    if (this.pageShown && this.tab === 'week') {
+      const zone2 = el.closest?.('.pw-day, .pw-tray');
+      return zone2 && this.sheet.contains(zone2) ? { zone: zone2 } : null;
+    }
+    if (this.pageShown && this.tab === 'ahead') {
+      if (!el.closest?.('.ah')) return null;
+      const col = [...this.sheet.querySelectorAll('.ah-h')].find((c) => { const b = c.getBoundingClientRect(); return x >= b.left && x < b.right; });
+      const week = col?.querySelector('.ah-week')?.dataset.week;
+      return week ? { week, col } : null;
+    }
+    if (this.dayShown || (this.pageShown && this.tab === 'day')) {
+      const box = this.dayShown ? this.box : this.sheet;
+      const list = el.closest?.('.pl-list');
+      if (list && box.contains(list)) {
+        const all = rowsOf(list);
+        const rest = all.filter((r) => !r.classList.contains('carried'));
+        const after = afterIn(all);
+        return { day: list.dataset.day, list, rows: rest, after: after && after.classList.contains('carried') ? null : after };
+      }
+      return el.closest?.('.pl-head') && box.contains(el) ? { day: box.querySelector('.pl-list')?.dataset.day || this.today, list: box.querySelector('.pl-list'), rows: [], after: null, top: true } : null;
+    }
+    return null;
+  }
+
+  pullShow(s) {
+    for (const x of document.querySelectorAll('.pull-over, .drop-before, .drop-after, .drop-on')) x.classList.remove('pull-over', 'drop-before', 'drop-after', 'drop-on');
+    if (!s) return false;
+    if (s.pz) s.pz.classList.add('pull-over');
+    else if (s.zone) s.zone.classList.add('drop-on');
+    else if (s.col) s.col.classList.add('pull-over');
+    else if (s.sec && (s.list.hidden || !s.rows.length)) s.sec.classList.add('pull-over');
+    else if (s.after) s.after.classList.add('drop-after');
+    else if (s.rows?.[0]) s.rows[0].classList.add('drop-before');
+    else if (s.sec) s.sec.classList.add('pull-over');
+    else if (s.list) (s.list.querySelector('.pl-add') || s.list).classList.add('drop-before');
+    return true;
+  }
+
+  // Let go: the lines get their When there, and stay where they're written.
+  async pullDrop(s, ids) {
+    this.pullShow(null);
+    if (!s || !ids.length) return false;
+    const h = horizon(this.today);
+    const seqWith = (rows, after) => {
+      const seq = rows.map((r) => r.dataset.task).filter((x) => !ids.includes(x));
+      seq.splice(after ? seq.indexOf(after.dataset.task) + 1 : 0, 0, ...ids);
+      return seq;
+    };
+    if (s.pz) {
+      const { kind, value } = s.pz.dataset;
+      if (kind === 'bucket') {
+        const head = this.whenModel().heads.find((x) => x.id === value);
+        await this.placeIn(value, [...(head?.items || []).map((i) => i.row.id).filter((x) => !ids.includes(x)), ...ids], ids);
+        return true;
+      }
+      if (kind === 'day') { await this.applyWhen(ids, { day: value }, long(value, { weekday: 'long' })); return true; }
+      if (kind === 'week') { await this.applyWhen(ids, { span: { kind: 'week', start: value } }, value <= h.mon0 ? 'This week' : value === h.mon1 ? 'Next week' : `the week of ${long(value, { month: 'short', day: 'numeric' })}`); return true; }
+      return false;
+    }
+    if (s.bucket) { await this.placeIn(s.bucket, seqWith(s.rows, s.after), ids); return true; }
+    if (s.zone) {
+      const day = s.zone.dataset.day || null;
+      const mon = weekOf(this.week || this.today)[0];
+      await this.applyWhen(ids, day ? { day } : { span: { kind: 'week', start: mon } }, day ? long(day, { weekday: 'long' }) : mon <= h.mon0 ? 'Any day this week' : `Any day, week of ${long(mon, { month: 'short', day: 'numeric' })}`);
+      return true;
+    }
+    if (s.week) { await this.applyWhen(ids, { span: { kind: 'week', start: s.week } }, s.week <= h.mon0 ? 'This week' : s.week === h.mon1 ? 'Next week' : `the week of ${long(s.week, { month: 'short', day: 'numeric' })}`); return true; }
+    if (s.day) {
+      if (s.day === h.today || s.day === h.tomorrow) await this.placeIn(s.day === h.today ? 'today' : 'tomorrow', seqWith(s.rows, s.after), ids);
+      else await this.applyWhen(ids, { day: s.day }, long(s.day, { weekday: 'long' }));
+      return true;
+    }
+    return false;
+  }
+
+  // On a phone, while a line slides up from the bottom half, the plan on top
+  // folds into a few big places to drop it on: the six headings (the week's
+  // days and "Any day" on Week, the six weeks on Weeks ahead).
+  pullZones(on) {
+    document.querySelector('.pull-zones')?.remove();
+    document.documentElement.classList.toggle('pull-dropping', !!on);
+    if (!on) return;
+    const h = horizon(this.today);
+    const box = make('div', 'pull-zones');
+    box.setAttribute('aria-hidden', 'true');
+    const zone = (kind, value, label, n) => {
+      const z = make('div', 'pz');
+      z.dataset.kind = kind;
+      z.dataset.value = value;
+      z.append(make('span', 'pz-l', label), make('span', 'pz-n', n ? String(n) : ''));
+      box.append(z);
+    };
+    if (this.pageShown && this.tab === 'week') {
+      const w = weekPlan(this.items, this.week || this.today, this.today);
+      for (const d of w.days) zone('day', d.iso, `${long(d.iso, { weekday: 'long' })} ${dateOf(d.iso).getDate()}`, d.open.length);
+      zone('week', w.days[0].iso, w.days[0].iso <= h.mon0 ? 'Any day this week' : 'Any day that week', w.tray.length);
+    } else if (this.pageShown && this.tab === 'ahead') {
+      for (let n = 0; n < 6; n++) { const iso = addDays(h.mon0, n * 7); zone('week', iso, n === 0 ? 'This week' : n === 1 ? 'Next week' : `Week of ${long(iso, { month: 'short', day: 'numeric' })}`, 0); }
+    } else for (const x of this.whenModel().heads) zone('bucket', x.id, x.label, x.items.length);
+    document.body.append(box);
+  }
+
   // ---------- Week ----------
 
   drawWeek() {
@@ -622,7 +926,7 @@ export class Plan {
     next.dataset.act = 'week-next';
     next.setAttribute('aria-label', 'The week after');
     nav.append(prev, now, next);
-    side.append(this.meter(w.min, this.free * 60), nav, this.switchRow('week'));
+    side.append(this.meter(w.min, this.free * 60), nav, ...[this.pullButton()].filter(Boolean), this.switchRow('week'));
     head.append(left, side);
 
     const grid = make('div', 'pw-week');
@@ -642,7 +946,7 @@ export class Plan {
     }
     const tray = make('section', 'pw-tray');
     tray.dataset.day = '';
-    tray.append(make('h2', 'pl-label', 'Not on a day yet'));
+    tray.append(make('h2', 'pl-label', thisWeek ? 'Any day this week' : 'Any day that week'));
     const chips = make('div', 'pw-chips');
     for (const i of w.tray) chips.append(this.chip(i));
     chips.append(this.addRow(null, 'Add'));
@@ -832,6 +1136,8 @@ export class Plan {
       return popMenu(el, (this.areaList || []).filter((a) => !shown.has(a.id)).map((a) => ({ label: a.title || 'Untitled', run: () => this.askTarget(a.id) })));
     }
     if (act === 'all-done') { this.allDone = !this.allDone; return this.drawSteps(); }
+    if (act === 'pull') return this.hooks.pull?.();
+    if (act === 'ww-fold') { const sec = el.closest('.ww-sec'); this.whenFold(sec.dataset.bucket, !sec.classList.contains('folded')); return this.drawWhen(); }
     if (act === 'kid') {
       if (e.target.closest('a[href]')) return;
       const of = el.closest('[data-kids-of]')?.dataset.kidsOf;
@@ -839,7 +1145,7 @@ export class Plan {
       return of && this.hooks.openTask?.(of, el.dataset.line);
     }
     if (!i) return;
-    if (act === 'day') return popMenu(el, this.dayItems(i));
+    if (act === 'day') return this.pickWhenFor(this.movingIds(i.row.id), { anchor: el });
     if (act === 'history') return popMenu(el, this.historyItems(i));
     if (act === 'tick' && i.ghost) return this.hooks.toast?.(`It comes round on ${long(i.ghost, { weekday: 'long' })}. Tick it then, or tick the one that’s due.`);
     if (act === 'tick') return this.tick(i, !i.row.fields?.done);
@@ -1066,8 +1372,10 @@ export class Plan {
     const { title, est, repeat } = parseAdd(input.value);
     const steps = input.dataset.add === 'steps' && this.world;
     const day = steps || input.dataset.add === 'tray' ? null : input.dataset.add;
+    // Added under "Any day this week": loose in that week.
+    const loose = input.dataset.add === 'tray' ? { kind: 'week', start: weekOf(this.week || this.today)[0] } : null;
     input.value = '';
-    addTask({ text: title, day, est, repeat, order: this.lastOrder(day), home: steps ? stepsHome(this.world) : null }).then(async (rows) => {
+    addTask({ text: title, day, est, repeat, span: loose, order: this.lastOrder(day), home: steps ? stepsHome(this.world) : null }).then(async (rows) => {
       await this.wrote(rows);
       // One that repeats starts on the first day it lands on: say so when that isn't here.
       const made = rows.at(-1)?.fields?.task;
@@ -1148,24 +1456,6 @@ export class Plan {
     ];
   }
 
-  // Which day: today, tomorrow, another, or none.
-  dayItems(i) {
-    const t = i.task;
-    const today = this.today;
-    const days = [];
-    for (let n = 2; n <= 7; n++) {
-      const iso = addDays(today, n);
-      days.push({ label: long(iso, { weekday: 'long', month: 'short', day: 'numeric' }), current: t.day === iso, run: () => this.move(i, iso) });
-    }
-    days.push({ label: 'Pick a date…', run: async () => { const v = await askText({ title: 'Which day?', type: 'date', value: '', ok: 'Move' }); if (v && /^\d{4}-\d\d-\d\d$/.test(String(v))) this.move(i, String(v)); } });
-    return [
-      { label: 'Today', current: t.day === today, run: () => this.move(i, today) },
-      { label: 'Tomorrow', current: t.day === addDays(today, 1), run: () => this.move(i, addDays(today, 1)) },
-      { label: 'Another day', sub: days },
-      { label: 'Not on a day yet', current: !t.day, run: () => this.move(i, null) }
-    ];
-  }
-
   // The menu for a task, the same wherever the task shows (the plan, a week,
   // the label after its words on a page).
   menu(i, anchor, at) {
@@ -1189,7 +1479,7 @@ export class Plan {
     // On a phone, a quick way to the ends of the day without sliding past everything.
     const list = !done && anchor?.dataset?.move && anchor.closest?.('.pl-list');
     if (list) items.push('sep', { label: 'Move to the top', run: () => this.toEnd(list, i.row.id, true) }, { label: 'Move to the bottom', run: () => this.toEnd(list, i.row.id, false) });
-    items.push('sep', ...this.dayItems(i), 'sep',
+    items.push('sep', { label: `When…${hover.matches ? '  (Alt + W)' : ''}`, run: () => this.pickWhenFor(this.movingIds(i.row.id), { anchor, at }) }, 'sep',
       ...(t.habit || !this.estimates ? [] : [{ label: t.est ? `Takes ${span(t.est)}` : 'How long it takes', sub: this.estItems(i) }]),
       // It can come round again; one that does can be a habit, with no hours.
       ...(!done && !isStretch(t) && !t.mark ? [{ label: rep ? repeatWord(t.repeat) : 'Repeat', sub: this.repeatItems(i) }] : []),
@@ -1315,7 +1605,14 @@ export class Plan {
     const spot = (e, target = e.target) => {
       const zone = target?.closest?.('.pw-day, .pw-tray');
       if (zone) return { zone };
-      const list = target?.closest?.('.pl-list');
+      // What's when: over a heading (or a folded one), at the end of it.
+      const sec = target?.closest?.('.ww-sec');
+      let list = target?.closest?.('.pl-list');
+      if (sec && (!list || target.closest('.ww-h') || list.hidden)) {
+        list = sec.querySelector('.ww-list');
+        const rest = [...list.querySelectorAll('.pl-task:not(.done):not(.ghost):not(.carried)')].filter((r) => r.dataset.task !== id);
+        return { list, rows: rest, after: list.hidden ? rest.at(-1) || null : rest.at(-1) || null, sec };
+      }
       if (!list) return null;
       // In a woven plan the events count as places too: a task can go just above or below one.
       const all = [...list.querySelectorAll('.pl-task:not(.done):not(.ghost), .pl-wev')].filter((r) => r.dataset.task !== id);
@@ -1332,18 +1629,30 @@ export class Plan {
     };
     const show = (s) => {
       clear();
+      root.querySelectorAll('.pull-over').forEach((x) => x.classList.remove('pull-over'));
       if (!s) return;
-      if (s.zone) s.zone.classList.add('drop-on');
+      if (s.sec && (s.list.hidden || !s.rows.length)) s.sec.classList.add('pull-over');
+      else if (s.zone) s.zone.classList.add('drop-on');
       else if (s.after) s.after.classList.add('drop-after');
       else (s.rows[0] || s.list.querySelector('.pl-add'))?.classList.add('drop-before');
     };
     const land = async (s, moved) => {
+      root.querySelectorAll('.pull-over').forEach((x) => x.classList.remove('pull-over'));
       if (!s) return;
+      const ids = this.movingIds(moved);
       if (s.zone) {
+        // A day of the week, or "Any day this week".
         const day = s.zone.dataset.day || null;
         const i = this.item(moved);
-        if (!i || (i.task.day || null) === day) return this.refresh();
-        return this.wrote(await setTask(moved, { day, order: this.lastOrder(day) }));
+        if (!i) return this.refresh();
+        if (ids.length === 1 && day && (i.task.day || null) === day) return this.refresh();
+        return this.pullDrop({ zone: s.zone }, ids);
+      }
+      // A heading of What's when: its time, at that place under it.
+      if (s.list?.dataset.bucket && !s.carried) {
+        const seq = s.rows.map((r) => r.dataset.task).filter((x) => !ids.includes(x));
+        seq.splice(s.after ? seq.indexOf(s.after.dataset.task) + 1 : 0, 0, ...ids);
+        return this.placeIn(s.list.dataset.bucket, seq, ids);
       }
       const seq = [...s.rows];
       seq.splice(s.after ? seq.indexOf(s.after) + 1 : 0, 0, { id: moved });
@@ -1445,7 +1754,9 @@ export class Plan {
       const step = () => {
         if (!t?.moving) return;
         const y = t.lastY;
-        const speed = y < edge ? -Math.ceil((edge - y) / 6) : y > innerHeight - edge ? Math.ceil((y - (innerHeight - edge)) / 6) : 0;
+        // With a project open in the bottom half, its top is the bottom edge.
+        const floor = this.hooks.floor?.() || innerHeight;
+        const speed = y < edge ? -Math.ceil((edge - y) / 6) : y > floor - edge ? Math.ceil((y - (floor - edge)) / 6) : 0;
         if (speed) { window.scrollBy(0, speed); show(at(t.lastX, y)); }
         t.raf = requestAnimationFrame(step);
       };

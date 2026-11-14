@@ -3,7 +3,8 @@
 // and how it reads in words. A task is a line with fields.task:
 //   { v: 1, day, est, done_at (ms), actual, log, run, order, owner,
 //     until, mark: 'date' | 'hard', repeat: { every, n, days, from, until },
-//     did: [[day, minutes, ms]], habit, on: { day, at (minutes from midnight) }, len }
+//     did: [[day, minutes, ms]], habit, on: { day, at (minutes from midnight) }, len,
+//     span: { kind: 'week' | 'month' | 'later', start } (a day OR a span, never both) }
 // Days are the person's local dates, YYYY-MM-DD.
 
 export type RepeatRule = { every: "day" | "weekdays" | "week" | "month"; n?: number; days?: number[]; from: string; until?: string | null };
@@ -14,6 +15,10 @@ export type Task = {
   did?: [string, number | null, number][]; habit?: boolean;
   /** Where it sits on the day's Calendar (minutes from midnight), and how long its block is. */
   on?: { day: string; at: number } | null; len?: number | null;
+  /** Loose time, instead of a day: some day in a week (start = its Monday), in a month (start = its 1st), or later. */
+  span?: { kind: "week" | "month" | "later"; start: string | null } | null;
+  /** Its place under a heading of What's when. */
+  rank?: { h: string; n: number } | null;
 };
 
 export const blank = (): Task => ({ v: 1, day: null, est: null, done_at: null, actual: null, log: [], run: null, order: 0 });
@@ -31,6 +36,20 @@ export const dow = (iso: string) => ((new Date(ms(iso)).getUTCDay() + 6) % 7) + 
 const monday = (iso: string) => addDays(iso, 1 - dow(iso));
 export const isRepeat = (t: Task | null | undefined) => !!t?.repeat?.every;
 export const isStretch = (t: Task | null | undefined) => !!(t?.day && t.until && t.until >= t.day);
+export const spanOf = (t: Task | null | undefined) => (t && !t.day && t.span?.kind ? t.span : null);
+/** A loose time in words, seen from today: "this week", "next week", "week of 2026-11-30", "this month", "2026-12", "later". */
+export function spanWord(t: Task | null | undefined, today: string): string | null {
+  const s = spanOf(t);
+  if (!s) return null;
+  if (s.kind === "week") {
+    const mon = addDays(today, 1 - dow(today));
+    if (!s.start || s.start <= mon) return "this week";
+    if (s.start === addDays(mon, 7)) return "next week";
+    return `week of ${s.start}`;
+  }
+  if (s.kind === "month") return !s.start || s.start.slice(0, 7) <= today.slice(0, 7) ? "this month" : s.start.slice(0, 7);
+  return "later";
+}
 
 /** Does this rule land on that day? */
 export function lands(rule: RepeatRule | null | undefined, iso: string): boolean {

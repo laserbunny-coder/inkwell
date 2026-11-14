@@ -127,7 +127,18 @@ const get = async (p, id) => (await all(p)).find((r) => r.id === id);
 const go = (p, place) => p.evaluate((pl) => { history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); }, place);
 const viewOf = (p) => p.evaluate(() => document.documentElement.dataset.view || 'write');
 const still = (p) => p.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {}))));
-const pick = async (p, label) => { await p.locator('.pop-menu .pop-item', { hasText: label }).first().click(); await sleep(300); };
+// Today, Tomorrow and the rest of the times are in the When picker (from "When…" in the menu).
+const WHEN = { Today: 'Today', Tomorrow: 'Tomorrow', 'Not on a day yet': 'Not planned' };
+const pick = async (p, label) => {
+  if (WHEN[label]) {
+    // A step's label opens the picker straight away; a menu has "When…".
+    await p.waitForSelector('.when-pick, .pop-menu');
+    if (!(await p.locator('.when-pick').count())) await p.locator('.pop-menu .pop-item', { hasText: 'When' }).first().click();
+    await p.waitForSelector('.when-pick');
+    await p.locator('.when-pick .wp-opt', { hasText: WHEN[label] }).first().click();
+  } else await p.locator('.pop-menu .pop-item', { hasText: label }).first().click();
+  await sleep(300);
+};
 const facts = (p) => p.evaluate(() => Object.fromEntries([...document.querySelectorAll('#wh-facts dt')].map((dt) => [dt.textContent, dt.nextElementSibling.innerText.trim()])));
 const steps = (p) => p.locator('#wh-steps .pl-task .pl-words').allInnerTexts();
 const step = (p, text) => p.locator('#wh-steps .pl-task', { hasText: text });

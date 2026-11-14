@@ -148,7 +148,18 @@ const ahead = async (p) => {
   await go(p, { view: 'plan', tab: 'ahead' });
   await p.waitForSelector('.ah .ah-lane');
 };
-const pick = async (p, label) => { await p.locator('.pop-menu .pop-item', { hasText: label }).first().click(); await sleep(250); };
+// Today, Tomorrow and the rest of the times are in the When picker (from "When…" in the menu).
+const WHEN = { Today: 'Today', Tomorrow: 'Tomorrow', 'Not on a day yet': 'Not planned' };
+const pick = async (p, label) => {
+  if (WHEN[label]) {
+    // A step's label opens the picker straight away; a menu has "When…".
+    await p.waitForSelector('.when-pick, .pop-menu');
+    if (!(await p.locator('.when-pick').count())) await p.locator('.pop-menu .pop-item', { hasText: 'When' }).first().click();
+    await p.waitForSelector('.when-pick');
+    await p.locator('.when-pick .wp-opt', { hasText: WHEN[label] }).first().click();
+  } else await p.locator('.pop-menu .pop-item', { hasText: label }).first().click();
+  await sleep(250);
+};
 const lanes = (p) => p.evaluate(() => [...document.querySelectorAll('.ah-p')].map((b) => `${b.innerText.trim()}${b.classList.contains('faint') ? ' (faint)' : ''}`));
 // "1 / 3 Reel 2: generate and edit" for each bar in a lane.
 const bars = (p, world) => p.evaluate((w) => [...document.querySelectorAll(`.ah-lane[data-world="${w}"] .ah-bar`)].map((b) => `${b.style.gridColumn} ${b.querySelector('.ah-t').textContent}`), world);
@@ -186,7 +197,7 @@ try {
 
   await check('Today’s switch has Weeks ahead between Week and Pace, and it opens six weeks from this one', async () => {
     await go(page, { view: 'plan', tab: 'week' });
-    assert.deepEqual(await page.locator('.today-switch .tb-btn').allInnerTexts(), ['Day', 'Week', 'Weeks ahead', 'Pace']);
+    assert.deepEqual(await page.locator('.today-switch .tb-btn').allInnerTexts(), ['Day', 'What’s when', 'Week', 'Weeks ahead', 'Pace']);
     await page.locator('.today-switch .tb-btn', { hasText: 'Weeks ahead' }).click();
     await page.waitForFunction(() => history.state?.tab === 'ahead' && document.querySelector('.today-switch [aria-current="page"]')?.textContent === 'Weeks ahead');
     await page.waitForSelector('.ah .ah-lane');
@@ -530,7 +541,7 @@ try {
     const phone = await open(undefined, { ...devices['Pixel 7'] });
     await go(phone, { view: 'plan', tab: 'ahead' });
     await phone.waitForSelector('.ah .ah-lane');
-    assert.deepEqual(await phone.locator('.pl-switch button').allInnerTexts(), ['Day', 'Week', 'Weeks ahead', 'Pace']);
+    assert.deepEqual(await phone.locator('.pl-switch button').allInnerTexts(), ['Day', 'What’s when', 'Week', 'Weeks ahead', 'Pace']);
     const wide = await phone.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     assert.ok(wide <= 1, `the page spills ${wide}`);
     assert.ok(await phone.locator('.ah-wrap').evaluate((w) => w.scrollWidth > w.clientWidth + 100));

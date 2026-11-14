@@ -7,7 +7,12 @@
 // fields.task = { v: 1, day: 'YYYY-MM-DD' | null, est: minutes | null,
 //   done_at: ms | null, actual: minutes | null, log: [[start, end], …],
 //   run: ms | null (the timer is going since then), order: number, owner,
-//   until: 'YYYY-MM-DD' | null, mark: 'date' | 'hard' | null }
+//   until: 'YYYY-MM-DD' | null, mark: 'date' | 'hard' | null,
+//   span: { kind: 'week' | 'month' | 'later', start: 'YYYY-MM-DD' } | null,
+//   rank: { h: heading key, n } (its place under a heading of What's when) }
+// A task has a day OR a span (loose time: some day in a week, in a month, or
+// later), never both. One with a span is on no day's list and never late:
+// a week gone by rolls on quietly into this week.
 // A line's own "done" (fields.done) is the tick; done_at says when.
 // A task with an "until" is a stretch of work, from its day through that
 // day: a bar in Weeks ahead, not something on one day's plan. A task with a
@@ -78,10 +83,10 @@ export function dayWord(iso, today = isoOf()) {
 // The quiet label after a task's words where it's written.
 export function chipLabel(task, done = false, today = isoOf()) {
   if (done) return task.actual ? `Done · ${span(task.actual)}` : 'Done';
-  return [isStretch(task) ? stretchWord(task) : `${isRepeat(task) ? '↻ ' : ''}${dayWord(dueDay(task, today), today)}`, task.est && !task.habit ? span(task.est) : null, task.run ? 'timing' : null].filter(Boolean).join(' · ');
+  return [isStretch(task) ? stretchWord(task) : spanOf(task) ? looseWord(task, today) : `${isRepeat(task) ? '↻ ' : ''}${dayWord(dueDay(task, today), today)}`, task.est && !task.habit ? span(task.est) : null, task.run ? 'timing' : null].filter(Boolean).join(' · ');
 }
 
-const blank = () => ({ v: 1, day: null, est: null, done_at: null, actual: null, log: [], run: null, order: 0 });
+const blank = () => ({ v: 1, day: null, est: null, done_at: null, actual: null, log: [], run: null, order: 0, span: null });
 export const taskOf = (row) => (row?.fields?.task?.v ? row.fields.task : null);
 // A stretch of work: it has a first day and a last.
 export const isStretch = (task) => !!(task?.day && task.until && task.until >= task.day);
@@ -259,6 +264,99 @@ export function timed(task, now = Date.now()) {
   return ms ? Math.max(1, Math.round(ms / 6e4)) : 0;
 }
 
+// ---------- loose time ----------
+
+// A task's span, if it has one (a day always wins).
+export const spanOf = (task) => (task && !task.day && task.span?.kind ? task.span : null);
+export const monthStart = (iso) => `${iso.slice(0, 7)}-01`;
+export const monthEnd = (iso) => { const d = dateOf(monthStart(iso)); return isoOf(new Date(d.getFullYear(), d.getMonth() + 1, 0)); };
+const monthAfter = (iso) => { const d = dateOf(monthStart(iso)); return isoOf(new Date(d.getFullYear(), d.getMonth() + 1, 1)); };
+const monthName = (iso, today) => dateOf(iso).toLocaleDateString('en-US', iso.slice(0, 4) === today.slice(0, 4) ? { month: 'long' } : { month: 'long', year: 'numeric' });
+
+// Where the headings of What's when fall, seen from today. "This month" is
+// the rest of the month after next week; in the last days of a month, when
+// nothing of it is left after next week, it's next month, by its name.
+export function horizon(today = isoOf()) {
+  const mon0 = weekOf(today)[0];
+  const sun0 = addDays(mon0, 6);
+  const mon1 = addDays(mon0, 7);
+  const sun1 = addDays(mon0, 13);
+  let start = monthStart(today);
+  let from = addDays(sun1, 1);
+  let to = monthEnd(today);
+  const here = from <= to;
+  if (!here) { start = monthAfter(today); to = monthEnd(start); }
+  if (from < start) from = start;
+  return { today, tomorrow: addDays(today, 1), mon0, sun0, mon1, sun1, month: { start, from, to, here, label: here ? 'This month' : monthName(start, today) } };
+}
+
+// The six headings, in order.
+export const WHEN_IDS = ['today', 'tomorrow', 'week', 'next', 'month', 'later'];
+export function whenHeadings(h) {
+  return [
+    { id: 'today', label: 'Today', key: `d:${h.today}`, when: { day: h.today } },
+    { id: 'tomorrow', label: 'Tomorrow', key: `d:${h.tomorrow}`, when: { day: h.tomorrow } },
+    { id: 'week', label: 'This week', key: `w:${h.mon0}`, when: { span: { kind: 'week', start: h.mon0 } } },
+    { id: 'next', label: 'Next week', key: `w:${h.mon1}`, when: { span: { kind: 'week', start: h.mon1 } } },
+    { id: 'month', label: h.month.label, key: `m:${h.month.start}`, when: { span: { kind: 'month', start: h.month.start } } },
+    { id: 'later', label: 'Later', key: 'later', when: { span: { kind: 'later', start: null } } }
+  ];
+}
+
+// Which heading a task is under (null: not planned). A day on or before
+// today is today's (carried over); a week or a month gone by rolls on.
+export function whenOf(task, h) {
+  if (!task) return null;
+  const d = task.day;
+  if (d) {
+    if (d <= h.today) return 'today';
+    if (d === h.tomorrow) return 'tomorrow';
+    if (d <= h.sun0) return 'week';
+    if (d <= h.sun1) return 'next';
+    return d <= h.month.to ? 'month' : 'later';
+  }
+  const s = spanOf(task);
+  if (!s) return null;
+  if (s.kind === 'week') {
+    const w = s.start || h.mon0;
+    if (w <= h.mon0) return 'week';
+    if (w <= h.mon1) return 'next';
+    return w <= h.month.to ? 'month' : 'later';
+  }
+  if (s.kind === 'month') {
+    const m = s.start || h.month.start;
+    if (m > h.month.start) return 'later';
+    // A month that ends this week or next is under that week.
+    const end = monthEnd(m);
+    if (m < h.month.start && end <= h.sun0) return 'week';
+    if (m < h.month.start && end <= h.sun1) return 'next';
+    return 'month';
+  }
+  return 'later';
+}
+
+// A loose time in words: "This week", "Next week", "Week of Nov 30",
+// "This month", "December", "Later".
+export function looseWord(task, today = isoOf()) {
+  const s = spanOf(task);
+  if (!s) return '';
+  if (s.kind === 'week') {
+    const mon0 = weekOf(today)[0];
+    if (!s.start || s.start <= mon0) return 'This week';
+    if (s.start === addDays(mon0, 7)) return 'Next week';
+    return `Week of ${short(s.start)}`;
+  }
+  if (s.kind === 'month') return !s.start || s.start <= monthStart(today) ? 'This month' : monthName(s.start, today);
+  return 'Later';
+}
+// When a task is planned, said short: a day ("Tue", "Nov 18"), a loose time, or ''.
+export function whenWord(task, today = isoOf()) {
+  if (!task) return '';
+  if (isStretch(task)) return stretchWord(task);
+  if (task.day) return dayWord(dueDay(task, today), today);
+  return looseWord(task, today);
+}
+
 // ---------- reading ----------
 
 // Every task with where it lives: { row, task, root (its page, day or piece),
@@ -367,7 +465,14 @@ export function weekPlan(items, anyDay, today = isoOf()) {
     const done = [...mine.filter((i) => isDone(i) && doneDay(i) === iso), ...didOn(mine, iso)].sort((a, b) => (a.task.done_at || 0) - (b.task.done_at || 0));
     return { iso, today: iso === today, open, done, min: open.reduce((a, i) => a + est(i), 0) + done.reduce((a, i) => a + real(i), 0) };
   });
-  const tray = mine.filter((i) => !isDone(i) && !i.task.day).sort(byOrder);
+  // Any day this week: tasks loose in this week (on this week, the ones from
+  // weeks gone by too). One with no When at all is found in its project.
+  const mon = days[0].iso;
+  const thisWeek = mon === weekOf(today)[0];
+  const tray = mine.filter((i) => {
+    const s = !isDone(i) && spanOf(i.task);
+    return s && s.kind === 'week' && (s.start === mon || (thisWeek && (!s.start || s.start < mon)));
+  }).sort(byOrder);
   // Still open from before this week: they wait on today's plan.
   const late = mine.filter((i) => !isDone(i) && i.task.day && i.task.day < days[0].iso).length;
   return { days, tray, late, min: days.reduce((a, d) => a + d.min, 0) };
@@ -423,6 +528,18 @@ export function aheadPlan(items, { today = isoOf(), weeks = 6, free = FREE_HOURS
     for (const d of i.task.did || []) if (d[0] >= first && d[0] <= end && d[2] !== i.task.done_at) cols[colOf(d[0]) - 1].min += d[1] ?? (i.task.est || 0);
     if (!isDone(i)) for (const iso of comingOn(i.task, first, end, today)) cols[colOf(iso) - 1].min += est(i);
   }
+  // A task loose in a week counts in that week (one from a week gone by, in this one).
+  const looseCol = (i) => {
+    const sp = spanOf(i.task);
+    if (!sp || sp.kind !== 'week') return 0;
+    const col = !sp.start || sp.start < first ? 1 : colOf(sp.start);
+    return col >= 1 && col <= weeks ? col : 0;
+  };
+  for (const i of items) {
+    if (!i.mine || isDone(i)) continue;
+    const col = looseCol(i);
+    if (col) cols[col - 1].min += est(i);
+  }
   for (const c of cols) c.over = c.min > free * 60;
   const out = lanes.map((lane) => {
     const mine = items.filter((i) => i.world?.id === lane.id && !isDone(i));
@@ -433,7 +550,9 @@ export function aheadPlan(items, { today = isoOf(), weeks = 6, free = FREE_HOURS
       .map((i) => ({ col: colOf(i.task.day), iso: i.task.day, text: i.row.text || 'Untitled', hard: i.task.mark === 'hard', item: i, go: null }));
     const other = dates.filter((d) => d.world === lane.id && d.iso >= first && d.iso <= end)
       .map((d) => ({ col: colOf(d.iso), iso: d.iso, text: d.text, hard: !!d.hard, item: null, go: d.go || null }));
-    return { ...lane, bars, dates: [...marks, ...other].sort((a, b) => a.iso.localeCompare(b.iso)) };
+    // Loose in a week: a quiet mark in that week's column, with no day.
+    const loose = mine.filter((i) => looseCol(i)).sort(byOrder).map((i) => ({ col: looseCol(i), item: i, text: i.row.text || 'Untitled' }));
+    return { ...lane, bars, loose, dates: [...marks, ...other].sort((a, b) => a.iso.localeCompare(b.iso)) };
   });
   const full = cols.find((c) => c.over);
   const long = (iso) => dateOf(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
@@ -477,7 +596,13 @@ async function change(id, fn, now = Date.now()) {
   await putEntries([next]);
   return next;
 }
-const withTask = (row, patch) => { row.fields.task = { ...blank(), ...(row.fields.task || {}), ...patch }; };
+// A day and a span never go together: whichever is set last wins.
+const withTask = (row, patch) => {
+  const t = { ...blank(), ...(row.fields.task || {}), ...patch };
+  if (patch.day) t.span = null;
+  else if (patch.span) t.day = null;
+  row.fields.task = t;
+};
 
 // Makes a line a task (or changes its day, estimate, place in the day).
 // A task has a box to tick.
@@ -490,11 +615,63 @@ export const moveTask = (id, day, order) => change(id, (r) => {
   if (t && isStretch(t)) patch.until = day ? addDays(day, Math.round((dateOf(t.until) - dateOf(t.day)) / 864e5)) : null;
   // Only this time moves; off its day altogether, it no longer repeats.
   if (t && isRepeat(t) && !day) { patch.repeat = null; patch.habit = false; }
+  // Off its day altogether: not planned at all.
+  if (!day) patch.span = null;
   withTask(r, patch);
   if (r.fields.box !== true) r.fields.box = true;
 });
 // The line stays, with its box; it's only no longer on any plan.
 export const unTask = (id) => change(id, (r) => { if (!r.fields.task) return false; delete r.fields.task; });
+
+// When it happens: { day } (an exact day), { span } (some day in a week, a
+// month, or later), or null (not planned). A plain line becomes a task. A
+// stretch keeps its length on a new day; a loose time is no stretch, no date
+// to hit, and doesn't repeat. extra: more task fields to write with it.
+export const setWhen = (id, when, extra = {}) => change(id, (r) => {
+  const t = taskOf(r);
+  const patch = { ...extra };
+  if (when?.day) {
+    patch.day = when.day;
+    patch.span = null;
+    if (t && isStretch(t)) patch.until = addDays(when.day, Math.round((dateOf(t.until) - dateOf(t.day)) / 864e5));
+  } else {
+    patch.day = null;
+    patch.span = when?.span?.kind ? { kind: when.span.kind, start: when.span.kind === 'later' ? null : when.span.start || null } : null;
+    patch.until = null;
+    patch.mark = null;
+    if (t && isRepeat(t)) { patch.repeat = null; patch.habit = false; }
+  }
+  withTask(r, patch);
+  if (r.fields.box !== true) r.fields.box = true;
+});
+// What a When change touches, to put back with Undo.
+const WHEN_KEYS = ['day', 'span', 'until', 'repeat', 'habit', 'mark', 'order', 'rank', 'carry'];
+export async function whenSnap(id) {
+  const r = await getEntry(id);
+  if (!r || r.deleted) return null;
+  const t = taskOf(r);
+  return { id, task: t ? Object.fromEntries(WHEN_KEYS.map((k) => [k, t[k] ?? null])) : null, box: r.fields?.box ?? null };
+}
+export const whenBack = (snap) => change(snap.id, (r) => {
+  if (!snap.task) {
+    delete r.fields.task;
+    if (snap.box === null) delete r.fields.box; else r.fields.box = snap.box;
+    return undefined;
+  }
+  r.fields.task = { ...blank(), ...(r.fields.task || {}), ...snap.task };
+  return undefined;
+});
+// The order under one heading of What's when (key: the heading's key, which
+// changes as the weeks go by, so an old order lapses by itself).
+export async function rankAll(ids, key) {
+  const out = [];
+  for (let n = 0; n < ids.length; n++) {
+    const t = taskOf(await getEntry(ids[n]));
+    if (!t || (t.rank?.h === key && t.rank?.n === n + 1)) continue;
+    out.push(await change(ids[n], (r) => { withTask(r, { rank: { h: key, n: n + 1 } }); }));
+  }
+  return out.filter(Boolean);
+}
 
 const stop = (task, now) => { if (task.run) { task.log = [...(task.log || []), [task.run, now]]; task.run = null; } };
 
@@ -604,7 +781,7 @@ export const stopTimer = (id, now = Date.now()) => change(id, (r) => { withTask(
 // A step added on a project's page lives on that project's Steps page (home).
 export const stepsPage = (worldId) => `steps-${worldId}`;
 export const stepsHome = (world) => ({ id: stepsPage(world.id), title: 'Steps', parent_id: world.id });
-export async function addTask({ text, day = null, est = null, order = 0, home = null, until = null, mark = null, repeat = null }) {
+export async function addTask({ text, day = null, est = null, order = 0, home = null, until = null, mark = null, repeat = null, span: loose = null }) {
   const now = Date.now();
   if (repeat) {
     const base = day && day > isoOf(now) ? day : isoOf(now);
@@ -625,7 +802,7 @@ export async function addTask({ text, day = null, est = null, order = 0, home = 
   const last = (await children(at.id)).filter((r) => r.kind === 'line').at(-1);
   const line = entry('line', {
     id: newId('li'), parent_id: at.id, sort: (last?.sort || 0) + GAP, text, content: text ? [{ type: 'text', text }] : null, tags: tagsIn(text), links: [],
-    fields: { done: false, gather: null, gathered: null, mirror: null, box: true, task: { ...blank(), day, est, order, ...(until ? { until } : {}), ...(mark ? { mark } : {}), ...(repeat ? { repeat } : {}) } }
+    fields: { done: false, gather: null, gathered: null, mirror: null, box: true, task: { ...blank(), day, est, order, ...(until ? { until } : {}), ...(mark ? { mark } : {}), ...(repeat ? { repeat } : {}), ...(loose && !day ? { span: loose } : {}) } }
   });
   rows.push(line);
   await putEntries(rows);

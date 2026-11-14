@@ -159,6 +159,9 @@ export class Frame {
     this.dayBtn = make('button', 'tb-btn', 'Day');
     this.dayBtn.dataset.cmd = 'today';
     this.dayBtn.title = 'Day: today’s plan on top of today’s page';
+    this.whenBtn = make('button', 'tb-btn', 'What’s when');
+    this.whenBtn.dataset.cmd = 'when';
+    this.whenBtn.title = 'What’s when: today, tomorrow, this week, next week, this month and later, on one page';
     this.weekBtn = make('button', 'tb-btn', 'Week');
     this.weekBtn.dataset.cmd = 'week';
     this.weekBtn.title = 'Week: seven days, and what isn’t on a day yet';
@@ -168,7 +171,7 @@ export class Frame {
     this.paceBtn = make('button', 'tb-btn', 'Pace');
     this.paceBtn.dataset.cmd = 'pace';
     this.paceBtn.title = 'Pace: what you planned against what it really took';
-    this.todaySwitch.append(this.tdPill, this.dayBtn, this.weekBtn, this.aheadBtn, this.paceBtn);
+    this.todaySwitch.append(this.tdPill, this.dayBtn, this.whenBtn, this.weekBtn, this.aheadBtn, this.paceBtn);
     this.todaySwitch.hidden = true;
     // Page tabs are redrawn each time, so their highlight lives beside them and slides.
     this.tabsPill = make('span', 'tabs-pill');
@@ -236,7 +239,7 @@ export class Frame {
     const b = roomOf(to);
     let turn = 'rise';
     // Day, Week, Weeks ahead and Pace are one room from further and further back.
-    const far = (v, t) => (v === 'plan' ? (t === 'pace' ? 3 : t === 'ahead' ? 2 : 1) : 0);
+    const far = (v, t) => (v === 'plan' ? (t === 'pace' ? 4 : t === 'ahead' ? 3 : t === 'when' ? 1 : 2) : 0);
     if (a === b && a === 'today' && far(from, this.lastTab) !== far(to, tab)) turn = far(to, tab) > far(from, this.lastTab) ? 'out' : 'in';
     else if (a === b && a === 'desk') turn = tab === 'history' ? 'fwd' : this.lastTab === 'history' ? 'back' : 'rise';
     else if (a === b && a === 'library') turn = LIBRARY.indexOf(to) > LIBRARY.indexOf(from) ? 'fwd' : LIBRARY.indexOf(to) < LIBRARY.indexOf(from) ? 'back' : 'rise';
@@ -270,8 +273,8 @@ export class Frame {
     const day = v === 'plan' || (v === 'notebook' && !!this.hooks.onDay?.());
     this.todaySwitch.hidden = !day;
     if (day) {
-      const at = v === 'plan' ? (this.last?.tab === 'pace' ? this.paceBtn : this.last?.tab === 'ahead' ? this.aheadBtn : this.weekBtn) : this.dayBtn;
-      for (const b of [this.dayBtn, this.weekBtn, this.aheadBtn, this.paceBtn]) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
+      const at = v === 'plan' ? (this.last?.tab === 'pace' ? this.paceBtn : this.last?.tab === 'ahead' ? this.aheadBtn : this.last?.tab === 'when' ? this.whenBtn : this.weekBtn) : this.dayBtn;
+      for (const b of [this.dayBtn, this.whenBtn, this.weekBtn, this.aheadBtn, this.paceBtn]) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
     }
     // The Library is one room: its word in the rail stays lit on the Drawer and Tags too.
     const libBtn = document.getElementById('library-toggle');
@@ -300,7 +303,12 @@ export class Frame {
     const next = list.map((p) => {
       const b = have.get(p.id) || make('button', 'rail-item rail-project');
       b.dataset.id = p.id;
-      if (!b.firstChild) { b.append(make('span', 'rail-dot'), make('span', 'rail-name')); b.addEventListener('click', () => this.hooks.openProject?.(b.dataset.id)); }
+      if (!b.firstChild) {
+        b.append(make('span', 'rail-dot'), make('span', 'rail-name'));
+        // Ctrl + click opens it beside, leaving the main view where it is; a right-click offers the same.
+        b.addEventListener('click', (e) => this.hooks.openProject?.(b.dataset.id, { beside: e.ctrlKey || e.metaKey }));
+        b.addEventListener('contextmenu', (e) => { if (!this.hooks.projectMenu) return; e.preventDefault(); this.hooks.projectMenu(b.dataset.id, b, { left: e.clientX, top: e.clientY }); });
+      }
       b.querySelector('.rail-dot').style.background = p.color || '';
       b.querySelector('.rail-name').textContent = p.title || 'Untitled';
       b.title = p.title || 'Untitled';
