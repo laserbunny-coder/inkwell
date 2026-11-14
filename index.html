@@ -42,6 +42,8 @@
       // again (bullets stays off); keep this list the same as REMOVED in src/shows.js.
       if (!localStorage.getItem('showsCleaned')) {
         const gone = ['dots', 'handle', 'taskgrip', 'scenedots', 'voice', 'woven', 'taskchips', 'tasknotes', 'repeatmark', 'repeatahead', 'marks', 'closedtag', 'hoursleft', 'took', 'aheadhours', 'areahours', 'synopsis', 'plan', 'planview', 'projdaybook'];
+        // With "Show the plan on Today" off, the phone showed the day's page; keep it that way.
+        if (hide.includes('plan')) localStorage.setItem('todayPhone', 'page');
         for (let i = hide.length - 1; i >= 0; i--) if (gone.includes(hide[i])) hide.splice(i, 1);
         if (!hide.includes('bullets')) hide.push('bullets');
         localStorage.setItem('hide', JSON.stringify(hide));
