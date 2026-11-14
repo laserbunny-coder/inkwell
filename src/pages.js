@@ -34,7 +34,7 @@ export const DESK = [
 // A world that's for life, not for making something.
 export const isLife = (w) => w?.kind === 'world' && w.fields?.life === true;
 
-// The example in a life project's "A task for Daybook" box, fitted to what the
+// The example in a life project's Add a step box, fitted to what the
 // project is about (read from its name and one-line description).
 const TASK_HINTS = [
   ['christmas|xmas|gifts?|presents?|birthday', 'Order the gifts that need shipping'],

@@ -12,7 +12,8 @@
 // other pair can be tied by hand. Where a project sits (on stage, in the
 // wings, backstage) is worked out from what's happening unless you say.
 
-import { getEntry, putEntries, byKind } from './db.js';
+import { getEntry, putEntries, byKind, children, isTrashed } from './db.js';
+import { taskOf, tickTask, chipLabel } from './tasks.js';
 import { entry } from './model.js';
 import { areas, areaColor, editedAt } from './library.js';
 import { popMenu } from './menu.js';
@@ -30,6 +31,22 @@ const STATUS = { waiting: 'Waiting on you', loose: 'Closed, still open', working
 export const closedLine = (text) => /^\s*closed:/i.test(String(text || ''));
 // The "thread closed" tag and the filter can be switched off under Look.
 const showClosed = () => !root.classList.contains('hide-closedtag');
+const showNext = () => !root.classList.contains('hide-nextstep');
+
+// A project's next step: the first open task on its Steps page, in order
+// (a step's own steps count, in the order they're written). null: none.
+export async function nextStep(worldId) {
+  const walk = async (parent, depth = 0) => {
+    const kids = (await children(parent)).filter((r) => r.kind === 'line' && !r.deleted && !isTrashed(r)).sort((a, b) => (a.sort || 0) - (b.sort || 0));
+    for (const r of kids) {
+      const t = taskOf(r);
+      if (t && !r.fields?.done && String(r.text || '').trim()) return r;
+      if (depth < 6 && !r.fields?.done) { const under = await walk(r.id, depth + 1); if (under) return under; }
+    }
+    return null;
+  };
+  return walk(`steps-${worldId}`);
+}
 const PACIFIC = 'America/Los_Angeles';
 const DAY = 864e5;
 // A thread that said "working" and then nothing for this long has gone quiet.
@@ -284,6 +301,8 @@ export class DeskPage {
       this.count(data.needs, now);
     }
     if (tab === 'history') this.all = data; else this.data = data;
+    // What's on stage may have changed: the order everywhere follows.
+    if (tab !== 'history' && data) this.ordered?.();
     if (tab !== 'history' && data) this.closed = await this.closedThreads(data);
     if (token !== this.token) return;
     this.now = now;
@@ -367,6 +386,17 @@ export class DeskPage {
 
   // ---- On stage ----
 
+  // Your projects in the Desk's order (on stage, then the wings, then
+  // backstage, each as you've dragged them): the one order projects come in
+  // everywhere (the rail, the box, Pull from a project).
+  async order() {
+    const { worlds, settings } = await this.seating();
+    const data = this.data || { needs: [], updates: [] };
+    const seats = seatsFor({ worlds, needs: data.needs, updates: data.updates, settings, now: Date.now() });
+    const rank = { on: 0, wings: 1, back: 2 };
+    return seats.filter((s) => s.world).sort((a, b) => rank[a.stage] - rank[b.stage]).map((s) => s.world.id);
+  }
+
   // Your projects as the Desk seats them, and how you've arranged it.
   async seating() {
     const [list, all, settings] = [await byKind('world'), await areas(), await deskSettings()];
@@ -438,6 +468,9 @@ export class DeskPage {
     } else parts.push(this.note(failed));
 
     const on = seats.filter((s) => s.stage === 'on');
+    // Each card's next step, read before the cards are drawn.
+    this.next = new Map();
+    if (showNext()) for (const s of on) if (s.world) this.next.set(s.world.id, await nextStep(s.world.id));
     const chairs = make('div', 'dk-chairs');
     chairs.dataset.drop = 'seat';
     chairs.dataset.stage = 'on';
@@ -492,6 +525,7 @@ export class DeskPage {
       nowLine.append(document.createTextNode(`${seat.last.text} `), make('span', 'dk-when', when(seat.last.at, now)));
     } else if (seat.world) nowLine.textContent = `Last touched ${when(seat.world.edited, now)}`;
     if (nowLine.textContent) el.append(nowLine);
+    if (seat.world && this.next?.has(seat.world.id)) el.append(this.nextLine(seat.world, this.next.get(seat.world.id)));
 
     if (seat.calls.length) {
       el.append(make('div', 'dk-sub', 'Needs you'));
@@ -677,6 +711,43 @@ export class DeskPage {
     this.changed?.([await saveDeskSettings({ order })]);
     if (said) this.toast?.(said);
     await this.render({ now: this.now, failed: false });
+  }
+
+  // "Your next step": the first open step, with its circle to tick it here
+  // and its when at the right; none: a way to add one.
+  nextLine(world, step) {
+    const box = make('div', 'dk-next');
+    box.append(make('div', 'dk-sub', 'Your next step'));
+    const line = make('div', 'dk-next-line');
+    if (!step) {
+      line.append(make('span', 'dk-next-none', 'No next step yet'));
+      const add = make('button', 'dk-link dk-next-add', 'Add one');
+      add.type = 'button';
+      add.addEventListener('click', () => this.addStep?.(world.id));
+      line.append(add);
+      box.append(line);
+      return box;
+    }
+    const tick = make('button', 'dk-tick');
+    tick.type = 'button';
+    tick.setAttribute('aria-label', `Done: ${step.text}`);
+    tick.title = 'Tick it done';
+    tick.addEventListener('click', async () => {
+      tick.disabled = true;
+      tick.classList.add('on');
+      const row = await tickTask(step.id, true);
+      if (row) this.changed?.([row]);
+      this.toast?.(`Done: “${step.text}”`);
+      await this.render({ now: this.now || Date.now(), failed: false });
+    });
+    const name = make('button', 'dk-next-name', step.text);
+    name.type = 'button';
+    name.addEventListener('click', () => this.open?.(step.id));
+    line.append(tick, name);
+    const t = taskOf(step);
+    if (t && (t.day || t.span?.kind)) line.append(make('span', 'dk-when', chipLabel({ ...t, est: null, run: null }).toLowerCase()));
+    box.append(line);
+    return box;
   }
 
   // A project waiting in the wings or backstage: one line.

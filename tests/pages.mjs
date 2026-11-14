@@ -462,7 +462,7 @@ try {
 
   // ---------- life projects ----------
 
-  await check('a life project: Overview, Gather and Notes only, tasks to Daybook, and never shared', async () => {
+  await check('a life project: Overview, Gather and Notes only, steps for tasks, and never shared', async () => {
     await page.evaluate(() => document.querySelector('#library-toggle').click());
     await sleep(400);
     await page.evaluate(() => document.querySelector('[data-cmd="new-book"], #lib-new-btn')?.click());
@@ -476,7 +476,8 @@ try {
     assert.equal(w.fields.life, true);
     assert.deepEqual(await tabs(page), ['overview*', 'gather', 'notes']);
     assert.ok(await page.locator('#wh-status').isHidden());
-    assert.ok(await page.locator('#wh-task-box').isVisible());
+    assert.equal(await page.locator('#wh-task-box').count(), 0, 'no Daybook box: Daybook is retired');
+    assert.ok(await page.locator('#wh-steps').isVisible());
     await shot(page, 'pages-life');
     await page.keyboard.press('Alt+Digit2');
     await page.waitForSelector('.st-body[data-page="notes"]');

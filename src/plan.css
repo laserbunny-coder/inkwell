@@ -675,3 +675,23 @@ html.has-rail .pl-switches { flex-direction: row; align-items: center; }
 .notebook.plan-side > #plan .pl-sub:empty { display: none; }
 .notebook.plan-side > #plan .pl-sub .pl-place { max-width: none; padding: 0 4px; }
 .notebook.plan-side > #plan .pl-acts { display: flex; align-items: center; gap: 0; grid-column: 3; grid-row: 1 / span 2; align-self: center; }
+
+/* Plan opens on Today alone: the rest waits behind one thin line (like the
+   earlier days under a day's page), and opens by itself during a drag. */
+.pl-restline { margin-top: 18px; }
+.pl-restline.open span::after { transform: rotate(-135deg); margin-bottom: -.1em; }
+.pl-restline span { opacity: .75; }
+@media (hover: none) { .pl-restline span { opacity: 1; } }
+.pl-rest:not(.open) { display: none; }
+:is(html.pl-dragging, html.pl-touchdrag, html.pull-dragging) .pl-rest { display: block; }
+
+/* "3 done": the done tasks out of sight; a tap shows them for now. */
+.pl-doneline { display: block; border: 0; background: none; color: var(--faint); font: 12px var(--ui); padding: 8px 0 4px 34px; cursor: pointer; text-align: left; opacity: .8; }
+.pl-doneline:hover, .pl-doneline:focus-visible { color: var(--muted); opacity: 1; }
+@media (hover: none) { .pl-doneline { padding: 12px 0 8px 34px; } }
+
+/* From a project: a line with lines under it starts folded; ▸ 12 opens it. */
+.pu-fold { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: var(--faint); font: 11.5px var(--ui); padding: 2px 6px; border-radius: 10px; cursor: pointer; }
+.pu-fold:hover, .pu-fold:focus-visible { color: var(--muted); background: var(--hover, rgba(127,127,127,.12)); }
+.pu-whenis + .pu-fold { margin-left: 6px; }
+@media (hover: none) { .pu-fold { min-width: 44px; min-height: 32px; justify-content: center; font-size: 13px; } }

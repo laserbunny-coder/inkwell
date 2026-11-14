@@ -6,7 +6,6 @@ import { setFileNote } from './filenode.js';
 import { withTag } from './capture.js';
 import { placeVoice } from './voice.js';
 import { speechTerms } from './terms.js';
-import { queueTask } from './daybook.js';
 
 // Meetings: a recording of a meeting (Samsung's Voice Recorder shared into
 // Inkwell, or a file added with Ctrl+K on the desk) lands on today's page,
@@ -158,27 +157,20 @@ async function linkDayLine(it, title) {
   return [row];
 }
 
-// Tasks that are yours (or nobody's) go to Daybook in the meeting's area;
-// tasks someone else took stay on the page with their name.
+// Tasks that are yours (or nobody's) become tasks in Inkwell (on their due
+// day, else not planned yet, in Plan); tasks someone else took stay on the
+// page as plain lines with their name.
 export const mine = (owner, me) => !owner || (!!me && owner.toLowerCase().split(/\s+/)[0] === me.toLowerCase().split(/\s+/)[0]);
 
-async function sendTasks(it, notes, { me, areas, base }) {
+async function markTasks(it, notes, { me }) {
   const pid = pageIdOf(it);
-  let areaId = null;
-  try {
-    const list = (await areas?.()) || [];
-    const want = notes.kind === 'business' ? /business/i : notes.kind === 'filmmaking' ? /film/i : null;
-    areaId = want ? list.find((a) => want.test(a.title))?.id || null : null;
-  } catch (e) { console.warn(e); }
   const rows = [];
   for (const [i, t] of notes.tasks.entries()) {
     if (!mine(t.owner, me)) continue;
-    const lineId = `${pid}-do${i + 1}`;
-    const id = `inkwell-${lineId}`;
-    const extra = [t.notes, t.due ? `By ${shortDay(t.due)}.` : '', `From ${notes.title}.`].filter(Boolean).join(' ');
-    await queueTask({ id, title: t.title, notes: extra, link: `${base}?open=${encodeURIComponent(lineId)}`, area_id: areaId, deleted: false });
-    const line = await getEntry(lineId);
-    if (line) rows.push({ ...line, fields: { ...line.fields, daybook: { id, at: Date.now() } }, updated_at: Date.now() });
+    const line = await getEntry(`${pid}-do${i + 1}`);
+    if (!line || line.deleted) continue;
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(t.due || '') ? t.due : null;
+    rows.push({ ...line, fields: { ...line.fields, box: true, task: { v: 1, day, est: null, done_at: null, actual: null, log: [], run: null, order: 0, span: null } }, updated_at: Date.now() });
   }
   if (rows.length) await putEntries(rows);
   return rows;
@@ -297,8 +289,8 @@ export function meetingPending({ ask, canAsk, onRows, me = () => '', areas, base
         await update(it.line, { notes });
       }
       // Business: the meeting and all its tasks to Acro HQ. Anything else, or
-      // until Acro HQ is set up: your own tasks to Daybook, in the meeting's area.
-      let to = 'daybook';
+      // until Acro HQ is set up: your own tasks become tasks here.
+      let to = 'inkwell';
       if (notes.kind === 'business') {
         try {
           rows.push(...await sendMeetingToAcro(pageIdOf(it), { ask, base: base() }));
@@ -307,7 +299,7 @@ export function meetingPending({ ask, canAsk, onRows, me = () => '', areas, base
           if (e.code !== 'no-acro') { console.warn('Acro HQ send failed, will retry', e); setFileNote(it.file, 'waiting to go to Acro HQ'); if (rows.length) onRows(rows); continue; }
         }
       }
-      if (to === 'daybook') rows.push(...await sendTasks(it, notes, { me: me(), areas, base: base() }));
+      if (to === 'inkwell') rows.push(...await markTasks(it, notes, { me: me() }));
       await learnPeople(names);
       await unqueue(it.line);
       setFileNote(it.file, '');

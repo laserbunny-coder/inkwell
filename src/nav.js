@@ -2,11 +2,11 @@
 // anywhere.
 //
 // On a phone a bar sits along the bottom (hidden while the keyboard is up):
-// Today, Desk, the mic in the middle, Library and Go. Go opens the Go sheet:
-// the last few places (the first is Back), the path up, this piece's or
-// world's pages, the rooms, and Everything (the whole menu).
+// Today, Desk, the mic in the middle, Library and Go. Go opens the one box
+// (box.js) as a sheet: Jump back (the first is Back), this piece's or
+// world's pages, the rooms, Right here and All commands.
 // On a computer the top bar names the place, with the last place as its first
-// button, and Ctrl + O opens the same panel (Enter flips straight back).
+// button, and Ctrl + K (or Ctrl + O) opens the same box (Enter flips straight back).
 
 const RECENT = 'recentPlaces';
 const KEEP = 8;
@@ -78,39 +78,23 @@ export class Nav {
     handle.setAttribute('aria-label', 'Show the bar');
     handle.append(make('span'));
     handle.addEventListener('click', () => document.body.classList.add('bar-peek'));
-    document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.placebar, .pb-handle, .go-panel')) document.body.classList.remove('bar-peek'); });
+    document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.placebar, .pb-handle, .palette')) document.body.classList.remove('bar-peek'); });
 
     // The computer's back button, at the start of the top bar.
     this.lineBack = document.getElementById('tb-back');
     this.lineBack.addEventListener('click', () => this.jumpBack());
 
-    // The Go sheet (a panel on a computer).
-    this.backdrop = make('div', 'go-backdrop');
-    this.backdrop.hidden = true;
-    this.backdrop.addEventListener('click', () => this.close());
-    this.panel = make('section', 'go-panel');
-    this.panel.setAttribute('aria-label', 'Go');
-    this.panel.hidden = true;
-    this.panel.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.close(); }
-    });
-
-    document.body.append(bar, handle, this.backdrop, this.panel);
+    document.body.append(bar, handle);
     this.bar = bar;
-    // While the panel is open, only it takes the caret: a page that finishes
-    // opening a moment later doesn't pull your typing back into its text.
-    document.addEventListener('focusin', (e) => {
-      if (!this.isOpen || this.panel.contains(e.target)) return;
-      (this.find ? this.panel.querySelector('.go-find') : this.panel).focus();
-    });
     // The keyboard is up while something on a touch screen is being typed in.
     document.addEventListener('focusin', (e) => { if (this.hooks.isTouch() && this.typingIn(e.target)) document.body.classList.add('kb-up'); });
     document.addEventListener('focusout', () => setTimeout(() => { if (!this.typingIn(document.activeElement)) document.body.classList.remove('kb-up'); }, 50));
   }
 
-  typingIn(el) { return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) && !el.closest('.go-panel'); }
+  typingIn(el) { return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) && !el.closest('.palette.box'); }
 
-  get isOpen() { return !this.panel.hidden; }
+  // Go is the one box now (box.js): the Go button opens it.
+  get isOpen() { return !!this.hooks.boxOpen?.(); }
 
   // Where you are now, and what to call it. names: the crumb's words, outermost first.
   here(place, names) {
@@ -128,16 +112,6 @@ export class Nav {
     this.name = name;
     this.context = context;
     this.draw();
-    if (this.isOpen) {
-      // Redrawn while open (a page finished opening): keep the caret and anything typed.
-      const old = this.panel.querySelector('.go-find');
-      const had = old && document.activeElement === old;
-      const typed = old?.value || '';
-      this.drawPanel();
-      const find = this.panel.querySelector('.go-find');
-      find.value = typed;
-      if (had) find.focus();
-    }
   }
 
   // A place's name was changed (a rename): keep the list's words fresh.
@@ -170,130 +144,9 @@ export class Nav {
   }
 
   toggle(find) { if (this.isOpen) this.close(); else this.open(find); }
-
-  // find: put the caret in the search box (always when opened from the keyboard).
-  open(find = !this.hooks.isTouch()) {
-    document.body.classList.remove('show-outline', 'show-top');
-    this.drawPanel();
-    this.panel.hidden = false;
-    this.backdrop.hidden = false;
-    document.body.classList.add('go-on');
-    // On a phone the keyboard would cover the sheet, so nothing is focused there.
-    this.find = find;
-    if (find) this.panel.querySelector('.go-find')?.focus();
-    else this.panel.focus?.();
-  }
-
-  close(refocus = true) {
-    if (!this.isOpen) return;
-    this.panel.hidden = true;
-    this.backdrop.hidden = true;
-    document.body.classList.remove('go-on');
-    if (refocus) this.hooks.refocus?.();
-  }
-
-  drawPanel() {
-    const p = this.panel;
-    p.tabIndex = -1;
-    const parts = [];
-    if (this.hooks.isTouch()) { const grip = make('div', 'go-grip'); grip.setAttribute('aria-hidden', 'true'); parts.push(grip); }
-
-    const find = make('input', 'go-find');
-    find.type = 'text';
-    find.placeholder = 'Go to anything…';
-    find.setAttribute('aria-label', 'Go to anything');
-    find.addEventListener('input', () => { const t = find.value; this.close(false); this.hooks.search(t); });
-    find.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !find.value) { e.preventDefault(); this.jumpBack(); } });
-    parts.push(find);
-
-    const section = (label, body, cls = '') => {
-      const s = make('div', 'go-section ' + cls);
-      s.append(make('div', 'go-label', label), body);
-      parts.push(s);
-    };
-    const go = (fn) => () => { this.close(false); fn(); };
-
-    if (this.recent.length) {
-      const list = make('div', 'go-recent');
-      this.recent.slice(0, 5).forEach((r, i) => {
-        const b = make('button', 'go-chip' + (i === 0 ? ' first' : ''));
-        b.append(make('span', 'go-name', r.name));
-        if (r.context) b.append(make('span', 'go-ctx', `· ${r.context}`));
-        if (i === 0 && !this.hooks.isTouch()) b.append(make('span', 'keys', 'Enter'));
-        b.addEventListener('click', go(() => this.hooks.go(r.place)));
-        list.append(b);
-      });
-      section('Jump back', list);
-    }
-
-    // The path up, each step a way there.
-    const crumb = this.hooks.crumb().filter((b) => b.textContent.trim());
-    if (crumb.length > 1) {
-      const path = make('div', 'go-path');
-      crumb.forEach((c, i) => {
-        if (i) path.append(make('span', 'sep', '›'));
-        const here = i === crumb.length - 1;
-        const b = make('button', 'go-step' + (here ? ' here' : ''), c.textContent.replace(/\s*▾\s*$/, ''));
-        if (!here) b.addEventListener('click', go(() => c.click()));
-        else b.disabled = true;
-        path.append(b);
-      });
-      section('You’re in', path);
-    }
-
-    // This world's or piece's pages, all of them, with their keys.
-    const tabs = this.hooks.tabs();
-    const active = this.hooks.active();
-    const inside = tabs.some((t) => t.n != null);
-    if (inside) {
-      const grid = make('div', 'go-tabs');
-      for (const t of tabs) {
-        const b = make('button', 'go-tab' + (t.id === active ? ' on' : ''));
-        b.append(make('span', 'go-tab-name', t.label));
-        if (!this.hooks.isTouch()) b.append(make('span', 'keys', this.hooks.keyLabel(`⌥${t.n}`)));
-        if (t.id === active) b.setAttribute('aria-current', 'page');
-        b.addEventListener('click', go(() => this.hooks.goPage(t.id)));
-        grid.append(b);
-      }
-      if (this.hooks.isTouch()) {
-        const o = make('button', 'go-tab quiet', 'Outline');
-        o.addEventListener('click', go(() => this.hooks.outline()));
-        grid.append(o);
-      }
-      section(this.titleOfOwner(), grid);
-    }
-
-    const desk = make('div', 'go-desk');
-    for (const [id, label, keys] of [['today', 'Today', '⌘J'], ['desk', 'Desk', '⌘⇧U'], ['library', 'Library', '⌘⇧O'], ['drawer', 'Drawer', ''], ['tags', 'Tags', ''], ['catchup', 'Catch-up', '']]) {
-      const b = make('button', 'go-tab desk' + (active === id && !inside ? ' on' : ''));
-      b.append(make('span', 'go-tab-name', label));
-      if (keys && !this.hooks.isTouch()) b.append(make('span', 'keys', this.hooks.keyLabel(keys)));
-      b.addEventListener('click', go(() => this.hooks.goPage(id)));
-      desk.append(b);
-    }
-    if (!inside && this.hooks.isTouch()) {
-      const o = make('button', 'go-tab desk quiet', 'Outline');
-      o.addEventListener('click', go(() => this.hooks.outline()));
-      desk.append(o);
-    }
-    section('Rooms', desk);
-    // The phone's bar has no room for the menu, so it's the sheet's last line.
-    // Look gets its own button beside it: the one setting people look for most.
-    if (this.hooks.isTouch()) {
-      const row = make('div', 'go-ends');
-      const look = make('button', 'go-look', 'Aa');
-      look.append(make('span', 'go-ctx', 'Look'));
-      look.setAttribute('aria-label', 'Look: colours, font and text size');
-      look.addEventListener('click', go(() => this.hooks.look()));
-      const all = make('button', 'go-all', 'Everything');
-      all.append(make('span', 'go-ctx', 'the whole menu and settings'));
-      all.addEventListener('click', go(() => this.hooks.menu()));
-      row.append(look, all);
-      parts.push(row);
-    }
-    if (!this.hooks.isTouch()) parts.push(make('p', 'go-hint', `${this.hooks.keyLabel('⌘O')}, then Enter, flips you back to where you just were. Typing finds anything.`));
-    p.replaceChildren(...parts);
-  }
+  // find: put the caret in the box (always when opened from the keyboard).
+  open(find = !this.hooks.isTouch()) { this.hooks.openBox?.({ find }); }
+  close(refocus = true) { if (this.isOpen) this.hooks.closeBox?.(refocus); }
 
   // The world or piece whose pages these are: the crumb's book part, else the world.
   titleOfOwner() {

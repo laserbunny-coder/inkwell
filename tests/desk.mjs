@@ -343,9 +343,9 @@ try {
     await page.waitForSelector('.notebook', { state: 'visible' });
     await sleep(300);
     await page.keyboard.press('Control+O');
-    await page.waitForSelector('.go-panel', { state: 'visible' });
-    assert.deepEqual(await page.locator('.go-desk .go-tab-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up']);
-    await page.locator('.go-desk .go-tab', { hasText: 'Desk' }).click();
+    await page.waitForSelector('.palette.box', { state: 'visible' });
+    assert.deepEqual(await page.locator('.box-rooms .go-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up', 'Aa Look']);
+    await page.locator('.box-rooms .box-chip', { hasText: 'Desk' }).click();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'desk');
     await page.waitForSelector('.dk-chair');
   });
@@ -628,13 +628,15 @@ try {
     if (SHOTS) { await still(phone); await phone.screenshot({ path: `${SHOTS}/desk-history-phone.png` }); }
   });
 
-  await check('the menu moved into the Go sheet as Everything', async () => {
+  await check('the Go sheet ends with All commands, every command in groups', async () => {
     await phone.locator('.pb-place').tap();
-    await phone.waitForSelector('.go-panel', { state: 'visible' });
-    assert.deepEqual(await phone.locator('.go-desk .go-tab-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up']);
-    await phone.locator('.go-all').tap();
-    await phone.waitForSelector('.palette', { state: 'visible' });
-    assert.equal(await phone.locator('.go-panel').isVisible(), false);
+    await phone.waitForSelector('.palette.box', { state: 'visible' });
+    assert.deepEqual(await phone.locator('.box-rooms .go-name').allInnerTexts(), ['Drawer', 'Tags', 'Catch-up', 'Aa Look', 'Outline']);
+    await phone.locator('.box-allrow').tap();
+    await phone.waitForSelector('.palette.box-all', { state: 'visible' });
+    assert.ok(await phone.locator('.box-fold').count() >= 8);
+    await phone.locator('.box-back').tap();
+    await phone.waitForSelector('.palette.box-all', { state: 'hidden' });
     assert.deepEqual(phone.errors, []);
   });
 } finally {

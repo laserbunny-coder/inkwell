@@ -257,7 +257,7 @@ try {
     assert.equal(live(await all(page)).filter((r) => r.kind === 'project' && r.parent_id === 'wd_nb').length, 4);
   });
 
-  await check('a new life project starts in Personal, with a Daybook example that fits it', async () => {
+  await check('a new life project starts in Personal, with an example step that fits it', async () => {
     await openNew(page);
     const before = await page.locator('#lib-new-area').inputValue();
     await page.locator('.lib-shape[data-shape="life"]').click();
@@ -271,7 +271,7 @@ try {
     const w = live(await all(page)).find((r) => r.kind === 'world' && r.title === 'Camping trip 2027');
     assert.equal(w.area_id, 'area-personal');
     assert.equal(w.fields.life, true);
-    assert.equal(await page.locator('#wh-task').getAttribute('placeholder'), 'Book the campsite for Friday night');
+    assert.equal(await page.locator('#wh-steps input[data-add]').getAttribute('placeholder'), 'Book the campsite for Friday night');
     await shot(page, 'life-camping');
   });
 
@@ -288,7 +288,7 @@ try {
     await pick(page, 'Shape');
     await pick(page, 'Life project:');
     assert.equal((await get(page, id)).area_id, area, 'nothing moves unasked');
-    assert.equal(await page.locator('#wh-task').getAttribute('placeholder'), 'The next thing to do for Grandpa stories');
+    assert.equal(await page.locator('#wh-steps input[data-add]').getAttribute('placeholder'), 'The next thing to do for Grandpa stories');
     await page.locator('.toast .toast-action', { hasText: 'Move to Personal' }).click();
     await sleep(400);
     assert.equal((await get(page, id)).area_id, 'area-personal');

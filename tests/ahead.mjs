@@ -108,6 +108,7 @@ const ANSWER = {
 };
 async function open(viewport, extra = {}) {
   const ctx = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', viewport, ...extra });
+  await ctx.addInitScript(() => { try { if (localStorage.getItem('planRest') === null) localStorage.setItem('planRest', '1'); } catch { /* no storage */ } }); // the rest of Plan shown, as before its line
   const st = { db: fresh(), asked: [] };
   await ctx.exposeFunction('__db', (op, a) => {
     if (op === 'desk') return { needs: st.db.needs.map((n) => ({ ...n })), updates: st.db.updates.filter((u) => u.created_at >= a).map((u) => ({ ...u })) };

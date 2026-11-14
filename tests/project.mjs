@@ -91,6 +91,7 @@ const seed = (rows) => new Promise((res, rej) => {
 const browser = withoutSync(await chromium.launch());
 async function open(viewport, { desk = true, ...extra } = {}) {
   const ctx = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', viewport, ...extra });
+  await ctx.addInitScript(() => { try { if (localStorage.getItem('planRest') === null) localStorage.setItem('planRest', '1'); } catch { /* no storage */ } }); // the rest of Plan shown, as before its line
   await ctx.exposeFunction('__db', (op, a, b) => {
     calls.push([op, a, b]);
     if (op === 'desk') return { needs: db.needs.filter((n) => !n.resolved_at).map((n) => ({ ...n })), updates: db.updates.filter((u) => u.created_at >= a).map((u) => ({ ...u })) };
@@ -288,7 +289,7 @@ try {
     assert.equal(t.fields.task.est, 45);
     assert.equal((await all(page)).filter((r) => r.kind === 'page' && r.title === 'Steps' && !r.deleted).length, 1, 'one Steps page, not two');
     assert.equal(await page.evaluate(() => document.activeElement?.dataset.add), 'steps', 'the caret stays for the next one');
-    assert.equal((await steps(page)).indexOf('Record the bakery jingle'), 3, 'after the dated ones and the older undated one');
+    assert.equal((await steps(page)).indexOf('Record the bakery jingle'), 4, 'after the dated ones (the done one keeps its place among them) and the older undated one');
   });
 
   await check('a step’s day moves from its label, and the next date follows; ticking it counts', async () => {
@@ -371,7 +372,7 @@ try {
     await input.press('Enter');
     await page.waitForFunction(() => /0 of 1 done/.test(document.querySelector('#wh-steps .wp-sec')?.innerText || ''));
     assert.equal((await all(page)).find((r) => r.text === 'Book the campsite for Friday night').parent_id, 'steps-wd_camp');
-    assert.ok(await page.locator('#wh-task-box').isVisible(), 'the Daybook box is still there until Daybook retires');
+    assert.equal(await page.locator('#wh-task-box').count(), 0, 'no Daybook box: Daybook is retired');
     // With no thread and no words of your own, a click on the line is where you write it.
     await page.locator('#wh-facts .wp-now').click({ position: { x: 4, y: 8 } });
     await page.waitForSelector('#wh-facts [data-field="now"]:focus');
@@ -379,13 +380,11 @@ try {
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => /Gear list is current\./.test(document.querySelector('#wh-facts .wp-now')?.innerText || ''));
     assert.equal((await get(page, 'wd_camp')).fields.now, 'Gear list is current.');
-    assert.equal(await page.locator('#wh-task').getAttribute('placeholder'), 'Book the campsite for Friday night');
+    assert.equal(await page.locator('#wh-steps input[data-add]').getAttribute('placeholder'), 'Book the campsite for Friday night');
   });
 
   await check('each part can be switched off under Look', async () => {
     const flip = (name, on) => page.evaluate(([n, v]) => { const c = document.querySelector(`[data-show="${n}"]`); c.checked = v; c.dispatchEvent(new Event('change', { bubbles: true })); }, [name, on]);
-    await flip('projdaybook', false);
-    assert.ok(await page.locator('#wh-task-box').isHidden());
     await flip('projsteps', false);
     assert.ok(await page.locator('#wh-steps').isHidden());
     await world(page);
@@ -394,7 +393,7 @@ try {
     assert.ok(await page.locator('#wh-turns').isHidden());
     await flip('projrecent', false);
     assert.ok(await page.locator('#wh-recent-box').isHidden());
-    for (const n of ['projdaybook', 'projsteps', 'projcrew', 'projrecent']) await flip(n, true);
+    for (const n of ['projsteps', 'projcrew', 'projrecent']) await flip(n, true);
     assert.ok(await page.locator('#wh-steps').isVisible());
     assert.ok(await page.locator('#wh-turns').isVisible());
   });

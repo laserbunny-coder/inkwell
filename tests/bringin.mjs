@@ -1,7 +1,8 @@
 // Bring in old notes: a section pasted (plain, Markdown or rich text) or an
 // exported file (.opml, .md) becomes a page with its nesting kept, where Claude
-// suggests; old to-dos come in as plain lines and the live ones can go to
-// Daybook; the drawer gets one #drawer line; Brought in lists it all, with Undo.
+// suggests; old to-dos come in as plain lines and the live ones can become
+// tasks (not planned yet); the drawer gets one #drawer line; Brought in lists
+// it all, with Undo.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -25,12 +26,8 @@ const fake = () => {
   ];
   window.__pushed = [];
   window.__asked = [];
-  window.__tasks = [];
-  window.__relinked = [];
   window.__answer = null;
   window.__claude = async (body) => { window.__asked.push(body); return window.__answer ? window.__answer(body) : { home: '', title: '', about: '', tags: [], todos: [] }; };
-  window.__daybook = async (task) => { window.__tasks.push(task); };
-  window.__relink = async (from, to) => { window.__relinked.push([from, to]); return 2; };
   window.__syncBackend = {
     user: async () => ({ id: 'u1' }), onAuth() {}, signIn() {}, signOut() {},
     push: async (rows) => { window.__pushed.push(...rows); return rows.map((r) => ({ id: r.id, updated_at: new Date().toISOString() })); },
@@ -114,7 +111,7 @@ try {
     assert.deepEqual([await boxes.nth(0).isChecked(), await boxes.nth(1).isChecked()], [false, true]);
   });
 
-  await check('Bring it in: a page inside Kenji, nested lines, tags, about, came from; one task to Daybook', async () => {
+  await check('Bring it in: a page inside Kenji, nested lines, tags, about, came from; one to-do becomes a task', async () => {
     await page.locator('.bi-app').selectOption('workflowy');
     await page.locator('.bi-go').click();
     await page.waitForFunction(() => !document.querySelector('.bi-tree'));
@@ -127,11 +124,10 @@ try {
     assert.equal((await get(page, `ab-${pg.id}`)).text, 'Old gag ideas for Kenji and Sensei.');
     assert.equal(await treeOf(page, pg.id), "Ninja Bunch gags\n  Kenji hides in the dentist's ceiling\n    film the ceiling tile bit\n  Sensei falls asleep mid-lesson\nold: buy foam swords\ncall the voice actor back");
     assert.ok(rows.filter((r) => r.parent_id && r.kind === 'line').every((r) => !r.fields?.done));
-    await sleep(300);
-    const tasks = await page.evaluate(() => window.__tasks);
-    assert.equal(tasks.length, 1);
-    assert.equal(tasks[0].title, 'call the voice actor back');
-    assert.match(tasks[0].link, /\?open=li_/);
+    const tasks = rows.filter((r) => r.kind === 'line' && r.fields?.task);
+    assert.deepEqual(tasks.map((r) => r.text), ['call the voice actor back']);
+    assert.equal(tasks[0].fields.task.day, null, 'not planned yet');
+    assert.match(await page.locator('.toast').innerText(), /1 task in Plan/);
   });
 
   await check('rich text from OneNote: headings hold what follows, lists nest, links and bold come along', async () => {
@@ -184,18 +180,15 @@ try {
     assert.equal(await treeOf(page, line.id), 'A short about a robot who delivers grudges.\nhe only has one stamp');
   });
 
-  await check('a Thymer page: Daybook tasks pointing at it are switched to the new page', async () => {
+  await check('a Thymer page comes in like any other (no Daybook links to switch any more)', async () => {
     await paste(page, { text: 'Kitchen remodel\n  measure the island' });
     await page.waitForSelector('.bi-tree');
     await page.locator('.bi-app').selectOption('thymer');
-    assert.ok(await page.locator('.bi-thymer').isVisible());
-    await page.locator('.bi-thymer').fill('https://laserbunny.thymer.com/?open=ws1.abc123');
+    assert.equal(await page.locator('.bi-thymer').count(), 0);
     await page.locator('.bi-go').click();
-    await page.waitForFunction(() => window.__relinked.length === 1);
-    const [[from, to]] = await page.evaluate(() => window.__relinked);
-    assert.equal(from, 'https://laserbunny.thymer.com/?open=ws1.abc123');
+    await page.waitForFunction(() => !document.querySelector('.bi-tree'));
     const pg = (await all(page)).find((r) => r.kind === 'page' && r.title === 'Kitchen remodel');
-    assert.ok(to.endsWith(`?open=${pg.id}`));
+    assert.equal(pg.fields.from.app, 'thymer');
     assert.equal(await treeOf(page, pg.id), 'measure the island');
   });
 
