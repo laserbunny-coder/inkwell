@@ -248,9 +248,15 @@ try {
     const p = await phone.newPage();
     await p.goto(URL);
     await p.waitForSelector('#outline-editor .ProseMirror', { state: 'attached' });
+    // The app keeps where you are as it starts (and a slow runner was still
+    // starting when the place below was written, so it opened on Today):
+    // let it finish first.
+    await p.waitForFunction(() => document.documentElement.dataset.started === '1');
+    await sleep(300);
     await p.evaluate(seed, [{ id: 'p1', kind: 'line', parent_id: `day-${today}`, sort: 1024, text: 'A very long line about a stunt reel with a long name #a-really-long-tag-name-for-testing', content: [{ type: 'text', text: 'x' }], tags: ['a-really-long-tag-name-for-testing'], links: [], fields: {}, deleted: false, created_at: Date.now(), updated_at: Date.now() }]);
     await p.evaluate(() => { localStorage.setItem('place', JSON.stringify({ view: 'tags' })); });
     await p.reload();
+    await p.waitForFunction(() => document.documentElement.dataset.view === 'tags', null, { timeout: 15000 });
     await p.waitForSelector('.tags-home .tg-tag');
     const wide = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     assert.ok(wide <= 0, `page is ${wide}px too wide`);

@@ -253,14 +253,19 @@ export class Plan {
   }
 
   // What's typed in an "add" box, and where the caret is, survive a redraw.
+  // Words left in a box you've stepped out of survive too (a sync or the
+  // calendar arriving redraws the list; the words mustn't go with it).
   held(root) {
     const el = document.activeElement;
-    if (!el || !root.contains(el) || !el.matches('input[data-add]')) return null;
-    return { key: el.dataset.add, value: el.value };
+    const focused = el && root.contains(el) && el.matches('input[data-add]') ? el.dataset.add : null;
+    const words = [...root.querySelectorAll('input[data-add]')].filter((i) => i.value).map((i) => [i.dataset.add, i.value]);
+    return focused || words.length ? { key: focused, value: focused ? el.value : '', words } : null;
   }
   restore(root, held) {
     if (!held) return;
-    const el = [...root.querySelectorAll('input[data-add]')].find((i) => i.dataset.add === held.key);
+    const boxes = [...root.querySelectorAll('input[data-add]')];
+    for (const [key, value] of held.words) { const i = boxes.find((x) => x.dataset.add === key); if (i && !i.value) i.value = value; }
+    const el = held.key && boxes.find((i) => i.dataset.add === held.key);
     if (!el) return;
     el.value = held.value;
     el.focus({ preventScroll: true });
