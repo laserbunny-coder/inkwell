@@ -904,7 +904,7 @@ try {
     assert.equal(await ph.evaluate(() => document.activeElement?.closest('#outline-editor') !== null), true, 'keyboard stays up');
     // The mic comes first in the row, then Undo and Redo, the moves, # and link;
     // Done, Move to, Zoom and + (the insert menu) wait at the end.
-    assert.deepEqual(await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do)), ['talk', 'undo', 'redo', 'outdent', 'indent', 'up', 'down', 'tag', 'link', 'done', 'move', 'zoom', 'insert']);
+    assert.deepEqual(await ph.locator('.outline-bar button').evaluateAll((bs) => bs.map((b) => b.dataset.do)), ['talk', 'undo', 'redo', 'outdent', 'indent', 'up', 'down', 'tag', 'link', 'done', 'when', 'move', 'zoom', 'insert']);
     assert.equal(await ph.locator('.outline-bar [data-do="link"]').evaluate((b) => b.getBoundingClientRect().right <= innerWidth), true, 'link fits on the first screen');
     // The line you're on shows its handle; holding it still brings its menu up
     // from the bottom (a tap zooms in, as on every line). Move down keeps the

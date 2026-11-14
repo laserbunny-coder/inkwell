@@ -450,7 +450,8 @@ function lineMenu(eid) {
         ...(touch.matches ? [fold, zoom] : [zoom, fold]),
         besideItem(() => ({ view: 'notebook', pageId: notebook.page?.id, zoom: eid })),
         { label: node.attrs.done ? 'Not done' : 'Mark done', keys: '⌘↵', run: on(() => { toggleDone(ed); ed.commands.focus(); }) },
-        { label: 'When…', keys: 'Alt+W', run: () => setTimeout(async () => { await notebook.store.flush(ed.state.doc); const li = ed.view.dom.querySelector(`li:has(> .line-gutter[data-eid="${CSS.escape(eid)}"])`); plan.pickWhenFor([eid], { anchor: li?.querySelector(':scope > p') || null }); }, 60) }
+        // On a phone, When is in the bar above the keyboard instead.
+        ...(touch.matches ? [] : [{ label: 'When…', keys: 'Alt+W', run: () => setTimeout(async () => { await notebook.store.flush(ed.state.doc); const li = ed.view.dom.querySelector(`li:has(> .line-gutter[data-eid="${CSS.escape(eid)}"])`); plan.pickWhenFor([eid], { anchor: li?.querySelector(':scope > p') || null }); }, 60) }])
       ],
       [
         { label: node.attrs.checklist ? 'Not a checklist' : 'Checklist: boxes on the lines under it', run: on(() => { toggleChecklist(ed); ed.commands.focus(); }) },
