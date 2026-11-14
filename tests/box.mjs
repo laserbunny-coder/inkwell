@@ -83,7 +83,7 @@ try {
     await p.waitForFunction(() => document.documentElement.dataset.view === 'library');
     await sleep(300);
     await p.keyboard.press('Control+K');
-    await p.waitForFunction(() => document.querySelector('.palette.box:not([hidden])'));
+    await p.waitForSelector('.palette.box[data-loaded]:not([hidden])');
     assert.equal(await p.evaluate(() => document.activeElement?.id), 'palette-input');
     const k = await p.locator('#palette-list').innerText();
     assert.match(k, /JUMP BACK/i);
@@ -93,7 +93,7 @@ try {
     await p.keyboard.press('Escape');
     assert.equal(await boxOpen(p), false);
     await p.keyboard.press('Control+O');
-    await p.waitForFunction(() => document.querySelector('.palette.box:not([hidden])'));
+    await p.waitForSelector('.palette.box[data-loaded]:not([hidden])');
     assert.equal(await p.locator('#palette-list').innerText(), k, 'the same box');
     await p.keyboard.press('Enter');
     await p.waitForSelector('.notebook', { state: 'visible' });
@@ -102,6 +102,7 @@ try {
   });
 
   await check('the rooms, and “Right here” for where you are', async () => {
+    if (await boxOpen(p)) await p.keyboard.press('Escape');
     await p.keyboard.press('Control+K');
     await p.waitForSelector('.palette.box:not([hidden])');
     assert.deepEqual(await p.locator('.box-rooms .go-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up', 'Aa Look']);
@@ -118,8 +119,10 @@ try {
   });
 
   // Something to find: a page and a task.
+  if (await boxOpen(p)) await p.keyboard.press('Escape');
   await toToday(p);
   await p.keyboard.press('Control+K');
+  await p.waitForSelector('.palette.box[data-loaded]:not([hidden])');
   await p.keyboard.type('Reel ideas for winter');
   await sleep(200);
   await p.keyboard.press('Shift+Enter');

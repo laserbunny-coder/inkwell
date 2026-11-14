@@ -161,13 +161,16 @@ export class Box {
     this.places = null;
     this.tasks = null;
     const turn = (this.turn = {});
+    delete this.el.dataset.loaded;
     // Your projects, in your Desk order, for the just-opened box.
-    Promise.resolve().then(() => this.hooks.projects?.()).then((list) => { if (turn === this.turn) { this.projects = list || []; if (!this.input.value.trim() && !this.all) { const at = this.index; this.draw(); this.index = at; this.mark(false); } } }).catch(() => {});
+    const projects = Promise.resolve().then(() => this.hooks.projects?.()).then((list) => { if (turn === this.turn) { this.projects = list || []; if (!this.input.value.trim() && !this.all) { const at = this.index; this.draw(); this.index = at; this.mark(false); } } }).catch(() => {});
     const places = Promise.resolve().then(() => this.hooks.places()).catch(() => []);
     const tasks = Promise.resolve().then(() => this.hooks.tasks()).catch(() => []);
     places.then((list) => { if (turn === this.turn) { this.places = list; if (this.input.value.trim() && !this.all) this.draw(); } });
     tasks.then((list) => { if (turn === this.turn) { this.tasks = list; if (this.input.value.trim() && !this.all) this.draw(); } });
     this.ready = Promise.all([places, tasks]);
+    // Marked once everything has been read and drawn (the tests wait on it).
+    Promise.all([projects, this.ready]).then(() => { if (turn === this.turn) this.el.dataset.loaded = ''; });
   }
 
   stop() {
