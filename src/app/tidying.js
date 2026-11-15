@@ -11,12 +11,13 @@ import { sharesOf } from '../sharelink.js';
 import { areas, bookType, hasManuscript, kindName, newArea, pagesIn, bookOf, stats, ago, changeType, worlds, worldOf, newPiece, piecesIn, worldTree, usedLabels, SHAPES, shapeOf, levelsOf, nextLevel, FORMATS, formatName, defaultLabel, stageOf, allSets, addOwnWorkflow, dropOwnWorkflow, setById, stageSetOf, stagesIn, stagesOf } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday } from '../dates.js';
-import { $, areaOptions, editor, gone, hstrip, inNotebook, newDraft, newDraftFrom, notes, nudgeBook, openShare, openTalk, printCurrent, production, renderLibrary, renderProject, renderWorld, root, sharing, showClaudeKnows, stagePage, state, store, view, writing } from '../main.js';
+import { $, editor, gone, hstrip, inNotebook, newDraft, newDraftFrom, notes, openShare, openTalk, printCurrent, production, root, sharing, showClaudeKnows, stagePage, state, store, view, writing } from '../main.js';
 import { placeScriptBar } from './scriptbar.js';
 import { notebook } from './notebookview.js';
 import { go, openBook } from './routing.js';
 import { refreshWords, syncWoven, toggleNumbering } from './manuscript.js';
 import { renderCrumb, renderRail, subtree } from './rail.js';
+import { areaOptions, nudgeBook, renderLibrary, renderProject, renderWorld } from './libraryview.js';
 
 // ---------- tidying up: rename, move, change kind, the Trash ----------
 
