@@ -20,6 +20,7 @@ import { dayPlan, weave, addDays, isoOf, setTask, tickTask, PLAN_ID, savePlanSet
 import { clockWord } from './calendar.js';
 import { media } from './device.js';
 import { make } from './dom.js';
+import { talkView, heardView, closeView } from './nowends.js';
 import './now.css';
 
 export const SMALLS = 'smalls';
@@ -88,6 +89,12 @@ export class Now {
     this.smallsOpen = false; // the group's names shown in the list
     this.ctxOpen = false; // the one thing's notes
     this.busy = false;
+    // The two ends of the day (Part 4): null | 'talk' | 'heard' | 'close'.
+    this.mode = null;
+    this.talk = { text: '', busy: false, note: '' };
+    this.heard = null;
+    this.close = { also: [], alive: '', drained: '', first: '', busy: false };
+    this.forms = {};
     document.addEventListener('keydown', (e) => this.key(e));
   }
 
@@ -167,10 +174,15 @@ export class Now {
     top.append(p.switchRow('now'));
     const face = nowFace();
     const two = hover.matches && nowSide() && !!m.cur && !m.active;
-    const box = make('div', `now-view now-${m.active ? 'event' : m.cur ? face : 'gate'}${two ? ' now-two' : ''}`);
+    if (this.mode === 'heard' && m.cur) this.mode = null;
+    const mode = m.active ? null : this.mode;
+    const box = make('div', `now-view now-${m.active ? 'event' : mode ? 'ends' : m.cur ? face : 'gate'}${two && !mode ? ' now-two' : ''}`);
     box.setAttribute('role', 'region');
     box.setAttribute('aria-label', 'Now');
     if (m.active) box.append(this.eventView(m));
+    else if (mode === 'talk') box.append(talkView(this));
+    else if (mode === 'heard') box.append(heardView(this, m));
+    else if (mode === 'close') box.append(closeView(this, m));
     else if (!m.cur) box.append(...this.gateView(m));
     else if (two) {
       const left = make('div', 'now-left');
@@ -182,7 +194,7 @@ export class Now {
     } else if (face === 'line') box.append(this.thread(m));
     else if (face === 'next') box.append(this.mid(m), this.foot(m, { list: true }));
     else box.append(this.mid(m), this.foot(m, { list: this.listOpen }));
-    if (!m.active && !two && !this.off('nowout')) box.append(this.outLine());
+    if (!m.active && !two && !mode && !this.off('nowout')) box.append(this.outLine());
     sheet.replaceChildren(top, box);
     p.restore(sheet, held);
     if (typing?.isConnected) typing.focus({ preventScroll: true });
@@ -397,9 +409,16 @@ export class Now {
     } else {
       mid.append(make('p', 'now-thing sm', m.dp.done.length ? 'Nothing else is lined up.' : 'Nothing is on today yet.'));
       const acts = make('div', 'now-acts');
-      acts.append(this.btn('plan', 'Open Plan', 'go'), this.btn('page', 'Today’s page', 'quiet'));
+      if (this.morning(m)) acts.append(this.btn('talkday', 'Talk the day through', 'go', 'T'), this.btn('plan', 'Open Plan', 'quiet'));
+      else acts.append(this.btn('plan', 'Open Plan', 'go'), this.btn('page', 'Today’s page', 'quiet'));
       mid.append(acts);
     }
+    // The ends of the day, offered quietly under the gate.
+    const ends = make('div', 'now-endsrow');
+    if (m.cand && this.morning(m)) ends.append(this.btn('talkday', 'Talk the day through', 'link', 'T'));
+    if (this.evening()) ends.append(this.btn('closeday', 'Close the day', 'link', 'C'));
+    else if (this.st.closed) ends.append(make('span', 'now-closed', 'The day is closed.'));
+    if (ends.childElementCount) mid.append(ends);
     const out = [mid];
     if (this.listOpen && m.cand) {
       const foot = make('div', 'now-foot open');
@@ -453,6 +472,15 @@ export class Now {
       else if (act === 'over' || act === 'missed') await this.eventDone(el.dataset.event, act === 'over');
       else if (act === 'where') await this.openWhere();
       else if (act === 'mic') await this.p.hooks.mic?.();
+      else if (act === 'talkday') this.openTalk();
+      else if (act === 'talk-send') await this.sendTalk();
+      else if (act === 'talk-cancel' || act === 'close-cancel') this.endMode();
+      else if (act === 'talk-mic') await this.p.hooks.mic?.('day');
+      else if (act === 'talk-again') { this.talk.note = ''; this.mode = 'talk'; this.p.redraw(); this.focusIn('.now-say'); }
+      else if (act === 'heard-begin') { const m = this.model(); this.mode = null; if (m.cand) await this.begin(m.cand.group ? SMALLS : m.cand.item.row.id); else this.p.redraw(); }
+      else if (act === 'closeday') this.openClose();
+      else if (act === 'close-add') this.addAlso(this.forms.close?.querySelector('.now-addin'));
+      else if (act === 'close-save') await this.saveClose();
       else if (act === 'plan') this.p.goTab('plan');
       else if (act === 'page') this.p.goTab('page');
     } finally { this.busy = false; }
@@ -560,6 +588,96 @@ export class Now {
     this.p.redraw();
   }
 
+  // ---------- the two ends of the day (Part 4) ----------
+
+  // Morning: nothing laid out yet (nothing begun or done today, not talked through).
+  morning(m) {
+    const st = this.st;
+    return !this.off('nowtalk') && !st.laid && !st.task && !st.last && !m.dp.done.length;
+  }
+  // From 5 pm, until the day is closed.
+  evening() { return !this.off('nowclose') && new Date().getHours() >= 17 && !this.st.closed; }
+
+  focusIn(sel) { requestAnimationFrame(() => this.p.sheet.querySelector(sel)?.focus()); }
+
+  openTalk() {
+    this.mode = 'talk';
+    this.talk.note = '';
+    this.listOpen = false;
+    if (!this.shown) this.p.goTab('now');
+    this.p.redraw();
+    this.focusIn('.now-say');
+  }
+
+  openClose() {
+    this.mode = 'close';
+    if (!this.shown) this.p.goTab('now');
+    this.p.redraw();
+    if (hover.matches) this.focusIn('.now-addin');
+  }
+
+  endMode() {
+    this.mode = null;
+    this.talk.note = '';
+    this.p.redraw();
+  }
+
+  // Words said into the morning mic, once written out: into the box.
+  heardWords(text) {
+    const t = String(text || '').trim();
+    if (!t) return;
+    this.talk.text = this.talk.text.trim() ? `${this.talk.text.trim()}\n${t}` : t;
+    const box = this.forms.talk?.querySelector('textarea');
+    if (box) box.value = this.talk.text;
+    if (this.mode !== 'talk') { this.mode = 'talk'; this.p.redraw(); }
+  }
+
+  async sendTalk() {
+    const words = this.talk.text.trim();
+    if (!words || this.talk.busy) return;
+    this.talk.busy = true;
+    this.talk.note = '';
+    this.p.redraw();
+    let got = null;
+    try { got = await this.p.hooks.talkDay?.(words); } finally { this.talk.busy = false; }
+    if (!got || got.error) {
+      this.talk.note = got?.error || 'That didn’t go through. Your words are still here.';
+      this.p.redraw();
+      return;
+    }
+    this.talk.text = '';
+    if (this.forms.talk) this.forms.talk.querySelector('textarea').value = '';
+    this.heard = got;
+    this.mode = 'heard';
+    await this.save({ laid: true });
+    this.p.redraw();
+  }
+
+  addAlso(input) {
+    const t = input?.value.trim();
+    if (!t) return;
+    this.close.also.push(t);
+    input.value = '';
+    this.p.redraw();
+    input.focus();
+  }
+
+  async saveClose() {
+    if (this.close.busy) return;
+    const c = this.close;
+    const pending = this.forms.close?.querySelector('.now-addin')?.value.trim();
+    if (pending) c.also.push(pending);
+    c.busy = true;
+    try {
+      await this.p.hooks.closeDay?.({ also: c.also, alive: c.alive, drained: c.drained, first: c.first });
+    } finally { c.busy = false; }
+    this.close = { also: [], alive: '', drained: '', first: '', busy: false };
+    this.forms.close = null;
+    this.mode = null;
+    await this.save({ closed: true });
+    this.p.redraw();
+  }
+
   // ---------- keys (no caret in text) ----------
 
   key(e) {
@@ -573,6 +691,11 @@ export class Now {
     if (this.asking && ['1', '2', '3'].includes(k)) go = () => this.aside(['later', 'tomorrow', 'another'][Number(k) - 1]);
     else if (this.asking && e.key === 'Escape') go = () => { this.asking = false; this.p.redraw(); };
     else if (m.active) return;
+    else if (this.mode === 'heard' && k === 'b' && m.cand) go = () => { this.mode = null; return this.begin(m.cand.group ? SMALLS : m.cand.item.row.id); };
+    else if (this.mode && e.key === 'Escape') go = () => this.endMode();
+    else if (this.mode) return;
+    else if (k === 't' && !m.cur && this.morning(m)) go = () => this.openTalk();
+    else if (k === 'c' && !m.cur && this.evening()) go = () => this.openClose();
     else if (k === 'd' && m.cur) go = () => this.done();
     else if (k === 'n' && m.cur && !this.asking) go = () => { this.asking = true; this.p.redraw(); this.focusFirst('.now-choice'); };
     else if (k === 's' && m.cur?.smalls) go = () => this.skip();
