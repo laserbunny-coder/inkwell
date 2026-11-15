@@ -34,7 +34,7 @@ import { goPage, nav, strip, todayPanel } from './workpages.js';
 import { closeHistory, hstrip, openHistory } from './historyview.js';
 import { currentSize, currentWidth, progressPanel, setPage, step, toggleFocus, togglePageSettings, toggleReading, toggleSections, toggleShortcuts } from './pagesettings.js';
 import { box, commands, toggleTheme, writing } from './commands.js';
-import { askServer, canAskServer, capture, captureHere, flipPlan, inToday, plan, todayKey } from './talking.js';
+import { askServer, canAskServer, capture, captureHere, flipPlan, inToday, openToday, plan, todayKey } from './talking.js';
 import { openTalk, paneKeys, pull, toggleBesidePane, whenHere } from './beside.js';
 
 // Pictures and files from this device, put in where the caret is.
@@ -518,9 +518,13 @@ function wireQuickInserts() {
     if (cmd === 'grid') toggleGrid();
     if (cmd === 'production') toggleProduction();
     // Beside, the plan's own Day is today's plan alone, not the whole page.
-    if (cmd === 'today') go(inPane && view() === 'plan' ? BESIDE_PLACES.plan : { view: 'notebook', pageId: dayId(isoToday()) });
+    // Today opens on Now when something is current or today has open tasks.
+    if (cmd === 'today') { if (inPane && view() === 'plan') go(BESIDE_PLACES.plan); else openToday(); }
+    if (cmd === 'now') go({ view: 'plan', tab: 'now' });
     // On a phone the day is two views: its page, and its plan.
-    if (cmd === 'today-page' || cmd === 'today-plan') plan.goTab(cmd === 'today-page' ? 'page' : 'plan');
+    // Beside, Page is today's plan alone (a pane has no day page of its own).
+    if (cmd === 'today-page' && inPane && view() === 'plan') go(BESIDE_PLACES.plan);
+    else if (cmd === 'today-page' || cmd === 'today-plan') plan.goTab(cmd === 'today-page' ? 'page' : 'plan');
     if (cmd === 'beside') toggleBesidePane();
     if (cmd === 'talk') openTalk();
     if (cmd === 'drawer') go({ view: 'drawer' });
@@ -552,8 +556,11 @@ function wireQuickInserts() {
     else if (e.altKey && !m && e.shiftKey && e.code === 'KeyT') { e.preventDefault(); plan.bringToday(); }
     // Alt + P: the plan beside today's page, or on top of it.
     else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyP' && !inPane) { e.preventDefault(); flipPlan(); }
-    // Alt + 1, 2, 3 in Today: Today, Plan, Calendar (again in a calendar: the next zoom).
-    else if (e.altKey && !m && !e.shiftKey && /^Digit[1-3]$/.test(e.code) && inToday()) { e.preventDefault(); todayKey(Number(e.code.slice(5))); }
+    // Alt + 1: Now, from anywhere (in text too), except where a project's page
+    // tabs have Alt + 0 to 6. Alt + 2, 3, 4 in Today: Page, Plan, Calendar
+    // (again in a calendar: the next zoom).
+    else if (e.altKey && !m && !e.shiftKey && e.code === 'Digit1' && !strip.byNumber(1)) { e.preventDefault(); todayKey(1); }
+    else if (e.altKey && !m && !e.shiftKey && /^Digit[2-4]$/.test(e.code) && inToday()) { e.preventDefault(); todayKey(Number(e.code.slice(5))); }
     // Alt + W: When (today, this week, next week, later…) for the line or lines here.
     else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyW') { e.preventDefault(); whenHere(); }
     // Alt + Left / Right: Back and Forward, everywhere (in a line too), so a task

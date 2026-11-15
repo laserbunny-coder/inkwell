@@ -72,7 +72,7 @@ try {
   const pc = await device({ viewport: { width: 1440, height: 900 } }, { estimates: false });
 
   await check('computer: the switch is Today, Plan, Calendar; under today’s list one thin “Tomorrow and later” line opens to Tomorrow, This week and Further out', async () => {
-    assert.deepEqual(await pc.locator('.today-switch .tb-btn').allInnerTexts(), ['Today', 'Plan', 'Calendar']);
+    assert.deepEqual(await pc.locator('.today-switch .tb-btn').allInnerTexts(), ['Now', 'Page', 'Plan', 'Calendar']);
     assert.equal(await pc.locator('#plan .pl-further').isVisible(), false, 'folded at first');
     assert.match(await pc.locator('#plan .pl-today-rest').textContent(), /^Tomorrow and later/);
     await pc.locator('#plan .pl-today-rest').click();
@@ -92,8 +92,8 @@ try {
     assert.equal(await pc.locator('#plan .pl-fline[data-bucket="tomorrow"] .ww-n').innerText(), '1');
   });
 
-  await check('computer: Alt + 2 is Plan, the whole outline; Today open, the rest folded', async () => {
-    await pc.keyboard.press('Alt+2');
+  await check('computer: Alt + 3 is Plan, the whole outline; Today open, the rest folded', async () => {
+    await pc.keyboard.press('Alt+3');
     await pc.waitForSelector('#plan-sheet .ww-sec');
     assert.deepEqual(await heads(pc, '#plan-sheet'), HEADS);
     const open = await pc.locator('#plan-sheet .ww-sec:not(.folded) .ww-name').allInnerTexts();
@@ -103,14 +103,14 @@ try {
 
   await check('computer: Today in Plan is the same list as on today’s page', async () => {
     const inPlan = await pc.locator('#plan-sheet .ol-today .pl-task:not(.done) .pl-words').allInnerTexts();
-    await pc.keyboard.press('Alt+1');
+    await pc.keyboard.press('Alt+2');
     await pc.waitForSelector('#plan .pl-task');
     const onPage = await pc.locator('#plan .pl-task:not(.done) .pl-words').allInnerTexts();
     assert.deepEqual(inPlan, onPage);
   });
 
   await check('computer: a heading folds and unfolds, and stays so after a reload; drag from Tomorrow to Today sets the day', async () => {
-    await pc.keyboard.press('Alt+2');
+    await pc.keyboard.press('Alt+3');
     await pc.waitForSelector('#plan-sheet .ww-sec[data-bucket="tomorrow"]');
     await pc.locator('#plan-sheet .ww-sec[data-bucket="tomorrow"] .ww-fold').click();
     await pc.waitForSelector('#plan-sheet .ww-sec[data-bucket="tomorrow"]:not(.folded) .pl-task');
@@ -144,20 +144,20 @@ try {
     assert.ok(!(await named(pc, 'Call Dana')).fields.task.span, 'Undo puts it back');
   });
 
-  await check('computer: Alt + 3 is Calendar on the zoom used last; Alt + 3 again steps Day, Week, Six weeks', async () => {
-    await pc.keyboard.press('Alt+3');
+  await check('computer: Alt + 4 is Calendar on the zoom used last; Alt + 4 again steps Day, Week, Six weeks', async () => {
+    await pc.keyboard.press('Alt+4');
     await pc.waitForFunction(() => document.querySelector('#plan-sheet')?.dataset.tab === 'week');
     assert.equal(await pc.locator('.pl-zoom button[aria-pressed="true"]').innerText(), 'Week');
     assert.deepEqual(await pc.locator('.pl-zoom button').allInnerTexts(), ['Day', 'Week', 'Six weeks']);
-    await pc.keyboard.press('Alt+3');
+    await pc.keyboard.press('Alt+4');
     await pc.waitForFunction(() => document.querySelector('#plan-sheet')?.dataset.tab === 'ahead');
-    await pc.keyboard.press('Alt+3');
+    await pc.keyboard.press('Alt+4');
     await pc.waitForFunction(() => document.querySelector('#plan-sheet')?.dataset.tab === 'calday');
     await pc.waitForSelector('#plan-sheet .dc');
-    await pc.keyboard.press('Alt+1');
+    await pc.keyboard.press('Alt+2');
     await pc.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
     await sleep(400);
-    await pc.keyboard.press('Alt+3');
+    await pc.keyboard.press('Alt+4');
     await pc.waitForFunction(() => document.documentElement.dataset.view === 'plan' && document.querySelector('#plan-sheet')?.dataset.tab === 'calday');
     await sleep(300);
     assert.equal(await pc.locator('.today-switch [aria-current="page"]').innerText(), 'Calendar');
@@ -219,7 +219,7 @@ try {
   });
 
   await check('computer: a ticked task stays where it was; “Done tasks in the list” off hides it under “1 done”, with Undo', async () => {
-    await pc.keyboard.press('Alt+1');
+    await pc.keyboard.press('Alt+2');
     await pc.waitForSelector('#plan .pl-task');
     const words = () => pc.locator('#plan .pl-list .pl-task:not(.carried) .pl-words').allInnerTexts();
     const before = await words();
@@ -259,7 +259,7 @@ try {
   await check('phone: Page, Plan, Calendar; Plan is the whole outline from today', async () => {
     await go(phone, { view: 'desk' });
     await go(phone, { view: 'notebook', pageId: 'day-2026-11-14' });
-    assert.deepEqual(await phone.locator('.tp-switch .pl-switch button').allInnerTexts(), ['Page', 'Plan', 'Calendar']);
+    assert.deepEqual(await phone.locator('.tp-switch .pl-switch button').allInnerTexts(), ['Now', 'Page', 'Plan', 'Calendar']);
     assert.deepEqual(await heads(phone, '#plan'), HEADS);
     assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth - innerWidth), 0);
   });

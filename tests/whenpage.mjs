@@ -150,7 +150,7 @@ try {
   await check('the switch at the top is Today, Plan, Calendar, and Plan has its headings with counts', async () => {
     await page.evaluate(() => document.querySelector('#view-toggle').click());
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
-    assert.deepEqual(await page.locator('.today-switch button').allInnerTexts(), ['Today', 'Plan', 'Calendar']);
+    assert.deepEqual(await page.locator('.today-switch button').allInnerTexts(), ['Now', 'Page', 'Plan', 'Calendar']);
     await page.locator('.today-switch button', { hasText: 'Plan' }).click();
     await page.waitForSelector('.ww-sec');
     await still(page);
@@ -281,7 +281,7 @@ try {
   });
 
   await check('a loose task is on no day’s plan: today’s page shows only today’s and the carried-over one', async () => {
-    await page.locator('.today-switch button', { hasText: 'Today' }).click();
+    await page.locator('.today-switch button', { hasText: 'Page' }).click();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
     await page.waitForSelector('#plan .pl-task');
     const words = await page.locator('#plan .pl-task .pl-words').allInnerTexts();

@@ -647,7 +647,7 @@ export const setWhen = (id, when, extra = {}) => change(id, (r) => {
   if (r.fields.box !== true) r.fields.box = true;
 });
 // What a When change touches, to put back with Undo.
-const WHEN_KEYS = ['day', 'span', 'until', 'repeat', 'habit', 'mark', 'order', 'rank', 'carry'];
+const WHEN_KEYS = ['day', 'span', 'until', 'repeat', 'habit', 'mark', 'order', 'rank', 'carry', 'worked'];
 export async function whenSnap(id) {
   const r = await getEntry(id);
   if (!r || r.deleted) return null;

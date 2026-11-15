@@ -290,7 +290,8 @@ async function drawCrumb() {
     else {
       const tab = tabFor(lastPlace?.tab);
       parts.push(link('Today', () => go({ view: 'notebook', pageId: dayId(isoToday()) }), ''));
-      if (tab === 'plan') parts.push(link('Plan', () => {}, 'here'));
+      if (tab === 'now') parts.push(link('Now', () => {}, 'here'));
+      else if (tab === 'plan') parts.push(link('Plan', () => {}, 'here'));
       else parts.push(link('Calendar', () => plan.goTab('cal'), ''), link(ZOOMS.find((z) => z[0] === tab)?.[1] || 'Week', () => {}, 'here'));
     }
   } else if (view() === 'sidenotes') {

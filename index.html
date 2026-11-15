@@ -38,6 +38,8 @@
       if (!localStorage.getItem('linkPicsOff')) { hide.push('linkpics'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('linkPicsOff', '1'); }
       // Time estimates start off (Nov 2026): the plan is the order you'll do things in.
       if (!localStorage.getItem('estimatesOff')) { hide.push('estimates'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('estimatesOff', '1'); }
+      // Plan rows start plain (Nov 15 2026): the tick and the words; the rest in the row's ▸ and ⋯.
+      if (!localStorage.getItem('rowDetailsOff')) { hide.push('rowdetails'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('rowDetailsOff', '1'); }
       // Nov 2026: the Show tab's clean-up. Switches that went for good are simply on
       // again (bullets stays off); keep this list the same as REMOVED in src/shows.js.
       if (!localStorage.getItem('showsCleaned')) {
