@@ -6,8 +6,9 @@ import { Notebook } from '../notebook.js';
 import { openHandleMenu } from '../handlemenu.js';
 import { openPicker } from '../picker.js';
 import { inPane } from '../panes.js';
-import { $, applyRemoteChapter, besideItem, body, captureHere, dayMenu, dayReview, editor, inNotebook, listSoon, looseFoot, looseSoon, moveLinePicker, openEntry, pageMenu, paneMoves, plan, planningView, pull, remember, renderCrumb, renderRail, root, sendSelectionPicker, state, statusEl, tidyNudge, whenHere, writeOut } from '../main.js';
+import { $, applyRemoteChapter, besideItem, body, captureHere, dayMenu, dayReview, editor, inNotebook, listSoon, looseFoot, looseSoon, moveLinePicker, pageMenu, paneMoves, plan, planningView, pull, renderCrumb, renderRail, root, sendSelectionPicker, state, statusEl, tidyNudge, whenHere, writeOut } from '../main.js';
 import { ROOM_ABOVE, ROOM_BELOW, caretRoom, rowEnd, scriptBar, tapBar, touch, typeHere } from './scriptbar.js';
+import { openEntry, remember } from './routing.js';
 
 // ---------- notebook ----------
 
