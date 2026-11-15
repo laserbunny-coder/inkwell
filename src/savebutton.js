@@ -1,13 +1,15 @@
 import { plain as make } from './dom.js';
 // "Save to Inkwell" for a computer's browser, where Inkwell isn't in the share
 // menu: a bookmark that, clicked on any page (a post on X, a video, an
-// article), opens Inkwell with that page's address. It lands on today's page
-// the way a share from the phone does, and Claude's snapshot follows.
+// article), saves that page's address to today's page. It opens a little
+// window (save.html) that hands the link to the Inkwell already open in this
+// browser and closes itself; only when none is open does Inkwell open.
+// Claude's snapshot follows either way.
 
 
 export function bookmarklet(base) {
-  const app = base.split('#')[0].split('?')[0];
-  return `javascript:(()=>{window.open(${JSON.stringify(app)}+'?save='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title),'inkwell')})()`;
+  const save = new URL('save.html', base.split('#')[0].split('?')[0]).href;
+  return `javascript:(()=>{var w=380,h=150;window.open(${JSON.stringify(save)}+'?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title),'inkwell-save','popup,width='+w+',height='+h+',left='+Math.round((screen.availWidth-w)/2)+',top='+Math.round((screen.availHeight-h)/3))})()`;
 }
 
 export function showSaveButton(base = location.href) {
@@ -16,10 +18,11 @@ export function showSaveButton(base = location.href) {
   box.setAttribute('role', 'dialog');
   box.setAttribute('aria-modal', 'true');
   const steps = make('ol', 'save-steps');
+  const redo = make('p', 'save-tip', 'Already have the button from before? Right-click it on the bookmarks bar, Delete, and drag this new one up. The new one saves into the Inkwell you have open instead of opening another.');
   for (const s of [
     'Press Ctrl + Shift + B in your browser to show the bookmarks bar.',
     'Drag the Save to Inkwell button below up onto that bar.',
-    'On any page (a post on X, a video, an article), click it. The page lands on today, and Claude adds its title, a short summary and a tag.'
+    'On any page (a post on X, a video, an article), click it. A little window says Saved and closes. The page lands on today in the Inkwell you have open (Inkwell opens only if it isn’t), and Claude adds its title, a short summary and a tag.'
   ]) steps.append(make('li', '', s));
   const button = make('a', 'pill primary save-drag', 'Save to Inkwell');
   button.href = bookmarklet(base);
@@ -29,7 +32,7 @@ export function showSaveButton(base = location.href) {
   const row = make('div', 'ask-actions');
   const done = make('button', 'ghost-btn', 'Done');
   row.append(done);
-  box.append(make('h2', '', 'Save links from your browser'), steps, make('div', 'save-drag-row'), tip, row);
+  box.append(make('h2', '', 'Save links from your browser'), steps, make('div', 'save-drag-row'), redo, tip, row);
   box.querySelector('.save-drag-row').append(button);
   back.append(box);
   document.body.append(back);

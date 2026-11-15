@@ -196,13 +196,13 @@ try {
     await a.waitFor();
     const href = await a.getAttribute('href');
     assert.match(href, /^javascript:/);
-    assert.match(href, /\?save='\+encodeURIComponent\(location\.href\)/);
+    assert.match(href, /save\.html"\+'\?url='\+encodeURIComponent\(location\.href\)/);
     assert.ok(href.includes(URL), 'opens this Inkwell');
     if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/d-button.png` });
-    // What the bookmark does, run on another page, opens Inkwell with that page's address.
+    // What the bookmark does, run on another page, opens the little save window with that page's address (tests/savebox.mjs follows it).
     const opened = await page.evaluate((code) => { let got = null; const w = window.open; window.open = (u, n) => { got = [u, n]; }; new Function(decodeURIComponent(code.slice('javascript:'.length)))(); window.open = w; return got; }, href);
-    assert.equal(opened[1], 'inkwell');
-    assert.match(opened[0], /\?save=http.*&title=/);
+    assert.equal(opened[1], 'inkwell-save');
+    assert.match(opened[0], /save\.html\?url=http.*&title=/);
     await page.locator('.save-button button', { hasText: 'Done' }).click();
     await page.locator('.save-button').waitFor({ state: 'detached' });
   });
