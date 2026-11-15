@@ -77,9 +77,12 @@ export async function saveNoteTypes(types) {
 }
 
 // Anything of yours here yet? Books, worlds and pages count, in the Trash
-// too; a starter is only for an account with nothing in it.
+// too; a starter is only for an account with nothing in it. Pages the app
+// makes by itself (the Training page and the Tasks page its daily line goes
+// on, since Nov 15 2026) don't count.
+const MADE_BY_APP = new Set(['pg_training', 'page-tasks']);
 export async function hasWriting() {
-  for (const kind of ['project', 'world', 'page', 'day']) if ((await byKind(kind, { withTrash: true })).length) return true;
+  for (const kind of ['project', 'world', 'page', 'day']) if ((await byKind(kind, { withTrash: true })).some((r) => !MADE_BY_APP.has(r.id))) return true;
   return false;
 }
 
