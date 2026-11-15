@@ -522,9 +522,9 @@ export class Plan {
     }
     head.append(this.switchRow('day'));
     const { list, typing } = this.dayListIn(box, day, bits);
-    // Today on a computer: Tomorrow and This week as two folded lines under the
-    // day (drop a task on one to push it out), then the rest of the plan as one.
-    const more = box === this.box && day === today && hover.matches ? this.furtherLines() : [];
+    // Today: "Tomorrow and later" folded under the day (open, Tomorrow and This week
+    // take a dropped task to push it out), then the rest of the plan as one.
+    const more = box === this.box && day === today ? this.furtherLines() : [];
     if (typing) {
       for (const el of [...box.children]) if (el !== list) el.remove();
       box.prepend(head, bits.cal);
@@ -549,13 +549,21 @@ export class Plan {
     return left;
   }
 
-  // Under today's list on a computer: "Tomorrow · 2", "This week · 4" and
-  // "Further out · 9". Each opens Plan; the first two take a dropped task.
+  // Under today's list: one thin "Tomorrow and later · 133" line, as in Plan.
+  // Opened (kept per device), it shows "Tomorrow · 2", "This week · 4" and
+  // "Further out · 127". Each opens Plan; the first two take a dropped task.
+  todayRestOpen() { try { return localStorage.getItem('todayRest') === '1'; } catch { return false; } }
   furtherLines() {
     const { heads } = this.whenModel();
     const n = (id) => heads.find((x) => x.id === id)?.items.length || 0;
     const far = ['next', 'month', 'later'].reduce((a, id) => a + n(id), 0) + this.unplanned().length;
+    const open = this.todayRestOpen();
+    const all = n('tomorrow') + n('week') + far;
+    const toggle = this.restLine(all, open);
+    toggle.dataset.act = 'today-restline';
+    toggle.classList.add('pl-today-rest');
     const box = make('div', 'pl-further');
+    box.hidden = !open;
     const line = (id, label, count) => {
       const sec = make('section', 'ww-sec folded pl-fline');
       if (id) sec.dataset.bucket = id;
@@ -579,7 +587,7 @@ export class Plan {
     line('tomorrow', 'Tomorrow', n('tomorrow'));
     line('week', 'This week', n('week'));
     line(null, 'Further out', far);
-    return [box];
+    return [toggle, box];
   }
 
   // A calendar's Day: today's hours, with the tasks placed on them by hand.
@@ -1066,8 +1074,7 @@ export class Plan {
 
   // Tomorrow, the weeks, later and Not planned: shown or not, on this device.
   restOpen() { try { return localStorage.getItem('planRest') === '1'; } catch { return false; } }
-  restLine(n) {
-    const open = this.restOpen();
+  restLine(n, open = this.restOpen()) {
     const b = make('button', `past-toggle pl-restline${open ? ' open' : ''}`);
     b.dataset.act = 'pl-restline';
     b.setAttribute('aria-expanded', String(open));
@@ -1725,6 +1732,7 @@ export class Plan {
     if (act === 'pull') return this.hooks.pull?.();
     if (act === 'ww-group') { this.groupsOpen ||= new Set(); const k = el.dataset.group; if (this.groupsOpen.has(k)) this.groupsOpen.delete(k); else this.groupsOpen.add(k); return this.redraw(); }
     if (act === 'peek-done') { this.peekDone = !this.peekDone; return this.redraw(); }
+    if (act === 'today-restline') { try { localStorage.setItem('todayRest', this.todayRestOpen() ? '0' : '1'); } catch { /* no storage here */ } return this.redraw(); }
     if (act === 'pl-restline') { try { localStorage.setItem('planRest', this.restOpen() ? '0' : '1'); } catch { /* no storage here */ } return this.redraw(); }
     if (act === 'ww-fold') { const sec = el.closest('.ww-sec'); this.planFold(sec.dataset.bucket, sec.classList.contains('folded')); return this.redraw(); }
     if (act === 'kid') {
