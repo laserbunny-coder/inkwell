@@ -17,6 +17,7 @@ import { SideNotes } from '../sidenotes.js';
 import { Talk } from '../talk.js';
 import { forgetCalendar } from '../calendar.js';
 import { areas, areaColor, worldOf } from '../library.js';
+import { addCommands, mod } from './commandlist.js';
 import { $, blocks, editor, gone, inNotebook, notes, root, state, store, view } from '../main.js';
 import { touch } from './scriptbar.js';
 import { currentEditor, notebook } from './notebookview.js';
@@ -376,6 +377,21 @@ async function settleAt(eid, spot) {
   return false;
 }
 
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'write', label: 'When: plan this line (today, this week, next week, later…)', keys: 'Alt+W', words: ['when', 'schedule', 'plan', 'day', 'week', 'month', 'later', 'task'], run: () => setTimeout(() => whenHere(), 60) },
+  { group: 'go', label: 'From a project: open one next to the plan, to drag its steps in', keys: '', words: ['pull', 'project', 'beside', 'plan', 'drag', 'split', 'steps'], run: () => pullFromProject() },
+  { group: 'sync', label: 'Google Calendar: show your events on Today and the week…', keys: '', words: ['calendar', 'google', 'connect', 'events'], run: () => connectCalendar() },
+  { group: 'view', label: 'Beside: today’s plan next to this page (again: put it away)', keys: `${mod}\\`, words: ['pane', 'side by side', 'split', 'beside', 'plan', 'tasks', 'today'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => toggleBesidePane() },
+  { group: 'view', label: 'Talk it through with Claude, beside where you are', keys: '⌥T', words: ['claude', 'talk', 'think', 'plan', 'week', 'moves', 'ask', 'beside', 'overwhelmed', 'too much'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => openTalk() },
+  { group: 'view', label: 'In the Beside pane: this draft’s notes, listed next to it', words: ['pane', 'side by side', 'beside', 'notes', 'margin', 'comments'], when: () => !inPane && !!panes && writing() && !root.classList.contains('hide-panes'), run: () => openBeside(BESIDE_PLACES.notes) },
+  { group: 'view', label: 'Open where you are in a pane beside (middle-click opens anything beside)', words: ['pane', 'side by side', 'split', 'beside', 'two', 'compare'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => openBeside(lastPlace) },
+  { group: 'view', label: 'Show the panes beside', words: ['pane', 'peek', 'side by side'], when: () => !!panes?.count && panes.sheet && !panes.sheetOpen, run: () => panes.showSheet() },
+  { group: 'view', label: 'Close all the panes beside', words: ['pane', 'side by side', 'close'], when: () => !!panes?.count, run: () => panes.closeAll() },
+  ...Object.entries(LISTS).map(([list, name]) => ({ group: 'page', label: `Make this page a ${name.toLowerCase()} (Claude links each title)`, keys: '', run: () => makeList(list), when: () => inNotebook() && notebook.page?.kind === 'page' && listOf(notebook.page) !== list })),
+  { group: 'page', label: 'Stop Claude linking titles on this page', keys: '', run: () => makeList(null), when: () => inNotebook() && !!listOf(notebook.page) }
+]);
+
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).
 function wireBeside() {
@@ -492,4 +508,4 @@ function wireBeside() {
   });
 }
 
-export { besideItem, connectCalendar, listSoon, makeList, openBeside, openEntryBeside, openInMain, openProjectBeside, openTalk, paneKeys, paneMoves, panes, planningView, pull, pullFromProject, reviewAsked, reviewing, setReviewing, sideNotes, syncBeside, talkThrough, toggleBesidePane, whenHere, wireBeside };
+export { besideItem, listSoon, openBeside, openEntryBeside, openInMain, openProjectBeside, openTalk, paneKeys, paneMoves, panes, planningView, pull, pullFromProject, reviewAsked, reviewing, setReviewing, sideNotes, syncBeside, talkThrough, toggleBesidePane, whenHere, wireBeside };

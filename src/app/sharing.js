@@ -7,6 +7,7 @@ import { inPane } from '../panes.js';
 import { Sharing, linkFor, commentsOn } from '../sharelink.js';
 import { ago, worldOf } from '../library.js';
 import { make } from '../dom.js';
+import { addCommands } from './commandlist.js';
 import { editor, inNotebook, notes, state, store } from '../main.js';
 import { currentEditor, notebook } from './notebookview.js';
 import { openEntry } from './routing.js';
@@ -14,6 +15,7 @@ import { sync } from './syncwiring.js';
 import { plural } from './tidying.js';
 import { productionOwner } from './productionwiring.js';
 import { hidden, setShown } from './pagesettings.js';
+import { currentBookId } from './quickinserts.js';
 
 // ---------- share links: read and comment ----------
 
@@ -125,6 +127,11 @@ function warmRooms() {
 
 // Print (or save as PDF), loaded when first asked for.
 const printLater = async (what) => (await import('../print.js')).printPiece(what);
+
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'revise', label: 'Share a link to read and comment…', keys: '', words: ['share', 'feedback', 'reader', 'link'], run: () => openShare(), when: () => !!currentBookId() || (inNotebook() && notebook.page?.kind === 'page') }
+]);
 
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).

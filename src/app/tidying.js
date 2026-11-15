@@ -2,7 +2,7 @@
 import { putEntries, children, getEntry } from '../db.js';
 import { trash, restore, trashed, deleteForever, contents } from '../trash.js';
 import { editStages } from '../stageedit.js';
-import { ask, askText, askPiece, toast } from '../menu.js';
+import { popMenu, ask, askText, askPiece, toast } from '../menu.js';
 import { outline, entry } from '../model.js';
 import { titleOf, dayId } from '../notebook.js';
 import { isLife, personalArea } from '../pages.js';
@@ -11,6 +11,7 @@ import { sharesOf } from '../sharelink.js';
 import { areas, bookType, hasManuscript, kindName, newArea, pagesIn, bookOf, stats, ago, changeType, worlds, worldOf, newPiece, piecesIn, worldTree, usedLabels, SHAPES, shapeOf, levelsOf, nextLevel, FORMATS, formatName, defaultLabel, stageOf, allSets, addOwnWorkflow, dropOwnWorkflow, setById, stageSetOf, stagesIn, stagesOf } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday } from '../dates.js';
+import { addCommands } from './commandlist.js';
 import { $, editor, gone, inNotebook, notes, root, state, store, view } from '../main.js';
 import { placeScriptBar } from './scriptbar.js';
 import { notebook } from './notebookview.js';
@@ -24,7 +25,7 @@ import { production } from './productionwiring.js';
 import { stagePage } from './workpages.js';
 import { hstrip } from './historyview.js';
 import { writing } from './commands.js';
-import { showClaudeKnows } from './quickinserts.js';
+import { menuSpot, showClaudeKnows } from './quickinserts.js';
 import { openTalk } from './beside.js';
 
 // ---------- tidying up: rename, move, change kind, the Trash ----------
@@ -630,5 +631,12 @@ async function renderTrash() {
     return li;
   }));
 }
+
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
+  { group: 'tidy', label: 'This page: rename, move to a world or trash…', keys: '', run: async () => popMenu(null, await pageMenu(notebook.page), menuSpot()), when: () => inNotebook() && notebook.page?.kind === 'page' },
+  { group: 'tidy', label: 'This area: rename, move or trash…', keys: '', run: async () => popMenu(null, await areaMenu({ id: state.libArea }), menuSpot()), when: () => view() === 'library' && !!state.libArea }
+]);
 
 export { KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, leaveChapter, moveBookToArea, nameOf, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setLife, setStage, worldMenu };

@@ -23,6 +23,7 @@ import { aheadSource } from '../ahead.js';
 import { events as calendarEvents } from '../calendar.js';
 import { bookType, bookOf } from '../library.js';
 import { isoToday } from '../dates.js';
+import { addCommands } from './commandlist.js';
 import { $, editor, inNotebook, root, state, store, view } from '../main.js';
 import { touch } from './scriptbar.js';
 import { currentEditor, notebook } from './notebookview.js';
@@ -347,6 +348,25 @@ function flipPlan() {
   if (view() === 'notebook' && notebook.isDay) toast(was === 'side' ? 'The plan is on top of the page (Alt + P puts it beside)' : 'The plan is beside the page (Alt + P puts it on top)');
 }
 
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'go', label: 'Today: today’s page with its plan', keys: 'Alt+1', words: ['today', 'plan', 'day', 'tasks', 'page'], run: () => todayKey(1) },
+  { group: 'go', label: 'Bring earlier days to today (every task left from before, onto today)', keys: 'Alt+Shift+T', words: ['carried', 'earlier', 'overdue', 'late', 'move', 'today', 'left over'], run: () => plan.bringToday() },
+  { group: 'go', label: 'Plan: today, tomorrow, this week, next week, this month, later, not planned', keys: 'Alt+2', words: ['what’s when', 'whats when', 'when', 'planning', 'schedule', 'later', 'month', 'next week', 'loose', 'not planned', 'outline'], run: () => todayKey(2) },
+  { group: 'new', label: 'Capture an idea by voice (it lands where you are)', keys: '⌥C', words: ['dictate', 'voice', 'walk', 'speak', 'talk', 'draft'], run: () => captureHere() },
+  { group: 'new', label: 'Capture from a recording file…', words: ['audio', 'voice memo', 'upload', 'draft'], run: () => fromRecordingFile() },
+  { group: 'write', label: 'Your voice modes (shared with Scribe)…', words: ['journal', 'scene', 'idea', 'email', 'mode'], run: () => openModes() },
+  { group: 'view', label: 'Plan beside the page, or on top in one column', keys: 'Alt+P', words: ['plan', 'side', 'column', 'top', 'layout', 'flip'], run: () => flipPlan(), when: () => !touch.matches },
+  { group: 'go', label: 'Go through loose lines: the last week’s unfiled lines, one at a time', words: ['sort', 'file', 'loose', 'triage', 'review', 'inbox', 'tidy'], run: () => through.open('loose') },
+  { group: 'go', label: 'Go through the tasks left from earlier days: keep, not today, or delete', words: ['carried', 'overdue', 'old tasks', 'pile', 'triage', 'clear'], run: () => through.open('carried') },
+  { group: 'go', label: 'Go through what needs you: the Desk’s calls, one at a time', words: ['calls', 'needs you', 'decide', 'desk', 'triage', 'waiting'], run: () => through.open('calls') },
+  { group: 'tidy', label: 'Review the day with Claude (what to plan, what to keep thinking about)', keys: '', run: () => dayReview.run(), when: () => inNotebook() && notebook.isDay },
+  { group: 'new', label: 'Make meeting notes from a recording (summary, decisions, tasks, who said what)…', keys: '', run: () => setTimeout(makeMeeting, 120) },
+  { group: 'tidy', label: 'Send this meeting to Acro HQ (summary and tasks, for you and Nate)', keys: '', run: () => setTimeout(meetingToAcro, 120), when: () => inNotebook() && !!notebook.page?.fields?.meeting && canAskServer() },
+  { group: 'tidy', label: 'Fix a speaker’s name in this meeting…', keys: '', run: () => setTimeout(fixSpeaker, 120), when: () => inNotebook() && !!notebook.page?.fields?.meeting },
+  { group: 'tidy', label: 'Write out this recording again', keys: '', words: ['transcribe', 'voice', 'retry', 'audio'], run: writeLineOutAgain, when: () => inNotebook() && !!notebook.currentLine() && canAskServer() }
+]);
+
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).
 function wireTalking() {
@@ -514,4 +534,4 @@ function wireTalking() {
   if (inNotebook() && notebook.page) plan.showDay(notebook.page);
 }
 
-export { askServer, asking, blankOnce, canAskServer, capture, captureHere, dayReview, deskBackend, deskPage, fixSpeaker, flipPlan, fromRecordingFile, inToday, landShares, looseFoot, looseSoon, makeMeeting, meetingToAcro, openAsked, openCapture, openModes, plan, projectPage, scribeKept, setAsking, showCapture, tagsPage, through, todayKey, wireTalking, writeLineOutAgain, writeOut };
+export { askServer, asking, blankOnce, canAskServer, capture, captureHere, dayReview, deskBackend, deskPage, flipPlan, inToday, landShares, looseFoot, looseSoon, openAsked, openCapture, plan, projectPage, scribeKept, setAsking, showCapture, tagsPage, todayKey, wireTalking, writeOut };

@@ -2,8 +2,9 @@
 import { keyboard } from '../keyboard.js';
 import { media } from '../device.js';
 import { flip, altsHere } from '../alts.js';
-import { $, alts, body, editor, insertSection, isScript, root, setElement } from '../main.js';
-import { caretSoon, placeOutlineBar } from './notebookview.js';
+import { addCommands } from './commandlist.js';
+import { $, alts, body, editor, inNotebook, insertSection, isScript, root, setElement } from '../main.js';
+import { caretSoon, currentEditor, placeOutlineBar } from './notebookview.js';
 import { toggleFocus } from './pagesettings.js';
 import { writing } from './commands.js';
 import { captureHere } from './talking.js';
@@ -94,6 +95,11 @@ function rowEnd(what) {
   toggleFocus();
   placeScriptBar(); placeOutlineBar();
 }
+
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'write', label: 'Insert something (time, date, link…)', keys: '/', run: () => typeHere(currentEditor(), '/'), when: () => writing() || inNotebook() }
+]);
 
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).

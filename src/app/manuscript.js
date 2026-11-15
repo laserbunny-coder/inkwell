@@ -11,6 +11,7 @@ import { applyLook, renderLook, cleanLook, DEFAULT_LOOK } from '../wovenlook.js'
 import { elementsIn, plainPages, newElement } from '../production.js';
 import { threadsOf } from '../grid.js';
 import { bookType, bookOf, worldOf } from '../library.js';
+import { addCommands } from './commandlist.js';
 import { $, editor, isScript, isWoven, notes, root, state, statusEl, store, view } from '../main.js';
 import { placeScriptBar } from './scriptbar.js';
 import { openEntry, remember } from './routing.js';
@@ -331,6 +332,17 @@ async function newAct() {
   await openChapter(ch.id);
 }
 
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'write', label: 'Script view: Woven (flowing, scene headings hidden)', keys: '', words: ['woven', 'flowing', 'prose', 'quiet', 'view'], run: () => setWoven(true), when: () => writing() && isScript() && !isWoven() },
+  { group: 'write', label: 'Script view: Classic (the standard screenplay page)', keys: '', words: ['woven', 'classic', 'standard', 'view', 'courier'], run: () => setWoven(false), when: () => writing() && isWoven() },
+  { group: 'write', label: 'Woven: this scene’s place, time and title…', keys: '/scene', words: ['scene', 'place', 'time', 'slug', 'heading', 'title'], run: sceneDetails, when: () => writing() && isWoven() },
+  { group: 'write', label: 'Woven: prepare for shoot (fill in every scene’s place and time)', keys: '', words: ['shoot', 'production', 'slug', 'headings', 'breakdown', 'claude'], run: prepareShoot, when: () => writing() && isWoven() },
+  { group: 'write', label: 'Scene numbers: turn off', keys: '', run: async () => toggleNumbering(await currentBook()), when: () => writing() && isScript() && !!state.project?.fields?.numbered },
+  { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
+  { group: 'sync', label: 'Connect Scribe, the dictation keyboard…', keys: '', run: () => connectScribe() }
+]);
+
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).
 function wireManuscript() {
@@ -339,4 +351,4 @@ function wireManuscript() {
   $('#chapter-links-chip').addEventListener('click', () => $('.chapter-links').scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
 
-export { biblePlaces, connectClaude, connectScribe, markScene, newAct, newChapter, numbering, openChapter, prepareShoot, refreshWords, renderChapterLinks, sceneDetails, scenePop, setWoven, syncWoven, toggleNumbering, wireManuscript, wovenPick };
+export { biblePlaces, connectScribe, markScene, newAct, newChapter, numbering, openChapter, refreshWords, renderChapterLinks, sceneDetails, scenePop, syncWoven, toggleNumbering, wireManuscript, wovenPick };

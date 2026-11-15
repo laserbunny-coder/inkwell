@@ -10,17 +10,19 @@ import { draftHolding } from '../drafts.js';
 import { inPane } from '../panes.js';
 import { books, bookType, hasManuscript, bookOf, worldOf } from '../library.js';
 import { isoOf, isoToday } from '../dates.js';
+import { addCommands, mod } from './commandlist.js';
 import { $, body, editor, gone, gridTouched, inNotebook, root, setGridTouched, state, store, view } from '../main.js';
 import { touch } from './scriptbar.js';
 import { notebook } from './notebookview.js';
-import { openChapter } from './manuscript.js';
+import { newAct, newChapter, openChapter } from './manuscript.js';
 import { renderCrumb, renderRail } from './rail.js';
 import { grid, renderLibrary, renderProject, renderWorld } from './libraryview.js';
 import { beside, comparer, talk } from './revising.js';
 import { loadProduction } from './productionwiring.js';
 import { frame, loadStagePage, pageOfPlace } from './workpages.js';
 import { hstrip } from './historyview.js';
-import { box } from './commands.js';
+import { hidden } from './pagesettings.js';
+import { box, writing } from './commands.js';
 import { deskPage, looseFoot, plan, tagsPage } from './talking.js';
 import { openBeside, panes, planningView, pull, sideNotes, talkThrough } from './beside.js';
 
@@ -286,6 +288,25 @@ async function newPageHere() {
   if (!inNotebook()) await go({ view: 'notebook' });
   await notebook.newPage(parent);
 }
+
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
+  { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
+  { group: 'go', label: 'Calendar: day (today’s hours)', keys: '', words: ['calendar', 'day', 'hours', 'time', 'schedule'], run: () => go({ view: 'plan', tab: 'calday' }) },
+  { group: 'go', label: 'Calendar: week (seven days, and what’s for any day this week)', keys: '', words: ['calendar', 'week', 'plan', 'tasks', 'schedule', 'tray', 'any day'], run: () => go({ view: 'plan', tab: 'week' }) },
+  { group: 'go', label: 'Calendar: six weeks (a lane for each project)', keys: '', words: ['calendar', 'weeks ahead', 'ahead', 'six weeks', 'roadmap', 'weeks', 'months', 'dates', 'deadline', 'milestone', 'schedule', 'timeline', 'stretch'], run: () => go({ view: 'plan', tab: 'ahead' }) },
+  { group: 'go', label: 'Calendar: pace (what you planned against what it really took)', keys: '', words: ['calendar', 'pace', 'plan', 'tasks', 'time', 'estimate', 'looking back', 'hours'], run: () => go({ view: 'plan', tab: 'pace' }), when: () => !hidden().has('estimates') },
+  { group: 'go', label: 'Desk: every project, what needs you and who’s working on it', keys: `${mod}⇧U`, words: ['claude', 'threads', 'needs you', 'calls', 'catch-up', 'catchup', 'updates', 'projects', 'stage'], run: () => go({ view: 'desk' }) },
+  { group: 'go', label: 'History: every Claude thread, newest first', keys: '', words: ['threads', 'closed', 'finished', 'desk', 'search threads'], run: () => go({ view: 'desk', tab: 'history' }) },
+  { group: 'go', label: 'Today’s page', keys: `${mod}J`, run: () => go({ view: 'notebook', pageId: dayId(isoToday()) }) },
+  { group: 'go', label: 'The Drawer: ideas with no home yet', keys: '', words: ['ideas', 'jackie chan'], run: () => go({ view: 'drawer' }) },
+  { group: 'go', label: 'Back to writing', keys: `${mod}J`, run: () => go({ view: 'write' }), when: () => !writing() },
+  { group: 'new', label: 'New page', keys: '', run: newPageHere },
+  { group: 'new', label: 'New area', keys: '', run: () => go({ view: 'library' }).then(() => [...document.querySelectorAll('#lib-areas .chip.add')].at(-1)?.click()) },
+  { group: 'new', label: 'New chapter', keys: '', run: () => go({ view: 'write' }).then(newChapter), when: () => !!state.project },
+  { group: 'new', label: 'New act', keys: '', run: () => go({ view: 'write' }).then(newAct), when: () => !!state.project }
+]);
 
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).

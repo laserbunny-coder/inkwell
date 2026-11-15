@@ -8,6 +8,7 @@ import { pieceDoc, pageDoc, startDraft } from '../drafts.js';
 import { CompareView, BesidePane } from '../compare.js';
 import { claudeNotes, TalkPanel } from '../claudenotes.js';
 import { bookType, hasManuscript } from '../library.js';
+import { addCommands, mod } from './commandlist.js';
 import { $, alts, editor, inNotebook, notes, root, state, statusEl, store, view } from '../main.js';
 import { notebook } from './notebookview.js';
 import { go, openBook, remember } from './routing.js';
@@ -17,6 +18,7 @@ import { printLater } from './sharing.js';
 import { productionOwner } from './productionwiring.js';
 import { hidden, setShown } from './pagesettings.js';
 import { writing } from './commands.js';
+import { currentBookId } from './quickinserts.js';
 import { askServer, canAskServer } from './talking.js';
 
 // ---------- revising: fresh eyes, print, drafts, compare, Claude's notes ----------
@@ -154,6 +156,19 @@ async function toggleTalk() {
   await talk.open(state.chapterId);
 }
 
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'view', label: 'Fresh eyes: a new font, page and colour, to reread it cold', keys: `${mod}⇧Y`, words: ['reread', 'revise', 'unfamiliar'], run: () => toggleFreshEyes() },
+  { group: 'revise', label: 'Compare drafts, or the text then and now', keys: `${mod}⇧X`, words: ['diff', 'versions', 'changes'], run: toggleCompare, when: () => view() !== 'compare' },
+  { group: 'revise', label: 'Back to the text from comparing', keys: `${mod}⇧X`, run: toggleCompare, when: () => view() === 'compare' },
+  { group: 'revise', label: 'Read an earlier draft beside this one', keys: `${mod}⇧B`, words: ['side by side', 'old draft'], run: toggleBeside, when: writing },
+  { group: 'revise', label: 'New draft from this one: keep a copy of this draft and carry on…', keys: '', words: ['save draft', 'version', 'draft 2', 'snapshot'], run: async () => { const b = await revisionPiece(); if (b) newDraftFrom(b); }, when: () => !!currentBookId() },
+  { group: 'revise', label: 'Start a new draft from scratch (the old one is kept whole)…', keys: '', words: ['rewrite', 'draft 2'], run: async () => { const b = await revisionPiece(); if (b) newDraft(b); }, when: () => !!currentBookId() },
+  { group: 'revise', label: 'Claude’s notes on this chapter (margin notes and a fix list)', keys: '', words: ['feedback', 'editor', 'critique'], run: askClaudeNotes, when: writing },
+  { group: 'revise', label: 'Talk this chapter over with Claude', keys: '', words: ['chat', 'conversation', 'feedback'], run: toggleTalk, when: writing },
+  { group: 'revise', label: 'Print, or save as PDF (manuscript or screenplay format)', keys: `${mod}P`, words: ['pdf', 'export'], run: printCurrent, when: () => writing() || view() === 'project' || view() === 'compare' || (inNotebook() && notebook.page?.kind === 'page') }
+]);
+
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).
 function wireRevising() {
@@ -187,4 +202,4 @@ function wireRevising() {
   window.__talk = talk;
 }
 
-export { accountName, askClaudeNotes, beside, comparer, newDraft, newDraftFrom, printCurrent, revisionPiece, talk, toggleBeside, toggleCompare, toggleFreshEyes, toggleTalk, wireRevising };
+export { accountName, askClaudeNotes, beside, comparer, newDraft, newDraftFrom, printCurrent, talk, toggleCompare, toggleFreshEyes, toggleTalk, wireRevising };

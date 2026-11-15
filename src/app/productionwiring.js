@@ -3,6 +3,7 @@ import { getEntry } from '../db.js';
 import { popMenu, menuButton, ask, askText, toast } from '../menu.js';
 import { linkFor } from '../sharelink.js';
 import { hasManuscript, bookOf, worldOf, worldStats } from '../library.js';
+import { addCommands, mod } from './commandlist.js';
 import { $, inNotebook, state, view } from '../main.js';
 import { notebook } from './notebookview.js';
 import { go, openBook, remember } from './routing.js';
@@ -85,5 +86,13 @@ async function toggleGrid() {
   if (!id) { toast('Open a piece or a world to see its plot grid'); return; }
   return go({ view: 'grid', id });
 }
+
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'view', label: 'Plot grid (the story as a table)', keys: `${mod}⇧G`, run: toggleGrid, when: () => view() !== 'grid' && view() !== 'library' },
+  { group: 'view', label: 'Back to the text from the grid', keys: `${mod}⇧G`, run: toggleGrid, when: () => view() === 'grid' },
+  { group: 'view', label: 'Production (shots, kit, shoot days, posting)', keys: `${mod}⇧S`, run: toggleProduction, when: () => view() !== 'production' && view() !== 'library' },
+  { group: 'view', label: 'Back to the text from production', keys: `${mod}⇧S`, run: toggleProduction, when: () => view() === 'production' }
+]);
 
 export { loadProduction, production, productionOwner, toggleGrid, toggleProduction };

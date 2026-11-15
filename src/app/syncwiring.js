@@ -13,6 +13,7 @@ import { Conflicts } from '../conflicts.js';
 import { SPACE, spaceUsed, unsentFiles } from '../files.js';
 import { vaultFiles } from '../vault.js';
 import { dayId } from '../notebook.js';
+import { openAlerts } from '../alerts.js';
 import { DESK_ID } from '../desk.js';
 import { PLAN_ID } from '../tasks.js';
 import { draftHolding } from '../drafts.js';
@@ -20,6 +21,7 @@ import { inPane, sendChanged, onChanged } from '../panes.js';
 import { redrawTidy } from '../tidypass.js';
 import { ensureWorlds, setOwnWorkflows } from '../library.js';
 import { isoToday } from '../dates.js';
+import { addCommands } from './commandlist.js';
 import { $, body, editor, gone, inNotebook, notes, state, store, view } from '../main.js';
 import { notebook } from './notebookview.js';
 import { go, lastChapterAnywhere } from './routing.js';
@@ -223,6 +225,15 @@ async function applyRemoteChapter(tries = 0) {
   scheduleScenes();
   notes.layout();
 }
+
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'sync', label: 'Sync now', keys: '', run: () => sync.soon(0), when: () => !!sync.user },
+  { group: 'sync', label: 'Sign in to sync between devices', keys: '', run: () => sync.signIn(), when: () => sync.available && !sync.user },
+  { group: 'sync', label: 'Sign out of sync', keys: '', run: () => sync.signOut(), when: () => !!sync.user },
+  { group: 'sync', label: 'Phone alerts (day review, Needs you, your week and month)…', keys: '', run: () => openAlerts({ backend: sync.backend, signedIn: !!sync.user, toast }) },
+  { group: 'sync', label: 'Two versions to check', urgent: true, keys: '', run: () => conflicts.open(), when: () => !$('#versions').hidden }
+]);
 
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).

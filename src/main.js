@@ -1,3 +1,9 @@
+// Inkwell starts here. This file makes the editor and the few things every
+// part of the app shares (state, the chapter store, the notes layer), then
+// sets up each part in turn, in the order they need each other: each part
+// lives in src/app/ (getting around in routing.js, the command box in
+// commands.js, and so on) and its wire…() function runs here, in the place
+// its code always ran. start() at the end opens the app.
 import './keyboard.js';
 import './device.js';
 import './style.css';

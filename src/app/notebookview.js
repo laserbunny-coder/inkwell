@@ -1,11 +1,12 @@
 // The notebook: daily pages and pages written as lines.
 import { keyboard } from '../keyboard.js';
 import { menuButton, toast } from '../menu.js';
-import { toggleDone, indentLines, outdentLines, moveLine, foldKey, toggleChecklist, hasBox, toggleBox, canMoveLine, removeLine } from '../outline.js';
+import { toggleDone, indentLines, outdentLines, moveLine, foldKey, toggleChecklist, hasBox, toggleBox, canMoveLine, removeLine, lineChecks } from '../outline.js';
 import { Notebook } from '../notebook.js';
 import { openHandleMenu } from '../handlemenu.js';
 import { openPicker } from '../picker.js';
 import { inPane } from '../panes.js';
+import { addCommands, mod } from './commandlist.js';
 import { $, body, editor, inNotebook, root, state, statusEl } from '../main.js';
 import { ROOM_ABOVE, ROOM_BELOW, caretRoom, rowEnd, scriptBar, tapBar, touch, typeHere } from './scriptbar.js';
 import { openEntry, remember } from './routing.js';
@@ -13,6 +14,7 @@ import { applyRemoteChapter } from './syncwiring.js';
 import { renderCrumb, renderRail } from './rail.js';
 import { pageMenu } from './tidying.js';
 import { dayMenu } from './historyview.js';
+import { writing } from './commands.js';
 import { moveLinePicker, sendSelectionPicker, tidyNudge } from './quickinserts.js';
 import { captureHere, dayReview, looseFoot, looseSoon, plan, writeOut } from './talking.js';
 import { besideItem, listSoon, paneMoves, planningView, pull, whenHere } from './beside.js';
@@ -156,6 +158,24 @@ let caretTimer;
 const caretSoon = (ms = 60) => { clearTimeout(caretTimer); caretTimer = setTimeout(() => requestAnimationFrame(() => keepCaretInView()), ms); };
 
 const currentEditor = () => (inNotebook() ? notebook.editor : editor);
+
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'write', label: 'Zoom into this line', keys: 'click its handle', run: () => notebook.zoomTo(notebook.currentLine()), when: inNotebook },
+  { group: 'write', label: 'Zoom out', keys: 'Esc', run: () => notebook.zoomTo(null), when: () => inNotebook() && !!notebook.zoom },
+  { group: 'write', label: 'Fold or unfold this line', keys: `${mod}↑ ${mod}↓`, run: () => notebook.toggleFold(), when: inNotebook },
+  { group: 'write', label: 'Link to a page…', keys: '[[', run: () => openPicker(currentEditor()), when: () => writing() || inNotebook() },
+  { group: 'view', label: 'Typewriter mode: the line you’re on stays put', words: ['scroll', 'center', 'middle'], run: () => toggleTypewriter() },
+  { group: 'view', label: 'Show or hide earlier days (under the day page)', keys: '', run: () => notebook.togglePastDays(), when: () => inNotebook() && notebook.isDay },
+  { group: 'write', label: 'Bring back gathered lines I deleted', keys: '', run: () => notebook.regather(), when: () => inNotebook() && !!notebook.gatherLine() },
+  { group: 'write', label: 'Stop gathering on this line', keys: '', run: () => notebook.stopGather(), when: () => inNotebook() && !!notebook.gatherLine() },
+  { group: 'write', label: 'Task: put this line on a day’s plan (again: a plain line)', keys: `${mod}⇧↵`, words: ['todo', 'to-do', 'plan', 'schedule', 'today'], run: () => notebook.toggleTask(), when: inNotebook },
+  { group: 'write', label: 'Done: strike this line through', keys: `${mod}↵`, run: () => toggleDone(notebook.editor), when: inNotebook },
+  { group: 'write', label: 'Checklist: tick boxes on the lines under this one', keys: '', words: ['todo', 'to-do', 'list', 'checkbox', 'tick'], run: () => toggleChecklist(notebook.editor), when: () => inNotebook() && !lineChecks(notebook.editor.state)?.checklist },
+  { group: 'write', label: 'Not a checklist (take the boxes off the lines under this one)', keys: '', words: ['checklist', 'checkbox'], run: () => toggleChecklist(notebook.editor), when: () => inNotebook() && !!lineChecks(notebook.editor.state)?.checklist },
+  { group: 'write', label: 'Box on this line (tick it when done; or type [ ] at the start)', keys: '', words: ['checkbox', 'todo', 'to-do', 'tick'], run: () => toggleBox(notebook.editor), when: () => inNotebook() && lineChecks(notebook.editor.state) && !lineChecks(notebook.editor.state).box },
+  { group: 'write', label: 'No box on this line (a note, not a thing to do)', keys: '', words: ['checkbox', 'tick'], run: () => toggleBox(notebook.editor), when: () => inNotebook() && !!lineChecks(notebook.editor.state)?.box }
+]);
 
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).

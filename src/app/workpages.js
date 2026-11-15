@@ -16,6 +16,7 @@ import { pieceDoc } from '../drafts.js';
 import { areas, bookType, kindName, areaColor, bookOf, worldOf, editedAt, stageOf, nextLabel, setById, stageSetOf, stagesIn } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday } from '../dates.js';
+import { addCommands, mod } from './commandlist.js';
 import { $, body, editor, gone, inNotebook, notes, root, state, store, view } from '../main.js';
 import { touch } from './scriptbar.js';
 import { currentEditor, notebook } from './notebookview.js';
@@ -303,6 +304,14 @@ function renderBoard(w, pieces, el = $('#wh-board')) {
     return box;
   }));
 }
+
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'go', label: 'Back to the last place', keys: '', words: ['recent', 'jump', 'switch'], run: () => nav.jumpBack(), when: () => nav.recent.length > 0 },
+  { group: 'go', label: 'Catch-up: what your Claude threads did (bottom of the Desk)', keys: '', words: ['catch up', 'catch-up', 'catchup', 'threads', 'updates', 'claude'], run: () => goCatchup() },
+  { group: 'go', label: 'Side panel with today’s lines, beside what you’re doing', keys: `${mod}⇧J`, words: ['panel', 'side'], run: () => todayPanel.toggle() },
+  ...['overview', 'gather', 'shape', 'write', 'revise', 'make', 'deliver', 'notes'].map((id, i) => ({ group: 'go', label: `Page: ${id === 'overview' ? 'Overview' : PAGE_NAMES[id]}`, keys: id === 'notes' ? '' : `⌥${i}`, words: ['tab', 'page'], run: () => goPage(id), when: () => strip.tabs.some((t) => t.id === id) }))
+]);
 
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).

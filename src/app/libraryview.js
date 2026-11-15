@@ -12,6 +12,7 @@ import { dayWord } from '../tasks.js';
 import { areas, bookType, hasManuscript, kindName, areaColor, newArea, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, worlds, worldOf, piecesIn, worldTree, worldStats, usedLabels, SHAPES, shapeOf, nextLevel, newShaped, editedAt, defaultLabel, stageOf, nextLabel, setForNew, typeForSet, stageSetOf, stagesOf, isReady } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday } from '../dates.js';
+import { addCommands } from './commandlist.js';
 import { $, editor, gone, gridTouched, notes, setGridTouched, state, store, view } from '../main.js';
 import { go, openBook, openEntry } from './routing.js';
 import { areaPath, dot, renameable, renderCrumb, renderRail, subtree } from './rail.js';
@@ -557,6 +558,16 @@ function nextDate(worldId) {
 
 let grid; // set in wireLibraryView()
 
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'new', label: 'New novel', keys: '', run: () => showNewBook('novel') },
+  { group: 'new', label: 'New screenplay', keys: '', run: () => showNewBook('screenplay') },
+  { group: 'new', label: 'New notes collection', keys: '', run: () => showNewBook('notes') },
+  { group: 'new', label: 'New show (seasons, episodes)', keys: '', words: ['series', 'tv', 'reels'], run: () => showNewBook('novel', 'show') },
+  { group: 'new', label: 'New book series', keys: '', run: () => showNewBook('novel', 'series') },
+  { group: 'new', label: 'New project: what are you making?', keys: '', words: ['world', 'universe', 'collection', 'life'], run: () => showNewBook('novel', 'one') }
+]);
+
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).
 function wireLibraryView() {
@@ -615,4 +626,4 @@ function wireLibraryView() {
   window.__grid = grid;
 }
 
-export { areaOptions, grid, nextDate, nudgeBook, renderLibrary, renderProject, renderWorld, showNewBook, wireLibraryView };
+export { areaOptions, grid, nextDate, nudgeBook, renderLibrary, renderProject, renderWorld, wireLibraryView };

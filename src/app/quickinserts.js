@@ -4,7 +4,7 @@ import { flip, newParagraphVersion } from '../alts.js';
 import { bySort } from '../order.js';
 import { getEntry, byKind } from '../db.js';
 import { searchIndex } from '../search.js';
-import { toast } from '../menu.js';
+import { popMenu, toast } from '../menu.js';
 import { entry } from '../model.js';
 import { toggleDone, toggleChecklist, toggleBox } from '../outline.js';
 import { moveEntries } from '../move.js';
@@ -18,21 +18,22 @@ import { whenOpen } from '../when.js';
 import { inPane, BESIDE_PLACES } from '../panes.js';
 import { openClaudeKnows } from '../claudeknows.js';
 import { openTidy, counts as tidyCounts } from '../tidypass.js';
-import { areas, books, hasManuscript, kindName, bookOf, newPage, worlds, worldOf } from '../library.js';
+import { areas, books, bookType, hasManuscript, kindName, bookOf, newPage, worlds, worldOf } from '../library.js';
 import { isoOf, isoToday } from '../dates.js';
+import { addCommands, mod } from './commandlist.js';
 import { $, alts, blocks, body, editor, gone, inNotebook, insertSection, isScript, isWoven, notes, root, state, statusEl, store, tooBig, view } from '../main.js';
 import { touch } from './scriptbar.js';
 import { currentEditor, notebook } from './notebookview.js';
 import { besideUntil, go, newPageHere, openEntry, paneStep, setBesideUntil } from './routing.js';
 import { applyRemote, conflicts, sync } from './syncwiring.js';
-import { markScene, newAct, newChapter, sceneDetails } from './manuscript.js';
-import { refreshViews, setLife } from './tidying.js';
+import { markScene, newAct, newChapter, sceneDetails, toggleNumbering } from './manuscript.js';
+import { KINDS, addPiece, bookMenu, refreshViews, setKind, setLife, worldMenu } from './tidying.js';
 import { printCurrent, toggleCompare, toggleFreshEyes } from './revising.js';
 import { toggleGrid, toggleProduction } from './productionwiring.js';
 import { goPage, nav, strip, todayPanel } from './workpages.js';
 import { closeHistory, hstrip, openHistory } from './historyview.js';
 import { currentSize, currentWidth, progressPanel, setPage, step, toggleFocus, togglePageSettings, toggleReading, toggleSections, toggleShortcuts } from './pagesettings.js';
-import { box, commands, mod, toggleTheme, writing } from './commands.js';
+import { box, commands, toggleTheme, writing } from './commands.js';
 import { askServer, canAskServer, capture, captureHere, flipPlan, inToday, plan, todayKey } from './talking.js';
 import { openTalk, paneKeys, pull, toggleBesidePane, whenHere } from './beside.js';
 
@@ -416,6 +417,28 @@ function toggleNotes() {
 
 const toggleWriteToday = () => go(inNotebook() ? { view: 'write' } : { view: 'notebook', pageId: dayId(isoToday()) });
 
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'plan', label: 'Add a task', keys: `${mod}K`, run: () => setTimeout(() => openPalette('commands', null, 'Type the task, then Enter (a day at the end: fri, tomorrow, next week)'), 60) },
+  { group: 'go', label: 'Search inside all your writing', keys: `${mod}⇧F`, run: () => openPalette('search') },
+  { group: 'write', label: 'Insert the time', keys: `${mod}⇧;`, run: () => insertTime(currentEditor()), when: () => writing() || inNotebook() },
+  { group: 'write', label: 'Insert today’s date', keys: `${mod};`, run: () => insertDay(currentEditor(), 0), when: () => writing() || inNotebook() },
+  { group: 'view', label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: writing },
+  { group: 'write', label: 'Move this line to another page or day…', keys: '', run: moveLinePicker, when: inNotebook },
+  { group: 'write', label: 'Gather a #tag onto this page…', keys: '', run: gatherTagHere, when: inNotebook },
+  { group: 'write', label: 'Add a picture or file…', keys: '', run: () => setTimeout(pickFiles, 120), when: () => writing() || inNotebook() },
+  { group: 'tidy', label: 'Send selection to… a chapter, page or day', keys: '', run: () => setTimeout(sendSelectionPicker, 120), when: () => writing() || inNotebook() },
+  { group: 'tidy', label: 'This piece: rename, label, stage, move or trash…', keys: '', run: async () => popMenu(null, await bookMenu(await currentBook()), menuSpot()), when: () => !!currentBookId() },
+  { group: 'tidy', label: 'This world: rename, move to an area or trash…', keys: '', run: async () => popMenu(null, await worldMenu(await currentWorld()), menuSpot()), when: () => !!state.worldId && (view() === 'world' || !!currentBookId() || inNotebook()) },
+  { group: 'tidy', label: 'Change how this piece is written (prose, script, outline)…', keys: '', run: async () => { const b = await currentBook(); popMenu(null, KINDS.map(([id, label]) => ({ label, current: bookType(b) === id, run: () => setKind(b, id) })), menuSpot()); }, when: () => !!currentBookId() },
+  { group: 'new', label: 'New piece in this world (a gag, an episode, a season…)', keys: '', run: async () => { const w = await currentWorld(); if (w) addPiece(w.id); }, when: () => !!state.worldId },
+  { group: 'write', label: 'Number the scenes (for production)…', keys: '', run: async () => { const b = await currentBook(); if (!b.fields?.numbered) toggleNumbering(b); }, when: () => writing() && isScript() && !state.project?.fields?.numbered },
+  { group: 'view', label: 'What Claude knows: its one-line note on this, and weekly summaries', keys: '', words: ['about', 'summary', 'second brain', 'memory', 'digest', 'weekly'], run: () => showClaudeKnows() },
+  { group: 'new', label: 'Bring in old notes (from Thymer, Tana, Workflowy, OneNote)…', keys: '', words: ['import', 'paste', 'opml', 'markdown', 'migrate', 'old apps'], run: () => bringInOld() },
+  { group: 'tidy', label: 'Tidy pass: Claude’s suggested tidy-ups, and what it changed', keys: '', words: ['tidy', 'clean up', 'merge', 'duplicates', 'undo claude', 'claude changes', 'suggestions'], run: () => setTimeout(showTidy, 120) },
+  { group: 'tidy', label: 'Trash: bring things back', keys: '', run: showTrash }
+]);
+
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).
 function wireQuickInserts() {
@@ -590,4 +613,4 @@ function wireQuickInserts() {
   window.addEventListener('pagehide', () => { store.close(editor.state.doc); notebook.close(); });
 }
 
-export { boxOpen, bringInOld, closePalette, currentBook, currentBookId, currentWorld, filterPalette, gatherTagHere, insertDay, insertTime, menuSpot, moveLinePicker, openBox, openPalette, pickFiles, sendSelectionPicker, showClaudeKnows, showTidy, showTrash, tidyNudge, toggleNotes, wireQuickInserts };
+export { boxOpen, closePalette, currentBook, currentBookId, filterPalette, menuSpot, moveLinePicker, openBox, openPalette, sendSelectionPicker, showClaudeKnows, showTidy, tidyNudge, wireQuickInserts };

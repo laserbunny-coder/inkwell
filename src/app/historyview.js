@@ -7,6 +7,7 @@ import { titleOf } from '../notebook.js';
 import { HistoryStrip } from '../hstrip.js';
 import { ago } from '../library.js';
 import { make } from '../dom.js';
+import { addCommands, mod } from './commandlist.js';
 import { $, body, editor, inNotebook, notes, root, state, store } from '../main.js';
 import { currentEditor, notebook } from './notebookview.js';
 import { refreshWords } from './manuscript.js';
@@ -216,6 +217,12 @@ function showDeleted(rows) {
     box.append(p);
   }
 }
+
+// Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
+addCommands(() => [
+  { group: 'write', label: 'History: drag back through earlier versions of this chapter or page', keys: `${mod}⇧H`, words: ['versions', 'earlier', 'undo', 'go back', 'restore', 'scrub', 'timeline'], run: () => hstrip.toggle(), when: () => writing() || (inNotebook() && !!notebook.page) },
+  { group: 'write', label: 'History as a list, and what was deleted (this chapter or page)', keys: '', words: ['deleted', 'versions', 'bring back'], run: () => openHistory(), when: () => writing() || (inNotebook() && !!notebook.page) }
+]);
 
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).
