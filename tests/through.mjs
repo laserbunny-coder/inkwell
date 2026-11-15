@@ -133,7 +133,7 @@ try {
 
   await check('loose lines carry a ring, and the day says how many', async () => {
     await page.waitForFunction(() => document.querySelectorAll('#outline-editor li.is-loose').length === 4);
-    await footIs(page, '4 loose lines Go through them');
+    await footIs(page, '4 loose lines Go through them Keep it on the page');
     const ringed = await page.locator('#outline-editor li.is-loose > p').allInnerTexts();
     assert.deepEqual(ringed.map((t) => t.split(' ')[0]), ['Call', 'Kenji', 'What', 'Rain']);
     // A tagged line and a line indented under another are not loose.
@@ -142,7 +142,7 @@ try {
   });
 
   await check('Go through opens on the first one, with the likeliest answer lit', async () => {
-    await page.locator('#loose-foot button').click();
+    await page.locator('#loose-foot button:not(.loose-keep)').click();
     await page.waitForSelector('.thru');
     await still(page);
     const c = await card(page);
@@ -218,7 +218,7 @@ try {
 
   await check('at the end it says what’s left; the ring and the count follow', async () => {
     await page.waitForFunction(() => /1 left for next time/.test(document.querySelector('.toast')?.textContent || ''));
-    await footIs(page, '1 loose line Go through it');
+    await footIs(page, '1 loose line Go through it Keep it on the page');
     await page.waitForFunction(() => document.querySelectorAll('#outline-editor li.is-loose').length === 1);
     // What was filed shows on the page itself: a label on the task, the link, the tag.
     assert.match(await page.locator('#outline-editor li', { hasText: 'Call Dana' }).locator('.task-chip').innerText(), /Today/);
@@ -264,9 +264,9 @@ try {
     await page.keyboard.press('Control+End');
     await page.keyboard.press('Enter');
     await page.keyboard.type('Fresh thought about the harbor');
-    await footIs(page, '1 loose line Go through it');
+    await footIs(page, '1 loose line Go through it Keep it on the page');
     await page.waitForFunction(() => document.querySelectorAll('#outline-editor li.is-loose').length === 1);
-    await page.locator('#loose-foot button').click();
+    await page.locator('#loose-foot button:not(.loose-keep)').click();
     await page.waitForSelector('.thru');
     await cardIs(page, 'Fresh thought');
     await page.keyboard.press('Escape');
@@ -286,7 +286,7 @@ try {
     await page.keyboard.press('Control+End');
     await page.keyboard.press('Enter');
     await page.keyboard.type('One more loose thing');
-    await footIs(page, '1 loose line Go through it');
+    await footIs(page, '1 loose line Go through it Keep it on the page');
     await page.evaluate(() => { const c = document.querySelector('[data-show="loose"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); });
     assert.ok(await page.locator('#loose-foot').isHidden());
     const ring = () => page.locator('#outline-editor li.is-loose > .line-gutter .bullet').evaluate((b) => getComputedStyle(b, '::after').boxShadow);
@@ -350,7 +350,7 @@ try {
 
   await check('every look draws the card; motion off shows it at once; no page errors', async () => {
     await today(page);
-    await page.locator('#loose-foot button').click();
+    await page.locator('#loose-foot button:not(.loose-keep)').click();
     await page.waitForSelector('.thru');
     for (const look of ['midnight', 'lamplight', 'graphite', 'typewriter', 'paper']) {
       await page.evaluate((l) => { document.documentElement.dataset.look = l; }, look);
@@ -371,8 +371,8 @@ try {
   await seed(phone);
 
   await check('phone: the card comes up from the bottom, answers are tapped, nothing spills', async () => {
-    await footIs(phone, '4 loose lines Go through them');
-    await phone.locator('#loose-foot button').tap();
+    await footIs(phone, '4 loose lines Go through them Keep it on the page');
+    await phone.locator('#loose-foot button:not(.loose-keep)').tap();
     await phone.waitForSelector('.thru');
     await still(phone);
     const box = await phone.locator('.thru').boundingBox();
@@ -386,7 +386,7 @@ try {
     assert.equal((await lineNamed(phone, 'Call Dana')).fields.task.day, '2026-11-09');
     await phone.locator('.thru-stop').tap();
     await closed(phone);
-    await footIs(phone, '3 loose lines Go through them');
+    await footIs(phone, '3 loose lines Go through them Keep it on the page');
     assert.deepEqual(phone.errors, []);
   });
 } finally {

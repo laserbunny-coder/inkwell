@@ -16,6 +16,7 @@ import { MAX_BYTES } from './files.js';
 import { toast } from './menu.js';
 import { SlashMenu } from './slash.js';
 import { TaskLine, redrawTasks } from './taskline.js';
+import { filedNote } from './thoughts.js';
 import { checkLineDecos, diffLineDecos } from './linedecos.js';
 import { isLoose, inWindow } from './loosemark.js';
 import { taskOf, chipLabel, setTask, unTask, isoOf } from './tasks.js';
@@ -133,7 +134,8 @@ export class Notebook {
           label: (t, done) => chipLabel(t, done),
           onChip: (eid, el) => onTaskChip?.(eid, el),
           onToggle: (eid) => this.toggleTask(eid),
-          loose: (eid) => this.looseDay && isLoose(this.store.cache.get(eid))
+          loose: (eid) => this.looseDay && isLoose(this.store.cache.get(eid)),
+          note: (eid) => filedNote(this.store.cache.get(eid))
         }),
         LinkCatch.configure({ onCatch: (eid, url) => this.caughtLink(eid, url) })
       ],

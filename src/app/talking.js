@@ -20,6 +20,7 @@ import { looseOn } from '../loose.js';
 import { addTask, stepsHome, loadTasks, dayPlan } from '../tasks.js';
 import { readNow, nowSide, setNowSide } from '../now.js';
 import { NowStrip } from '../nowstrip.js';
+import { writeThought, fileThought, waitingThoughts } from '../thoughts.js';
 import { inPane, host as paneHost } from '../panes.js';
 import { aheadSource } from '../ahead.js';
 import { events as calendarEvents } from '../calendar.js';
@@ -72,9 +73,57 @@ async function writeLineOutAgain() {
   writeOut();
 }
 function writeOut() {
-  const opts = { ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows), typing: (id) => notebook.typingOn(id) };
+  const opts = { ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows).then(() => fileSaid(rows)), typing: (id) => notebook.typingOn(id) };
   return Promise.all([writeOutPending({ ...opts, draft: { context: draftContext, deliver: deliverDraft } }), snapshotPending(opts), meetingPending({ ...opts, ...meetingOpts })]);
 }
+// ---------- out of your head (Now's line, Part 3) ----------
+
+// A thought typed on Now: on today's page at once, filed in the background.
+async function thoughtFromNow(text) {
+  const got = await writeThought(text);
+  if (!got) return;
+  await applyRemote(got.rows);
+  toast('On today’s page', { label: 'Show', run: () => go({ view: 'notebook', pageId: got.line.parent_id, line: got.line.id }) });
+  fileSoon(got.line.id);
+}
+// Filed one at a time, in the order they came.
+let filing = Promise.resolve();
+function fileSoon(id, { dump = false } = {}) {
+  if (!canAskServer()) return filing;
+  filing = filing.then(() => fileThought(id, { ask: askServer, items: plan?.items || [], today: isoToday(), dump, wrote: (rows) => applyRemote(rows).then(() => notebook.redrawMarks()), toast })).catch((e) => console.warn(e));
+  return filing;
+}
+// Today's thoughts that didn't get an answer (offline): once there's a way to ask.
+async function fileWaiting() {
+  if (!canAskServer()) return;
+  for (const r of await waitingThoughts(isoToday())) fileSoon(r.id);
+}
+// Said into Now's mic: once it's written out, it's filed like a typed one.
+let nowMic = false;
+async function micFromNow() {
+  nowMic = true;
+  await openCapture({ into: null });
+}
+function fileSaid(rows) {
+  for (const r of rows) {
+    if (r.kind === 'line' && !r.deleted && r.fields?.thought?.state === 'voice' && String(r.fields?.voice?.raw || '').trim()) {
+      const kept = { ...r, fields: { ...r.fields, thought: { ...r.fields.thought, words: String(r.fields.voice.raw).trim(), state: 'waiting' } } };
+      putEntries([kept]).then(() => fileSoon(kept.id));
+    }
+  }
+}
+// "Keep it on the page": a brain dump on a day's page, its loose lines filed (never a plan change).
+async function keepOnPage(day) {
+  if (!canAskServer()) { toast('Filing needs a connection; the lines stay on the page'); return; }
+  const lines = await looseOn(day);
+  if (!lines.length) return;
+  toast(lines.length === 1 ? 'Filing it…' : `Filing ${lines.length} lines…`);
+  for (const r of lines) fileSoon(r.id, { dump: true });
+  await filing;
+  looseSoon();
+  toast(lines.length === 1 ? 'Filed. It stays on the page too' : `Filed ${lines.length} lines. They stay on the page too`);
+}
+
 // Meetings: your tasks become tasks here (a business one goes to Acro HQ).
 const meetingOpts = {
   me: () => sync.user?.user_metadata?.full_name || sync.user?.user_metadata?.name || '',
@@ -327,7 +376,14 @@ async function looseFoot() {
   b.addEventListener('click', () => through.open('loose'));
   const words = document.createElement('span');
   words.textContent = n === 1 ? '1 loose line' : `${n} loose lines`;
-  foot.replaceChildren(document.createElement('i'), words, b);
+  // Or file them all at once, as a brain dump: they stay on the page too.
+  const keep = document.createElement('button');
+  keep.type = 'button';
+  keep.className = 'loose-keep';
+  keep.textContent = 'Keep it on the page';
+  keep.title = 'Claude files each line where it belongs (the Drawer, Not planned, the Workshop, To look up); the lines stay here as you wrote them';
+  keep.addEventListener('click', () => keepOnPage(page.title));
+  foot.replaceChildren(document.createElement('i'), words, b, ...(hidden().has('nowout') ? [] : [keep]));
 }
 // Today's views, for Alt + 1 to 4: Now, Page, Plan, Calendar.
 function todayKey(n) {
@@ -404,15 +460,29 @@ function onNow() { return view() === 'plan' && tabFor(lastPlace?.tab) === 'now';
 // (what it sets up depends on what came before it).
 function wireTalking() {
   capture = new CaptureScreen($('.capture'), {
-    onSaved: (saved) => {
+    onSaved: async (saved) => {
+      // Said into Now's mic: it goes on today's page and you stay on Now.
+      if (nowMic && !saved.line.fields?.into) {
+        nowMic = false;
+        const kept = { ...saved.line, fields: { ...saved.line.fields, thought: { words: '', state: 'voice' } } };
+        await putEntries([kept]);
+        await applyRemote([...saved.rows.filter((r) => r.id !== kept.id), kept]);
+        toast('On today’s page. It’s filed once it’s written out');
+        writeOut();
+        return;
+      }
+      nowMic = false;
       // Aimed at the draft: you stay where you were writing, and the words follow.
       if (saved.line.fields?.into?.chapter) { toast('Kept. Claude is writing it into the draft…'); applyRemote(saved.rows).then(() => { if (writing()) editor.commands.focus(); writeOut(); }); return; }
       toast(saved.line.parent_id?.startsWith('day-') ? 'Kept on today’s page' : 'Kept here, and noted on today’s page');
       showCapture(saved);
     },
-    onClose: () => currentEditor().commands.focus(),
+    onClose: () => { if (!onNow()) currentEditor().commands.focus(); },
     toast
   });
+  // Thoughts that waited for a connection get filed once there is one.
+  window.addEventListener('online', () => fileWaiting());
+  setTimeout(() => fileWaiting(), 4000);
   // A tap on a capture's mode chip: the same words in another mode, or word for word.
   onVoiceChip(async (lineId, chip) => {
     const info = await voiceInfo(lineId);
@@ -560,6 +630,8 @@ function wireTalking() {
       pulling: () => !!pull?.isOpen,
       floor: () => pull?.floor() || 0,
       redrawn: () => { pull?.soon(); nowStrip?.soon(); },
+      thought: (text) => thoughtFromNow(text),
+      mic: () => micFromNow(),
       toast
     }
   });

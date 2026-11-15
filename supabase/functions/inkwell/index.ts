@@ -22,6 +22,7 @@ import { meetingNotes, writeOutMeeting } from "./meeting.ts";
 import { sendToAcro } from "./acro.ts";
 import { catchup } from "./catchup.ts";
 import { talk } from "./talk.ts";
+import { fileThought } from "./thoughts.ts";
 import { makeTidy } from "../_shared/tidyrun.ts";
 
 const client = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY") });
@@ -119,6 +120,7 @@ Deno.serve(async (req) => {
   if (body && (body as { mode: string }).mode === "review") return review(client, body as never);
   if (body && (body as { mode: string }).mode === "catchup") return catchup(client, body as never);
   if (body && (body as { mode: string }).mode === "talk") return talk(client, body as never);
+  if (body && (body as { mode: string }).mode === "thought") return fileThought(client, body as never);
   // A tidy pass now (the weekly one is made early on Monday): suggestions saved
   // as a batch for the app to show; nothing in the notes changes here.
   if (body && (body as { mode: string }).mode === "tidy") {
