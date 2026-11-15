@@ -549,8 +549,9 @@ export class Plan {
     return left;
   }
 
-  // Under today's list: one thin "Tomorrow and later · 133" line, as in Plan.
-  // Opened (kept per device), it shows "Tomorrow · 2", "This week · 4" and
+  // Under today's list: one clean thin line, as in Plan, its words ("Tomorrow
+  // and later") showing only on hover (a tap opens it on a phone). Opened
+  // (kept per device), it shows "Tomorrow · 2", "This week · 4" and
   // "Further out · 127". Each opens Plan; the first two take a dropped task.
   todayRestOpen() { try { return localStorage.getItem('todayRest') === '1'; } catch { return false; } }
   furtherLines() {
@@ -559,7 +560,7 @@ export class Plan {
     const far = ['next', 'month', 'later'].reduce((a, id) => a + n(id), 0) + this.unplanned().length;
     const open = this.todayRestOpen();
     const all = n('tomorrow') + n('week') + far;
-    const toggle = this.restLine(all, open);
+    const toggle = this.restLine(all, open, false);
     toggle.dataset.act = 'today-restline';
     toggle.classList.add('pl-today-rest');
     const box = make('div', 'pl-further');
@@ -1074,13 +1075,13 @@ export class Plan {
 
   // Tomorrow, the weeks, later and Not planned: shown or not, on this device.
   restOpen() { try { return localStorage.getItem('planRest') === '1'; } catch { return false; } }
-  restLine(n, open = this.restOpen()) {
+  restLine(n, open = this.restOpen(), count = true) {
     const b = make('button', `past-toggle pl-restline${open ? ' open' : ''}`);
     b.dataset.act = 'pl-restline';
     b.setAttribute('aria-expanded', String(open));
     b.setAttribute('aria-label', `${open ? 'Hide' : 'Show'} tomorrow, the weeks ahead, later and not planned${n ? ` (${n})` : ''}`);
     b.title = open ? 'Back to just today' : 'Tomorrow, this week, next week, this month, later, not planned';
-    b.append(make('span', '', open ? 'Just today' : `Tomorrow and later${n ? ` · ${n}` : ''}`));
+    b.append(make('span', '', open ? 'Just today' : `Tomorrow and later${n && count ? ` · ${n}` : ''}`));
     return b;
   }
 
