@@ -17,7 +17,8 @@ import { ProjectPage } from '../projectpage.js';
 import { Plan, tabFor, isCal } from '../plan.js';
 import { Through } from '../through.js';
 import { looseOn } from '../loose.js';
-import { addTask, stepsHome } from '../tasks.js';
+import { addTask, stepsHome, loadTasks, dayPlan } from '../tasks.js';
+import { readNow, nowSide, setNowSide } from '../now.js';
 import { inPane, host as paneHost } from '../panes.js';
 import { aheadSource } from '../ahead.js';
 import { events as calendarEvents } from '../calendar.js';
@@ -326,11 +327,25 @@ async function looseFoot() {
   words.textContent = n === 1 ? '1 loose line' : `${n} loose lines`;
   foot.replaceChildren(document.createElement('i'), words, b);
 }
-// Today's views, for Alt + 1 to 4.
+// Today's views, for Alt + 1 to 4: Now, Page, Plan, Calendar.
 function todayKey(n) {
-  if (n === 1) return go({ view: 'notebook', pageId: dayId(isoToday()) });
-  if (n === 2) return touch.matches ? plan.goTab('plan') : go({ view: 'plan', tab: 'plan' });
+  if (n === 1) return go({ view: 'plan', tab: 'now' });
+  if (n === 2) return touch.matches ? plan.goTab('page') : go({ view: 'notebook', pageId: dayId(isoToday()) });
+  if (n === 3) return touch.matches ? plan.goTab('plan') : go({ view: 'plan', tab: 'plan' });
   return view() === 'plan' && isCal(tabFor(lastPlace?.tab)) ? plan.stepZoom() : plan.goTab('cal');
+}
+// Where Today opens: on Now when something is current or today has open
+// tasks; otherwise on today's page, as before.
+async function todayOpensOnNow() {
+  try { if (localStorage.getItem('todayOpens') === 'page') return false; } catch { /* no storage here */ }
+  const [st, items] = await Promise.all([readNow(), loadTasks()]);
+  if (st.task) return true;
+  const p = dayPlan(items, isoToday(), isoToday());
+  return p.todo.some((i) => !i.ghost);
+}
+async function openToday() {
+  if (await todayOpensOnNow()) return go({ view: 'plan', tab: 'now' });
+  return go({ view: 'notebook', pageId: dayId(isoToday()) });
 }
 function inToday() {
   if (view() === 'plan') return true;
@@ -340,6 +355,14 @@ function inToday() {
 // one column, as on a phone. Kept on this device.
 const planLayout = () => (hidden().has('planside') ? 'top' : 'side');
 function flipPlan() {
+  // On Now: the one thing on the left and the day as a line on the right, or one column.
+  if (view() === 'plan' && tabFor(lastPlace?.tab) === 'now') {
+    const on = !nowSide();
+    setNowSide(on);
+    plan.redraw();
+    toast(on ? 'The day sits beside the one thing (Alt + P: one column)' : 'One column (Alt + P puts the day beside)');
+    return;
+  }
   const was = planLayout();
   const y = document.scrollingElement?.scrollTop || 0;
   setShown('planside', was !== 'side');
@@ -350,12 +373,18 @@ function flipPlan() {
 
 // Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
 addCommands(() => [
-  { group: 'go', label: 'Today: today’s page with its plan', keys: 'Alt+1', words: ['today', 'plan', 'day', 'tasks', 'page'], run: () => todayKey(1) },
+  { group: 'go', label: 'Now: the one thing you’re on', keys: 'Alt+1', words: ['now', 'one thing', 'focus', 'current', 'today', 'next'], run: () => todayKey(1) },
+  { group: 'go', label: 'Today: today’s page with its plan', keys: 'Alt+2', words: ['today', 'plan', 'day', 'tasks', 'page'], run: () => todayKey(2) },
   { group: 'go', label: 'Bring earlier days to today (every task left from before, onto today)', keys: 'Alt+Shift+T', words: ['carried', 'earlier', 'overdue', 'late', 'move', 'today', 'left over'], run: () => plan.bringToday() },
-  { group: 'go', label: 'Plan: today, tomorrow, this week, next week, this month, later, not planned', keys: 'Alt+2', words: ['what’s when', 'whats when', 'when', 'planning', 'schedule', 'later', 'month', 'next week', 'loose', 'not planned', 'outline'], run: () => todayKey(2) },
+  { group: 'go', label: 'Plan: today, tomorrow, this week, next week, this month, later, not planned', keys: 'Alt+2', words: ['what’s when', 'whats when', 'when', 'planning', 'schedule', 'later', 'month', 'next week', 'loose', 'not planned', 'outline'], run: () => todayKey(3) },
   { group: 'new', label: 'Capture an idea by voice (it lands where you are)', keys: '⌥C', words: ['dictate', 'voice', 'walk', 'speak', 'talk', 'draft'], run: () => captureHere() },
   { group: 'new', label: 'Capture from a recording file…', words: ['audio', 'voice memo', 'upload', 'draft'], run: () => fromRecordingFile() },
   { group: 'write', label: 'Your voice modes (shared with Scribe)…', words: ['journal', 'scene', 'idea', 'email', 'mode'], run: () => openModes() },
+  { group: 'plan', label: 'Now: Done with the one thing', keys: 'D', words: ['done', 'finished', 'tick', 'check', 'now', 'one thing'], run: () => plan.now.done(), when: onNow },
+  { group: 'plan', label: 'Now: Not now (later today, enough for today, another day)', keys: 'N', words: ['not now', 'later', 'tomorrow', 'set aside', 'postpone', 'another day', 'worked on'], run: () => { plan.now.asking = true; plan.redraw(); }, when: () => onNow() && !!plan.now.model().cur },
+  { group: 'plan', label: 'Now: Begin the next thing', keys: 'B', words: ['begin', 'start', 'next', 'go', 'now', 'gate'], run: () => { const m = plan.now.model(); if (m.cand) plan.now.begin(m.cand.group ? 'smalls' : m.cand.item.row.id); }, when: () => onNow() && !plan.now.model().cur },
+  { group: 'plan', label: 'Now: what is next today (show or hide the list)', keys: 'Space', words: ['next', 'list', 'more today', 'choose another', 'queue', 'what is next'], run: () => { plan.now.listOpen = !plan.now.listOpen; plan.redraw(); }, when: onNow },
+  { group: 'plan', label: 'Now: the day beside the one thing, or one column', keys: 'Alt+P', words: ['side by side', 'column', 'beside', 'layout', 'flip', 'now'], run: () => flipPlan(), when: () => onNow() && !touch.matches },
   { group: 'view', label: 'Plan beside the page, or on top in one column', keys: 'Alt+P', words: ['plan', 'side', 'column', 'top', 'layout', 'flip'], run: () => flipPlan(), when: () => !touch.matches },
   { group: 'go', label: 'Go through loose lines: the last week’s unfiled lines, one at a time', words: ['sort', 'file', 'loose', 'triage', 'review', 'inbox', 'tidy'], run: () => through.open('loose') },
   { group: 'go', label: 'Go through the tasks left from earlier days: keep, not today, or delete', words: ['carried', 'overdue', 'old tasks', 'pile', 'triage', 'clear'], run: () => through.open('carried') },
@@ -366,6 +395,8 @@ addCommands(() => [
   { group: 'tidy', label: 'Fix a speaker’s name in this meeting…', keys: '', run: () => setTimeout(fixSpeaker, 120), when: () => inNotebook() && !!notebook.page?.fields?.meeting },
   { group: 'tidy', label: 'Write out this recording again', keys: '', words: ['transcribe', 'voice', 'retry', 'audio'], run: writeLineOutAgain, when: () => inNotebook() && !!notebook.currentLine() && canAskServer() }
 ]);
+
+function onNow() { return view() === 'plan' && tabFor(lastPlace?.tab) === 'now'; }
 
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).
@@ -534,4 +565,4 @@ function wireTalking() {
   if (inNotebook() && notebook.page) plan.showDay(notebook.page);
 }
 
-export { askServer, asking, blankOnce, canAskServer, capture, captureHere, dayReview, deskBackend, deskPage, flipPlan, inToday, landShares, looseFoot, looseSoon, openAsked, openCapture, plan, projectPage, scribeKept, setAsking, showCapture, tagsPage, todayKey, wireTalking, writeOut };
+export { openToday, todayOpensOnNow, askServer, asking, blankOnce, canAskServer, capture, captureHere, dayReview, deskBackend, deskPage, flipPlan, inToday, landShares, looseFoot, looseSoon, openAsked, openCapture, plan, projectPage, scribeKept, setAsking, showCapture, tagsPage, todayKey, wireTalking, writeOut };

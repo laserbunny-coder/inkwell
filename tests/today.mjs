@@ -77,11 +77,11 @@ try {
     assert.ok(await phone.locator('.placebar').isVisible(), 'the bar at the bottom');
   });
 
-  await check('phone: one line of header and one switch of three in one row', async () => {
+  await check('phone: one line of header and one switch of four in one row', async () => {
     assert.equal(await phone.locator('#nb-title').innerText(), 'Sat, Nov 14');
     assert.ok(!(await phone.locator('#nb-kind').isVisible()), 'no TODAY eyebrow');
     assert.ok(!(await phone.locator('.nb-date').isVisible()), 'no calendar icon');
-    assert.deepEqual(await phone.locator('.tp-switch button').allInnerTexts(), ['Page', 'Plan', 'Calendar']);
+    assert.deepEqual(await phone.locator('.tp-switch button').allInnerTexts(), ['Now', 'Page', 'Plan', 'Calendar']);
     const tops = await phone.locator('.tp-switch button').evaluateAll((bs) => [...new Set(bs.map((b) => Math.round(b.getBoundingClientRect().top)))]);
     assert.equal(tops.length, 1, 'one row');
     assert.equal(await phone.locator('.tp-switch [aria-current="page"]').innerText(), 'Plan', 'Plan the first time');

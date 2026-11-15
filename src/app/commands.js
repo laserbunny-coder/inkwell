@@ -17,6 +17,7 @@ import { showSaveButton } from '../savebutton.js';
 import { toggleLight } from '../frame.js';
 import { addLine } from '../capture.js';
 import { tabFor } from '../plan.js';
+import { fiveAtMost, FACES, nowFace, setNowFace } from '../now.js';
 import { Box } from '../box.js';
 import { describe } from '../commandinfo.js';
 import { SHOWS } from '../shows.js';
@@ -125,7 +126,7 @@ let commands; // set in wireCommands()
 // Where you are, as the rooms commands say they fit (commandinfo.js).
 function roomTags() {
   const v = view();
-  if (v === 'plan') return ['plan', 'when', 'day'].includes(tabFor(lastPlace?.tab)) ? ['plan'] : ['calendar'];
+  if (v === 'plan') return tabFor(lastPlace?.tab) === 'now' ? ['today', 'plan'] : ['plan', 'when', 'day'].includes(tabFor(lastPlace?.tab)) ? ['plan'] : ['calendar'];
   if (inNotebook() && notebook.page) return notebook.isDay ? ['today'] : ['page'];
   if (v === 'desk') return ['desk'];
   if (['library', 'drawer', 'tags'].includes(v)) return ['library'];
@@ -183,6 +184,8 @@ async function boxAddTask(title, choice) {
   const rows = await addTask({ text: title.trim(), day, span: when.span || null, order: plan?.lastOrder?.(day) ?? 0 });
   await applyRemote(rows);
   const line = rows.at(-1);
+  // Five big things at most on today: a sixth waits under Not planned (it says so, with Undo).
+  if (day === isoToday() && plan) { await plan.refresh(); if (await fiveAtMost(plan, line, { off: (n) => hidden().has(n), toast })) return; }
   const said = !day ? choice.label.toLowerCase() : day === isoToday() ? 'today' : dayWord(day, isoToday()) === 'Tomorrow' ? 'tomorrow' : new Date(`${day}T12:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
   toast(`Task added for ${said}: “${title.trim()}”`, { label: 'Undo', run: async () => { const row = await getEntry(line.id); if (row) { const gone = { ...row, deleted: true, updated_at: Date.now() }; await putEntries([gone]); await applyRemote([gone]); } } }, { label: 'Open it', run: () => openEntry(line.id) });
 }
@@ -239,6 +242,10 @@ function wireCommands() {
   // The "Show or hide …" commands come from the same list as the Show tab
   // (shows.js); the ones written above by hand keep their own.
   for (const sh of SHOWS) {
+    if (sh.choice) {
+      for (const [v, l] of sh.choice) commands.push({ group: 'plan', label: `${sh.cmd}: ${l}`, keys: '', hint: sh.hint, words: sh.words, run: () => { setNowFace(v); plan?.redraw(); toast(`${sh.label}: ${l}`); } });
+      continue;
+    }
     if (!sh.cmd || commands.some((c) => c.label === sh.cmd)) continue;
     commands.push({ group: 'view', label: sh.cmd, keys: sh.keys || '', hint: sh.hint, words: sh.words, run: () => { setShown(sh.id, hidden().has(sh.id)); toast(`${sh.label}: ${hidden().has(sh.id) ? 'off' : 'on'}`); }, when: sh.phone ? () => touch.matches : undefined, needs: sh.phone ? 'On a phone only' : undefined });
   }

@@ -93,8 +93,8 @@ try {
     assert.ok(await page.locator('#plan').isVisible());
     assert.equal(await page.locator('#plan .pl-label').innerText(), 'PLAN');
     assert.equal(await page.locator('#plan input[data-add]').getAttribute('placeholder'), 'Add a task');
-    assert.deepEqual(await page.locator('.today-switch button').allInnerTexts(), ['Today', 'Plan', 'Calendar']);
-    await lit(page, '.today-switch [aria-current="page"]', 'Today');
+    assert.deepEqual(await page.locator('.today-switch button').allInnerTexts(), ['Now', 'Page', 'Plan', 'Calendar']);
+    await lit(page, '.today-switch [aria-current="page"]', 'Page');
     assert.ok(await page.locator('.place-switch:not(.desk-switch):not(.today-switch)').isHidden(), 'the Library’s switch is away');
     assert.ok(await page.locator('#plan .pl-switch').isHidden(), 'with the rail, no second switch in the page');
   });
@@ -552,7 +552,7 @@ try {
   await phone.waitForFunction(() => { document.activeElement?.blur(); return !document.body.classList.contains('kb-up'); });
   await check('phone: the plan sits on top of today, with Page, Plan, Calendar above it', async () => {
     assert.ok(await phone.locator('#plan').isVisible());
-    assert.deepEqual(await phone.locator('.tp-switch .pl-switch button').allInnerTexts(), ['Page', 'Plan', 'Calendar']);
+    assert.deepEqual(await phone.locator('.tp-switch .pl-switch button').allInnerTexts(), ['Now', 'Page', 'Plan', 'Calendar']);
     await add(phone, 'Call Dana 30m');
     await add(phone, 'Order the storage drive');
     assert.deepEqual(await words(phone), ['Call Dana', 'Order the storage drive']);

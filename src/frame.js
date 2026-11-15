@@ -145,26 +145,31 @@ export class Frame {
     this.history.title = 'History: every Claude thread, newest first';
     this.deskSwitch.append(this.dkPill, this.onStage, this.history);
     this.deskSwitch.hidden = true;
-    // Today in three words: Today (the page and its plan), Plan (one list
-    // from today outward) and Calendar (Day, Week, Six weeks). Alt + 1, 2, 3.
+    // Today in four words: Now (the one thing you're on), Page (the day's page
+    // and its plan), Plan (one list from today outward) and Calendar (Day,
+    // Week, Six weeks). Alt + 1, 2, 3, 4.
     this.todaySwitch = make('div', 'place-switch today-switch');
     this.todaySwitch.setAttribute('role', 'group');
     this.todaySwitch.setAttribute('aria-label', 'Views of Today');
     this.tdPill = make('span', 'switch-pill');
     this.tdPill.setAttribute('aria-hidden', 'true');
-    this.dayBtn = make('button', 'tb-btn', 'Today');
-    this.dayBtn.dataset.cmd = 'today';
-    this.dayBtn.dataset.key = 'Alt+1';
-    this.dayBtn.title = 'Today: today’s page with its plan (Alt + 1)';
+    this.nowBtn = make('button', 'tb-btn', 'Now');
+    this.nowBtn.dataset.cmd = 'now';
+    this.nowBtn.dataset.key = 'Alt+1';
+    this.nowBtn.title = 'Now: the one thing you’re on (Alt + 1)';
+    this.dayBtn = make('button', 'tb-btn', 'Page');
+    this.dayBtn.dataset.cmd = 'today-page';
+    this.dayBtn.dataset.key = 'Alt+2';
+    this.dayBtn.title = 'Page: today’s page with its plan (Alt + 2)';
     this.planBtn = make('button', 'tb-btn', 'Plan');
     this.planBtn.dataset.cmd = 'plan';
-    this.planBtn.dataset.key = 'Alt+2';
-    this.planBtn.title = 'Plan: today, tomorrow, this week, next week, this month, later and not planned, in one list (Alt + 2)';
+    this.planBtn.dataset.key = 'Alt+3';
+    this.planBtn.title = 'Plan: today, tomorrow, this week, next week, this month, later and not planned, in one list (Alt + 3)';
     this.calBtn = make('button', 'tb-btn', 'Calendar');
     this.calBtn.dataset.cmd = 'calendar';
-    this.calBtn.dataset.key = 'Alt+3';
-    this.calBtn.title = 'Calendar: the plan on time, as a day, a week or six weeks (Alt + 3, again for the next zoom)';
-    this.todaySwitch.append(this.tdPill, this.dayBtn, this.planBtn, this.calBtn);
+    this.calBtn.dataset.key = 'Alt+4';
+    this.calBtn.title = 'Calendar: the plan on time, as a day, a week or six weeks (Alt + 4, again for the next zoom)';
+    this.todaySwitch.append(this.tdPill, this.nowBtn, this.dayBtn, this.planBtn, this.calBtn);
     this.todaySwitch.hidden = true;
     // Page tabs are redrawn each time, so their highlight lives beside them and slides.
     this.tabsPill = make('span', 'tabs-pill');
@@ -232,7 +237,7 @@ export class Frame {
     const b = roomOf(to);
     let turn = 'rise';
     // Day, Week, Weeks ahead and Pace are one room from further and further back.
-    const far = (v, t) => (v === 'plan' ? (t === 'pace' ? 4 : t === 'ahead' ? 3 : t === 'when' ? 1 : 2) : 0);
+    const far = (v, t) => (v === 'plan' ? (t === 'now' ? -1 : t === 'pace' ? 4 : t === 'ahead' ? 3 : t === 'when' ? 1 : 2) : 0);
     if (a === b && a === 'today' && far(from, this.lastTab) !== far(to, tab)) turn = far(to, tab) > far(from, this.lastTab) ? 'out' : 'in';
     else if (a === b && a === 'desk') turn = tab === 'history' ? 'fwd' : this.lastTab === 'history' ? 'back' : 'rise';
     else if (a === b && a === 'library') turn = LIBRARY.indexOf(to) > LIBRARY.indexOf(from) ? 'fwd' : LIBRARY.indexOf(to) < LIBRARY.indexOf(from) ? 'back' : 'rise';
@@ -267,8 +272,8 @@ export class Frame {
     this.todaySwitch.hidden = !day;
     if (day) {
       const tab = this.last?.tab;
-      const at = v === 'plan' ? (tab === 'plan' || tab === 'when' || tab === 'day' ? this.planBtn : this.calBtn) : this.dayBtn;
-      for (const b of [this.dayBtn, this.planBtn, this.calBtn]) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
+      const at = v === 'plan' ? (tab === 'now' ? this.nowBtn : tab === 'plan' || tab === 'when' || tab === 'day' ? this.planBtn : this.calBtn) : this.dayBtn;
+      for (const b of [this.nowBtn, this.dayBtn, this.planBtn, this.calBtn]) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
     }
     // The Library is one room: its word in the rail stays lit on the Drawer and Tags too.
     const libBtn = document.getElementById('library-toggle');

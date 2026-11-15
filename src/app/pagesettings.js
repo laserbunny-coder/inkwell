@@ -6,6 +6,7 @@ import { toast } from '../menu.js';
 import { outline } from '../model.js';
 import { resetLinkPics } from '../filenode.js';
 import { SHOWS, SHOW_GROUPS, groupFor } from '../shows.js';
+import { nowFace, setNowFace } from '../now.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from '../fonts.js';
 import { inPane } from '../panes.js';
 import { make } from '../dom.js';
@@ -91,6 +92,26 @@ function lookPanel(panel) {
         chipRow.append(c);
         continue;
       }
+      // A choice of a few (how Now looks): one row of buttons, kept on this device.
+      if (r.choice) {
+        const row = make('div', 'ps-choice');
+        row.append(make('span', 'ps-choice-l', r.label));
+        const seg = make('div', 'ps-seg');
+        seg.setAttribute('role', 'radiogroup');
+        seg.setAttribute('aria-label', r.label);
+        for (const [v, l] of r.choice) {
+          const b = make('button', '', l);
+          b.type = 'button';
+          b.dataset.choice = r.id;
+          b.dataset.v = v;
+          b.setAttribute('role', 'radio');
+          b.addEventListener('click', () => { setChoice(r.id, v); });
+          seg.append(b);
+        }
+        row.append(seg);
+        body.append(row);
+        continue;
+      }
       const label = make('label', `switch${r.under ? ' sub' : ''}`);
       const input = make('input');
       input.type = 'checkbox';
@@ -139,7 +160,7 @@ function setShown(name, on) {
   if (name === 'linkpics') resetLinkPics();
   if (name === 'panes') { if (!on) panes?.closeAll(); panes?.layout(); }
   if (name === 'closedtag' && deskPage?.showing() && deskPage.now) deskPage.render({ now: deskPage.now, failed: false });
-  if (['estimates', 'woven', 'planview', 'foldearlier', 'areahours', 'aheadhours', 'donetasks'].includes(name)) { if (plan) { plan.peekDone = false; plan.just = null; plan.took = null; } plan?.refresh(); }
+  if (['estimates', 'woven', 'planview', 'foldearlier', 'areahours', 'aheadhours', 'donetasks', 'nowgate', 'smallsgo', 'rowdetails'].includes(name)) { if (plan) { plan.peekDone = false; plan.just = null; plan.took = null; } plan?.refresh(); }
   if (name === 'nextstep') deskPage?.refresh();
   syncSwitches();
 }
@@ -185,8 +206,15 @@ function syncQuiet() {
   body.classList.toggle('bar-quiet', quiet);
   if (!quiet) body.classList.remove('bar-peek');
 }
+// A choice row (shows.js `choice`): only Now's face for now.
+const choiceOf = (id) => (id === 'nowface' ? nowFace() : null);
+function setChoice(id, v) {
+  if (id === 'nowface') { setNowFace(v); plan?.redraw(); }
+  syncSwitches();
+}
 function syncSwitches() {
   const h = hidden();
+  document.querySelectorAll('[data-choice]').forEach((b) => b.setAttribute('aria-checked', String(choiceOf(b.dataset.choice) === b.dataset.v)));
   document.querySelectorAll('[data-show]').forEach((c) => { c.checked = !h.has(c.dataset.show); });
   $('#many-panes').checked = localStorage.getItem('manyPanes') === '1';
   $('#focus-toggle').setAttribute('aria-pressed', String(root.classList.contains('focus')));

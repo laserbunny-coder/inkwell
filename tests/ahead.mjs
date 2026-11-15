@@ -198,7 +198,7 @@ try {
 
   await check('Calendar’s zoom has Six weeks after Week (Pace after it with estimates on), and it opens six weeks from this one', async () => {
     await go(page, { view: 'plan', tab: 'week' });
-    assert.deepEqual(await page.locator('.today-switch .tb-btn').allInnerTexts(), ['Today', 'Plan', 'Calendar']);
+    assert.deepEqual(await page.locator('.today-switch .tb-btn').allInnerTexts(), ['Now', 'Page', 'Plan', 'Calendar']);
     assert.deepEqual(await page.locator('#plan-sheet .pl-zoom button').allInnerTexts(), ['Day', 'Week', 'Six weeks', 'Pace']);
     await page.locator('#plan-sheet .pl-zoom button', { hasText: 'Six weeks' }).click();
     await page.waitForFunction(() => history.state?.tab === 'ahead' && document.querySelector('.today-switch [aria-current="page"]')?.textContent === 'Calendar');
@@ -543,7 +543,7 @@ try {
     const phone = await open(undefined, { ...devices['Pixel 7'] });
     await go(phone, { view: 'plan', tab: 'ahead' });
     await phone.waitForSelector('.ah .ah-lane');
-    assert.deepEqual(await phone.locator('.pl-switch button').allInnerTexts(), ['Page', 'Plan', 'Calendar']);
+    assert.deepEqual(await phone.locator('.pl-switch button').allInnerTexts(), ['Now', 'Page', 'Plan', 'Calendar']);
     assert.deepEqual(await phone.locator('.pl-zoom button').allInnerTexts(), ['Day', 'Week', 'Six weeks', 'Pace']);
     const wide = await phone.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     assert.ok(wide <= 1, `the page spills ${wide}`);
