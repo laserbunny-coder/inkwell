@@ -10,10 +10,11 @@ import { draftHolding } from '../drafts.js';
 import { inPane } from '../panes.js';
 import { books, bookType, hasManuscript, bookOf, worldOf } from '../library.js';
 import { isoOf, isoToday } from '../dates.js';
-import { $, beside, body, box, comparer, deskPage, editor, frame, gone, grid, gridTouched, hstrip, inNotebook, loadProduction, loadStagePage, looseFoot, openBeside, pageOfPlace, panes, plan, planningView, pull, renderCrumb, renderLibrary, renderProject, renderRail, renderWorld, root, setGridTouched, sideNotes, state, store, tagsPage, talk, talkThrough, view } from '../main.js';
+import { $, beside, body, box, comparer, deskPage, editor, frame, gone, grid, gridTouched, hstrip, inNotebook, loadProduction, loadStagePage, looseFoot, openBeside, pageOfPlace, panes, plan, planningView, pull, renderLibrary, renderProject, renderWorld, root, setGridTouched, sideNotes, state, store, tagsPage, talk, talkThrough, view } from '../main.js';
 import { touch } from './scriptbar.js';
 import { notebook } from './notebookview.js';
 import { openChapter } from './manuscript.js';
+import { renderCrumb, renderRail } from './rail.js';
 
 // ---------- getting around ----------
 
