@@ -5,6 +5,7 @@ import { GAP } from './order.js';
 import { addFile, isAudio } from './files.js';
 import { queueMeeting } from './meeting.js';
 import { pad } from './dates.js';
+import { takeInbox, keepShare } from './inbox.js';
 
 // Share into Inkwell: from Chrome, Instagram, Pinterest or any Android app,
 // Share, then Inkwell. The phone hands the shared page, picture or text to
@@ -16,30 +17,8 @@ import { pad } from './dates.js';
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 
-// What the service worker kept, waiting for the app.
-const INBOX = 'inkwell-share';
-function openInbox() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(INBOX, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore('shares', { keyPath: 'at' });
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-const result = (req) => new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); });
-
-async function takeInbox() {
-  const db = await openInbox();
-  const all = await result(db.transaction('shares').objectStore('shares').getAll());
-  return { all, done: (at) => result(db.transaction('shares', 'readwrite').objectStore('shares').delete(at)) };
-}
-
-// Kept for the app the same way the service worker keeps a share: the
-// "Save to Inkwell" bookmark on a computer opens ?save=<address>&title=<name>.
-export async function keepShare({ url = '', title = '', text = '' }) {
-  const db = await openInbox();
-  await result(db.transaction('shares', 'readwrite').objectStore('shares').put({ at: Date.now(), url, title, text, files: [] }));
-}
+// What the service worker or the save window kept, waiting for the app (inbox.js).
+export { keepShare };
 
 const URL_RE = /\bhttps?:\/\/[^\s<>"']+/i;
 
@@ -138,6 +117,11 @@ export async function addShare(share, day = today(), skipped = []) {
 // Everything shared since the app last looked, oldest first.
 // Files too big to keep are named in `skipped`.
 export async function takeShares(skipped = []) {
+  // Two open windows told at once: one takes them, the other then finds none.
+  if (navigator.locks) return navigator.locks.request('inkwell-land-shares', () => takeSharesNow(skipped));
+  return takeSharesNow(skipped);
+}
+async function takeSharesNow(skipped) {
   let inbox;
   try { inbox = await takeInbox(); } catch { return []; }
   const out = [];

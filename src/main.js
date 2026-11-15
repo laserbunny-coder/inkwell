@@ -50,6 +50,7 @@ import { intoDrawer, gatherItems } from './stages.js';
 import { CaptureScreen, writeOutPending, recoverRecording, writeOutAgain, requeueBlank, addLine } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, placeScribeWaiting, RAW } from './voice.js';
 import { takeShares, snapshotPending, tidyShareBlanks, keepShare } from './share.js';
+import { SAVE_CHANNEL } from './inbox.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
 import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker, speakersOn, mine, sendMeetingToAcro } from './meeting.js';
 import { DayReview, getReview } from './review.js';
@@ -5138,18 +5139,27 @@ async function openAsked() {
 // Things shared into Inkwell from other apps land on today's page, with the
 // caret at the end of the last one (Enter starts a line under it).
 let landing = null;
-function landShares() {
-  landing ||= landSharesNow().finally(() => { landing = null; });
+// `quiet` (a link saved from the browser while you're working here): it goes
+// on today's page without taking you away from where you are.
+function landShares({ quiet = false } = {}) {
+  landing ||= landSharesNow(quiet).finally(() => { landing = null; });
   return landing;
 }
-async function landSharesNow() {
+async function landSharesNow(quiet = false) {
   const skipped = [];
   const added = await takeShares(skipped).catch((e) => { console.error(e); return []; });
   if (skipped.length) toast(`“${skipped[0]}” is over ${Math.round(MAX_BYTES / 1048576)} MB, too big to keep. For meetings, set Voice Recorder’s Recording quality lower`);
   if (!added.length) return;
+  const last = added.at(-1);
+  if (quiet) {
+    await applyRemote(added.flatMap((a) => a.rows));
+    const show = { label: 'Show', run: () => go({ view: 'notebook', pageId: last.line.parent_id, line: last.line.id }) };
+    toast(added.length === 1 ? `Saved to today’s page: ${last.line.text || 'the link'}` : `${added.length} links saved to today’s page`, show);
+    writeOut();
+    return;
+  }
   await Promise.all([store.close(editor.state.doc), notebook.close()]);
   await applyRemote(added.flatMap((a) => a.rows));
-  const last = added.at(-1);
   await go({ view: 'notebook', pageId: last.line.parent_id, line: last.line.id });
   toast(added.length === 1 ? 'Kept on today’s page' : `${added.length} things kept on today’s page`);
   writeOut();
@@ -5631,6 +5641,17 @@ async function makeList(list) {
 }
 // Sharing again while Inkwell is already open brings it to the front.
 if (!inPane) document.addEventListener('visibilitychange', () => { if (!document.hidden) landShares(); });
+// The Save to Inkwell bookmark (save.html) asks whether Inkwell is already
+// open in this browser: this window answers, and the link lands here quietly
+// (or once this window has finished opening).
+if (!inPane && 'BroadcastChannel' in window) {
+  const saves = new BroadcastChannel(SAVE_CHANNEL);
+  saves.onmessage = (e) => {
+    if (!e.data?.save) return;
+    saves.postMessage({ heard: e.data.save });
+    if (root.dataset.started) landShares({ quiet: true });
+  };
+}
 
 // ---------- side by side ----------
 

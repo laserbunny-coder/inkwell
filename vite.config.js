@@ -17,9 +17,10 @@ const deviceMedia = () => ({
 });
 
 // Relative paths so the built app works from any folder, including GitHub Pages.
-// Two pages: the app, and read.html, which a share link opens.
+// Three pages: the app, read.html (which a share link opens) and save.html
+// (the little window the Save to Inkwell bookmark opens).
 export default defineConfig({
   base: './',
   plugins: [deviceMedia()],
-  build: { rollupOptions: { input: { index: 'index.html', read: 'read.html' } } }
+  build: { rollupOptions: { input: { index: 'index.html', read: 'read.html', save: 'save.html' } } }
 });
