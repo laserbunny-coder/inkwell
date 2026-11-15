@@ -211,6 +211,10 @@ try {
     assert.equal(await sheet(page).locator('.now-dot').count(), 5);
     assert.equal(await sheet(page).locator('.now-numl').count(), 2);
     assert.match(await sheet(page).locator('.now-train').innerText(), /lever seconds[\s\S]*planche seconds/);
+    const was2 = Number(await sheet(page).locator('#now-tnum2').inputValue());
+    await sheet(page).locator('[data-now="tnum2"][data-v="1"]').click();
+    await settle(page);
+    assert.equal(await sheet(page).locator('#now-tnum2').inputValue(), String(was2 + 1), 'the second number has its own plus');
     await shot(page, 'train-pair');
   });
 

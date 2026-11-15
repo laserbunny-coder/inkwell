@@ -39,7 +39,7 @@ const bottomIs = async (p, want, why) => {
 
 try {
   const H = 915;
-  const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 412, height: H }, hasTouch: true, isMobile: true, quietDrafts: true, todayPage: false, training: true });
+  const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 412, height: H }, hasTouch: true, isMobile: true, quietDrafts: true, todayPage: false, training: true, firstlight: true });
   await ctx.addInitScript((h) => {
     const vv = new EventTarget();
     Object.assign(vv, { width: 412, height: h, offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1 });
@@ -187,7 +187,7 @@ try {
     const groups = await p.evaluate(() => [...document.querySelectorAll('.ps-group')].map((g) => `${g.dataset.group}${g.classList.contains('open') ? '*' : ''}`));
     assert.deepEqual(groups, ['writing*', 'pages', 'today', 'desk', 'around']);
     const rows = await p.evaluate(() => document.querySelectorAll('.ps-show .switch').length + document.querySelectorAll('.ps-chips').length + document.querySelectorAll('.ps-show .ps-choice').length);
-    assert.equal(rows, 38, 'thirty-eight rows on a phone (Calendar zoom came with the Calendar build; Now added nine on Nov 15: four for the strip, two for out of your head, two for the ends of the day, one for Training)');
+    assert.equal(rows, 39, 'thirty-nine rows on a phone (Calendar zoom came with the Calendar build; Now added ten on Nov 15: four for the strip, two for out of your head, two for the ends of the day, one for Training, one for First light)');
     assert.ok(await p.evaluate(() => document.querySelector('.page-settings').scrollHeight < 900), 'short enough to read');
     // A switch and its command are the same thing.
     await p.locator('.ps-group[data-group="pages"] .ps-ghead').tap();

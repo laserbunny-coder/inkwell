@@ -218,3 +218,22 @@ a.now-video { text-decoration: none; }
 .dk-goal { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; border-bottom: 1px solid var(--line); font: 14.5px var(--ui); }
 .dk-goal-at { color: var(--muted); text-align: right; }
 html.hide-training .dk-train { display: none !important; }
+
+/* First light (Part 5): today's reading, then one chapter per screen. */
+.now-reading { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font: 20px/1.45 var(--prose); color: var(--ink); text-align: center; }
+.now-ref-link { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 30%, transparent); text-underline-offset: 4px; }
+.now-ref-link:hover { text-decoration-color: currentColor; }
+.now-light.reading { align-items: stretch; max-width: 36em; width: 100%; margin: 0 auto; }
+.now-light.reading > .now-eyebrow, .now-light.reading > .now-thing { text-align: center; align-self: center; }
+.now-scripture { font: 19px/1.7 var(--prose); color: var(--ink); text-align: left; }
+.now-scripture .sc-h { font: 500 15px var(--ui); color: var(--muted); margin: 22px 0 6px; letter-spacing: .02em; }
+.now-scripture .sc-p { margin: 0 0 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.now-scripture .sc-v { font: 11px var(--ui); color: var(--muted); padding: 0 2px; vertical-align: super; line-height: 0; }
+.now-esv { margin-top: 26px; font: 12px/1.5 var(--ui); color: var(--muted); }
+.now-esv p { margin: 0 0 6px; white-space: pre-wrap; }
+.now-esv a { color: var(--muted); }
+.now-tracks { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; }
+.now-track { display: grid; grid-template-columns: 8.5em 1fr 72px; text-align: left; gap: 8px; align-items: center; }
+.now-trk { font: 15px var(--ui); color: var(--ink); }
+.now-track select, .now-track input { width: 100%; box-sizing: border-box; font: 15px var(--ui); color: var(--ink); background: var(--panel, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 8px; min-height: 40px; min-width: 0; }
+@media (max-width: 600px) { .now-scripture { font-size: 18px; } .now-track { grid-template-columns: 7.5em 1fr 64px; } }

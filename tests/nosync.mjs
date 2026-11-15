@@ -16,8 +16,9 @@ export function withoutSync(browser) {
     // when today has tasks; older tests expect the day's page, so it opens there
     // unless a test asks ({ todayNow: true }). Training puts a line on each day
     // (Nov 15 2026); older tests count today's lines, so it starts off unless a
-    // test asks ({ training: true }).
-    const { estimates = true, todayPage = true, quietDrafts = false, rowDetails = true, todayNow = false, training = false, ...rest } = opts;
+    // test asks ({ training: true }). First light (the morning reading) comes
+    // before anything else in Now, so it starts off too ({ firstlight: true }).
+    const { estimates = true, todayPage = true, quietDrafts = false, rowDetails = true, todayNow = false, training = false, firstlight = false, ...rest } = opts;
     const ctx = await open(rest);
     if (todayPage) await ctx.addInitScript(() => { try { if (!localStorage.getItem('todayPhone')) localStorage.setItem('todayPhone', 'page'); } catch { /* no storage here */ } });
     await ctx.addInitScript(() => { if (!('__syncBackend' in window)) window.__syncBackend = null; });
@@ -25,6 +26,7 @@ export function withoutSync(browser) {
     if (estimates) await ctx.addInitScript(() => { try { if (!localStorage.getItem('estimatesOff')) localStorage.setItem('estimatesOff', '1'); } catch { /* no storage here */ } });
     if (rowDetails) await ctx.addInitScript(() => { try { if (!localStorage.getItem('rowDetailsOff')) localStorage.setItem('rowDetailsOff', '1'); } catch { /* no storage here */ } });
     if (!training) await ctx.addInitScript(() => { try { if (!localStorage.getItem('trainingOffOnce')) { const h = JSON.parse(localStorage.getItem('hide') || '[]'); if (!h.includes('training')) h.push('training'); localStorage.setItem('hide', JSON.stringify(h)); localStorage.setItem('trainingOffOnce', '1'); } } catch { /* no storage here */ } });
+    if (!firstlight) await ctx.addInitScript(() => { try { if (!localStorage.getItem('firstlightOffOnce')) { const h = JSON.parse(localStorage.getItem('hide') || '[]'); if (!h.includes('firstlight')) h.push('firstlight'); localStorage.setItem('hide', JSON.stringify(h)); localStorage.setItem('firstlightOffOnce', '1'); } } catch { /* no storage here */ } });
     if (!todayNow) await ctx.addInitScript(() => { try { if (!localStorage.getItem('todayOpens')) localStorage.setItem('todayOpens', 'page'); } catch { /* no storage here */ } });
     return ctx;
   };

@@ -499,6 +499,7 @@ addCommands(() => [
   { group: 'plan', label: 'Now: Not now (later today, enough for today, another day)', keys: 'N', words: ['not now', 'later', 'tomorrow', 'set aside', 'postpone', 'another day', 'worked on'], run: () => { plan.now.asking = true; plan.redraw(); }, when: () => onNow() && !!plan.now.model().cur },
   { group: 'plan', label: 'Now: Begin the next thing', keys: 'B', words: ['begin', 'start', 'next', 'go', 'now', 'gate'], run: () => { const m = plan.now.model(); if (m.cand) plan.now.begin(m.cand.group ? 'smalls' : m.cand.item.row.id); }, when: () => onNow() && !plan.now.model().cur },
   { group: 'go', label: 'Training: the sessions and their exercises', words: ['training', 'workout', 'exercise', 'sessions', 'calisthenics', 'parkour', 'handstand', 'front lever', 'vertical'], run: async () => { await seedTraining(); openEntry(TRAINING_PAGE); }, when: () => !hidden().has('training') },
+  { group: 'plan', label: 'Today’s reading (First light)', words: ['bible', 'reading', 'esv', 'scripture', 'first light', 'chapters', 'psalm', 'devotion', 'morning'], run: async () => { plan.now.light.open(); await go({ view: 'plan', tab: 'now' }); plan.redraw(); }, when: () => !!plan && !hidden().has('firstlight') },
   { group: 'plan', label: 'Talk the day through (what is in front of you today)', words: ['morning', 'talk', 'day', 'lay out', 'plan the day', 'say', 'brain dump', 'start', 'now'], run: async () => { await go({ view: 'plan', tab: 'now' }); plan.now.openTalk(); }, when: () => !!plan && !hidden().has('nowtalk') },
   { group: 'plan', label: 'Close the day (what you did, two questions, first thing tomorrow)', words: ['evening', 'close', 'end', 'day', 'reflect', 'journal', 'done', 'tomorrow', 'shutdown', 'wrap up'], run: () => closeDayFromCard(), when: () => !!plan && !hidden().has('nowclose') },
   { group: 'plan', label: 'Now: what is next today (show or hide the list)', keys: 'Space', words: ['next', 'list', 'more today', 'choose another', 'queue', 'what is next'], run: () => { plan.now.listOpen = !plan.now.listOpen; plan.redraw(); }, when: onNow },
@@ -706,6 +707,8 @@ function wireTalking() {
       thought: (text) => thoughtFromNow(text),
       mic: (kind) => micFromNow(kind),
       talkDay: (words) => talkDayFromNow(words),
+      // First light (Part 5): one ESV chapter from the server (no key yet: { nokey }).
+      bible: (body) => (canAskServer() ? askServer(body) : null),
       // Training (Part 6): today's line, once a day, not on Sunday.
       daily: (items, today) => (inPane || hidden().has('training') ? [] : ensureTrainingLine(items, today)),
       closeDay: (answers) => closeDayFromNow(answers),
