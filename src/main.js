@@ -1,5 +1,5 @@
 import './keyboard.js';
-import { media, isNarrow } from './device.js';
+import { media } from './device.js';
 import './style.css';
 import './frame.css';
 import './desk.css';
@@ -8,7 +8,7 @@ import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { EntryIds, SceneBreak, sectionName, SECTION_NAMES } from './schema.js';
 import { isMac, keyLabel, showKeysForThisComputer } from './keys.js';
-import { StatsPanel, record as recordProgress } from './stats.js';
+import './stats.js';
 import { AltMark, ParagraphVersions, AltPanel, flip, newParagraphVersion } from './alts.js';
 import { ChapterStore } from './chapter.js';
 import { NotesLayer } from './notes.js';
@@ -21,14 +21,14 @@ import { tidyHistory } from './history.js';
 import './stageedit.js';
 import { popMenu, ask, askText, askScript, showCopy, toast } from './menu.js';
 import './sync.js';
-import { hasWriting, outline, entry, noteTypes } from './model.js';
+import { hasWriting, entry, noteTypes } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
 import { EntryRef, TagMarks } from './outline.js';
 import './links.js';
 import { keepStorage, mb } from './keep.js';
 import { moveEntries } from './move.js';
 import './conflicts.js';
-import { FileEmbed, insertFiles, resetLinkPics } from './filenode.js';
+import { FileEmbed, insertFiles } from './filenode.js';
 import { MAX_BYTES, SPACE, spaceUsed, unsentFiles } from './files.js';
 import { vaultZip, pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, elementLabel, toFountain, fromFountain, fromOutline, looksLikeOutline, SceneCodes } from './script.js';
@@ -62,11 +62,11 @@ import { Pull } from './pull.js';
 import { whenOpen } from './when.js';
 import { Box } from './box.js';
 import { describe } from './commandinfo.js';
-import { SHOWS, SHOW_GROUPS, groupFor } from './shows.js';
+import { SHOWS } from './shows.js';
 import { Through } from './through.js';
 import { looseOn } from './loose.js';
 import { dayWord, loadTasks, addTask, stepsHome } from './tasks.js';
-import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
+import { setFont } from './fonts.js';
 import './drafts.js';
 import './compare.js';
 import { inPane, PANE_ID, PaneHost, host as paneHost, BESIDE_PLACES } from './panes.js';
@@ -81,13 +81,13 @@ import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts } from './tidypass.js';
 import './sharelink.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newBook, pagesIn, bookOf, newPage, ago, worlds, worldOf, newPiece, setOwnWorkflows } from './library.js';
-import { make } from './dom.js';
+import './dom.js';
 import { isoOf, isoToday } from './dates.js';
-import { placeScriptBar, touch, typeHere, wireScriptBar } from './app/scriptbar.js';
-import { currentEditor, notebook, placeOutlineBar, toggleTypewriter, wireNotebook } from './app/notebookview.js';
+import { touch, typeHere, wireScriptBar } from './app/scriptbar.js';
+import { currentEditor, notebook, toggleTypewriter, wireNotebook } from './app/notebookview.js';
 import { besideUntil, go, historyMode, lastChapterAnywhere, lastPlace, newPageHere, openBook, openEntry, paneStep, phoneAway, placeOf, setBesideUntil, setHistoryMode, wireRouting } from './app/routing.js';
 import { applyRemote, caretAfter, conflicts, migrateOnce, seedIfEmpty, seedNow, setCaretAfter, sync, wireSync } from './app/syncwiring.js';
-import { biblePlaces, connectClaude, connectScribe, markScene, newAct, newChapter, numbering, openChapter, prepareShoot, refreshWords, sceneDetails, scenePop, setWoven, toggleNumbering, wireManuscript, wovenPick } from './app/manuscript.js';
+import { biblePlaces, connectClaude, connectScribe, markScene, newAct, newChapter, numbering, openChapter, prepareShoot, refreshWords, sceneDetails, scenePop, setWoven, toggleNumbering, wireManuscript } from './app/manuscript.js';
 import { renderCrumb, scheduleScenes, wireRail } from './app/rail.js';
 import { KINDS, addPiece, areaMenu, bookMenu, chapterMenu, pageMenu, plural, refreshViews, setKind, setLife, worldMenu } from './app/tidying.js';
 import { nextDate, renderWorld, showNewBook, wireLibraryView } from './app/libraryview.js';
@@ -96,6 +96,7 @@ import { openShare, warmRooms, wireSharing } from './app/sharing.js';
 import { toggleGrid, toggleProduction } from './app/productionwiring.js';
 import { PAGE_NAMES, frame, goCatchup, goPage, nav, projectOrder, railProjects, strip, todayPanel, wireWorkPages } from './app/workpages.js';
 import { closeHistory, hstrip, openHistory, wireHistory } from './app/historyview.js';
+import { currentSize, currentWidth, hidden, lookTab, progressPanel, setPage, setShown, step, toggleFocus, togglePageSettings, toggleReading, toggleSections, toggleShortcuts, wirePageSettings } from './app/pagesettings.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -264,249 +265,7 @@ let box = null;
 
 wireHistory();
 
-// ---------- panels revealed by edges ----------
-
-// The browser can fire a stray hover when the layout shifts (like turning focus on), so edges ignore it then.
-let edgesQuietUntil = 0;
-
-// ---------- page width and text size (per device) ----------
-
-const DEFAULT_WIDTH = 660;
-const defaultSize = () => (isNarrow() ? 18 : 21);
-const currentWidth = () => Number(localStorage.getItem('pageWidth')) || DEFAULT_WIDTH;
-const currentSize = () => Number(localStorage.getItem('textSize')) || defaultSize();
-
-function setPage(width, size) {
-  width = Math.max(420, Math.min(1100, width));
-  size = Math.max(14, Math.min(30, size));
-  root.style.setProperty('--page-width', `${width}px`);
-  root.style.setProperty('--text-size', `${size}px`);
-  localStorage.setItem('pageWidth', String(width));
-  localStorage.setItem('textSize', String(size));
-  $('#page-width').value = width;
-  $('#text-size').value = size;
-  $('#width-value').textContent = `${width}px`;
-  $('#size-value').textContent = `${size}px`;
-  notes.layout();
-}
-
-// The Aa panel in three tabs: Look (the looks, motion), Text (size, width,
-// font, a script's view) and Show (what shows, in five folded groups, opening
-// on the group for where you are). Made once, from what index.html and
-// frame.js put in it.
-function lookPanel(panel) {
-  const tabs = make('div', 'ps-tabs');
-  tabs.setAttribute('role', 'tablist');
-  const panes = {};
-  for (const [id, label] of [['look', 'Look'], ['text', 'Text'], ['show', 'Show']]) {
-    const b = make('button', 'ps-tab', label);
-    b.type = 'button';
-    b.dataset.pane = id;
-    b.setAttribute('role', 'tab');
-    b.addEventListener('click', () => lookTab(id));
-    tabs.append(b);
-    panes[id] = make('div', 'ps-pane');
-    panes[id].dataset.pane = id;
-  }
-  const show = panel.querySelector('.ps-show');
-  panes.look.append(panel.querySelector('.look-pick'));
-  for (const el of [panel.querySelector('.woven-pick'), $('#page-width').closest('label'), $('#text-size').closest('label'), panel.querySelector('.font-pick')]) panes.text.append(el);
-  panes.show.append(show);
-  panel.prepend(tabs, panes.look, panes.text, panes.show);
-  // Show: one folding group each, its switches made from shows.js.
-  const touchOnly = touch.matches;
-  for (const g of SHOW_GROUPS) {
-    const rows = SHOWS.filter((r) => r.group === g.id && (!r.phone || touchOnly));
-    const box = make('div', 'ps-group');
-    box.dataset.group = g.id;
-    const head = make('button', 'ps-ghead');
-    head.type = 'button';
-    head.setAttribute('aria-expanded', 'false');
-    head.append(make('span', '', g.label), make('span', 'ps-gcount'));
-    head.addEventListener('click', () => box.classList.toggle('open') ? head.setAttribute('aria-expanded', 'true') : head.setAttribute('aria-expanded', 'false'));
-    const body = make('div', 'ps-gbody');
-    let chipRow = null;
-    for (const r of rows) {
-      if (r.chip) {
-        if (!chipRow) { chipRow = make('div', 'ps-chips'); chipRow.append(make('span', '', 'On a project’s page:')); body.append(chipRow); }
-        const c = make('button', 'ps-chip', r.chip);
-        c.type = 'button';
-        c.dataset.show = r.id;
-        c.addEventListener('click', () => setShown(r.id, hidden().has(r.id)));
-        chipRow.append(c);
-        continue;
-      }
-      const label = make('label', `switch${r.under ? ' sub' : ''}`);
-      const input = make('input');
-      input.type = 'checkbox';
-      if (r.id === 'typewriter') input.id = 'typewriter-mode';
-      else if (r.id === 'manypanes') input.id = 'many-panes';
-      else input.dataset.show = r.id;
-      label.append(input, ` ${r.label}`);
-      if (r.keys) { const k = make('span', 'keys', keyLabel(r.keys)); label.append(' ', k); }
-      body.append(label);
-    }
-    head.querySelector('.ps-gcount').textContent = String(rows.filter((r) => !r.chip).length + (chipRow ? 1 : 0));
-    box.append(head, body);
-    show.append(box);
-  }
-}
-function lookTab(id) {
-  const panel = $('.page-settings');
-  panel.dataset.tab = id;
-  panel.querySelectorAll('.ps-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.pane === id)));
-  panel.querySelectorAll('.ps-pane').forEach((p) => { p.hidden = p.dataset.pane !== id; });
-  panel.scrollTop = 0;
-}
-function togglePageSettings(tab = 'look') {
-  const panel = $('.page-settings');
-  if (!panel.hidden) { panel.hidden = true; if (!touch.matches) currentEditor().commands.focus(); return; }
-  setPage(currentWidth(), currentSize());
-  loadPreviews();
-  showFonts();
-  wovenPick();
-  // Show opens on the group for where you are; the others are folded.
-  const here = groupFor(roomTags()[0]);
-  panel.querySelectorAll('.ps-group').forEach((g) => { const on = g.dataset.group === here; g.classList.toggle('open', on); g.querySelector('.ps-ghead').setAttribute('aria-expanded', String(on)); });
-  lookTab(tab);
-  panel.hidden = false;
-  if (!touch.matches) panel.querySelector('.ps-tab[aria-selected="true"]')?.focus();
-}
-
-// Display switches, per device: anything beyond the text can be turned off.
-const hidden = () => { try { return new Set(JSON.parse(localStorage.getItem('hide') || '[]')); } catch { return new Set(); } };
-function setShown(name, on) {
-  const h = hidden();
-  if (on) h.delete(name); else h.add(name);
-  localStorage.setItem('hide', JSON.stringify([...h]));
-  root.classList.toggle(`hide-${name}`, !on);
-  if (name === 'claude' || name === 'comments') notes.render();
-  if (name === 'linkpics') resetLinkPics();
-  if (name === 'panes') { if (!on) panes?.closeAll(); panes?.layout(); }
-  if (name === 'closedtag' && deskPage?.showing() && deskPage.now) deskPage.render({ now: deskPage.now, failed: false });
-  if (['estimates', 'woven', 'planview', 'foldearlier', 'areahours', 'aheadhours', 'donetasks'].includes(name)) { if (plan) { plan.peekDone = false; plan.just = null; plan.took = null; } plan?.refresh(); }
-  if (name === 'nextstep') deskPage?.refresh();
-  syncSwitches();
-}
-// Reading a script through: only the script pages, no sections, notes or tools.
-function toggleReading() {
-  const on = !root.classList.contains('reading');
-  if (on !== root.classList.contains('focus')) toggleFocus();
-  root.classList.toggle('reading', on);
-}
-
-function toggleFocus() {
-  const on = !root.classList.contains('focus');
-  root.classList.toggle('focus', on);
-  if (!on) root.classList.remove('reading');
-  // Focus is only the words: what's beside steps out, and is back when you leave.
-  if (!inPane) { panes?.layout(); syncBeside(); }
-  localStorage.setItem('focus', on ? '1' : '0');
-  edgesQuietUntil = Date.now() + 600;
-  body.classList.remove('show-outline', 'show-top', 'bar-peek');
-  syncSwitches();
-  placeScriptBar(); placeOutlineBar();
-  box?.refreshQuick?.();
-}
-// A script's own section titles and summaries (not the INT./EXT. ones), on or
-// off where you are: in Focus they stay away unless you ask for them, outside
-// it they show unless you put them away.
-function toggleFocusSections(on = !root.classList.contains('focus-sections')) {
-  root.classList.toggle('focus-sections', on);
-  localStorage.setItem('focusSections', on ? '1' : '0');
-  syncSwitches();
-}
-function toggleSections() {
-  const showing = root.classList.contains('focus') ? root.classList.contains('focus-sections') : !hidden().has('sections');
-  if (root.classList.contains('focus')) toggleFocusSections(!showing); else setShown('sections', !showing);
-  if (writing() && isScript()) toast(showing ? 'Section titles hidden' : 'Section titles showing');
-}
-// The phone's bar rests as a tab in Focus, and in a draft (a chapter or a
-// script) unless "Quiet drafts" is off. The computer's rail never covers the
-// text, so there only Focus counts (the tab in the corner, frame.css).
-function syncQuiet() {
-  const draft = (root.dataset.view || 'write') === 'write';
-  const quiet = root.classList.contains('focus') || (touch.matches && draft && !hidden().has('quietdrafts'));
-  body.classList.toggle('bar-quiet', quiet);
-  if (!quiet) body.classList.remove('bar-peek');
-}
-new MutationObserver(syncQuiet).observe(root, { attributes: true, attributeFilter: ['class', 'data-view'] });
-touch.addEventListener?.('change', syncQuiet);
-function syncSwitches() {
-  const h = hidden();
-  document.querySelectorAll('[data-show]').forEach((c) => { c.checked = !h.has(c.dataset.show); });
-  $('#many-panes').checked = localStorage.getItem('manyPanes') === '1';
-  $('#focus-toggle').setAttribute('aria-pressed', String(root.classList.contains('focus')));
-  document.querySelectorAll('.ps-show .switch input').forEach((c) => c.closest('.switch').classList.toggle('on', c.checked));
-  document.querySelectorAll('.ps-chip[data-show]').forEach((b) => b.setAttribute('aria-pressed', String(!hidden().has(b.dataset.show))));
-}
-
-// Next or previous chapter in the book, or day on a daily page.
-async function step(dir) {
-  if (inNotebook()) return notebook.step(dir);
-  if (!writing() || !state.project) return;
-  const chapters = (await outline(state.project.id)).flatMap((a) => a.chapters);
-  const i = chapters.findIndex((c) => c.id === state.chapterId);
-  const next = chapters[i + dir];
-  if (next) go({ view: 'write', chapterId: next.id });
-}
-
-const progressPanel = new StatsPanel($('.stats'), { onClose: () => currentEditor().commands.focus() });
-if (!inPane) {
-  document.addEventListener('visibilitychange', () => { if (document.hidden) recordProgress().catch(() => {}); });
-  // Once things have settled after opening.
-  setTimeout(() => recordProgress().catch((e) => console.error(e)), 20000);
-}
-const toggleShortcuts = () => { const s = $('.shortcuts'); s.hidden = !s.hidden; if (s.hidden) currentEditor().commands.focus(); };
-document.querySelectorAll('[data-show]').forEach((c) => c.addEventListener('change', () => setShown(c.dataset.show, c.checked)));
-// One pane beside unless you ask for a row of them. Back to one: the last one stays.
-$('#many-panes').addEventListener('change', (e) => {
-  if (e.target.checked) localStorage.setItem('manyPanes', '1');
-  else { localStorage.removeItem('manyPanes'); for (const p of (panes?.panes || []).slice(0, -1)) panes.close(p.id); }
-});
-$('#typewriter-mode').checked = root.classList.contains('typewriter');
-$('#typewriter-mode').addEventListener('change', toggleTypewriter);
-syncSwitches();
-syncQuiet();
-
-$('#page-width').addEventListener('input', (e) => setPage(Number(e.target.value), currentSize()));
-$('#text-size').addEventListener('input', (e) => setPage(currentWidth(), Number(e.target.value)));
-$('#page-reset').addEventListener('click', () => { setPage(DEFAULT_WIDTH, defaultSize()); pickFont(DEFAULT_FONT); });
-
-// Font picker: Serif / Sans / Mono, then each font written in its own face.
-let fontGroup = null;
-function showFonts() {
-  const cur = currentFont();
-  fontGroup ||= cur.group;
-  $('#font-value').textContent = cur.name;
-  $('.font-groups').replaceChildren(...FONT_GROUPS.map(([g, label]) => {
-    const b = document.createElement('button');
-    b.type = 'button'; b.textContent = label; b.setAttribute('role', 'tab');
-    b.classList.toggle('current', g === fontGroup);
-    b.setAttribute('aria-selected', String(g === fontGroup));
-    b.addEventListener('click', () => { fontGroup = g; showFonts(); });
-    return b;
-  }));
-  $('.font-list').replaceChildren(...FONTS.filter((f) => f.group === fontGroup).map((f) => {
-    const b = document.createElement('button');
-    b.type = 'button'; b.dataset.font = f.id; b.setAttribute('role', 'radio');
-    const name = document.createElement('span'), about = document.createElement('span');
-    name.className = 'font-name'; name.textContent = f.name;
-    about.className = 'font-about'; about.textContent = f.about;
-    b.append(name, about);
-    b.classList.toggle('current', f === cur);
-    b.setAttribute('aria-checked', String(f === cur));
-    b.addEventListener('click', () => pickFont(f.id));
-    return b;
-  }));
-}
-function pickFont(id) {
-  setFont(id);
-  fontGroup = currentFont().group;
-  showFonts();
-  notes.layout();
-}
-$('#page-done').addEventListener('click', () => togglePageSettings());
+wirePageSettings();
 
 // ---------- command menu (⌘K) and go-to (⌘O) ----------
 
@@ -2478,4 +2237,4 @@ async function startPane() {
 
 start();
 
-export { $, alts, askServer, besideItem, blankOnce, body, box, boxOpen, canAskServer, captureHere, closePalette, currentBook, dayReview, deskPage, edgesQuietUntil, editor, filterPalette, gone, gridTouched, hidden, inNotebook, insertSection, isScript, isWoven, listSoon, lookPanel, looseFoot, looseSoon, moveLinePicker, notes, openAsked, openBeside, openBox, openPalette, openProjectBeside, openTalk, paneMoves, panes, plan, planningView, projectPage, pull, reviewAsked, root, scribeKept, sectionNames, sendSelectionPicker, setElement, setGridTouched, setShown, showClaudeKnows, sideNotes, state, statusEl, store, tagsPage, talkThrough, tidyNudge, toggleFocus, togglePageSettings, view, whenHere, writeOut, writing };
+export { $, alts, askServer, besideItem, blankOnce, body, box, boxOpen, canAskServer, captureHere, closePalette, currentBook, dayReview, deskPage, editor, filterPalette, gone, gridTouched, inNotebook, insertSection, isScript, isWoven, listSoon, looseFoot, looseSoon, moveLinePicker, notes, openAsked, openBeside, openBox, openPalette, openProjectBeside, openTalk, paneMoves, panes, plan, planningView, projectPage, pull, reviewAsked, roomTags, root, scribeKept, sectionNames, sendSelectionPicker, setElement, setGridTouched, showClaudeKnows, sideNotes, state, statusEl, store, syncBeside, tagsPage, talkThrough, tidyNudge, view, whenHere, writeOut, writing };
