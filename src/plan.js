@@ -168,6 +168,13 @@ export class Plan {
     const turn = (this.turn = (this.turn || 0) + 1);
     const [items, settings, src, areaList] = await Promise.all([loadTasks(undefined, { withAway: this.stepsShown && !this.dayShown && !this.pageShown }), planSettings(), this.pageShown && this.tab === 'ahead' ? this.hooks.ahead?.() : null, this.pageShown && this.tab === 'week' ? areas() : null]);
     if (turn !== this.turn) return;
+    // Lines that come by themselves each day (Training, Part 6): once made, look again.
+    if (this.hooks.daily && !this.dailying) {
+      this.dailying = true;
+      let made = [];
+      try { made = (await this.hooks.daily(items, this.today)) || []; } catch (e) { console.warn(e); } finally { this.dailying = false; }
+      if (made.length) { await this.hooks.changed?.(made); return this.refresh(); }
+    }
     if (this.pageShown && this.tab === 'now') { await this.now.load(); if (turn !== this.turn) return; }
     this.items = items;
     this.free = settings.free;

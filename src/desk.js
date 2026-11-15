@@ -13,12 +13,13 @@
 // wings, backstage) is worked out from what's happening unless you say.
 
 import { getEntry, putEntries, byKind, children, isTrashed } from './db.js';
-import { taskOf, tickTask, chipLabel } from './tasks.js';
+import { taskOf, tickTask, chipLabel, loadTasks, isoOf } from './tasks.js';
 import { entry } from './model.js';
 import { areas, areaColor, editedAt } from './library.js';
 import { popMenu } from './menu.js';
 import { deskDrags, inOrder, mergeOrder } from './deskdrag.js';
 import { make } from './dom.js';
+import { deskTraining, TRAINING_PAGE, PLAN_URL, trainingToday, addTrainingLine, seedTraining } from './training.js';
 
 export const DESK_ID = 'settings-desk';
 const KIND = { decision: 'Decide', blocked: 'Do', review: 'Try' };
@@ -486,6 +487,9 @@ export class DeskPage {
       parts.push(l);
     }
 
+    // Training (Part 6): the goals on stage, where each stands, and what's next.
+    if (!document.documentElement.classList.contains('hide-training')) { const t = await this.trainingBlock(); if (t) parts.push(t); }
+
     for (const [stage, label] of [['wings', 'In the wings'], ['back', 'Backstage']]) {
       const rows = seats.filter((s) => s.stage === stage);
       if (!rows.length) continue;
@@ -760,6 +764,38 @@ export class DeskPage {
     right.append(this.more(seat));
     row.append(name, make('span', 'dk-rd', says), right);
     return row;
+  }
+
+  // One quiet block: the training goals on stage with where each stands, the
+  // ones waiting their turn, and the next session. No charts, no streaks.
+  async trainingBlock() {
+    await seedTraining();
+    const t = await deskTraining();
+    if (!t) return null;
+    const sec = make('section', 'dk-sec dk-train');
+    const h = make('h2', 'dk-label', 'Training');
+    h.append(make('span', 'dk-label-more', 'four goals, and the handstand'));
+    sec.append(h);
+    const list = make('div', 'dk-goals');
+    for (const [goal, at] of t.goals) { const r = make('div', 'dk-goal'); r.append(make('span', 'dk-goal-t', goal), make('span', 'dk-goal-at', at)); list.append(r); }
+    sec.append(list);
+    sec.append(make('p', 'hint dk-wait', `Waiting their turn: ${t.waiting.join(', ')}.`));
+    const foot = make('p', 'hint dk-tnext');
+    foot.append(`Next session: ${t.next || 'none'}. `);
+    const today = isoOf();
+    const items = await loadTasks();
+    if (!trainingToday(items, today)) {
+      const put = make('button', 'dk-link', 'Put it on today');
+      put.addEventListener('click', async () => { const rows = await addTrainingLine(items, today); await this.changed?.(rows); this.render({ now: this.now, failed: false }); });
+      foot.append(put, ' · ');
+    }
+    const open = make('button', 'dk-link', 'The Training page');
+    open.addEventListener('click', () => this.open?.(TRAINING_PAGE));
+    const plan = make('a', 'dk-link', 'your training plan');
+    plan.href = PLAN_URL; plan.target = '_blank'; plan.rel = 'noopener';
+    foot.append(open, ' · ', plan);
+    sec.append(foot);
+    return sec;
   }
 
   // What your threads did, underneath, so there's no separate page to remember.

@@ -42,16 +42,30 @@ export const TaskLine = Extension.create({
       const t = task(node.attrs.eid);
       if (!t) {
         // A thought filed from Now: a quiet "Filed under the Drawer" after its words.
+        // A training exercise: its amounts as a chip to tap (training.js).
         const said = note(node.attrs.eid);
         if (said) {
           const end = pos + 1 + node.firstChild.nodeSize - 1;
+          const text = typeof said === 'string' ? said : said.text;
           decos.push(Decoration.widget(end, () => {
+            if (typeof said !== 'string') {
+              const b = document.createElement('button');
+              b.type = 'button';
+              b.className = 'task-chip train-chip';
+              b.tabIndex = -1;
+              b.contentEditable = 'false';
+              b.dataset.eid = node.attrs.eid;
+              b.dataset.train = '1';
+              b.textContent = text;
+              b.title = 'Click to change the amounts';
+              return b;
+            }
             const n = document.createElement('span');
             n.className = 'thought-note';
             n.contentEditable = 'false';
-            n.textContent = said;
+            n.textContent = text;
             return n;
-          }, { side: 1, key: `n-${node.attrs.eid}-${said}`, ignoreSelection: true }));
+          }, { side: 1, key: `n-${node.attrs.eid}-${text}`, ignoreSelection: true }));
         }
         // doc > list > item: only lines straight on the page can be loose.
         if (state.doc.resolve(pos).depth === 1 && loose(node.attrs.eid)) decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'is-loose' }));

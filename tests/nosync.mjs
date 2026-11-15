@@ -14,14 +14,17 @@ export function withoutSync(browser) {
     // Plan rows start plain (Nov 15 2026); older tests click a row's details, so
     // they show unless a test asks ({ rowDetails: false }). Today opens on Now
     // when today has tasks; older tests expect the day's page, so it opens there
-    // unless a test asks ({ todayNow: true }).
-    const { estimates = true, todayPage = true, quietDrafts = false, rowDetails = true, todayNow = false, ...rest } = opts;
+    // unless a test asks ({ todayNow: true }). Training puts a line on each day
+    // (Nov 15 2026); older tests count today's lines, so it starts off unless a
+    // test asks ({ training: true }).
+    const { estimates = true, todayPage = true, quietDrafts = false, rowDetails = true, todayNow = false, training = false, ...rest } = opts;
     const ctx = await open(rest);
     if (todayPage) await ctx.addInitScript(() => { try { if (!localStorage.getItem('todayPhone')) localStorage.setItem('todayPhone', 'page'); } catch { /* no storage here */ } });
     await ctx.addInitScript(() => { if (!('__syncBackend' in window)) window.__syncBackend = null; });
     if (!quietDrafts) await ctx.addInitScript(() => { try { if (!localStorage.getItem('hide')) localStorage.setItem('hide', '["quietdrafts"]'); } catch { /* no storage here */ } });
     if (estimates) await ctx.addInitScript(() => { try { if (!localStorage.getItem('estimatesOff')) localStorage.setItem('estimatesOff', '1'); } catch { /* no storage here */ } });
     if (rowDetails) await ctx.addInitScript(() => { try { if (!localStorage.getItem('rowDetailsOff')) localStorage.setItem('rowDetailsOff', '1'); } catch { /* no storage here */ } });
+    if (!training) await ctx.addInitScript(() => { try { if (!localStorage.getItem('trainingOffOnce')) { const h = JSON.parse(localStorage.getItem('hide') || '[]'); if (!h.includes('training')) h.push('training'); localStorage.setItem('hide', JSON.stringify(h)); localStorage.setItem('trainingOffOnce', '1'); } } catch { /* no storage here */ } });
     if (!todayNow) await ctx.addInitScript(() => { try { if (!localStorage.getItem('todayOpens')) localStorage.setItem('todayOpens', 'page'); } catch { /* no storage here */ } });
     return ctx;
   };
