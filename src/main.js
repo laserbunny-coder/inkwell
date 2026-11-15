@@ -21,28 +21,28 @@ import { keep, versionsOf, tidyHistory, blocks as docBlocks, compare, deletedFro
 import { editStages, newWorkflow } from './stageedit.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, askPiece, askScript, showCopy, toast } from './menu.js';
 import './sync.js';
-import { hasWriting, outline, entry, wordCount, docWords, noteTypes } from './model.js';
+import { hasWriting, outline, entry, wordCount, noteTypes } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
 import { EntryRef, TagMarks } from './outline.js';
-import { freshenRefs } from './links.js';
+import './links.js';
 import { keepStorage, mb } from './keep.js';
 import { moveEntries } from './move.js';
 import './conflicts.js';
 import { FileEmbed, insertFiles, resetLinkPics } from './filenode.js';
 import { MAX_BYTES, SPACE, spaceUsed, unsentFiles } from './files.js';
 import { vaultZip, pageMarkdown } from './vault.js';
-import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain, fromOutline, looksLikeOutline, SceneCodes, assignCodes } from './script.js';
-import { titleOf, dayId, renderLinkedFrom } from './notebook.js';
-import { toggleDone, toggleChecklist, toggleBox, lineChecks, loadDoc, setLineDragOut, dropLineAt } from './outline.js';
+import { ScriptElements, ELEMENTS, elementLabel, toFountain, fromFountain, fromOutline, looksLikeOutline, SceneCodes } from './script.js';
+import { titleOf, dayId } from './notebook.js';
+import { toggleDone, toggleChecklist, toggleBox, lineChecks, setLineDragOut, dropLineAt } from './outline.js';
 import { SlashMenu, setSlashItems, slashOpen } from './slash.js';
-import { Woven, ScenePop, newScene, guessAll, redraw as redrawWoven, placeList, sceneAt, scenesOf, ensureHeading, setMarker, KINDS as SCENE_KINDS } from './woven.js';
-import { applyLook, renderLook, cleanLook, DEFAULT_LOOK } from './wovenlook.js';
-import { elementsIn, plainPages, newElement } from './production.js';
+import { Woven, newScene, placeList } from './woven.js';
+import './wovenlook.js';
+import './production.js';
 import './handlemenu.js';
 import { openAlerts } from './alerts.js';
 import { showSaveButton } from './savebutton.js';
 import { openPicker } from './picker.js';
-import { PlotGrid, threadsOf, worldPromises } from './grid.js';
+import { PlotGrid, worldPromises } from './grid.js';
 import { PageStrip, TodayPanel, isLife, taskHint, personalArea } from './pages.js';
 import { Nav } from './nav.js';
 import { Frame, lookPicker, startLook, toggleLight } from './frame.js';
@@ -87,6 +87,7 @@ import { placeScriptBar, touch, typeHere, wireScriptBar } from './app/scriptbar.
 import { currentEditor, notebook, placeOutlineBar, toggleTypewriter, wireNotebook } from './app/notebookview.js';
 import { besideUntil, go, historyMode, lastChapterAnywhere, lastPlace, newPageHere, openBook, openEntry, paneStep, phoneAway, placeOf, remember, setBesideUntil, setHistoryMode, wireRouting } from './app/routing.js';
 import { applyRemote, caretAfter, conflicts, migrateOnce, seedIfEmpty, seedNow, setCaretAfter, sync, wireSync } from './app/syncwiring.js';
+import { biblePlaces, connectClaude, connectScribe, markScene, newAct, newChapter, numbering, openChapter, prepareShoot, refreshWords, sceneDetails, scenePop, setWoven, syncWoven, toggleNumbering, wireManuscript, wovenPick } from './app/manuscript.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -106,13 +107,9 @@ const extensions = [
   Woven.configure({ isWoven: () => isWoven(), busy: (v) => slashOpen(v), places: (doc) => placeList(biblePlaces, doc), onDot: (ref, anchor, title) => scenePop.open(ref, anchor, title), onBlocked: (m) => toast(m) }),
   FileEmbed.configure({ onTooBig: tooBig }), SlashMenu
 ];
-// The scene numbers in the numbered script's other chapters, around the one open.
-let numbering = { before: null, after: null, used: [] };
 const isScript = () => root.classList.contains('script');
 // Woven: the script written as flowing prose, scene headings hidden (woven.js).
 const isWoven = () => root.classList.contains('woven');
-// The world's places (bible pages that are locations), for guessing where a scene is.
-let biblePlaces = [];
 // What the levels of a script's sections are called (Act, Sequence, Scene…), per piece.
 const sectionNames = () => state.project?.fields?.sections || SECTION_NAMES;
 function tooBig(f) { toast(`“${f.name}” is too big to add (the limit is ${Math.round(MAX_BYTES / 1048576)} MB)`); }
@@ -246,312 +243,7 @@ let hstrip = null;
 
 wireSync();
 
-// ---------- chapters ----------
-
-async function openChapter(id) {
-  if (state.chapterId === id) return;
-  if (state.chapterId) await store.close(editor.state.doc);
-  const { doc, recovered } = await store.load(id);
-  state.chapterId = id;
-  const book = await bookOf(store.chapter);
-  if (book && book.id !== state.project?.id) state.project = book;
-  root.classList.toggle('script', bookType(book) === 'screenplay');
-  root.classList.toggle('numbered', !!book?.fields?.numbered);
-  await syncWoven(book);
-  numbering = book?.fields?.numbered ? await numberingAround(book, id) : { before: null, after: null, used: [] };
-  requestAnimationFrame(placeScriptBar);
-  loadDoc(editor, doc);
-  if (isWoven()) guessAll(editor);
-  if (recovered) store.change(editor.state.doc);
-  else statusEl.textContent = 'Saved';
-  freshenRefs(editor);
-  if (state.project) state.acts = await outline(state.project.id);
-  notes.threads = await threadsOf(book && (await worldOf(book)));
-  await notes.load(id);
-  await renderChapterLinks();
-  await setMeta('lastChapter', id);
-  if (state.project) await setMeta(`lastChapter:${state.project.id}`, id);
-  if (view() === 'write') remember({ view: 'write', chapterId: id });
-  if (beside.isOpen) beside.follow(id);
-  if (talk.isOpen) talk.open(id);
-  refreshWords();
-  renderRail();
-  renderCrumb();
-  editor.commands.focus('end');
-}
-
-// Scene numbers already given in a script's other chapters: the last one
-// before this chapter, the first after it, and all of them.
-async function numberingAround(piece, chapterId) {
-  const chapters = (await outline(piece.id)).flatMap((a) => a.chapters);
-  const i = chapters.findIndex((c) => c.id === chapterId);
-  const codesIn = async (ch) => (await children(ch.id)).filter((r) => r.fields?.el === 'scene' && r.fields?.code).map((r) => r.fields.code);
-  const before = [];
-  const after = [];
-  for (const [j, ch] of chapters.entries()) if (j !== i) (j < i ? before : after).push(...(await codesIn(ch)));
-  return { before: before.at(-1) || null, after: after[0] || null, used: [...before, ...after] };
-}
-
-// Number a script's scenes, for production. Once on, every scene keeps its
-// number for good and new ones slot in (3A); turning it off only hides them.
-// ---------- Woven ----------
-
-// The script open is Woven or Classic (a per-script switch, kept with the
-// script so every device shows it the same way), and Woven wears its look.
-async function syncWoven(book) {
-  const on = isScript() && !!book?.fields?.woven;
-  root.classList.toggle('woven', on);
-  applyLook(root, on ? (book.fields.look || DEFAULT_LOOK) : null);
-  if (on) await loadPlaces(book);
-  if (!on) scenePop?.close();
-  wovenPick();
-}
-
-async function loadPlaces(book) {
-  const world = book ? await worldOf(book) : null;
-  if (!world) { biblePlaces = []; return; }
-  const pages = [
-    ...(await elementsIn(world)).filter((p) => p.fields?.element?.type === 'location'),
-    ...(await plainPages(world)).filter((x) => x.guess === 'location').map((x) => x.page)
-  ];
-  biblePlaces = pages.filter((p) => (p.title || '').trim() && !/^(places|locations|sets)$/i.test(p.title.trim())).map((p) => ({
-    name: p.title.trim(), ie: p.fields?.place?.ie || '', also: p.fields?.place?.also || [], notime: !!p.fields?.place?.notime, page: p.id
-  }));
-}
-
-async function setWoven(on) {
-  const b = await currentBook();
-  if (!b || bookType(b) !== 'screenplay') return;
-  const fresh = await getEntry(b.id);
-  if (!!fresh.fields?.woven === on) return;
-  const next = { ...fresh, fields: { ...fresh.fields, woven: on }, updated_at: Date.now() };
-  await putEntries([next]);
-  if (state.project?.id === b.id) state.project = next;
-  try { localStorage.setItem('scriptView', on ? 'woven' : 'classic'); } catch { /* private window */ }
-  await syncWoven(next);
-  if (on) guessAll(editor); else redrawWoven(editor);
-  notes.layout();
-  toast(on ? 'Woven: the scene headings are hidden as faint lines. Classic shows them again.' : 'Classic: the standard screenplay page. Your Woven titles stay as sections.');
-}
-
-async function saveLook(look) {
-  const b = await currentBook();
-  if (!b) return;
-  const fresh = await getEntry(b.id);
-  const next = { ...fresh, fields: { ...fresh.fields, look: cleanLook(look) }, updated_at: Date.now() };
-  await putEntries([next]);
-  if (state.project?.id === b.id) state.project = next;
-  if (isWoven()) applyLook(root, next.fields.look);
-}
-
-// The Aa panel's part for the script that's open: Woven or Classic, and its look.
-function wovenPick() {
-  const box = $('.woven-pick');
-  if (!box) return;
-  const script = writing() && isScript();
-  box.hidden = !script;
-  if (!script) return;
-  box.querySelectorAll('[data-sv]').forEach((b) => {
-    const cur = (b.dataset.sv === 'woven') === isWoven();
-    b.classList.toggle('current', cur);
-    b.setAttribute('aria-checked', String(cur));
-  });
-  const look = box.querySelector('.woven-look');
-  look.hidden = !isWoven();
-  if (isWoven()) renderLook(look, {
-    look: () => state.project?.fields?.look || DEFAULT_LOOK,
-    save: (l) => saveLook(l),
-    canAsk: canAskServer,
-    toast,
-    ask: async (text) => {
-      const got = await askServer({ mode: 'woven', task: 'look', describe: text, piece: state.project?.title || '' });
-      if (got?.error) throw new Error(got.error);
-      return got?.look || null;
-    }
-  });
-}
-document.querySelectorAll('.woven-pick [data-sv]').forEach((b) => b.addEventListener('click', () => setWoven(b.dataset.sv === 'woven')));
-
-const scenePop = new ScenePop({ editor: () => editor, places: () => placeList(biblePlaces, editor.state.doc), toast: (m, a) => toast(m, a) });
-
-// The card for the scene the caret is in (the same one the margin dot opens).
-function sceneDetails() {
-  const s = sceneAt(editor.state.doc, editor.state.selection.from);
-  if (!s) return;
-  const dom = s.eid ? editor.view.dom.querySelector(`.wv-line[data-eid="${s.eid}"] .wv-dot`) : editor.view.dom.querySelector('.wv-line.wv-top .wv-dot');
-  scenePop.open({ eid: s.eid, at: s.at }, dom);
-}
-
-// /continuous, /intercut, /flashback, /montage: the scene you're in becomes one.
-function markScene(kind) {
-  let s = sceneAt(editor.state.doc, editor.state.selection.from);
-  if (!s) return;
-  const pos = s.node ? s.pos : ensureHeading(editor, s);
-  s = sceneAt(editor.state.doc, pos + 1);
-  const m = { ...s.marker, kind };
-  if (kind === 'continuous' && !m.place) {
-    // Straight on: the same place as the scene before.
-    const all = scenesOf(editor.state.doc);
-    const prev = all[all.findIndex((x) => x.pos === pos) - 1];
-    if (prev?.marker.place) { m.place = prev.marker.place; m.ie ||= prev.marker.ie; }
-  }
-  if (kind !== 'continuous' && s.marker.kind === 'continuous') m.time = '';
-  setMarker(editor, pos, m);
-  toast(`Scene ${s.node?.attrs.code || s.n}: ${SCENE_KINDS.find((k) => k.id === kind)?.label.toLowerCase()}`);
-}
-
-async function prepareShoot() {
-  if (!isWoven()) return;
-  const world = state.project ? await worldOf(state.project) : null;
-  const { prepareForShoot } = await import('./wovenprep.js');
-  await prepareForShoot({
-    editor,
-    places: (doc) => placeList(biblePlaces, doc),
-    biblePlaces: () => biblePlaces,
-    piece: () => state.project?.title || '',
-    canAsk: canAskServer,
-    ask: async (body) => { const got = await askServer(body); if (got?.error) throw new Error(got.error); return got; },
-    toast,
-    makePlaces: async (list) => {
-      if (!world) throw new Error('This script isn’t in a world yet, so there’s no bible to add places to.');
-      for (const p of list) {
-        const page = await newElement(world, 'location', p.name);
-        if (p.ie) await putEntries([{ ...page, fields: { ...page.fields, place: { ie: p.ie } }, updated_at: Date.now() }]);
-      }
-      await loadPlaces(state.project);
-      redrawWoven(editor);
-      await refreshViews();
-      toast(`${list.length === 1 ? 'A place page' : `${list.length} place pages`} made in ${world.title || 'the world'}’s bible`);
-    }
-  });
-}
-
-async function toggleNumbering(piece) {
-  const b = await getEntry(piece.id);
-  const on = !b.fields?.numbered;
-  if (on) {
-    const ok = await ask({
-      title: `Number the scenes in “${nameOf(b)}”?`,
-      body: 'Each scene heading gets a number that never changes, so file names, shot lists and notes keep pointing at the right scene. A scene you add later between 3 and 4 becomes 3A. Do this when the script is heading into production; nothing else about the script changes, and you can hide the numbers any time.',
-      ok: 'Number the scenes'
-    });
-    if (!ok) return;
-  }
-  const open = state.project?.id === b.id && state.chapterId;
-  if (open) await store.close(editor.state.doc);
-  const next = { ...b, fields: { ...b.fields, numbered: on }, updated_at: Date.now() };
-  const rows = [next];
-  if (on) {
-    // Every chapter of the script in order, as one run of scenes.
-    const scenes = [];
-    for (const ch of (await outline(b.id)).flatMap((a) => a.chapters)) scenes.push(...(await children(ch.id)).filter((r) => r.kind === 'para' && r.fields?.el === 'scene' && (r.text || '').trim()));
-    const codes = assignCodes(scenes.map((r) => r.fields?.code || null));
-    scenes.forEach((r, i) => { if (r.fields?.code !== codes[i]) rows.push({ ...r, fields: { ...r.fields, code: codes[i] }, updated_at: Date.now() }); });
-  }
-  await putEntries(rows);
-  if (state.project?.id === b.id) {
-    state.project = next;
-    root.classList.toggle('numbered', on);
-    if (open) {
-      numbering = on ? await numberingAround(next, state.chapterId) : { before: null, after: null, used: [] };
-      editor.commands.setContent(await store.refresh(), { emitUpdate: false });
-      renderScenes();
-    }
-  }
-  await refreshViews();
-  toast(on ? `Scenes numbered in “${nameOf(b)}”` : 'Scene numbers are hidden. They come back as they were if you turn them on again.');
-}
-
-// The Inkwell connector: an address that lets Claude, in any Claude chat,
-// read Inkwell and add to it (new lines and pages, marked as Claude's). Only a
-// fingerprint of it is kept, so it's shown once; making a new one turns the
-// old one off.
-async function connectClaude() {
-  if (!sync.user || !sync.backend?.rpc) { toast('Sign in to sync first: the connector reaches Inkwell through your cloud copy.'); return; }
-  const ok = await ask({
-    title: 'Connect Claude to Inkwell?',
-    body: 'You get an address to add in Claude as a custom connector (Settings, then Connectors, then Add custom connector). Claude can then read your worlds, pages and drafts from any chat, and add lines and pages, marked as written by Claude. It never changes or deletes what you wrote. Anyone with the address can do the same, so keep it private. Making a new address turns off the old one.',
-    ok: 'Make my address'
-  });
-  if (!ok) return;
-  let token;
-  try { token = await sync.backend.rpc('new_inkwell_mcp_token'); } catch (e) { console.error(e); toast('Couldn’t make an address. Check your connection and try again.'); return; }
-  const got = await showCopy({
-    title: 'Your Inkwell connector address',
-    body: 'It’s only shown this once, so copy it now and paste it into Claude.',
-    value: `${sync.backend.functionsUrl}/inkwell-mcp/${token}`,
-    extra: { label: 'Turn off Claude’s access', danger: true }
-  });
-  if (got === 'extra') {
-    try { await sync.backend.rpc('revoke_inkwell_mcp_token'); toast('Claude’s access to Inkwell is off'); } catch { toast('Couldn’t turn it off. Try again.'); }
-  }
-}
-
-// Scribe, the dictation app: Scribe opens Inkwell at ?connect=scribe, and this
-// makes a secret for that device and hands it back to the app. Each device
-// has its own; connecting the same one again replaces its old secret.
-async function connectScribe() {
-  const user = sync.user || await sync.backend?.user?.().catch(() => null);
-  if (!user || !sync.backend?.rpc) { toast('Sign in to sync first: Scribe connects through your Inkwell account.'); return; }
-  const android = /Android/i.test(navigator.userAgent);
-  const ok = await ask({
-    title: android ? 'Connect Scribe on this phone?' : 'Connect Scribe?',
-    body: 'Scribe, your dictation keyboard, can then write out what you say and have Claude tidy it. It only uses your account for that; it can’t read your writing.',
-    ok: 'Connect'
-  });
-  if (!ok) return;
-  let token;
-  try { token = await sync.backend.rpc('new_scribe_token', { device: android ? 'phone' : 'computer' }); } catch (e) { console.error(e); toast('Couldn’t connect Scribe. Check your connection and try again.'); return; }
-  const query = `token=${token}&url=${encodeURIComponent(sync.backend.functionsUrl)}`;
-  if (android) {
-    // Opening the app needs a tap, so it's its own button.
-    const go = await ask({ title: 'Scribe is connected', body: 'Go back to Scribe to finish.', ok: 'Open Scribe' });
-    if (go) location.href = `intent://connect?${query}#Intent;scheme=scribe;package=com.laserbunny.scribe;end`;
-    return;
-  }
-  await showCopy({ title: 'Scribe connection link', body: 'Paste this into Scribe on your computer. It’s only shown once.', value: `scribe://connect?${query}` });
-}
-
-// What links to this chapter, shown after its last paragraph.
-async function renderChapterLinks() {
-  if (!state.chapterId) return;
-  const n = await renderLinkedFrom(state.chapterId, $('.chapter-links'), $('#chapter-links-list'), openEntry);
-  const chip = $('#chapter-links-chip');
-  chip.hidden = !n || view() !== 'write';
-  chip.textContent = `Linked from ${n}`;
-}
-$('#chapter-links-chip').addEventListener('click', () => $('.chapter-links').scrollIntoView({ behavior: 'smooth', block: 'center' }));
-
-function refreshWords() {
-  if (view() !== 'write') { $('#words').textContent = ''; return; }
-  if (isScript()) { const n = scriptPages(editor.state.doc); $('#words').textContent = `About ${n} page${n === 1 ? '' : 's'}`; return; }
-  $('#words').textContent = `${docWords(editor.state.doc).toLocaleString()} words`;
-}
-
-async function newChapter() {
-  if (!state.project) return;
-  const act = state.acts.find((a) => a.chapters.some((c) => c.id === state.chapterId)) || state.acts.at(-1);
-  if (!act) return newAct();
-  const level = state.project.fields?.levels?.[1] || 'Chapter';
-  const count = state.acts.reduce((n, a) => n + a.chapters.length, 0);
-  const ch = entry('chapter', { parent_id: act.id, title: `${level} ${count + 1}`, sort: (act.chapters.at(-1)?.sort || 0) + 1 });
-  await putEntries([ch]);
-  state.acts = await outline(state.project.id);
-  await openChapter(ch.id);
-}
-
-async function newAct() {
-  if (!state.project) return;
-  const level = state.project.fields?.levels?.[0] || 'Act';
-  const names = ['One', 'Two', 'Three', 'Four', 'Five', 'Six'];
-  const act = entry('act', { parent_id: state.project.id, title: `${level} ${names[state.acts.length] || state.acts.length + 1}`, sort: (state.acts.at(-1)?.sort || 0) + 1 });
-  const chLevel = state.project.fields?.levels?.[1] || 'Chapter';
-  const count = state.acts.reduce((n, a) => n + a.chapters.length, 0);
-  const ch = entry('chapter', { parent_id: act.id, title: `${chLevel} ${count + 1}`, sort: 1 });
-  await putEntries([act, ch]);
-  state.acts = await outline(state.project.id);
-  await openChapter(ch.id);
-}
+wireManuscript();
 
 // ---------- names you can rename in place ----------
 
@@ -5244,4 +4936,4 @@ async function startPane() {
 
 start();
 
-export { $, alts, beside, besideItem, blankOnce, body, box, captureHere, comparer, dayMenu, dayReview, deskPage, editor, frame, gone, grid, gridTouched, hstrip, inNotebook, insertSection, isScript, leaveChapter, listSoon, loadProduction, loadStagePage, looseFoot, looseSoon, moveLinePicker, notes, openAsked, openBeside, openChapter, pageMenu, pageOfPlace, paneMoves, panes, plan, planningView, production, pull, refreshViews, refreshWords, renderChapterLinks, renderCrumb, renderLibrary, renderProject, renderRail, renderWorld, reviewAsked, root, scheduleScenes, scribeKept, sendSelectionPicker, setElement, setGridTouched, sideNotes, stagePage, state, statusEl, store, tagsPage, talk, talkThrough, tidyNudge, todayPanel, toggleFocus, view, whenHere, writeOut, writing };
+export { $, alts, askServer, beside, besideItem, blankOnce, body, box, canAskServer, captureHere, comparer, currentBook, dayMenu, dayReview, deskPage, editor, frame, gone, grid, gridTouched, hstrip, inNotebook, insertSection, isScript, isWoven, leaveChapter, listSoon, loadProduction, loadStagePage, looseFoot, looseSoon, moveLinePicker, nameOf, notes, openAsked, openBeside, pageMenu, pageOfPlace, paneMoves, panes, plan, planningView, production, pull, refreshViews, renderCrumb, renderLibrary, renderProject, renderRail, renderScenes, renderWorld, reviewAsked, root, scheduleScenes, scribeKept, sendSelectionPicker, setElement, setGridTouched, sideNotes, stagePage, state, statusEl, store, tagsPage, talk, talkThrough, tidyNudge, todayPanel, toggleFocus, view, whenHere, writeOut, writing };
