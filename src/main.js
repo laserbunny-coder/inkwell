@@ -7,13 +7,13 @@ import './plan.css';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { EntryIds, SceneBreak, sectionName, SECTION_NAMES } from './schema.js';
-import { isMac, keyLabel } from './keys.js';
+import './keys.js';
 import './stats.js';
-import { AltMark, ParagraphVersions, AltPanel, flip, newParagraphVersion } from './alts.js';
+import { AltMark, ParagraphVersions, AltPanel, newParagraphVersion } from './alts.js';
 import { ChapterStore } from './chapter.js';
 import { NotesLayer } from './notes.js';
 import { BlockHandle } from './blocks.js';
-import { bySort } from './order.js';
+import './order.js';
 import { getMeta, setMeta, putEntries, children, getEntry, byKind, forgetDeleted, isTrashed } from './db.js';
 import './trash.js';
 import { searchIndex } from './search.js';
@@ -28,13 +28,13 @@ import './links.js';
 import { keepStorage } from './keep.js';
 import { moveEntries } from './move.js';
 import './conflicts.js';
-import { FileEmbed, insertFiles } from './filenode.js';
+import { FileEmbed } from './filenode.js';
 import { MAX_BYTES } from './files.js';
 import { pageMarkdown } from './vault.js';
 import { ScriptElements, ELEMENTS, elementLabel, SceneCodes } from './script.js';
 import { titleOf, dayId } from './notebook.js';
-import { toggleDone, toggleChecklist, toggleBox, setLineDragOut, dropLineAt } from './outline.js';
-import { SlashMenu, setSlashItems, slashOpen } from './slash.js';
+import { setLineDragOut, dropLineAt } from './outline.js';
+import { SlashMenu, slashOpen } from './slash.js';
 import { Woven, newScene, placeList } from './woven.js';
 import './wovenlook.js';
 import './production.js';
@@ -54,12 +54,12 @@ import { SAVE_CHANNEL } from './inbox.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
 import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker, speakersOn, mine, sendMeetingToAcro } from './meeting.js';
 import { DayReview, getReview } from './review.js';
-import { TagsPage, tagIndex, statsOf } from './tags.js';
+import { TagsPage } from './tags.js';
 import { DeskPage } from './desk.js';
 import { ProjectPage } from './projectpage.js';
 import { Plan, tabFor, isCal } from './plan.js';
 import { Pull } from './pull.js';
-import { whenOpen } from './when.js';
+import './when.js';
 import './box.js';
 import './commandinfo.js';
 import './shows.js';
@@ -77,27 +77,28 @@ import './hstrip.css';
 import { aheadSource } from './ahead.js';
 import { events as calendarEvents, forgetCalendar } from './calendar.js';
 import './claudenotes.js';
-import { openClaudeKnows } from './claudeknows.js';
-import { openTidy, counts as tidyCounts } from './tidypass.js';
+import './claudeknows.js';
+import './tidypass.js';
 import './sharelink.js';
-import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, pagesIn, bookOf, newPage, worlds, worldOf, setOwnWorkflows } from './library.js';
+import { ensureAreas, areas, bookType, areaColor, pagesIn, bookOf, worldOf, setOwnWorkflows } from './library.js';
 import './dom.js';
-import { isoOf, isoToday } from './dates.js';
+import { isoToday } from './dates.js';
 import { touch, wireScriptBar } from './app/scriptbar.js';
 import { currentEditor, notebook, wireNotebook } from './app/notebookview.js';
-import { besideUntil, go, historyMode, lastChapterAnywhere, lastPlace, newPageHere, openEntry, paneStep, phoneAway, placeOf, setBesideUntil, setHistoryMode, wireRouting } from './app/routing.js';
+import { besideUntil, go, historyMode, lastChapterAnywhere, lastPlace, openEntry, paneStep, phoneAway, placeOf, setBesideUntil, setHistoryMode, wireRouting } from './app/routing.js';
 import { applyRemote, caretAfter, conflicts, migrateOnce, seedIfEmpty, seedNow, setCaretAfter, sync, wireSync } from './app/syncwiring.js';
-import { biblePlaces, connectScribe, markScene, newAct, newChapter, numbering, refreshWords, sceneDetails, scenePop, wireManuscript } from './app/manuscript.js';
+import { biblePlaces, connectScribe, numbering, refreshWords, scenePop, wireManuscript } from './app/manuscript.js';
 import { renderCrumb, scheduleScenes, wireRail } from './app/rail.js';
-import { refreshViews, setLife } from './app/tidying.js';
+import './app/tidying.js';
 import { nextDate, renderWorld, wireLibraryView } from './app/libraryview.js';
-import { printCurrent, toggleCompare, toggleFreshEyes, wireRevising } from './app/revising.js';
+import { wireRevising } from './app/revising.js';
 import { warmRooms, wireSharing } from './app/sharing.js';
-import { toggleGrid, toggleProduction } from './app/productionwiring.js';
-import { frame, goPage, nav, projectOrder, railProjects, strip, todayPanel, wireWorkPages } from './app/workpages.js';
-import { closeHistory, hstrip, openHistory, wireHistory } from './app/historyview.js';
-import { currentSize, currentWidth, hidden, progressPanel, setPage, setShown, step, toggleFocus, togglePageSettings, toggleReading, toggleSections, toggleShortcuts, wirePageSettings } from './app/pagesettings.js';
-import { box, commands, mod, toggleTheme, wireCommands, writing } from './app/commands.js';
+import './app/productionwiring.js';
+import { frame, nav, projectOrder, railProjects, wireWorkPages } from './app/workpages.js';
+import { wireHistory } from './app/historyview.js';
+import { hidden, setShown, wirePageSettings } from './app/pagesettings.js';
+import { wireCommands, writing } from './app/commands.js';
+import { closePalette, menuSpot, sendSelectionPicker, showClaudeKnows, showTidy, wireQuickInserts } from './app/quickinserts.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -268,557 +269,7 @@ wirePageSettings();
 
 wireCommands();
 
-// Pictures and files from this device, put in where the caret is.
-// ---------- quick inserts (the / menu, Ctrl+Shift+; and Ctrl+;) ----------
-
-const timeNow = () => new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, ' ').toLowerCase();
-const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-function dayFrom(n) { const d = new Date(); d.setDate(d.getDate() + n); return d; }
-const shortDay = (d) => d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-
-function insertTime(ed) { ed.chain().focus().insertContent(`${timeNow()} `).run(); }
-// A date is a link to that day's page (made when you first write on it).
-function insertDay(ed, n) {
-  const id = dayId(isoOf(dayFrom(n)));
-  ed.chain().focus().insertContent([{ type: 'entryRef', attrs: { id, title: titleOf({ kind: 'day', id }) } }, { type: 'text', text: ' ' }]).run();
-}
-// The time on its own line with the caret on a fresh line under it, ready
-// for an entry (tucked in a level on the notebook).
-function timeHeading(ed) {
-  const outline = ed === notebook.editor;
-  const empty = !ed.state.selection.$from.parent.textContent.trim();
-  const c = ed.chain().focus();
-  if (!empty) (outline ? c.splitListItem('listItem') : c.splitBlock());
-  c.insertContent(timeNow()).run();
-  if (outline) ed.chain().splitListItem('listItem').sinkListItem('listItem').scrollIntoView().run();
-  else ed.chain().splitBlock().scrollIntoView().run();
-}
-
-setSlashItems((ed) => {
-  const outline = ed === notebook.editor;
-  const inScript = !outline && isScript();
-  const days = WEEKDAYS.map((name, w) => {
-    const ahead = ((w - new Date().getDay() + 7) % 7) || 7;
-    return { id: name, label: name[0].toUpperCase() + name.slice(1), hint: shortDay(dayFrom(ahead)), more: true, run: (e) => insertDay(e, ahead) };
-  });
-  return [
-    { id: 'time', label: 'Time', hint: timeNow(), keys: '⌘⇧;', run: insertTime },
-    { id: 'now', label: 'Time heading', hint: 'a line to write under', words: ['journal', 'entry', 'log'], run: timeHeading },
-    { id: 'today', label: 'Today', hint: shortDay(new Date()), keys: '⌘;', words: ['date'], run: (e) => insertDay(e, 0) },
-    { id: 'tomorrow', label: 'Tomorrow', hint: shortDay(dayFrom(1)), words: ['date'], run: (e) => insertDay(e, 1) },
-    { id: 'yesterday', label: 'Yesterday', hint: shortDay(dayFrom(-1)), words: ['date'], run: (e) => insertDay(e, -1) },
-    { id: 'link', label: 'Link to a page', keys: '[[', words: ['page'], run: (e) => openPicker(e) },
-    { id: 'tag', label: 'Tag', keys: '#', run: (e) => e.chain().focus().insertContent('#').run() },
-    !outline && { id: 'note', label: 'Note on this paragraph', keys: '⌘⇧N', words: ['comment'], run: () => notes.add() },
-    { id: 'talk', label: 'Talk', hint: 'say it; Claude writes it up here', keys: '⌥C', words: ['voice', 'dictate', 'speak', 'record', 'capture'], run: () => setTimeout(() => captureHere({ start: true }), 60) },
-    { id: 'picture', label: 'Picture or file', words: ['image', 'photo', 'file', 'attach'], run: () => setTimeout(pickFiles, 120) },
-    outline && { id: 'done', label: 'Done', hint: 'strike the line through', keys: '⌘↵', words: ['todo', 'check'], run: (e) => toggleDone(e) },
-    outline && { id: 'checklist', label: 'Checklist', hint: 'boxes on the lines under this one', words: ['todo', 'to-do', 'list', 'tick', 'checkbox'], run: (e) => toggleChecklist(e) },
-    outline && { id: 'box', label: 'Box', hint: 'a tick box on this line', keys: '[ ]', words: ['checkbox', 'todo', 'tick'], run: (e) => toggleBox(e) },
-    !outline && !inScript && { id: 'scene', label: 'Scene break', keys: '⌘⇧↵', words: ['break', 'divider'], run: (e) => e.chain().focus().insertSceneBreak().run() },
-    inScript && { id: 'section', label: 'Section', hint: 'your own heading', words: ['act', 'sequence', 'heading'], run: () => { insertSection(editor.state.selection.$from.before(1)); } },
-    inScript && isWoven() && { id: 'cut', label: 'New scene', hint: 'a faint line, from here on', keys: '⌘⇧↵', words: ['scene', 'break', 'line'], run: () => newScene(editor) },
-    inScript && isWoven() && { id: 'continuous', label: 'Continuous', hint: 'straight on from the scene before', words: ['cont'], run: () => markScene('continuous') },
-    inScript && isWoven() && { id: 'intercut', label: 'Intercut', hint: 'two places at once (a phone call)', words: ['phone', 'cross'], run: () => markScene('intercut') },
-    inScript && isWoven() && { id: 'flashback', label: 'Flashback', hint: 'this scene is the past', words: ['past', 'memory'], run: () => markScene('flashback') },
-    inScript && isWoven() && { id: 'montage', label: 'Montage', hint: 'a run of moments', words: ['series'], run: () => markScene('montage') },
-    inScript && isWoven() && { id: 'scene', label: 'Scene details', hint: 'place, time, title', words: ['place', 'time', 'title', 'slug'], run: () => setTimeout(sceneDetails, 30) },
-    ...days
-  ].filter(Boolean);
-});
-
-function pickFiles() {
-  const ed = currentEditor();
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.multiple = true;
-  input.addEventListener('change', () => {
-    const files = [...input.files];
-    if (files.length) insertFiles(ed.view, ed.schema.nodes.file, files, null, tooBig);
-  });
-  input.click();
-}
-
-// The piece you're in, wherever you are in it.
-function currentBookId() {
-  if (view() === 'project') return state.bookId;
-  if (view() === 'compare') return state.compareId;
-  if (writing()) return state.project?.id || null;
-  if (inNotebook() && notebook.page?.kind === 'project') return notebook.page.id;
-  return null;
-}
-const currentBook = () => getEntry(currentBookId());
-const currentWorld = () => getEntry(state.worldId);
-// The page, piece or world you're in, for What Claude knows (null on a day page or the Library).
-async function knowsThing() {
-  if (inNotebook() && notebook.page?.kind === 'page') return notebook.page;
-  if (currentBookId()) return currentBook();
-  if (state.worldId && view() === 'world') return currentWorld();
-  return null;
-}
-// Bring in old notes: a section pasted or dropped from another app becomes a page.
-async function bringInOld() {
-  const base = location.origin + location.pathname;
-  const { openBringIn } = await import('./bringin.js');
-  await openBringIn({
-    ask: askServer, canAsk: canAskServer, toast, base,
-    open: (row) => openEntry(row.id),
-    applied: async (rows) => { if (rows.length) await applyRemote(rows); await refreshViews(); },
-    tags: async () => statsOf(await tagIndex()).sort((a, b) => b.count - a.count).map((t) => t.tag)
-  });
-}
-
-const showClaudeKnows = async (thing) => openClaudeKnows(thing === undefined ? await knowsThing() : thing, { toast });
-
-// Claude's tidy pass (src/tidypass.js): its suggestions to tick yes or no, and
-// what it changed itself through the connector, each with an Undo.
-async function showTidy() {
-  if (!$('.palette').hidden) closePalette(false);
-  await openTidy({
-    flush: () => Promise.all([store.close(editor.state.doc), notebook.close()]),
-    setLife,
-    onRows: (rows) => applyRemote(rows),
-    open: (id) => openEntry(id),
-    canAsk: canAskServer,
-    // Claude makes the batch on the server; it comes down with the next sync.
-    ask: async () => { const got = await askServer({ mode: 'tidy' }); await sync.run(); return got?.count || 0; },
-    onClose: () => tidyNudge(),
-    toast
-  });
-}
-// On today's page, a quiet line while Claude has tidy-ups waiting or has changed something since you last looked.
-let nudgeAt = 0;
-async function tidyNudge() {
-  const el = $('.tidy-nudge');
-  if (!el) return;
-  const today = inNotebook() && notebook.isDay && notebook.page?.id === dayId(isoToday());
-  const stamp = ++nudgeAt;
-  const { waiting, changes } = today ? await tidyCounts() : { waiting: 0, changes: 0 };
-  if (stamp !== nudgeAt) return;
-  el.hidden = !(waiting || changes);
-  el.textContent = ['Tidy pass', waiting ? `${waiting} to look at` : '', changes ? `Claude changed ${changes === 1 ? 'a thing' : `${changes} things`}` : ''].filter(Boolean).join(' · ');
-}
-const menuSpot = () => ({ left: Math.max(8, window.innerWidth / 2 - 130), top: 110 });
-
-async function showTrash() {
-  await go({ view: 'library', area: null });
-  const box = $('#lib-trash-box');
-  if (box.hidden) toast('The Trash is empty');
-  else { box.open = true; box.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-}
-
-// Everything you can go to: books, areas, chapters, pages and recent days.
-// Move to…: send the line you're on (and what's under it) to another page or day.
-function moveLinePicker() {
-  const eid = notebook.currentLine();
-  if (!eid || !inNotebook()) return;
-  const send = (id, fallback) => async () => {
-    if (await notebook.moveLineTo(eid, id, fallback)) statusEl.textContent = (`Moved to ${fallback ? titleOf(fallback) : titleOf(await getEntry(id))}`);
-  };
-  const day = (offset) => { const d = new Date(); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-  openPalette('move', async () => {
-    const out = [];
-    for (const [label, iso] of [['Today', day(0)], ['Tomorrow', day(1)], ['Yesterday', day(-1)]]) {
-      const id = dayId(iso);
-      if (id !== notebook.page?.id) out.push({ label, keys: 'day', run: send(id, entry('day', { id, title: iso })) });
-    }
-    for (const pg of (await byKind('page')).filter((x) => !x.deleted && x.id !== notebook.page?.id).sort((a, c) => c.updated_at - a.updated_at)) out.push({ label: pg.title || 'Untitled page', keys: 'page', run: send(pg.id) });
-    const days = (await byKind('day')).filter((d) => !d.deleted && d.id !== notebook.page?.id).sort((a, c) => (a.title < c.title ? 1 : -1)).slice(0, 30);
-    for (const d of days) out.push({ label: titleOf(d), keys: 'day', run: send(d.id) });
-    return out;
-  });
-}
-
-// Send selection to…: the paragraphs or lines the selection touches (or the
-// one the caret is in) move together to a chapter, page or day.
-function selectedIds(ed) {
-  const { from, to } = ed.state.selection;
-  const ids = [];
-  ed.state.doc.descendants((node, pos) => {
-    if (pos + node.nodeSize < from || pos > to) return false;
-    if (node.attrs?.eid && (node.type.name === 'listItem' || node.isBlock)) { ids.push(node.attrs.eid); return false; }
-    return true;
-  });
-  return ids;
-}
-
-// ids: the paragraphs or lines to send (the six-dot menu passes its own one).
-function sendSelectionPicker(ids = selectedIds(currentEditor())) {
-  if (!ids.length) return;
-  const here = inNotebook() ? notebook.page?.id : state.chapterId;
-  const send = (id, fallback) => async () => {
-    const n = await moveEntries(ids, id, { fallback });
-    if (n) statusEl.textContent = `Moved ${n === 1 ? '' : `${n} `}to ${fallback ? titleOf(fallback) : titleOf(await getEntry(id))}`;
-  };
-  const day = (offset) => { const d = new Date(); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-  openPalette('move', async () => {
-    const out = [];
-    for (const [label, iso] of [['Today', day(0)], ['Tomorrow', day(1)], ['Yesterday', day(-1)]]) {
-      const id = dayId(iso);
-      if (id !== here) out.push({ label, keys: 'day', run: send(id, entry('day', { id, title: iso })) });
-    }
-    for (const ch of (await byKind('chapter')).filter((x) => !gone(x) && x.id !== here).sort((a, c) => c.updated_at - a.updated_at)) {
-      const book = await bookOf(ch);
-      if (book && !gone(book)) out.push({ label: `${ch.title || 'Untitled'} · ${book.title || 'Untitled'}`, keys: 'chapter', run: send(ch.id) });
-    }
-    for (const pg of (await byKind('page')).filter((x) => !gone(x) && x.id !== here).sort((a, c) => c.updated_at - a.updated_at)) out.push({ label: pg.title || 'Untitled page', keys: 'page', run: send(pg.id) });
-    for (const d of (await byKind('day')).filter((x) => !x.deleted && x.id !== here).sort((a, c) => (a.title < c.title ? 1 : -1)).slice(0, 30)) out.push({ label: titleOf(d), keys: 'day', run: send(d.id) });
-    return out;
-  });
-}
-
-// Gather a tag: pick the page its lines should gather on (from the tag's list).
-function gatherOntoPage(tag) {
-  if (!tag) return;
-  $('.tag-results').hidden = true;
-  const onto = (pageId) => async () => {
-    await go({ view: 'notebook', pageId });
-    const n = await notebook.addGather(tag);
-    statusEl.textContent = n ? `Gathered ${n} #${tag} ${n === 1 ? 'line' : 'lines'}` : `Gathering #${tag} here`;
-  };
-  openPalette('pick', async () => {
-    const out = [];
-    if (notebook.page && !notebook.isDay) out.push({ label: `This page: ${titleOf(notebook.page)}`, keys: 'page', run: onto(notebook.page.id) });
-    const label = tag.charAt(0).toUpperCase() + tag.slice(1).replace(/[-_]/g, ' ');
-    out.push({ label: `A new page called “${label}”`, keys: 'new', run: async () => {
-      const world = notebook.page && !notebook.isDay ? await worldOf(notebook.page) : null;
-      const page = await newPage(world?.id || (view() === 'project' ? state.bookId : null), label);
-      await onto(page.id)();
-    } });
-    for (const pg of (await byKind('page')).filter((x) => !x.deleted && x.id !== notebook.page?.id).sort((a, c) => c.updated_at - a.updated_at)) out.push({ label: pg.title || 'Untitled page', keys: 'page', run: onto(pg.id) });
-    return out;
-  }, `Gather #${tag} onto which page?`);
-}
-
-// Gather a tag onto the page you're on: pick the tag.
-function gatherTagHere() {
-  openPalette('pick', async () => {
-    const tags = new Map();
-    for (const kind of ['line', 'para']) for (const r of await byKind(kind)) for (const t of r.tags || []) tags.set(t, (tags.get(t) || 0) + 1);
-    return [...tags].sort((a, b) => b[1] - a[1]).map(([t, n]) => ({ label: `#${t}`, keys: String(n), run: async () => {
-      const added = await notebook.addGather(t);
-      statusEl.textContent = added ? `Gathered ${added} #${t} ${added === 1 ? 'line' : 'lines'}` : `Gathering #${t} here`;
-    } }));
-  }, 'Gather which #tag onto this page?');
-}
-
-async function places(only) {
-  const [allAreas, allBooks, allWorlds] = await Promise.all([areas(), books(), worlds()]);
-  const out = [];
-  const worldName = new Map(allWorlds.map((w) => [w.id, w.title || 'Untitled']));
-  for (const w of allWorlds.sort((a, c) => c.updated_at - a.updated_at)) out.push({ label: w.title || 'Untitled', keys: 'world', run: () => go({ view: 'world', id: w.id }) });
-  for (const b of allBooks.sort((a, c) => c.updated_at - a.updated_at)) {
-    const w = worldName.get(b.parent_id);
-    // A world's only piece of the same name is already listed as the world.
-    if (w === (b.title || 'Untitled') && allBooks.filter((x) => x.parent_id === b.parent_id).length === 1) continue;
-    out.push({ label: w ? `${b.title || 'Untitled'} · ${w}` : b.title || 'Untitled', keys: kindName(b).toLowerCase(), run: () => go({ view: 'project', id: b.id }) });
-  }
-  if (only === 'books') return out;
-  for (const a of allAreas) out.push({ label: a.title, keys: 'area', run: () => go({ view: 'library', area: a.id }) });
-  // Every act and chapter in two reads, rather than a read per book and act.
-  const [allActs, allChapters] = await Promise.all([byKind('act'), byKind('chapter')]);
-  const under = new Map();
-  for (const r of [...allActs, ...allChapters]) (under.get(r.parent_id) || under.set(r.parent_id, []).get(r.parent_id)).push(r);
-  const inOrder = (id) => (under.get(id) || []).sort(bySort);
-  for (const b of allBooks.filter(hasManuscript)) {
-    for (const act of inOrder(b.id)) if (act.kind === 'act') for (const ch of inOrder(act.id)) out.push({ label: `${ch.title} · ${b.title}`, keys: 'chapter', run: () => go({ view: 'write', chapterId: ch.id }) });
-  }
-  for (const p of (await byKind('page')).filter((x) => !x.deleted)) out.push({ label: p.title || 'Untitled page', keys: 'page', run: () => go({ view: 'notebook', pageId: p.id }) });
-  const days = (await byKind('day')).filter((d) => !d.deleted).sort((a, c) => (a.title < c.title ? 1 : -1)).slice(0, 30);
-  for (const d of days) out.push({ label: titleOf(d), keys: 'day', run: () => go({ view: 'notebook', pageId: d.id }) });
-  return out;
-}
-
-let paletteIndex = 0;
-let paletteItems = [];
-let paletteMode = 'commands';
-let paletteSource = commands;
-let paletteReady = Promise.resolve();
-let paletteGroup = null;
-let searchIdx = null;
-const KIND_LABEL = { para: 'text', heading: 'heading', line: 'line', note: 'note', scene: 'scene', project: 'book', chapter: 'chapter', page: 'page', area: 'area' };
-
-// A search result: open it where it lives, with the caret on it.
-async function openHit(row) {
-  if (row.kind === 'note') { await openEntry(row.parent_id); if (!notes.visible) notes.setVisible(true); return; }
-  if (row.kind === 'chapter') return go({ view: 'write', chapterId: row.id });
-  return openEntry(row.id);
-}
-
-async function openPalette(mode = 'commands', only, placeholder) {
-  // Open and focus at once so nothing typed is lost; the list fills in after.
-  box.stop();
-  // Commands, places and adding a task: the one box (box.js).
-  if (mode === 'commands') return openBox({ all: only === 'all', placeholder });
-  paletteMode = mode;
-  paletteGroup = null;
-  const listed = mode === 'move' || mode === 'pick';
-  paletteSource = [];
-  paletteReady = Promise.resolve();
-  $('.palette').hidden = false;
-  $('.palette-backdrop').hidden = false;
-  const input = $('#palette-input');
-  input.placeholder = mode === 'pick' ? placeholder : mode === 'search' ? 'Search all your writing…' : mode === 'move' ? 'Move this line to…' : mode === 'go' ? (only === 'books' ? 'Go to a book…' : 'Go to a book, chapter, page or day…') : 'Type a command…';
-  input.value = typeof only === 'string' && mode === 'search' ? only : '';
-  input.focus();
-  filterPalette();
-  if (mode === 'search') {
-    // Stores what's written now; each search after that is instant.
-    searchIdx = null;
-    paletteReady = (async () => { await store.close(editor.state.doc); await notebook.close(); return searchIndex(); })().then((idx) => {
-      if (paletteMode !== 'search') return;
-      searchIdx = idx;
-      filterPalette();
-    });
-    await paletteReady;
-  }
-  if (mode === 'go' || listed) {
-    paletteReady = (listed ? only() : places(only)).then((list) => {
-      if (paletteMode !== mode) return;
-      paletteSource = list;
-      filterPalette();
-    });
-    await paletteReady;
-  }
-}
-
-// The one box: Ctrl + K or Ctrl + O, the Go button on a phone. find: put the
-// caret in it (a phone keeps its keyboard down until you tap the box).
-function openBox({ all = false, find = !touch.matches, placeholder = '' } = {}) {
-  paletteMode = 'box';
-  paletteGroup = null;
-  body.classList.remove('show-outline', 'show-top');
-  $('.palette').hidden = false;
-  $('.palette-backdrop').hidden = false;
-  body.classList.add('go-on');
-  const input = $('#palette-input');
-  input.value = '';
-  if (find) input.focus();
-  box.start({ all, find });
-  if (placeholder) input.placeholder = placeholder;
-}
-const boxOpen = () => !$('.palette').hidden && paletteMode === 'box';
-
-function closePalette(refocus = true) {
-  box.stop();
-  body.classList.remove('go-on');
-  $('.palette').hidden = true;
-  $('.palette-backdrop').hidden = true;
-  if (refocus && (writing() || inNotebook())) currentEditor().commands.focus();
-}
-
-function filterPalette() {
-  // Straight and curly apostrophes are the same thing here ("what's when").
-  const norm = (t) => t.toLowerCase().replace(/[’‘']/g, '');
-  if (paletteMode === 'box') return;
-  const q = norm($('#palette-input').value.trim());
-  if (paletteMode === 'search') {
-    const raw = $('#palette-input').value;
-    const hits = searchIdx ? searchIdx.find(raw) : [];
-    paletteItems = hits.map((h) => ({ label: h.snippet, hint: h.where, keys: KIND_LABEL[h.row.kind] || '', run: () => openHit(h.row) }));
-    if (!paletteItems.length) {
-      const note = !searchIdx ? 'Looking…' : raw.trim().length < 2 ? 'Type a word or two from anything you’ve written' : 'Nothing found';
-      paletteItems = [{ label: note, keys: '', stay: true, run: () => {} }];
-    }
-  } else {
-    // Best matches first: the whole name, then names starting with it, then a
-    // word starting with it, then anywhere (so "Page 3" isn't lost behind "Page 30").
-    const rank = (label) => {
-      const l = norm(label);
-      if (l === q) return 0;
-      if (l.startsWith(q)) return l[q.length] === ' ' ? 1 : 2;
-      if (l.includes(` ${q}`)) return 3;
-      return l.includes(q) ? 4 : 5;
-    };
-    // A command's other words (theme for the look, catch-up for the Desk) find it too, after the names.
-    // Several words find a name holding them all, in any order ("calendar week").
-    const words = q.split(/\s+/).filter(Boolean);
-    const allIn = (l) => words.length > 1 && words.every((w) => l.includes(w));
-    const hit = (c) => norm(c.label).includes(q) || allIn(norm(c.label));
-    paletteItems = paletteSource.filter((c) => hit(c))
-      .map((c, i) => ({ c, i, r: q ? rank(c.label) : 0 })).sort((a, b) => a.r - b.r || a.i - b.i).slice(0, 60).map((x) => x.c);
-    // Not a title? Offer to look inside the writing too.
-    if (paletteMode === 'go' && q.length > 1) {
-      const text = $('#palette-input').value.trim();
-      paletteItems.push({ label: `Search inside your writing for “${text}”`, keys: `${mod}⇧F`, stay: true, run: () => openPalette('search', text) });
-    }
-  }
-  // In a category, start on its first command rather than the way back.
-  paletteIndex = paletteItems[0]?.back && paletteItems.length > 1 ? 1 : 0;
-  const list = $('#palette-list');
-  list.replaceChildren();
-  paletteItems.forEach((c, i) => {
-    const li = document.createElement('li');
-    li.setAttribute('role', 'option');
-    li.setAttribute('aria-selected', String(i === paletteIndex));
-    li.innerHTML = '<span class="label"></span><span class="keys"></span>';
-    li.firstChild.textContent = c.label;
-    if (c.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = c.hint; li.firstChild.append(h); }
-    if (c.back) li.classList.add('back');
-    if (c.stay) li.classList.add('opens');
-    li.lastChild.textContent = keyLabel(c.keys);
-    li.addEventListener('click', () => runCommand(c));
-    li.addEventListener('mousemove', () => selectPalette(i));
-    list.append(li);
-  });
-}
-
-function selectPalette(i) {
-  paletteIndex = i;
-  [...$('#palette-list').children].forEach((li, j) => li.setAttribute('aria-selected', String(j === i)));
-  $('#palette-list').children[i]?.scrollIntoView({ block: 'nearest' });
-}
-
-function runCommand(c) {
-  if (c.stay) return c.run();
-  closePalette(paletteMode !== 'go');
-  c.run();
-}
-
-$('#palette-input').addEventListener('input', filterPalette);
-$('#palette-input').addEventListener('keydown', (e) => {
-  if (paletteMode === 'box') return;
-  if (e.key === 'ArrowDown') { e.preventDefault(); selectPalette(Math.min(paletteIndex + 1, paletteItems.length - 1)); }
-  if (e.key === 'ArrowUp') { e.preventDefault(); selectPalette(Math.max(paletteIndex - 1, 0)); }
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    // Shift + Enter or Ctrl + Enter: beside.
-    const beside = (e.shiftKey || e.ctrlKey || e.metaKey) && !['move', 'pick'].includes(paletteMode);
-    // Enter pressed before the list arrived still picks the best match.
-    paletteReady.then(() => {
-      const c = paletteItems[paletteIndex];
-      if (!c) return;
-      // Shift + Enter (or Ctrl + Enter): where it leads opens beside.
-      if (beside && !c.stay && (!c.group || c.group === 'go')) setBesideUntil(Date.now() + 1500);
-      runCommand(c);
-    });
-  }
-  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePalette(); }
-});
-$('.palette-backdrop').addEventListener('click', () => closePalette());
-
-function toggleNotes() {
-  notes.setVisible(!notes.visible);
-}
-document.addEventListener('notes-visibility', () => { $('#notes-toggle').setAttribute('aria-pressed', String(notes.visible)); });
-
-const toggleWriteToday = () => go(inNotebook() ? { view: 'write' } : { view: 'notebook', pageId: dayId(isoToday()) });
-
-document.addEventListener('click', (e) => {
-  const b = e.target.closest('[data-cmd]');
-  if (!b) return;
-  const cmd = b.dataset.cmd;
-  if (cmd === 'palette') openPalette();
-  if (cmd === 'notes' && writing()) toggleNotes();
-  if (cmd === 'page') togglePageSettings();
-  if (cmd === 'history') hstrip.toggle();
-  if (cmd === 'history-list') openHistory();
-  if (cmd === 'new-chapter') newChapter();
-  if (cmd === 'new-act') newAct();
-  if (cmd === 'new-page') newPageHere();
-  if (cmd === 'view') toggleWriteToday();
-  if (cmd === 'focus') toggleFocus();
-  if (cmd === 'shortcuts') toggleShortcuts();
-  if (cmd === 'stats') progressPanel.toggle();
-  if (cmd === 'library') go({ view: 'library', area: null });
-  if (cmd === 'grid') toggleGrid();
-  if (cmd === 'production') toggleProduction();
-  // Beside, the plan's own Day is today's plan alone, not the whole page.
-  if (cmd === 'today') go(inPane && view() === 'plan' ? BESIDE_PLACES.plan : { view: 'notebook', pageId: dayId(isoToday()) });
-  // On a phone the day is two views: its page, and its plan.
-  if (cmd === 'today-page' || cmd === 'today-plan') plan.goTab(cmd === 'today-page' ? 'page' : 'plan');
-  if (cmd === 'beside') toggleBesidePane();
-  if (cmd === 'talk') openTalk();
-  if (cmd === 'drawer') go({ view: 'drawer' });
-  if (cmd === 'go') nav.toggle();
-  if (cmd === 'mic') captureHere({ start: true });
-  if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
-  if (cmd === 'tags') go({ view: 'tags' });
-  if (cmd === 'week') go({ view: 'plan', tab: 'week' });
-  if (cmd === 'when' || cmd === 'plan') go({ view: 'plan', tab: 'plan' });
-  if (cmd === 'calendar') plan.goTab('cal');
-  if (cmd === 'ahead') go({ view: 'plan', tab: 'ahead' });
-  if (cmd === 'pace') go({ view: 'plan', tab: 'pace' });
-  if (cmd === 'desk') go({ view: 'desk' });
-  if (cmd === 'desk-history') go({ view: 'desk', tab: 'history' });
-  if (cmd === 'close-tag') { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
-});
-
-document.addEventListener('keydown', (e) => {
-  const m = e.metaKey || e.ctrlKey;
-  const k = e.key.toLowerCase();
-  if (paneKeys(e, m)) return;
-  // Ctrl + K: the box; again while it's open and empty, All commands.
-  if (m && !e.shiftKey && k === 'k') { e.preventDefault(); if ($('.palette').hidden) openBox({ find: true }); else if (boxOpen() && !box.all && !$('#palette-input').value) box.setAll(true); else closePalette(); }
-  else if (m && e.shiftKey && !e.altKey && e.code === 'Period') { e.preventDefault(); toggleSections(); }
-  else if (m && e.key === '.') { e.preventDefault(); toggleFocus(); }
-  else if (m && !e.shiftKey && !e.altKey && e.code === 'Backslash') { e.preventDefault(); toggleBesidePane(); }
-  // Alt + T: talk it through with Claude, beside where you are.
-  else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyT') { e.preventDefault(); openTalk(); }
-  // Alt + Shift + T: everything left from earlier days onto today.
-  else if (e.altKey && !m && e.shiftKey && e.code === 'KeyT') { e.preventDefault(); plan.bringToday(); }
-  // Alt + P: the plan beside today's page, or on top of it.
-  else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyP' && !inPane) { e.preventDefault(); flipPlan(); }
-  // Alt + 1, 2, 3 in Today: Today, Plan, Calendar (again in a calendar: the next zoom).
-  else if (e.altKey && !m && !e.shiftKey && /^Digit[1-3]$/.test(e.code) && inToday()) { e.preventDefault(); todayKey(Number(e.code.slice(5))); }
-  // Alt + W: When (today, this week, next week, later…) for the line or lines here.
-  else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyW') { e.preventDefault(); whenHere(); }
-  // Alt + Left / Right: Back and Forward, everywhere (in a line too), so a task
-  // zoomed into from the plan zooms back out the way an outliner does.
-  else if (e.altKey && !m && !e.shiftKey && !inPane && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); if (e.key === 'ArrowLeft') history.back(); else history.forward(); }
-  else if (m && e.shiftKey && k === 'f') { e.preventDefault(); openPalette('search'); }
-  else if (m && e.shiftKey && k === 'o') { e.preventDefault(); go({ view: 'library', area: null }); }
-  else if (m && k === 'o') { e.preventDefault(); if (boxOpen()) closePalette(); else { if (!$('.palette').hidden) closePalette(false); openBox({ find: true }); } }
-  else if (m && e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); step(e.key === 'ArrowDown' ? 1 : -1); }
-  else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketLeft') { e.preventDefault(); if (inPane) paneStep(-1); else history.back(); }
-  else if (m && !e.shiftKey && !e.altKey && e.code === 'BracketRight') { e.preventDefault(); if (inPane) paneStep(1); else history.forward(); }
-  else if (m && !e.altKey && e.code === 'Semicolon' && (writing() || inNotebook()) && currentEditor().isFocused) { e.preventDefault(); if (e.shiftKey) insertTime(currentEditor()); else insertDay(currentEditor(), 0); }
-  else if (m && (e.key === '/' || e.code === 'Slash')) { e.preventDefault(); toggleShortcuts(); }
-  else if (m && e.shiftKey && k === 'p') { e.preventDefault(); progressPanel.toggle(); }
-  else if (m && e.shiftKey && k === 'j') { e.preventDefault(); todayPanel.toggle(); }
-  else if (m && e.shiftKey && !e.altKey && k === 'u') { e.preventDefault(); go({ view: 'desk' }); }
-  else if (m && k === 'j') { e.preventDefault(); toggleWriteToday(); }
-  else if (m && k === '1') { e.preventDefault(); body.classList.toggle('pin-outline'); }
-  else if (m && k === '2' && writing()) { e.preventDefault(); toggleNotes(); }
-  else if (((m && e.shiftKey) || (!isMac && e.altKey && !m && !e.shiftKey)) && e.code === 'KeyN' && writing()) { e.preventDefault(); notes.add(); }
-  else if (e.altKey && e.shiftKey && !m && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && writing() && editor.isFocused) { e.preventDefault(); blocks.moveCurrent(e.key === 'ArrowUp' ? -1 : 1); }
-  else if (m && e.shiftKey && k === 'e' && writing()) { e.preventDefault(); editor.commands.focus(); alts.toggle({ scope: 'word', focusAdd: true }); }
-  else if (m && e.shiftKey && k === 'd' && writing() && editor.isFocused) { e.preventDefault(); newParagraphVersion(editor); }
-  else if (e.altKey && !e.shiftKey && !m && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && writing() && editor.isFocused) { if (flip(editor, e.key === 'ArrowDown' ? 1 : -1)) e.preventDefault(); }
-  else if (m && e.shiftKey && k === 'h' && (writing() || inNotebook())) { e.preventDefault(); if (!$('.history').hidden) closeHistory(); else hstrip.toggle(); }
-  else if (m && e.shiftKey && k === 'l') { e.preventDefault(); toggleTheme(); }
-  else if (m && e.shiftKey && k === 'g') { e.preventDefault(); toggleGrid(); }
-  else if (m && e.shiftKey && !e.altKey && k === 's') { e.preventDefault(); toggleProduction(); }
-  else if (m && e.shiftKey && !e.altKey && k === 'y') { e.preventDefault(); toggleFreshEyes(); }
-  else if (m && e.shiftKey && !e.altKey && k === 'x') { e.preventDefault(); toggleCompare(); }
-  else if (m && !e.shiftKey && !e.altKey && k === 'p' && (writing() || view() === 'project' || view() === 'compare' || (inNotebook() && notebook.page?.kind === 'page'))) { e.preventDefault(); printCurrent(); }
-  // Alt + 0 to 6: the pages (Overview, then Gather to Deliver).
-  else if (e.altKey && !m && !e.shiftKey && /^Digit[0-6]$/.test(e.code) && strip.byNumber(Number(e.code.slice(5)))) { e.preventDefault(); goPage(strip.byNumber(Number(e.code.slice(5)))); }
-  // Alt+C: Capture, recording at once; Alt+C again keeps it.
-  // Alt + C talks, and lands where you are (Alt + V, the old draft key, does the same).
-  else if (e.altKey && !m && !e.shiftKey && (e.code === 'KeyC' || e.code === 'KeyV')) { e.preventDefault(); if (!capture.isOpen) captureHere({ start: true }); else if (capture.rec) capture.finish(); }
-  else if (e.altKey && !m && e.code === 'BracketRight') { e.preventDefault(); setPage(currentWidth() + 40, currentSize()); }
-  else if (e.altKey && !m && e.code === 'BracketLeft') { e.preventDefault(); setPage(currentWidth() - 40, currentSize()); }
-  else if (e.altKey && !m && e.code === 'Equal') { e.preventDefault(); setPage(currentWidth(), currentSize() + 1); }
-  else if (e.altKey && !m && e.code === 'Minus') { e.preventDefault(); setPage(currentWidth(), currentSize() - 1); }
-  else if (e.key === 'Escape' && root.classList.contains('reading')) toggleReading();
-  else if (e.key === 'Escape' && pull?.isOpen && !whenOpen() && $('.palette').hidden && !document.querySelector('.pop-menu') && !e.target.closest?.('input, textarea, [contenteditable="true"]') && pull.escape()) e.preventDefault();
-  else if (e.key === 'Escape') {
-    if (alts.isOpen) alts.close();
-    if (!$('.page-settings').hidden) { $('.page-settings').hidden = true; currentEditor().commands.focus(); }
-    if (!$('.history').hidden) closeHistory();
-    if (!$('.tag-results').hidden) { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
-    if (!$('.versions').hidden) conflicts.close();
-    if (!$('.shortcuts').hidden) toggleShortcuts();
-    nav.close();
-    if (progressPanel.isOpen) progressPanel.close();
-    body.classList.remove('show-outline', 'show-top');
-  }
-});
-
-// Save before the tab goes away.
-document.addEventListener('visibilitychange', () => { if (document.hidden) { store.close(editor.state.doc); notebook.close(); } });
-window.addEventListener('pagehide', () => { store.close(editor.state.doc); notebook.close(); });
+wireQuickInserts();
 
 // ---------- capture: talk, and it lands on today's page ----------
 
@@ -1857,4 +1308,4 @@ async function startPane() {
 
 start();
 
-export { $, alts, askServer, besideItem, blankOnce, body, boxOpen, bringInOld, canAskServer, captureHere, closePalette, connectCalendar, currentBook, currentBookId, currentWorld, dayReview, deskPage, editor, filterPalette, fixSpeaker, flipPlan, fromRecordingFile, gatherTagHere, gone, gridTouched, inNotebook, insertDay, insertSection, insertTime, isScript, isWoven, listSoon, looseFoot, looseSoon, makeList, makeMeeting, meetingToAcro, menuSpot, moveLinePicker, notes, openAsked, openBeside, openBox, openModes, openPalette, openProjectBeside, openTalk, paneMoves, panes, pickFiles, plan, planningView, projectPage, pull, pullFromProject, reviewAsked, root, scribeKept, sectionNames, sendSelectionPicker, setElement, setGridTouched, showClaudeKnows, showTidy, showTrash, sideNotes, state, statusEl, store, syncBeside, tagsPage, talkThrough, through, tidyNudge, todayKey, toggleBesidePane, toggleNotes, view, whenHere, writeLineOutAgain, writeOut };
+export { $, alts, askServer, besideItem, blankOnce, blocks, body, canAskServer, capture, captureHere, connectCalendar, dayReview, deskPage, editor, fixSpeaker, flipPlan, fromRecordingFile, gone, gridTouched, inNotebook, inToday, insertSection, isScript, isWoven, listSoon, looseFoot, looseSoon, makeList, makeMeeting, meetingToAcro, notes, openAsked, openBeside, openModes, openProjectBeside, openTalk, paneKeys, paneMoves, panes, plan, planningView, projectPage, pull, pullFromProject, reviewAsked, root, scribeKept, sectionNames, setElement, setGridTouched, sideNotes, state, statusEl, store, syncBeside, tagsPage, talkThrough, through, todayKey, toggleBesidePane, tooBig, view, whenHere, writeLineOutAgain, writeOut };

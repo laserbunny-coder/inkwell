@@ -28,7 +28,7 @@ import { dayWord, loadTasks, addTask } from '../tasks.js';
 import { inPane, PANE_ID, host as paneHost, BESIDE_PLACES } from '../panes.js';
 import { areas, books, bookType, hasManuscript, kindName, newBook, ago, worlds, newPiece } from '../library.js';
 import { isoToday } from '../dates.js';
-import { $, alts, body, bringInOld, canAskServer, captureHere, closePalette, connectCalendar, currentBook, currentBookId, currentWorld, dayReview, deskPage, editor, fixSpeaker, flipPlan, fromRecordingFile, gatherTagHere, gone, inNotebook, insertDay, insertSection, insertTime, isScript, isWoven, makeList, makeMeeting, meetingToAcro, menuSpot, moveLinePicker, notes, openBeside, openModes, openPalette, openTalk, panes, pickFiles, plan, pullFromProject, root, sendSelectionPicker, setElement, showClaudeKnows, showTidy, showTrash, state, store, through, todayKey, toggleBesidePane, toggleNotes, view, whenHere, writeLineOutAgain } from '../main.js';
+import { $, alts, body, canAskServer, captureHere, connectCalendar, dayReview, deskPage, editor, fixSpeaker, flipPlan, fromRecordingFile, gone, inNotebook, insertSection, isScript, isWoven, makeList, makeMeeting, meetingToAcro, notes, openBeside, openModes, openTalk, panes, plan, pullFromProject, root, setElement, state, store, through, todayKey, toggleBesidePane, view, whenHere, writeLineOutAgain } from '../main.js';
 import { touch, typeHere } from './scriptbar.js';
 import { currentEditor, notebook, toggleTypewriter } from './notebookview.js';
 import { go, lastPlace, newPageHere, openBook, openEntry } from './routing.js';
@@ -42,6 +42,7 @@ import { toggleGrid, toggleProduction } from './productionwiring.js';
 import { PAGE_NAMES, goCatchup, goPage, nav, projectOrder, railProjects, strip, todayPanel } from './workpages.js';
 import { hstrip, openHistory } from './historyview.js';
 import { currentSize, currentWidth, hidden, lookTab, progressPanel, setPage, setShown, step, toggleFocus, togglePageSettings, toggleReading, toggleSections, toggleShortcuts } from './pagesettings.js';
+import { bringInOld, closePalette, currentBook, currentBookId, currentWorld, gatherTagHere, insertDay, insertTime, menuSpot, moveLinePicker, openPalette, pickFiles, sendSelectionPicker, showClaudeKnows, showTidy, showTrash, toggleNotes } from './quickinserts.js';
 // The one box (box.js), made once the commands are listed.
 let box = null;
 
