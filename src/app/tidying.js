@@ -8,10 +8,11 @@ import { titleOf, dayId } from '../notebook.js';
 import { isLife, personalArea } from '../pages.js';
 import { inPane, host as paneHost } from '../panes.js';
 import { sharesOf } from '../sharelink.js';
-import { areas, bookType, hasManuscript, kindName, newArea, pagesIn, bookOf, stats, ago, changeType, worlds, worldOf, newPiece, piecesIn, worldTree, usedLabels, SHAPES, shapeOf, levelsOf, nextLevel, FORMATS, formatName, defaultLabel, stageOf, allSets, addOwnWorkflow, dropOwnWorkflow, setById, stageSetOf, stagesIn, stagesOf } from '../library.js';
+import { isFinished, areas, bookType, hasManuscript, kindName, newArea, pagesIn, bookOf, stats, ago, changeType, worlds, worldOf, newPiece, piecesIn, worldTree, usedLabels, SHAPES, shapeOf, levelsOf, nextLevel, FORMATS, formatName, defaultLabel, stageOf, allSets, addOwnWorkflow, dropOwnWorkflow, setById, stageSetOf, stagesIn, stagesOf } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday } from '../dates.js';
 import { addCommands } from './commandlist.js';
+import { loadTasks } from '../tasks.js';
 import { $, editor, gone, inNotebook, notes, root, state, store, view } from '../main.js';
 import { placeScriptBar } from './scriptbar.js';
 import { notebook } from './notebookview.js';
@@ -302,8 +303,42 @@ async function worldMenu(world) {
       { label: 'Move later in my order', run: () => nudgeBook(w, 1) }
     ] : []),
     'sep',
+    isFinished(w) ? { label: 'Reopen project', run: () => reopenWorld(w) } : { label: 'Finish project…', run: () => finishWorld(w) },
     { label: 'Move to Trash…', danger: true, run: () => toTrash(w) }
   ];
+}
+
+// Finishing a project puts it away without deleting anything: off the Desk,
+// the rail and the plan, onto the Library's Finished shelf. Its open tasks
+// go away with it (they come back if it's reopened); done ones still count.
+async function finishWorld(world) {
+  const w = await getEntry(world.id);
+  if (!w) return;
+  if (isFinished(w)) { toast(`“${nameOf(w)}” is already finished`); return; }
+  const open = (await loadTasks()).filter((i) => i.world?.id === w.id && !i.row.fields?.done).length;
+  const name = nameOf(w);
+  const ok = await ask({
+    title: `Finish “${name}”?`,
+    body: `It moves to the Finished shelf at the bottom of the Library, off the Desk, the sidebar and your plan. Every page, piece and done task stays in it, and you can reopen it any time.${open ? ` Its ${plural(open, 'open task')} ${open === 1 ? 'goes away with it and comes' : 'go away with it and come'} back if you reopen it.` : ''}`,
+    ok: 'Finish it'
+  });
+  if (!ok) return;
+  await setFinished(w, Date.now());
+  toast(`“${name}” is finished. It’s on the Finished shelf in the Library.`, { label: 'Undo', run: () => setFinished(w, null) });
+}
+async function reopenWorld(world) {
+  const w = await getEntry(world.id);
+  if (!w) return;
+  if (!isFinished(w)) { toast(`“${nameOf(w)}” isn’t finished`); return; }
+  await setFinished(w, null);
+  toast(`“${nameOf(w)}” is open again, back on the Desk${(await loadTasks()).some((i) => i.world?.id === w.id && !i.row.fields?.done) ? ' with its open tasks' : ''}`);
+}
+async function setFinished(world, at) {
+  const fresh = await getEntry(world.id);
+  const fields = { ...fresh.fields };
+  if (at) fields.finished = at; else delete fields.finished;
+  await putEntries([{ ...fresh, fields, updated_at: Date.now() }]);
+  await refreshViews();
 }
 
 // What a project is. Nothing moves or gets renamed: the shape only says
@@ -636,7 +671,9 @@ async function renderTrash() {
 addCommands(() => [
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
   { group: 'tidy', label: 'This page: rename, move to a world or trash…', keys: '', run: async () => popMenu(null, await pageMenu(notebook.page), menuSpot()), when: () => inNotebook() && notebook.page?.kind === 'page' },
+  { group: 'tidy', label: 'Finish this project (put it away, keep everything)…', keys: '', run: async () => finishWorld(await getEntry(state.worldId)), when: () => !!state.worldId },
+  { group: 'tidy', label: 'Reopen this project', keys: '', run: async () => reopenWorld(await getEntry(state.worldId)), when: () => !!state.worldId },
   { group: 'tidy', label: 'This area: rename, move or trash…', keys: '', run: async () => popMenu(null, await areaMenu({ id: state.libArea }), menuSpot()), when: () => view() === 'library' && !!state.libArea }
 ]);
 
-export { KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, leaveChapter, moveBookToArea, nameOf, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setLife, setStage, worldMenu };
+export { finishWorld, reopenWorld, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, leaveChapter, moveBookToArea, nameOf, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setLife, setStage, worldMenu };

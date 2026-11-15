@@ -243,7 +243,7 @@ export function todosIn(lines, acc = []) { for (const l of lines) { if (l.todo) 
 /** Worlds and life projects, and the pages in their bibles: [{ id, label, title, kind, depth }]. */
 export async function homes() {
   const out = [];
-  const ws = (await worlds()).filter((w) => !w.deleted).sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  const ws = (await worlds()).filter((w) => !w.deleted && !w.fields?.finished).sort((a, b) => (a.title || '').localeCompare(b.title || ''));
   for (const w of ws) {
     if (await inTrash(w.id)) continue;
     const life = !!w.fields?.life;

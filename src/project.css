@@ -19,6 +19,9 @@
 .wp-head { align-items: flex-start; justify-content: space-between; gap: 12px 24px; }
 .wp-head .pill { margin-top: 6px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .wp-sheet .wh-logline { margin: 14px 0 0; max-width: 60ch; text-wrap: pretty; }
+/* A finished project says so, quietly, with Reopen beside it. */
+.wh-finished { margin: 10px 0 0; font-size: 14px; color: var(--muted); }
+.wh-finished .wp-link { margin-left: 4px; }
 
 /* ---------- north star, now, next date ---------- */
 .wp-two { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 8px 20px; margin: 30px 0 0; align-items: baseline; }

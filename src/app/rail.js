@@ -76,7 +76,7 @@ let railBusy; // set in wireRail()
 function renderRail() { railBusy = railBusy.then(drawRail).catch((e) => console.error(e)); return railBusy; }
 
 async function drawRail() {
-  const [allAreas, allWorlds, allBooks, loose] = await Promise.all([areas(), worlds(), books(), loosePages()]);
+  let [allAreas, allWorlds, allBooks, loose] = await Promise.all([areas(), worlds(), books(), loosePages()]);
   // Where you are: the piece being written or shown, the world it's in, the page open.
   let piece = null;
   if (view() === 'write') piece = state.project;
@@ -168,6 +168,8 @@ async function drawRail() {
     for (const sub of allAreas.filter((a) => a.parent_id === area.id)) await areaNode(sub, depth + 1);
   };
 
+  // Finished projects are put away (on the Library's Finished shelf), unless you're in one.
+  allWorlds = allWorlds.filter((w) => !w.fields?.finished || w.id === world?.id);
   for (const area of allAreas.filter((a) => !a.parent_id || !allAreas.some((x) => x.id === a.parent_id))) await areaNode(area, 0);
   const orphans = allWorlds.filter((w) => !allAreas.some((a) => a.id === w.area_id));
   if (orphans.length) { out.push(make('div', 'tree-area', 'Other')); for (const w of orphans) await worldNode(w, 0); }

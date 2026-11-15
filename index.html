@@ -137,6 +137,11 @@
         <div class="panel-label">Loose pages, not in a world yet</div>
         <ul id="lib-loose" class="loose-list"></ul>
       </section>
+      <details id="lib-done-box" class="lib-trash lib-done" hidden>
+        <summary class="panel-label">Finished <span id="lib-done-count"></span></summary>
+        <p class="hint">Projects you’ve finished, with everything still in them. Open one to look back, or reopen it to bring it back to the Desk.</p>
+        <ul id="lib-done" class="loose-list"></ul>
+      </details>
       <details id="lib-trash-box" class="lib-trash" hidden>
         <summary class="panel-label">Trash <span id="lib-trash-count"></span></summary>
         <p class="hint">Things you moved to the Trash, with everything that was in them. Restore puts them back where they were.</p>
@@ -206,6 +211,7 @@
         <span id="wh-more"></span>
       </div>
       <p id="wh-logline" class="wh-logline" spellcheck="true"></p>
+      <p id="wh-finished" class="wh-finished" hidden></p>
       <dl class="wp-two" id="wh-facts"></dl>
       <section class="wp-part" id="wh-calls" hidden></section>
       <div id="wh-stagebar" class="wh-stagebar" hidden></div>

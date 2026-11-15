@@ -46,6 +46,13 @@ export async function books() {
 export async function worlds() {
   return (await byKind('world')).filter((w) => !w.deleted);
 }
+// A finished project (fields.finished: when you finished it) is put away:
+// off the Desk, the rail and the plan, on the Library's Finished shelf, with
+// everything still in it. Reopening brings it all back.
+export const isFinished = (w) => !!w?.fields?.finished;
+export async function liveWorlds() {
+  return (await worlds()).filter((w) => !isFinished(w));
+}
 
 // How a piece is written: prose and scripts in the manuscript view, an
 // outline in the notebook. 'notes' is a book from before worlds that only

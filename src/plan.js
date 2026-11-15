@@ -163,7 +163,7 @@ export class Plan {
     }
     if (!this.dayShown && !this.pageShown && !this.stepsShown) return;
     const turn = (this.turn = (this.turn || 0) + 1);
-    const [items, settings, src, areaList] = await Promise.all([loadTasks(), planSettings(), this.pageShown && this.tab === 'ahead' ? this.hooks.ahead?.() : null, this.pageShown && this.tab === 'week' ? areas() : null]);
+    const [items, settings, src, areaList] = await Promise.all([loadTasks(undefined, { withAway: this.stepsShown && !this.dayShown && !this.pageShown }), planSettings(), this.pageShown && this.tab === 'ahead' ? this.hooks.ahead?.() : null, this.pageShown && this.tab === 'week' ? areas() : null]);
     if (turn !== this.turn) return;
     this.items = items;
     this.free = settings.free;

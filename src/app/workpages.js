@@ -55,7 +55,7 @@ const RAIL_PROJECTS = 7;
 // Every project in your Desk order (what's on stage first, as you dragged
 // them): the one order projects come in everywhere.
 async function projectOrder() {
-  const list = (await byKind('world')).filter((w) => !gone(w));
+  const list = (await byKind('world')).filter((w) => !gone(w) && !w.fields?.finished);
   const order = deskPage ? await deskPage.order() : [];
   const rank = new Map(order.map((id, i) => [id, i]));
   return list.sort((a, b) => (rank.get(a.id) ?? 1e6) - (rank.get(b.id) ?? 1e6) || editedAt(b) - editedAt(a));
@@ -66,7 +66,8 @@ async function railProjects() {
   const [all, list, here] = [await areas(), await projectOrder(), await currentWorldId()];
   const byId = new Map(all.map((a) => [a.id, a]));
   const top = list.slice(0, RAIL_PROJECTS);
-  const extra = here && !top.some((w) => w.id === here) ? list.find((w) => w.id === here) : null;
+  // (A finished project isn't in the order, but shows while you're in it.)
+  const extra = here && !top.some((w) => w.id === here) ? list.find((w) => w.id === here) || (await getEntry(here)) : null;
   return [...top, ...(extra ? [extra] : [])]
     .map((w) => ({ id: w.id, title: w.title, color: areaColor(byId.get(w.area_id)), current: w.id === here }));
 }

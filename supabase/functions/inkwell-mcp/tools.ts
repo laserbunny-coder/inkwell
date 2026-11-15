@@ -816,6 +816,9 @@ async function read(args: Record<string, unknown>, db: Db) {
   throw new Bad(`That id is a ${r.kind}, which read doesn't open. Give a world, piece, chapter or page.`);
 }
 
+/** A project the person has finished and put away (still all there): when, as YYYY-MM-DD. */
+const finishedOf = (w: Entry) => (w.fields?.finished ? { finished: new Date(Number(w.fields.finished)).toISOString().slice(0, 10) } : {});
+
 async function listWorlds(db: Db) {
   const shape = await shapeWithAbouts(db);
   const areas = [...shape.byId.values()].filter((r) => r.kind === "area").sort(bySort);
@@ -824,7 +827,7 @@ async function listWorlds(db: Db) {
   for (const r of shape.byId.values()) if (r.kind === "project") labels.add(labelOf(r));
   return {
     areas: areas.map((a) => shape.areaPath(a.id)),
-    worlds: worlds.map((w) => ({ id: w.id, title: w.title || "Untitled", ...(shape.about.has(w.id) ? { about: shape.about.get(w.id) } : {}), area: shape.areaPath(w.area_id), pieces: shape.pieceTree(w.id), bible: shape.pageTree(w.id) })),
+    worlds: worlds.map((w) => ({ id: w.id, title: w.title || "Untitled", ...(shape.about.has(w.id) ? { about: shape.about.get(w.id) } : {}), ...finishedOf(w), area: shape.areaPath(w.area_id), pieces: shape.pieceTree(w.id), bible: shape.pageTree(w.id) })),
     loose_pages: shape.under(null, "page").map((p) => ({ id: p.id, title: p.title || "Untitled page", ...(shape.about.has(p.id) ? { about: shape.about.get(p.id) } : {}) })),
     labels_in_use: [...labels].sort(),
   };
@@ -1058,7 +1061,7 @@ async function map(db: Db) {
     return x ? { entries: x.n, last_touched: localDate(x.last, tz), ...(stale ? { about_may_be_stale: true } : {}), ...(x.top_tags?.length ? { top_tags: x.top_tags.map((t) => `#${t}`) } : {}) } : { entries: 0 };
   };
   const worldOut = (w: Entry) => ({
-    id: w.id, title: w.title || "Untitled", ...(shape.about.has(w.id) ? { about: shape.about.get(w.id) } : {}),
+    id: w.id, title: w.title || "Untitled", ...(shape.about.has(w.id) ? { about: shape.about.get(w.id) } : {}), ...finishedOf(w),
     pieces: count(w.id, "project"), bible_pages: count(w.id, "page"), ...stats(w.id),
   });
   const areas = [...shape.byId.values()].filter((r) => r.kind === "area").sort(bySort);
