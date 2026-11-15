@@ -16,7 +16,7 @@
 
 import { popMenu } from './menu.js';
 import { getEntry } from './db.js';
-import { dayPlan, weave, addDays, isoOf, setTask, tickTask, PLAN_ID, savePlanSettings, taskOf } from './tasks.js';
+import { dayPlan, weave, addDays, isoOf, setTask, tickTask, PLAN_ID, savePlanSettings, taskOf, TASKS_PAGE } from './tasks.js';
 import { clockWord } from './calendar.js';
 import { media } from './device.js';
 import { make } from './dom.js';
@@ -46,6 +46,39 @@ export function setNowFace(f) { try { localStorage.setItem('nowFace', f); } catc
 export function nowSide() { try { return localStorage.getItem('nowSide') === '1'; } catch { return false; } }
 export function setNowSide(on) { try { localStorage.setItem('nowSide', on ? '1' : '0'); } catch { /* no storage here */ } }
 
+// While a draft is open (Look: "While you write a draft"): nothing, a small
+// dot, or the strip. In Focus nothing shows, whatever the choice.
+export const WRITE_STRIP = [['none', 'Nothing'], ['dot', 'A small dot'], ['strip', 'The strip']];
+export function writeStrip() { try { const f = localStorage.getItem('nowWrite'); return WRITE_STRIP.some((x) => x[0] === f) ? f : 'none'; } catch { return 'none'; } }
+export function setWriteStrip(f) { try { localStorage.setItem('nowWrite', f); } catch { /* no storage here */ } }
+// The Look panel's choice rows (shows.js `choice`), read and set by id.
+export const CHOICES = { nowface: [nowFace, setNowFace], nowwrite: [writeStrip, setWriteStrip] };
+// Anything the strip shows has changed: the pointer, a choice, a switch.
+export const nowChanged = () => document.dispatchEvent(new CustomEvent('inkwell:now'));
+
+// Where the one thing lives, said short ("The Ninja Bunch · Two-minute hook"),
+// and what opens it: the page or piece its line links to, else where it's
+// written. Nothing for a day page or the Tasks page.
+function firstLink(nodes) {
+  for (const n of nodes || []) {
+    if (n.type === 'entryRef' && n.attrs?.id) return n.attrs;
+    const in_ = firstLink(n.content);
+    if (in_) return in_;
+  }
+  return null;
+}
+export function whereOf(i) {
+  if (!i) return null;
+  const w = i.world?.title || '';
+  const link = firstLink(i.row.content);
+  if (link && link.id !== i.world?.id) return { label: [w, link.title || 'Untitled'].filter(Boolean).join(' · '), id: link.id };
+  if (link) return { label: w || link.title || 'Untitled', id: link.id };
+  const r = i.root;
+  if (!r || r.kind === 'day' || r.id === TASKS_PAGE) return null;
+  const name = r.title || 'Untitled';
+  return { label: w && w !== name ? `${w} · ${name}` : name, id: i.row.id, own: true };
+}
+
 export class Now {
   constructor(plan) {
     this.p = plan;
@@ -65,6 +98,7 @@ export class Now {
   async save(patch) {
     this.st = { ...this.st, ...patch, day: this.p.today };
     await savePlanSettings({ now: this.st });
+    nowChanged();
   }
 
   // ---------- what there is ----------
@@ -162,6 +196,15 @@ export class Now {
     thing.tabIndex = 0;
     if (cur.item.notes) { thing.setAttribute('role', 'button'); thing.setAttribute('aria-expanded', String(this.ctxOpen)); thing.title = this.ctxOpen ? 'Hide the lines under it' : 'Show the lines under it'; thing.classList.add('has-notes'); }
     mid.append(thing);
+    const where = !cur.smalls && !this.off('nowwhere') ? whereOf(cur.item) : null;
+    if (where) {
+      const a = make('button', 'now-where');
+      a.type = 'button';
+      a.dataset.now = 'where';
+      a.append(make('span', '', where.label), make('span', 'now-where-go', ' ›'));
+      a.title = hover.matches ? 'Open it (Enter or O)' : 'Open it';
+      mid.append(a);
+    }
     if (this.ctxOpen && cur.item.notes) mid.append(this.p.kidsBox(cur.item.row.id));
     if (this.asking) mid.append(this.choices(cur));
     else {
@@ -369,6 +412,7 @@ export class Now {
       else if (act === 'smalls') { this.smallsOpen = !this.smallsOpen; this.p.redraw(); }
       else if (act === 'ctx') { if (this.m?.cur?.item.notes) { this.ctxOpen = !this.ctxOpen; this.p.redraw(); } }
       else if (act === 'over' || act === 'missed') await this.eventDone(el.dataset.event, act === 'over');
+      else if (act === 'where') await this.openWhere();
       else if (act === 'plan') this.p.goTab('plan');
       else if (act === 'page') this.p.goTab('page');
     } finally { this.busy = false; }
@@ -381,6 +425,14 @@ export class Now {
       { label: 'Do this now', run: () => this.begin(i.row.id) },
       { label: 'Open it', run: () => this.p.open(i) }
     ]);
+  }
+
+  // Into the work: where the one thing lives (the strip keeps it in view there).
+  async openWhere() {
+    const cur = this.m?.cur || this.model().cur;
+    const w = cur && !cur.smalls ? whereOf(cur.item) : null;
+    if (!w) return;
+    await this.p.hooks.openEntry(w.id);
   }
 
   focusFirst(sel) { if (hover.matches) requestAnimationFrame(() => this.p.sheet.querySelector(sel)?.focus()); }
@@ -485,6 +537,7 @@ export class Now {
     else if (k === 'n' && m.cur && !this.asking) go = () => { this.asking = true; this.p.redraw(); this.focusFirst('.now-choice'); };
     else if (k === 's' && m.cur?.smalls) go = () => this.skip();
     else if (k === 'b' && !m.cur && m.cand) go = () => this.begin(m.cand.group ? SMALLS : m.cand.item.row.id);
+    else if ((k === 'o' || (e.key === 'Enter' && !t?.closest?.('button, a'))) && m.cur && !m.cur.smalls && !this.asking && whereOf(m.cur.item)) go = () => this.openWhere();
     else if (e.key === ' ' && !t?.closest?.('button')) go = () => { this.listOpen = !this.listOpen; this.p.redraw(); };
     if (!go) return;
     e.preventDefault();

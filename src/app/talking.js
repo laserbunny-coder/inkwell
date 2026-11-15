@@ -19,6 +19,7 @@ import { Through } from '../through.js';
 import { looseOn } from '../loose.js';
 import { addTask, stepsHome, loadTasks, dayPlan } from '../tasks.js';
 import { readNow, nowSide, setNowSide } from '../now.js';
+import { NowStrip } from '../nowstrip.js';
 import { inPane, host as paneHost } from '../panes.js';
 import { aheadSource } from '../ahead.js';
 import { events as calendarEvents } from '../calendar.js';
@@ -39,6 +40,7 @@ import { openBeside, openEntryBeside, openInMain, openTalk, pull, pullFromProjec
 let tagsPage = null; // the Tags page (set up with capture, below)
 let deskPage = null; // the Desk: every project, what needs you (below)
 let plan = null; // the plan: tasks by day, on a day's page and as Week and Pace (below)
+let nowStrip = null; // the strip that travels: the one thing, away from Today (below)
 let projectPage = null; // what a project's page borrows from the Desk (below)
 let through = null; // Go through: loose lines and the Desk's calls, one at a time (below)
 let dayReview = null; // the day review under a day page (set up with capture, below)
@@ -557,12 +559,14 @@ function wireTalking() {
       pull: inPane ? null : () => pullFromProject(),
       pulling: () => !!pull?.isOpen,
       floor: () => pull?.floor() || 0,
-      redrawn: () => pull?.soon(),
+      redrawn: () => { pull?.soon(); nowStrip?.soon(); },
       toast
     }
   });
   window.__plan = plan;
+  // Away from Today, the one thing travels in a thin strip (not in a pane).
+  if (!inPane) window.__nowStrip = nowStrip = new NowStrip({ plan, view, inToday, go: (place) => go(place), off: (name) => hidden().has(name) });
   if (inNotebook() && notebook.page) plan.showDay(notebook.page);
 }
 
-export { openToday, todayOpensOnNow, askServer, asking, blankOnce, canAskServer, capture, captureHere, dayReview, deskBackend, deskPage, flipPlan, inToday, landShares, looseFoot, looseSoon, openAsked, openCapture, plan, projectPage, scribeKept, setAsking, showCapture, tagsPage, todayKey, wireTalking, writeOut };
+export { nowStrip, openToday, todayOpensOnNow, askServer, asking, blankOnce, canAskServer, capture, captureHere, dayReview, deskBackend, deskPage, flipPlan, inToday, landShares, looseFoot, looseSoon, openAsked, openCapture, plan, projectPage, scribeKept, setAsking, showCapture, tagsPage, todayKey, wireTalking, writeOut };

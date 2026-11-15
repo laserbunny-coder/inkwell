@@ -6,7 +6,7 @@ import { toast } from '../menu.js';
 import { outline } from '../model.js';
 import { resetLinkPics } from '../filenode.js';
 import { SHOWS, SHOW_GROUPS, groupFor } from '../shows.js';
-import { nowFace, setNowFace } from '../now.js';
+import { CHOICES, nowChanged } from '../now.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from '../fonts.js';
 import { inPane } from '../panes.js';
 import { make } from '../dom.js';
@@ -94,7 +94,7 @@ function lookPanel(panel) {
       }
       // A choice of a few (how Now looks): one row of buttons, kept on this device.
       if (r.choice) {
-        const row = make('div', 'ps-choice');
+        const row = make('div', `ps-choice${r.under ? ' sub' : ''}`);
         row.append(make('span', 'ps-choice-l', r.label));
         const seg = make('div', 'ps-seg');
         seg.setAttribute('role', 'radiogroup');
@@ -160,8 +160,9 @@ function setShown(name, on) {
   if (name === 'linkpics') resetLinkPics();
   if (name === 'panes') { if (!on) panes?.closeAll(); panes?.layout(); }
   if (name === 'closedtag' && deskPage?.showing() && deskPage.now) deskPage.render({ now: deskPage.now, failed: false });
-  if (['estimates', 'woven', 'planview', 'foldearlier', 'areahours', 'aheadhours', 'donetasks', 'nowgate', 'smallsgo', 'rowdetails'].includes(name)) { if (plan) { plan.peekDone = false; plan.just = null; plan.took = null; } plan?.refresh(); }
+  if (['estimates', 'woven', 'planview', 'foldearlier', 'areahours', 'aheadhours', 'donetasks', 'nowgate', 'smallsgo', 'rowdetails', 'nowwhere'].includes(name)) { if (plan) { plan.peekDone = false; plan.just = null; plan.took = null; } plan?.refresh(); }
   if (name === 'nextstep') deskPage?.refresh();
+  if (name.startsWith('now')) nowChanged();
   syncSwitches();
 }
 // Reading a script through: only the script pages, no sections, notes or tools.
@@ -206,10 +207,13 @@ function syncQuiet() {
   body.classList.toggle('bar-quiet', quiet);
   if (!quiet) body.classList.remove('bar-peek');
 }
-// A choice row (shows.js `choice`): only Now's face for now.
-const choiceOf = (id) => (id === 'nowface' ? nowFace() : null);
+// A choice row (shows.js `choice`): how Now looks, and what a draft shows.
+const choiceOf = (id) => CHOICES[id]?.[0]() ?? null;
 function setChoice(id, v) {
-  if (id === 'nowface') { setNowFace(v); plan?.redraw(); }
+  if (!CHOICES[id]) return;
+  CHOICES[id][1](v);
+  plan?.redraw();
+  nowChanged();
   syncSwitches();
 }
 function syncSwitches() {

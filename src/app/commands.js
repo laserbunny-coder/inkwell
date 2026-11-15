@@ -17,7 +17,7 @@ import { showSaveButton } from '../savebutton.js';
 import { toggleLight } from '../frame.js';
 import { addLine } from '../capture.js';
 import { tabFor } from '../plan.js';
-import { fiveAtMost, FACES, nowFace, setNowFace } from '../now.js';
+import { fiveAtMost, CHOICES, nowChanged } from '../now.js';
 import { Box } from '../box.js';
 import { describe } from '../commandinfo.js';
 import { SHOWS } from '../shows.js';
@@ -243,7 +243,7 @@ function wireCommands() {
   // (shows.js); the ones written above by hand keep their own.
   for (const sh of SHOWS) {
     if (sh.choice) {
-      for (const [v, l] of sh.choice) commands.push({ group: 'plan', label: `${sh.cmd}: ${l}`, keys: '', hint: sh.hint, words: sh.words, run: () => { setNowFace(v); plan?.redraw(); toast(`${sh.label}: ${l}`); } });
+      for (const [v, l] of sh.choice) commands.push({ group: 'plan', label: `${sh.cmd}: ${l}`, keys: '', hint: sh.hint, words: sh.words, run: () => { CHOICES[sh.id]?.[1](v); plan?.redraw(); nowChanged(); toast(`${sh.label}: ${l}`); } });
       continue;
     }
     if (!sh.cmd || commands.some((c) => c.label === sh.cmd)) continue;
