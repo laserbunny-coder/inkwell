@@ -708,6 +708,13 @@ html.has-rail .pl-switches { flex-direction: row; align-items: center; }
 .pl-restline.open span::after { transform: rotate(-135deg); margin-bottom: -.1em; }
 .pl-restline span { opacity: .75; }
 @media (--touch) { .pl-restline span { opacity: 1; } }
+/* Today's fold, folded: one clean line, its words only on hover (none on a
+   phone, where a tap on the line opens it), and no second line under the
+   plan; the space between the tasks and the page stays. */
+.pl-today-rest:not(.open) span { opacity: 0; }
+.pl-today-rest:not(.open):is(:hover, :focus-visible) span { opacity: 1; }
+@media (--touch) { .pl-today-rest:not(.open) span, .pl-today-rest:not(.open):is(:hover, :focus-visible) span { opacity: 0; } }
+.plan:has(> * .pl-today-rest:not(.open)), .plan:has(> .pl-today-rest:not(.open)) { border-bottom-color: transparent; }
 .pl-rest:not(.open) { display: none; }
 :is(html.pl-dragging, html.pl-touchdrag, html.pull-dragging) .pl-rest { display: block; }
 
