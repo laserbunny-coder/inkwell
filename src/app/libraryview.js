@@ -12,11 +12,12 @@ import { dayWord } from '../tasks.js';
 import { areas, bookType, hasManuscript, kindName, areaColor, newArea, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, worlds, worldOf, piecesIn, worldTree, worldStats, usedLabels, SHAPES, shapeOf, nextLevel, newShaped, editedAt, defaultLabel, stageOf, nextLabel, setForNew, typeForSet, stageSetOf, stagesOf, isReady } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday } from '../dates.js';
-import { $, askServer, canAskServer, editor, gone, gridTouched, notes, plan, projectPage, setGridTouched, state, store, view } from '../main.js';
+import { $, editor, gone, gridTouched, notes, setGridTouched, state, store, view } from '../main.js';
 import { go, openBook, openEntry } from './routing.js';
 import { areaPath, dot, renameable, renderCrumb, renderRail, subtree } from './rail.js';
 import { KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, moveBookToArea, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu } from './tidying.js';
 import { renderBoard } from './workpages.js';
+import { askServer, canAskServer, plan, projectPage } from './talking.js';
 let worldDates = []; // the open project's dated things besides its steps (shoot days)
 
 // ---------- library view ----------

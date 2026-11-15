@@ -3,7 +3,7 @@ import { getEntry } from '../db.js';
 import { popMenu, menuButton, ask, askText, toast } from '../menu.js';
 import { linkFor } from '../sharelink.js';
 import { hasManuscript, bookOf, worldOf, worldStats } from '../library.js';
-import { $, askServer, canAskServer, inNotebook, state, view } from '../main.js';
+import { $, inNotebook, state, view } from '../main.js';
 import { notebook } from './notebookview.js';
 import { go, openBook, remember } from './routing.js';
 import { toggleNumbering } from './manuscript.js';
@@ -11,6 +11,7 @@ import { renderRail } from './rail.js';
 import { grid } from './libraryview.js';
 import { openShare, sharing } from './sharing.js';
 import { filesOut } from './workpages.js';
+import { askServer, canAskServer } from './talking.js';
 
 // ---------- production: shots, the kit, shoot days, posting ----------
 

@@ -9,12 +9,13 @@ import { SHOWS, SHOW_GROUPS, groupFor } from '../shows.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from '../fonts.js';
 import { inPane } from '../panes.js';
 import { make } from '../dom.js';
-import { $, body, deskPage, inNotebook, isScript, notes, panes, plan, root, state, syncBeside } from '../main.js';
+import { $, body, inNotebook, isScript, notes, panes, root, state, syncBeside } from '../main.js';
 import { placeScriptBar, touch } from './scriptbar.js';
 import { currentEditor, notebook, placeOutlineBar, toggleTypewriter } from './notebookview.js';
 import { go } from './routing.js';
 import { wovenPick } from './manuscript.js';
 import { box, roomTags, writing } from './commands.js';
+import { deskPage, plan } from './talking.js';
 
 // ---------- panels revealed by edges ----------
 

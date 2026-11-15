@@ -16,7 +16,7 @@ import { pieceDoc } from '../drafts.js';
 import { areas, bookType, kindName, areaColor, bookOf, worldOf, editedAt, stageOf, nextLabel, setById, stageSetOf, stagesIn } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday } from '../dates.js';
-import { $, askServer, body, canAskServer, captureHere, deskPage, editor, gone, inNotebook, notes, openProjectBeside, plan, planningView, root, state, store, view } from '../main.js';
+import { $, body, editor, gone, inNotebook, notes, openProjectBeside, planningView, root, state, store, view } from '../main.js';
 import { touch } from './scriptbar.js';
 import { currentEditor, notebook } from './notebookview.js';
 import { go, openBook, openEntry, remember } from './routing.js';
@@ -28,6 +28,7 @@ import { printLater } from './sharing.js';
 import { hidden, lookPanel, setShown, toggleFocus, togglePageSettings } from './pagesettings.js';
 import { writing } from './commands.js';
 import { boxOpen, closePalette, filterPalette, openBox, openPalette } from './quickinserts.js';
+import { askServer, canAskServer, captureHere, deskPage, plan } from './talking.js';
 
 // ---------- the pages: Gather, Shape, Write, Revise, Make, Deliver ----------
 

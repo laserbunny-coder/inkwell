@@ -20,7 +20,7 @@ import { openClaudeKnows } from '../claudeknows.js';
 import { openTidy, counts as tidyCounts } from '../tidypass.js';
 import { areas, books, hasManuscript, kindName, bookOf, newPage, worlds, worldOf } from '../library.js';
 import { isoOf, isoToday } from '../dates.js';
-import { $, alts, askServer, blocks, body, canAskServer, capture, captureHere, editor, flipPlan, gone, inNotebook, inToday, insertSection, isScript, isWoven, notes, openTalk, paneKeys, plan, pull, root, state, statusEl, store, todayKey, toggleBesidePane, tooBig, view, whenHere } from '../main.js';
+import { $, alts, blocks, body, editor, gone, inNotebook, insertSection, isScript, isWoven, notes, openTalk, paneKeys, pull, root, state, statusEl, store, toggleBesidePane, tooBig, view, whenHere } from '../main.js';
 import { touch } from './scriptbar.js';
 import { currentEditor, notebook } from './notebookview.js';
 import { besideUntil, go, newPageHere, openEntry, paneStep, setBesideUntil } from './routing.js';
@@ -33,6 +33,7 @@ import { goPage, nav, strip, todayPanel } from './workpages.js';
 import { closeHistory, hstrip, openHistory } from './historyview.js';
 import { currentSize, currentWidth, progressPanel, setPage, step, toggleFocus, togglePageSettings, toggleReading, toggleSections, toggleShortcuts } from './pagesettings.js';
 import { box, commands, mod, toggleTheme, writing } from './commands.js';
+import { askServer, canAskServer, capture, captureHere, flipPlan, inToday, plan, todayKey } from './talking.js';
 
 // Pictures and files from this device, put in where the caret is.
 // ---------- quick inserts (the / menu, Ctrl+Shift+; and Ctrl+;) ----------
