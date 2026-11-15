@@ -4,7 +4,8 @@
 // it can't run when it can't (needs: shown dimmed with that reason instead
 // of hidden, so the whole list can be learned).
 //
-// Keyed by the command's label in main.js. tests/box.mjs checks that every
+// Keyed by the command's label (each part of the app adds its own commands
+// with addCommands, app/commandlist.js). tests/box.mjs checks that every
 // command has a group, a hint and words, so a new or renamed command can't
 // be left out.
 //

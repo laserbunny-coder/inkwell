@@ -11,7 +11,7 @@ import { keyLabel } from './keys.js';
 export const slashKey = new PluginKey('slash');
 const MATCH = /(?:^|\s)\/([\p{L}\p{N}]{0,20})$/u;
 
-// main.js registers the list: (editor) => [{ id, label, hint, keys, words, more, run(editor) }].
+// app/quickinserts.js registers the list: (editor) => [{ id, label, hint, keys, words, more, run(editor) }].
 // "more" items only show once something is typed (the weekdays, say).
 let itemsFor = () => [];
 export function setSlashItems(fn) { itemsFor = fn; }

@@ -1,7 +1,7 @@
 // A project's page, the part that comes from the Desk: where it sits (on
 // stage, in the wings, backstage), its north star, where it stands now, its
 // next date, what needs you, who's working on it (crew) and how it got here
-// (turns). The pieces and the steps are drawn by main.js and plan.js; this
+// (turns). The pieces and the steps are drawn by app/libraryview.js and plan.js; this
 // fills the rest. Signed out, it shows what Inkwell knows by itself.
 
 import './project.css';
