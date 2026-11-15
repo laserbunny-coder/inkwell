@@ -18,6 +18,7 @@ import { addLine } from './capture.js';
 import { getEntry, putEntries } from './db.js';
 import { addTask, setTask, taskOf, dayPlan, addDays, isoOf } from './tasks.js';
 import { clockWord } from './calendar.js';
+import { isTraining, addTrainingLine, trainingToday } from './training.js';
 
 export const BIG_MOST = 5;
 const clip = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
@@ -64,13 +65,22 @@ export async function layOutDay(out, { items, today }) {
     if (o.item) {
       const t = o.item.task;
       const small = o.missed ? !!t.small : o.small;
-      if (!small && !t.habit) big++;
+      if (!small && !t.habit && !isTraining(o.item.row)) big++;
       n++;
       const before = { day: t.day ?? null, order: t.order ?? 0, small: !!t.small };
       const patch = { day: today, order: n, ...(small !== !!t.small && !t.habit ? { small } : {}) };
       const r = await setTask(o.item.row.id, patch);
       if (r) rows.push(r);
       undo.push(async () => { const back = await setTask(o.item.row.id, before); return back ? [back] : []; });
+      continue;
+    }
+    // "Training" said in the morning is the day's training line, never a second one.
+    if (/^(do |go )?training$/i.test(o.text)) {
+      if (trainingToday(items, today)) continue;
+      n++;
+      const made = await addTrainingLine(items, today);
+      const line = made.find((r) => r.kind === 'line');
+      if (line) { const r = await setTask(line.id, { order: n }); rows.push(...made.filter((x) => x !== line), r || line); const id = line.id; undo.push(async () => { const x = await getEntry(id); if (!x) return []; const gone = { ...x, deleted: true, updated_at: Date.now() }; await putEntries([gone]); return [gone]; }); }
       continue;
     }
     if (!o.small && big >= BIG_MOST) { page.push(o.text); continue; }

@@ -10,7 +10,7 @@ import { addCommands, mod } from './commandlist.js';
 import { $, body, editor, inNotebook, root, state, statusEl } from '../main.js';
 import { ROOM_ABOVE, ROOM_BELOW, caretRoom, rowEnd, scriptBar, tapBar, touch, typeHere } from './scriptbar.js';
 import { openEntry, remember } from './routing.js';
-import { applyRemoteChapter } from './syncwiring.js';
+import { applyRemote, applyRemoteChapter } from './syncwiring.js';
 import { renderCrumb, renderRail } from './rail.js';
 import { pageMenu } from './tidying.js';
 import { dayMenu } from './historyview.js';
@@ -18,6 +18,7 @@ import { writing } from './commands.js';
 import { moveLinePicker, sendSelectionPicker, tidyNudge } from './quickinserts.js';
 import { captureHere, dayReview, looseFoot, looseSoon, plan, writeOut } from './talking.js';
 import { besideItem, listSoon, paneMoves, planningView, pull, whenHere } from './beside.js';
+import { amountsMenu } from '../trainpage.js';
 
 // ---------- notebook ----------
 
@@ -187,7 +188,7 @@ function wireNotebook() {
       if (inNotebook()) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved';
       if (s === 'saved') { listSoon(); if (notebook?.isDay) dayReview?.soon(); plan?.soon(); if (notebook?.looseDay) { notebook.redrawMarks(); looseSoon(); } }
     },
-    onTaskChip: (eid, el) => plan?.chipMenu(eid, el),
+    onTaskChip: (eid, el) => (el?.dataset.train ? amountsMenu(eid, el, { wrote: (rows) => applyRemote(rows).then(() => notebook.redrawMarks()) }) : plan?.chipMenu(eid, el)),
     onTasks: () => plan?.soon(),
     onChange: () => { clearTimeout(railTimer); railTimer = setTimeout(renderRail, 100); },
     // A mirror edited a paragraph of the chapter that's open behind the notebook.

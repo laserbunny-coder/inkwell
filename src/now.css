@@ -190,3 +190,29 @@ html.hide-nowfiled .thought-note { display: none; }
   .now-talk-row .now-btn, .now-closeform .now-btn { min-height: 46px; }
   .now-q { font-size: 17px; }
 }
+
+/* Training, one exercise at a time (Part 6). */
+.now-tsay { max-width: 520px; text-wrap: pretty; }
+.now-sets { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.now-dot { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--muted); background: transparent; cursor: pointer; padding: 0; }
+.now-dot.on { background: var(--accent); border-color: var(--accent); }
+.now-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.now-setn { font: 13.5px var(--ui); color: var(--muted); margin-left: 6px; font-variant-numeric: tabular-nums; }
+.now-num { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.now-btn.now-step { min-width: 44px; font-size: 20px; padding: 6px 10px; }
+.now-numl { display: flex; align-items: baseline; gap: 8px; font: 14px var(--ui); color: var(--muted); }
+.now-numl input { width: 84px; text-align: center; border: 1px solid var(--line); background: transparent; color: var(--ink); font: 500 22px var(--ui); padding: 6px 8px; border-radius: 10px; outline: none; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.now-numl input::-webkit-outer-spin-button, .now-numl input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.now-numl input:focus { border-color: var(--muted); background: var(--raise); }
+a.now-video { text-decoration: none; }
+@media (max-width: 700px) {
+  .now-dot { width: 34px; height: 34px; }
+  .now-btn.now-step { min-width: 48px; min-height: 48px; }
+}
+/* The Training page: an exercise's amounts as a quiet chip. */
+.train-chip { opacity: .85; }
+/* The Desk's training block. */
+.dk-goals { display: grid; gap: 2px; max-width: 560px; }
+.dk-goal { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; border-bottom: 1px solid var(--line); font: 14.5px var(--ui); }
+.dk-goal-at { color: var(--muted); text-align: right; }
+html.hide-training .dk-train { display: none !important; }

@@ -21,6 +21,8 @@ import { clockWord } from './calendar.js';
 import { media } from './device.js';
 import { make } from './dom.js';
 import { talkView, heardView, closeView } from './nowends.js';
+import { TrainNow } from './nowtrain.js';
+import { isTraining } from './training.js';
 import './now.css';
 
 export const SMALLS = 'smalls';
@@ -95,13 +97,21 @@ export class Now {
     this.heard = null;
     this.close = { also: [], alive: '', drained: '', first: '', busy: false };
     this.forms = {};
+    this.train = new TrainNow(this); // Training, one exercise at a time (Part 6)
     document.addEventListener('keydown', (e) => this.key(e));
   }
 
   get shown() { return this.p.pageShown && this.p.tab === 'now'; }
   off(name) { return !!this.p.hooks.off?.(name); }
 
-  async load() { this.st = await readNow(this.p.today); }
+  async load() { this.st = await readNow(this.p.today); await this.train.load(); }
+
+  // Runs one action at a time (a key, Enter in a number).
+  run(fn) {
+    if (this.busy) return;
+    this.busy = true;
+    Promise.resolve(fn()).catch((e) => console.warn(e)).finally(() => { this.busy = false; });
+  }
   async save(patch) {
     this.st = { ...this.st, ...patch, day: this.p.today };
     await savePlanSettings({ now: this.st });
@@ -170,6 +180,7 @@ export class Now {
     const m = (this.m = this.model());
     const held = p.held(sheet);
     const typing = this.out && this.out.contains(document.activeElement) ? document.activeElement : null;
+    const numIn = /^now-t(num|min)$/.test(document.activeElement?.id || '') ? document.activeElement.id : null;
     const top = make('header', 'now-top');
     top.append(p.switchRow('now'));
     const face = nowFace();
@@ -198,6 +209,7 @@ export class Now {
     sheet.replaceChildren(top, box);
     p.restore(sheet, held);
     if (typing?.isConnected) typing.focus({ preventScroll: true });
+    if (numIn) sheet.querySelector(`#${numIn}`)?.focus({ preventScroll: true });
     p.just = null;
   }
 
@@ -238,6 +250,7 @@ export class Now {
 
   // The one thing, its two buttons (or the three choices under Not now).
   mid(m) {
+    if (this.train.active(m.cur)) return this.train.view(m.cur);
     const mid = make('div', 'now-mid');
     const cur = m.cur;
     if (cur.smalls) mid.append(make('p', 'now-eyebrow', `Small things · ${cur.items.length} left`));
@@ -281,6 +294,14 @@ export class Now {
       if (hover.matches) b.append(make('kbd', '', key));
       box.append(b);
     };
+    if (this.train.active(cur)) {
+      one('later', 'Later today', 'The session waits where you stopped', '1');
+      one('tomorrow', 'Enough for today', 'Off today. Tomorrow it starts fresh', '2');
+      one('another', 'Another day', 'Off today. Your place does not move', '3');
+      one('own', 'I trained on my own', 'Counts as a session; the next one takes its turn', '4');
+      box.append(this.btn('keep', 'Keep going with it', 'quiet', 'Esc'));
+      return box;
+    }
     const them = cur.smalls ? 'They go' : 'It goes';
     one('later', 'Later today', `${them} to the end of today`, '1');
     one('tomorrow', 'Enough for today', `Counts as worked on, and ${cur.smalls ? 'they come' : 'it comes'} back tomorrow`, '2');
@@ -392,13 +413,14 @@ export class Now {
     if (last?.t) {
       const said = last.k === 'done' ? (last.left ? `Done. ${last.left} left for later.` : 'Done.')
         : last.k === 'event' ? (last.happened ? 'Over.' : 'It did not happen.')
-          : { later: 'Set aside for later today.', tomorrow: 'Enough for today. It comes back tomorrow.', another: 'Off today. It waits in Plan under Not planned.' }[last.where] || '';
+          : { training: 'Off today. Your place in the round stays.', later: 'Set aside for later today.', tomorrow: 'Enough for today. It comes back tomorrow.', another: 'Off today. It waits in Plan under Not planned.' }[last.where] || '';
       const was = make('p', `now-was${last.k === 'done' || (last.k === 'event' && last.happened) ? ' struck' : ''}`);
       was.append(make('span', 'w', last.t), make('span', 's', ` ${said}`));
       mid.append(was);
     }
     if (m.cand) {
-      mid.append(make('p', 'now-eyebrow', m.back ? 'You were on' : 'Next'), make('p', 'now-thing sm', m.candName));
+      const train = !m.cand.group && isTraining(m.cand.item?.row) ? this.train.session()?.name : '';
+      mid.append(make('p', 'now-eyebrow', m.back ? 'You were on' : 'Next'), make('p', 'now-thing sm', train ? `Training · ${train}` : m.candName));
       const acts = make('div', 'now-acts');
       const go = this.btn('begin', m.back ? 'Pick it back up' : 'Begin', 'go', 'B');
       go.dataset.task = m.cand.group ? SMALLS : m.cand.item.row.id;
@@ -459,7 +481,8 @@ export class Now {
     const act = el.dataset.now;
     this.busy = true;
     try {
-      if (act === 'done') await this.done();
+      if (['tset', 'tmin', 'tnum', 'tskip', 'tback', 'tup'].includes(act)) await this.train.click(act, el);
+      else if (act === 'done') await this.done();
       else if (act === 'skip') await this.skip();
       else if (act === 'notnow') { this.asking = true; this.p.redraw(); this.focusFirst('.now-choice'); }
       else if (act === 'keep') { this.asking = false; this.p.redraw(); }
@@ -510,6 +533,7 @@ export class Now {
     this.asking = false;
     this.listOpen = false;
     this.ctxOpen = false;
+    this.train.reset();
     await this.save({ task: id, since: Date.now(), skipped: id === SMALLS ? [] : this.st.skipped, last: null });
     this.p.redraw();
   }
@@ -530,6 +554,7 @@ export class Now {
     const m = this.model();
     const cur = m.cur;
     if (!cur) return;
+    if (this.train.active(cur)) { await this.train.done(); return; }
     const was = { ...this.st };
     const id = cur.item.row.id;
     await this.p.wrote(await tickTask(id, true));
@@ -562,6 +587,7 @@ export class Now {
     const m = this.model();
     const cur = m.cur;
     if (!cur) return;
+    if (this.train.active(cur) && where !== 'later') { await this.train.aside(where); return; }
     const today = this.p.today;
     const ids = cur.smalls ? cur.items.map((i) => i.row.id) : [cur.item.row.id];
     const was = { ...this.st };
@@ -689,6 +715,7 @@ export class Now {
     const k = e.key.toLowerCase();
     let go = null;
     if (this.asking && ['1', '2', '3'].includes(k)) go = () => this.aside(['later', 'tomorrow', 'another'][Number(k) - 1]);
+    else if (this.asking && k === '4' && this.train.active(m.cur)) go = () => this.aside('own');
     else if (this.asking && e.key === 'Escape') go = () => { this.asking = false; this.p.redraw(); };
     else if (m.active) return;
     else if (this.mode === 'heard' && k === 'b' && m.cand) go = () => { this.mode = null; return this.begin(m.cand.group ? SMALLS : m.cand.item.row.id); };
@@ -699,6 +726,7 @@ export class Now {
     else if (k === 'd' && m.cur) go = () => this.done();
     else if (k === 'n' && m.cur && !this.asking) go = () => { this.asking = true; this.p.redraw(); this.focusFirst('.now-choice'); };
     else if (k === 's' && m.cur?.smalls) go = () => this.skip();
+    else if (k === 's' && this.train.active(m.cur) && !this.train.ask) go = () => this.train.move(1, null);
     else if (k === 'b' && !m.cur && m.cand) go = () => this.begin(m.cand.group ? SMALLS : m.cand.item.row.id);
     else if ((k === 'o' || (e.key === 'Enter' && !t?.closest?.('button, a'))) && m.cur && !m.cur.smalls && !this.asking && whereOf(m.cur.item)) go = () => this.openWhere();
     else if (e.key === ' ' && !t?.closest?.('button')) go = () => { this.listOpen = !this.listOpen; this.p.redraw(); };
@@ -719,8 +747,8 @@ export async function fiveAtMost(plan, row, { off, toast }) {
   if (!row || off('fivebig')) return false;
   const t = taskOf(row);
   const today = isoOf();
-  if (!t || t.day !== today || t.small || t.habit) return false;
-  const big = plan.items.filter((i) => i.mine && !i.row.fields?.done && i.task.day === today && !i.ghost && !isSmall(i) && i.row.id !== row.id);
+  if (!t || t.day !== today || t.small || t.habit || isTraining(row)) return false;
+  const big = plan.items.filter((i) => i.mine && !i.row.fields?.done && i.task.day === today && !i.ghost && !isSmall(i) && !isTraining(i.row) && i.row.id !== row.id);
   if (big.length < 5) return false;
   await plan.wrote(await setTask(row.id, { day: null, order: 0 }));
   toast(`Five big things are on today already, so “${clip(row.text, 40)}” waits in Plan under Not planned`, {

@@ -22,6 +22,7 @@ import { readNow, nowSide, setNowSide } from '../now.js';
 import { NowStrip } from '../nowstrip.js';
 import { writeThought, fileThought, waitingThoughts } from '../thoughts.js';
 import { dayBody, layOutDay, writeClose } from '../dayends.js';
+import { ensureTrainingLine, seedTraining, TRAINING_PAGE } from '../training.js';
 import { inPane, host as paneHost } from '../panes.js';
 import { aheadSource } from '../ahead.js';
 import { events as calendarEvents } from '../calendar.js';
@@ -497,6 +498,7 @@ addCommands(() => [
   { group: 'plan', label: 'Now: Done with the one thing', keys: 'D', words: ['done', 'finished', 'tick', 'check', 'now', 'one thing'], run: () => plan.now.done(), when: onNow },
   { group: 'plan', label: 'Now: Not now (later today, enough for today, another day)', keys: 'N', words: ['not now', 'later', 'tomorrow', 'set aside', 'postpone', 'another day', 'worked on'], run: () => { plan.now.asking = true; plan.redraw(); }, when: () => onNow() && !!plan.now.model().cur },
   { group: 'plan', label: 'Now: Begin the next thing', keys: 'B', words: ['begin', 'start', 'next', 'go', 'now', 'gate'], run: () => { const m = plan.now.model(); if (m.cand) plan.now.begin(m.cand.group ? 'smalls' : m.cand.item.row.id); }, when: () => onNow() && !plan.now.model().cur },
+  { group: 'go', label: 'Training: the sessions and their exercises', words: ['training', 'workout', 'exercise', 'sessions', 'calisthenics', 'parkour', 'handstand', 'front lever', 'vertical'], run: async () => { await seedTraining(); openEntry(TRAINING_PAGE); }, when: () => !hidden().has('training') },
   { group: 'plan', label: 'Talk the day through (what is in front of you today)', words: ['morning', 'talk', 'day', 'lay out', 'plan the day', 'say', 'brain dump', 'start', 'now'], run: async () => { await go({ view: 'plan', tab: 'now' }); plan.now.openTalk(); }, when: () => !!plan && !hidden().has('nowtalk') },
   { group: 'plan', label: 'Close the day (what you did, two questions, first thing tomorrow)', words: ['evening', 'close', 'end', 'day', 'reflect', 'journal', 'done', 'tomorrow', 'shutdown', 'wrap up'], run: () => closeDayFromCard(), when: () => !!plan && !hidden().has('nowclose') },
   { group: 'plan', label: 'Now: what is next today (show or hide the list)', keys: 'Space', words: ['next', 'list', 'more today', 'choose another', 'queue', 'what is next'], run: () => { plan.now.listOpen = !plan.now.listOpen; plan.redraw(); }, when: onNow },
@@ -704,6 +706,8 @@ function wireTalking() {
       thought: (text) => thoughtFromNow(text),
       mic: (kind) => micFromNow(kind),
       talkDay: (words) => talkDayFromNow(words),
+      // Training (Part 6): today's line, once a day, not on Sunday.
+      daily: (items, today) => (inPane || hidden().has('training') ? [] : ensureTrainingLine(items, today)),
       closeDay: (answers) => closeDayFromNow(answers),
       toast
     }
