@@ -1,6 +1,7 @@
 // The Training page's amounts (Part 6): each exercise line shows its amounts
 // as a quiet chip ("3 holds · seconds · mark 10 · video"). Tapping it changes
-// them one at a time. They're fields on the line, never typed syntax, so the
+// them one at a time. A pair (superset) line says "5 rounds · taking turns";
+// its two exercises are the lines under it. They're fields on the line, never typed syntax, so the
 // words stay plain and both he and Claude can edit the outline.
 
 import { getEntry, putEntries } from './db.js';
@@ -12,6 +13,7 @@ export function amountsOf(row) {
   const ex = row?.fields?.ex;
   if (!ex) return '';
   const bits = [];
+  if (ex.pair) return [ex.n ? `${ex.n} ${ex.w || 'rounds'}` : '', 'taking turns', ex.link ? 'video' : ''].filter(Boolean).join(' · ');
   if (ex.m) bits.push(`${ex.m} min`);
   if (ex.n) bits.push(`${ex.n} ${ex.w || 'sets'}`);
   if (ex.u) bits.push(ex.u);

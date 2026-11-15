@@ -188,7 +188,7 @@ try {
   await check('Hard A: fewer minutes from last time are shown, and the first week has one set fewer', async () => {
     await dayIs(page, TUE);
     await beginTraining(page);
-    assert.equal(await eyebrow(page), 'TRAINING · HARD A · 1 OF 15');
+    assert.equal(await eyebrow(page), 'TRAINING · HARD A · 1 OF 13');
     assert.match(await sheet(page).locator('.now-tsay').innerText(), /Last time 5 of 10 minutes/);
     await press(page, 's');
     assert.equal(await thing(page), 'Pogo hops');
@@ -202,24 +202,45 @@ try {
     assert.equal(await sheet(page).locator('.now-dot').count(), 3);
   });
 
-  await check('a ladder moves up only with every set done at the mark, and he decides', async () => {
+  await check('a superset is one step: two names, one row of rounds, a number each', async () => {
     await skipTo(page, 'Tuck front lever hold');
-    assert.match(await sheet(page).locator('.now-tsay').innerText(), /On the way to the front lever/);
+    assert.equal(await sheet(page).locator('.now-with').innerText(), 'taking turns with');
+    assert.equal(await sheet(page).locator('.now-thing').nth(1).innerText(), 'Planche lean hold');
+    assert.match(await sheet(page).locator('.now-tsay').innerText(), /^5 rounds\. One of each, then rest about 2 minutes/);
+    assert.match(await sheet(page).locator('.now-tsay').innerText(), /On the way to the front lever and the straddle planche/);
+    assert.equal(await sheet(page).locator('.now-dot').count(), 5);
+    assert.equal(await sheet(page).locator('.now-numl').count(), 2);
+    assert.match(await sheet(page).locator('.now-train').innerText(), /lever seconds[\s\S]*planche seconds/);
+    await shot(page, 'train-pair');
+  });
+
+  await check('a ladder moves up only with every round done at the mark, and he decides each one', async () => {
     await sheet(page).locator('.now-dot').nth(4).click(); // 4 of 5
     await sheet(page).locator('#now-tnum').fill('12');
+    await sheet(page).locator('#now-tnum2').fill('11');
     await press(page, 'd');
-    assert.equal(await sheet(page).locator('[data-now="tup"]').count(), 0, 'not with a set missing');
+    assert.equal(await sheet(page).locator('[data-now="tup"]').count(), 0, 'not with a round missing');
     assert.equal(await thing(page), 'Front lever lowers');
     await sheet(page).locator('[data-now="tback"]').click();
     await settle(page);
-    assert.match(await sheet(page).locator('.now-tsay').innerText(), /Last time 12 seconds, 4 of 5 holds/);
+    assert.match(await sheet(page).locator('.now-tsay').innerText(), /Last time 12 and 11 seconds, 4 of 5 rounds/);
+    assert.equal(await sheet(page).locator('#now-tnum2').inputValue(), '11');
     await sheet(page).locator('#now-tnum').fill('10');
     await press(page, 'd');
     assert.match(await thing(page), /Ready to move up to the advanced tuck front lever\?/);
     await shot(page, 'train-moveup');
     await sheet(page).locator('[data-now="tup"][data-v="1"]').click();
     await settle(page);
-    assert.equal((await state(page)).step.lever, 1);
+    assert.match(await thing(page), /11 seconds\. Ready to move up to the tuck planche\?/);
+    await sheet(page).locator('[data-now="tup"][data-v="0"]').click();
+    await settle(page);
+    const st = await state(page);
+    assert.equal(st.step.lever, 1);
+    assert.equal(st.step.planche, 0);
+    assert.equal(st.last.lever, 10);
+    assert.equal(st.last.planche, 11);
+    assert.equal(st.lastSets.holds, 5);
+    assert.equal(await thing(page), 'Front lever lowers');
     await sheet(page).locator('[data-now="tback"]').click();
     await settle(page);
     assert.equal(await thing(page), 'Advanced tuck front lever hold');
@@ -232,15 +253,17 @@ try {
     assert.equal(await thing(page), 'Advanced tuck front lever hold');
   });
 
-  await check('the planche is a ladder too, and Not yet keeps the step', async () => {
-    await skipTo(page, 'Planche lean hold');
-    await sheet(page).locator('#now-tnum').fill('11');
+  await check('pull-ups and push-ups take turns too', async () => {
+    await skipTo(page, 'Pull-ups');
+    assert.equal(await sheet(page).locator('.now-thing').nth(1).innerText(), 'Pseudo planche push-ups');
+    assert.match(await sheet(page).locator('.now-train').innerText(), /pull-up reps[\s\S]*push-up reps/);
+    await sheet(page).locator('#now-tnum').fill('6');
+    await sheet(page).locator('#now-tnum2').fill('9');
     await press(page, 'd');
-    assert.match(await thing(page), /Ready to move up to the tuck planche\?/);
-    await sheet(page).locator('[data-now="tup"][data-v="0"]').click();
+    assert.equal(await thing(page), 'Pike leg lifts');
+    await sheet(page).locator('[data-now="tback"]').click();
     await settle(page);
-    assert.equal((await state(page)).step.planche, 0);
-    assert.equal(await thing(page), 'Pseudo planche push-ups');
+    assert.match(await sheet(page).locator('.now-tsay').innerText(), /Last time 6 and 9 reps\./);
     await press(page, 'n');
     await press(page, '1');
   });
@@ -265,7 +288,8 @@ try {
     await settle(page);
     const chips = await page.locator('#outline-editor .train-chip').allInnerTexts();
     assert.ok(chips.includes('10 min'), chips.slice(0, 5).join(' | '));
-    assert.ok(chips.some((c) => c === '5 holds · seconds · move up at 10'));
+    assert.ok(chips.includes('5 rounds · taking turns'), chips.join(' | '));
+    assert.ok(chips.includes('seconds · move up at 10'));
     await shot(page, 'train-page');
     await page.locator('#outline-editor .train-chip', { hasText: '10 min' }).first().click();
     await page.waitForSelector('.pop-menu');
@@ -303,6 +327,15 @@ try {
     assert.equal(await sheet(phone).locator('.now-dot.on').count(), 3);
     assert.equal(await phone.evaluate(() => document.scrollingElement.scrollWidth <= 412), true);
     await shot(phone, 'phone-train');
+  });
+  await check('phone: a superset fits, both numbers in reach', async () => {
+    await patchState(phone, { round: 8, at: { day: MON, i: 5, res: [] } });
+    await phone.evaluate(async () => { await window.__plan.now.train.load(); window.__plan.now.train.reset(); window.__plan.redraw(); });
+    await settle(phone);
+    assert.equal(await thing(phone), 'Tuck front lever hold');
+    assert.equal(await sheet(phone).locator('.now-numl').count(), 2);
+    assert.equal(await phone.evaluate(() => document.scrollingElement.scrollWidth <= 412), true);
+    await shot(phone, 'phone-pair');
   });
   assert.deepEqual(phone.errors, []);
 } catch (e) {

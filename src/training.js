@@ -45,14 +45,15 @@ const STRENGTH = [
   { k: 'calf', t: 'Single-leg calf raises', n: 3, w: 'sets', d: '10 slow reps each leg' },
   { k: 'nordic', t: 'Nordic hamstring curls', n: 2, w: 'sets', u: 'reps', q: 'Reps' }
 ];
-const LEVER = [
-  { k: 'lever', t: 'Front lever hold', lad: 'lever', n: 5, w: 'holds', d: 'About 70% of your best time, 2 to 3 minutes apart', u: 'seconds', q: 'Shortest hold' },
-  { k: 'lowers', t: 'Front lever lowers', n: 3, w: 'sets', d: '3 slow lowers a set' }
-];
-const PLANCHE = [
-  { k: 'planche', t: 'Planche hold', lad: 'planche', n: 5, w: 'holds', d: 'About 70% of your best time. Take turns with the lever holds if you like', u: 'seconds', q: 'Shortest hold' },
-  { k: 'ppu', t: 'Pseudo planche push-ups', n: 3, w: 'sets', u: 'reps', q: 'Reps' }
-];
+// Supersets (Nov 15): two exercises that take turns are one step on one
+// screen. A pair line holds the rounds; its two exercises are child lines,
+// each with its own number (and ladder).
+const HOLDS = { k: 'holds', t: 'Lever and planche holds', n: 5, w: 'rounds', d: 'One of each, then rest about 2 minutes. About 70% of your best time', pair: [
+  { k: 'lever', t: 'Front lever hold', lad: 'lever', u: 'seconds', lab: 'lever seconds' },
+  { k: 'planche', t: 'Planche hold', lad: 'planche', u: 'seconds', lab: 'planche seconds' }] };
+const LOWERS = { k: 'lowers', t: 'Front lever lowers', n: 3, w: 'sets', d: '3 slow lowers a set' };
+const pullPush = (k, t, pull) => ({ k, t, n: 3, w: 'rounds', d: 'One set of each, then rest', pair: [pull,
+  { k: 'ppu', t: 'Pseudo planche push-ups', u: 'reps', lab: 'push-up reps' }] });
 export const SEED = [
   { n: 'Evaluation 1', once: true, x: [WARM,
     { k: 'reach', t: 'Standing reach', d: 'Side to a wall, feet flat, chalk on your fingertips', u: 'inches', q: 'Reach' },
@@ -73,9 +74,9 @@ export const SEED = [
     { k: 'vert', t: 'Vertical jumps', n: 4, w: 'sets', d: '5 jumps a set, full effort, full rest' },
     { k: 'broad', t: 'Broad jumps', n: 3, w: 'sets', d: '4 jumps a set' },
     { k: 'sprintA', t: 'Short sprints', n: 4, w: 'sprints', d: '20 yards at about 80% effort, walk back' },
-    ...LEVER,
-    { k: 'pull', t: 'Pull-ups', n: 3, w: 'sets', u: 'reps', q: 'Reps' },
-    ...PLANCHE,
+    HOLDS,
+    LOWERS,
+    pullPush('pullpair', 'Pull-ups and push-ups', { k: 'pull', t: 'Pull-ups', u: 'reps', lab: 'pull-up reps' }),
     ...STRENGTH] },
   { n: 'Light', x: [WRIST,
     { k: 'wall', t: 'Wall handstand holds', m: 2, mw: 'minutes in total, chest to wall', u: 'seconds', q: 'Longest hold' },
@@ -92,9 +93,9 @@ export const SEED = [
     { k: 'sprint', t: 'Sprints', n: 5, w: 'sprints', d: '20 yards at about 80% effort, walk back' },
     { k: 'vert', t: 'Vertical jumps', n: 3, w: 'sets', d: '5 jumps a set, full effort, full rest' },
     { k: 'pogo', t: 'Pogo hops', n: 3, w: 'sets', d: '15 hops a set' },
-    ...LEVER,
-    { k: 'rows', t: 'Tuck front lever rows', n: 3, w: 'sets', u: 'reps', q: 'Reps' },
-    ...PLANCHE,
+    HOLDS,
+    LOWERS,
+    pullPush('rowpair', 'Rows and push-ups', { k: 'rows', t: 'Tuck front lever rows', u: 'reps', lab: 'row reps' }),
     ...STRENGTH] }
 ];
 // After the two evaluations, the round: Hard A, Light, Light, Hard B, Light, Light.
@@ -119,11 +120,13 @@ export async function seedTraining() {
   };
   SEED.forEach((s, si) => {
     const top = line(TRAINING_PAGE, (si + 1) * GAP, s.n, { session: { once: !!s.once, hard: !!s.hard } });
-    s.x.forEach((x, xi) => {
-      const { t, lad, ...ex } = x;
-      const r = line(top.id, (xi + 1) * GAP, t, { ex: { ...ex, ...(lad ? { lad, mark: LADDERS[lad].mark, goal: LADDERS[lad].goal } : {}) } });
+    const exLine = (parent, sort, x) => {
+      const { t, lad, pair, ...ex } = x;
+      const r = line(parent, sort, t, { ex: { ...ex, ...(pair ? { pair: true } : {}), ...(lad ? { lad, mark: LADDERS[lad].mark, goal: LADDERS[lad].goal } : {}) } });
       if (lad) LADDERS[lad].steps.forEach((st, i) => line(r.id, (i + 1) * GAP, st, { ladstep: { lad, i } }));
-    });
+      if (pair) pair.forEach((m, mi) => exLine(r.id, (mi + 1) * GAP, m));
+    };
+    s.x.forEach((x, xi) => exLine(top.id, (xi + 1) * GAP, x));
   });
   await putEntries(rows);
   return rows;
@@ -141,12 +144,19 @@ export async function readTraining() {
   const sessions = [];
   for (const top of sorted(await children(TRAINING_PAGE))) {
     const x = [];
-    for (const r of sorted(await children(top.id))) {
+    const read = async (r) => {
       const ex = { ...(r.fields?.ex || {}), id: r.id, t: r.text || 'Untitled' };
       if (!ex.k) ex.k = r.id;
-      if (ex.lad) ex.steps = sorted(await children(r.id)).map((s) => s.text || '');
-      x.push(ex);
-    }
+      const kids = sorted(await children(r.id));
+      if (ex.lad) ex.steps = kids.filter((c) => c.fields?.ladstep || !c.fields?.ex).map((c) => c.text || '');
+      if (ex.pair) {
+        const ms = [];
+        for (const c of kids.filter((k) => k.fields?.ex)) ms.push(await read(c));
+        if (ms.length >= 2) ex.pair = ms.slice(0, 2); else { delete ex.pair; Object.assign(ex, ms[0] ? { ...ms[0], n: ex.n, w: ex.w, k: ex.k } : {}); }
+      }
+      return ex;
+    };
+    for (const r of sorted(await children(top.id))) x.push(await read(r));
     sessions.push({ id: top.id, name: top.text || 'Session', once: !!top.fields?.session?.once, hard: !!top.fields?.session?.hard || /^hard\b/i.test(top.text || ''), x });
   }
   return { page, state, sessions };
@@ -168,6 +178,7 @@ export function sessionAt(tr, round = tr.state.round) {
 
 // An exercise's name: a ladder says the step he's on.
 export function exName(ex, state) {
+  if (ex.pair) return ex.pair.map((m) => exName(m, state)).join(' with ');
   if (!ex.lad || !ex.steps?.length) return ex.t;
   const i = Math.min(state.step?.[ex.lad] || 0, ex.steps.length - 1);
   return `${ex.steps[i]} hold`;
@@ -214,11 +225,21 @@ export async function addTrainingLine(items, day) {
 // ---------- doing a session ----------
 
 // One exercise's result, for the page: "Tuck front lever hold: 8 seconds, 4 of 5 holds".
+// Two numbers of a pair: "8 and 6 seconds" (or "6 reps and 9 seconds").
+export function bothNums(pair, vals) {
+  const [a, b] = pair;
+  const [va, vb] = vals;
+  if (va == null && vb == null) return '';
+  if (va == null || vb == null) return va == null ? `${vb} ${b.u}` : `${va} ${a.u}`;
+  return a.u === b.u ? `${va} and ${vb} ${a.u}` : `${va} ${a.u} and ${vb} ${b.u}`;
+}
+
 export function resultLine(ex, name, { cur = null, sets = null, min = null } = {}) {
   const bits = [];
-  if (ex.u && cur != null) bits.push(`${cur} ${ex.u}`);
+  if (ex.pair && Array.isArray(cur)) { const t = bothNums(ex.pair, cur); if (t) bits.push(t); }
+  else if (ex.u && cur != null) bits.push(`${cur} ${ex.u}`);
   if (ex.n && sets != null && sets < ex.n) bits.push(`${sets} of ${ex.n} ${ex.w || 'sets'}`);
-  else if (ex.n && sets != null && ex.u) bits.push(`${sets} of ${ex.n} ${ex.w || 'sets'}`);
+  else if (ex.n && sets != null && (ex.u || ex.pair)) bits.push(`${sets} of ${ex.n} ${ex.w || 'sets'}`);
   if (ex.m && min != null && min !== ex.m) bits.push(`${min} of ${ex.m} minutes`);
   return bits.length ? `${name}: ${bits.join(', ')}` : '';
 }
@@ -253,7 +274,7 @@ export async function deskTraining() {
   const tr = await readTraining();
   if (!tr) return null;
   const L = tr.state.last || {};
-  const xs = tr.sessions.flatMap((s) => s.x);
+  const xs = tr.sessions.flatMap((s) => s.x).flatMap((x) => (x.pair ? [x, ...x.pair] : [x]));
   const after = 'After your evaluation';
   const sec = (v, pre = '') => (v != null ? `${pre}${v} seconds` : after);
   const ladder = (lad) => { const x = xs.find((e) => e.lad === lad); return x ? `${exName(x, tr.state).replace(/ hold$/, '')}${L[x.k] != null ? `, ${L[x.k]} seconds` : ''}` : after; };

@@ -180,7 +180,7 @@ export class Now {
     const m = (this.m = this.model());
     const held = p.held(sheet);
     const typing = this.out && this.out.contains(document.activeElement) ? document.activeElement : null;
-    const numIn = /^now-t(num|min)$/.test(document.activeElement?.id || '') ? document.activeElement.id : null;
+    const numIn = /^now-t(num2?|min)$/.test(document.activeElement?.id || '') ? document.activeElement.id : null;
     const top = make('header', 'now-top');
     top.append(p.switchRow('now'));
     const face = nowFace();

@@ -193,6 +193,8 @@ html.hide-nowfiled .thought-note { display: none; }
 
 /* Training, one exercise at a time (Part 6). */
 .now-tsay { max-width: 520px; text-wrap: pretty; }
+.now-with { font: italic 14px var(--ui); color: var(--muted); margin: -6px 0; }
+.now-pair .now-numl > span { min-width: 8.5em; text-align: left; }
 .now-sets { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
 .now-dot { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--muted); background: transparent; cursor: pointer; padding: 0; }
 .now-dot.on { background: var(--accent); border-color: var(--accent); }
