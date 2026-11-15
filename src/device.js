@@ -43,10 +43,13 @@ export function media(name) {
   return (lists[name] ||= window.matchMedia(QUERIES[name]));
 }
 
-export const isTouch = () => media('touch').matches;
-export const isPhone = () => media('phone').matches;
-export const isNarrow = () => media('narrow').matches;
-export const isCompact = () => media('compact').matches;
+// Asked afresh each time, as the code did before (a test or a browser may
+// swap window.matchMedia after start).
+const now = (name) => window.matchMedia(QUERIES[name]).matches;
+export const isTouch = () => now('touch');
+export const isPhone = () => now('phone');
+export const isNarrow = () => now('narrow');
+export const isCompact = () => now('compact');
 
 // Calls fn whenever the answer to any of the named questions changes (a window
 // resized past 700 px, a mouse plugged into a tablet). Returns a stop function.
