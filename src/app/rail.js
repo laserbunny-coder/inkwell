@@ -10,10 +10,11 @@ import { inPane, PANE_ID, host as paneHost } from '../panes.js';
 import { areas, books, hasManuscript, areaColor, pagesIn, loosePages, bookOf, worlds, worldOf, worldTree } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday } from '../dates.js';
-import { $, PAGE_NAMES, actMenu, areaMenu, bookMenu, chapterMenu, editor, frame, inNotebook, isScript, nav, openBeside, openPalette, openProjectBeside, pageMenu, plan, renderStrip, root, sectionNames, sideNotes, state, tagsPage, view, worldMenu } from '../main.js';
+import { $, PAGE_NAMES, editor, frame, inNotebook, isScript, nav, openBeside, openPalette, openProjectBeside, plan, renderStrip, root, sectionNames, sideNotes, state, tagsPage, view } from '../main.js';
 import { notebook } from './notebookview.js';
 import { go, lastPlace } from './routing.js';
 import { refreshWords } from './manuscript.js';
+import { actMenu, areaMenu, bookMenu, chapterMenu, pageMenu, worldMenu } from './tidying.js';
 
 // ---------- names you can rename in place ----------
 

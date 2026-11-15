@@ -20,11 +20,12 @@ import { inPane, sendChanged, onChanged } from '../panes.js';
 import { redrawTidy } from '../tidypass.js';
 import { ensureWorlds, setOwnWorkflows } from '../library.js';
 import { isoToday } from '../dates.js';
-import { $, blankOnce, body, dayReview, deskPage, editor, frame, gone, grid, inNotebook, leaveChapter, looseSoon, notes, openAsked, plan, production, refreshViews, renderLibrary, renderProject, renderWorld, reviewAsked, scribeKept, sideNotes, stagePage, state, store, tagsPage, tidyNudge, todayPanel, view, writeOut } from '../main.js';
+import { $, blankOnce, body, dayReview, deskPage, editor, frame, gone, grid, inNotebook, looseSoon, notes, openAsked, plan, production, renderLibrary, renderProject, renderWorld, reviewAsked, scribeKept, sideNotes, stagePage, state, store, tagsPage, tidyNudge, todayPanel, view, writeOut } from '../main.js';
 import { notebook } from './notebookview.js';
 import { go, lastChapterAnywhere } from './routing.js';
 import { openChapter, refreshWords, renderChapterLinks } from './manuscript.js';
 import { renderCrumb, renderRail, scheduleScenes } from './rail.js';
+import { leaveChapter, refreshViews } from './tidying.js';
 
 // ---------- sync between devices ----------
 
