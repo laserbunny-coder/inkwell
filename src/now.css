@@ -47,7 +47,7 @@ html.has-rail.in-pane .now-top { display: flex; }
 .now-group .now-gn { margin-left: 10px; font: 12px var(--ui); color: var(--faint); }
 .now-smalls { margin: 0 0 6px 30px; padding-left: 10px; border-left: 1px solid var(--line); }
 .now-smalls .pl-words { font-size: 16px; }
-.now-gbegin { margin: 4px 0 2px -8px; padding-inline: 8px !important; min-height: 34px; font-size: 13.5px !important; }
+.now-gbegin { display: block; text-align: left; margin: 4px 0 2px -4px; padding-inline: 8px !important; min-height: 34px; font-size: 13.5px !important; }
 
 /* With what is next: the names fade out beneath the one thing. */
 .now-next .now-list > .pl-task:nth-of-type(2) .pl-words { opacity: .8; }
@@ -64,7 +64,7 @@ html.has-rail.in-pane .now-top { display: flex; }
 .now-thread .th-done > i { background: var(--faint); }
 .now-thread .th-done span { text-decoration: line-through; text-decoration-color: var(--faint); }
 .now-thread .th-now { padding: 14px 0; color: var(--ink); }
-.now-thread .th-now > i { background: var(--accent); border-color: var(--accent); top: 50%; width: 11px; height: 11px; left: -25px; }
+.now-thread .th-now > i { background: var(--accent); border-color: var(--accent); top: 44px; width: 11px; height: 11px; left: -25px; }
 .now-thread .th-now .now-mid { align-items: flex-start; text-align: left; padding: 6px 0; }
 .now-thread .th-now .now-acts { justify-content: flex-start; margin-left: -12px; }
 .now-thread .th-now .now-btn.go { margin-left: 12px; }
