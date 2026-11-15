@@ -21,6 +21,7 @@ import { addTask, stepsHome, loadTasks, dayPlan } from '../tasks.js';
 import { readNow, nowSide, setNowSide } from '../now.js';
 import { NowStrip } from '../nowstrip.js';
 import { writeThought, fileThought, waitingThoughts } from '../thoughts.js';
+import { dayBody, layOutDay, writeClose } from '../dayends.js';
 import { inPane, host as paneHost } from '../panes.js';
 import { aheadSource } from '../ahead.js';
 import { events as calendarEvents } from '../calendar.js';
@@ -99,9 +100,9 @@ async function fileWaiting() {
   for (const r of await waitingThoughts(isoToday())) fileSoon(r.id);
 }
 // Said into Now's mic: once it's written out, it's filed like a typed one.
-let nowMic = false;
-async function micFromNow() {
-  nowMic = true;
+let nowMic = false; // true (a thought) or 'day' (the morning talk)
+async function micFromNow(kind) {
+  nowMic = kind === 'day' ? 'day' : true;
   await openCapture({ into: null });
 }
 function fileSaid(rows) {
@@ -109,6 +110,11 @@ function fileSaid(rows) {
     if (r.kind === 'line' && !r.deleted && r.fields?.thought?.state === 'voice' && String(r.fields?.voice?.raw || '').trim()) {
       const kept = { ...r, fields: { ...r.fields, thought: { ...r.fields.thought, words: String(r.fields.voice.raw).trim(), state: 'waiting' } } };
       putEntries([kept]).then(() => fileSoon(kept.id));
+    }
+    // Said into the morning talk: the words go into its box.
+    if (r.kind === 'line' && !r.deleted && r.fields?.dayTalk === 'voice' && String(r.fields?.voice?.raw || '').trim()) {
+      const kept = { ...r, fields: { ...r.fields, dayTalk: 'used' }, updated_at: Date.now() };
+      putEntries([kept]).then(() => { plan?.now.heardWords(String(r.fields.voice.raw)); toast('Your words are in the box'); });
     }
   }
 }
@@ -122,6 +128,56 @@ async function keepOnPage(day) {
   await filing;
   looseSoon();
   toast(lines.length === 1 ? 'Filed. It stays on the page too' : `Filed ${lines.length} lines. They stay on the page too`);
+}
+
+// ---------- the two ends of the day (Now, Part 4) ----------
+
+// Morning: what he said, heard as the day and laid out at once (Undo puts
+// today back). Thoughts, and a sixth big thing, go on the page and are filed.
+async function talkDayFromNow(words) {
+  if (!canAskServer()) return { error: 'Talking the day through needs a connection. Your words are still here.' };
+  const today = isoToday();
+  let out;
+  try { out = await askServer(dayBody(words, { items: plan?.items || [], today, events: plan?.cal || [] })); } catch (e) { console.warn(e); out = null; }
+  if (!out || out.error) return { error: `${out?.error || 'That didn’t go through.'} Your words are still here.` };
+  const laid = await layOutDay(out, { items: plan.items, today });
+  await plan.wrote(laid.rows);
+  const written = [];
+  for (const t of laid.page) {
+    const got = await writeThought(t);
+    if (got) { written.push(got.line.id); await applyRemote(got.rows); }
+  }
+  for (const id of written) fileSoon(id, { dump: true });
+  toast(out.said || 'Here is the day as I heard it', {
+    label: 'Undo',
+    run: async () => {
+      const back = [];
+      for (const u of [...laid.undo].reverse()) back.push(...(await u()));
+      await plan.wrote(back);
+      if (plan.now.mode === 'heard') plan.now.mode = null;
+      await plan.now.save({ laid: false });
+      plan.redraw();
+      toast(written.length ? 'Today is back as it was. What went to the page stays there' : 'Today is back as it was');
+    }
+  });
+  return { page: laid.page.length, added: laid.added };
+}
+// Evening: written on today's page under "Close of the day"; the first thing
+// for tomorrow goes to the top of tomorrow.
+async function closeDayFromNow(answers) {
+  const today = isoToday();
+  const got = await writeClose(answers, { items: plan?.items || [], today });
+  await applyRemote(got.rows.filter((r) => r !== got.first));
+  if (got.first) await plan.wrote([got.first]);
+  else await plan.refresh();
+  const first = got.first ? ` “${got.first.text}” is first tomorrow.` : '';
+  toast(`The day is closed. It’s on today’s page.${first}`, { label: 'Show', run: () => go({ view: 'notebook', pageId: `day-${today}`, line: got.line.id }) });
+}
+// From the 9 pm card on today's page.
+async function closeDayFromCard() {
+  if (!plan) return;
+  await go({ view: 'plan', tab: 'now' });
+  plan.now.openClose();
 }
 
 // Meetings: your tasks become tasks here (a business one goes to Acro HQ).
@@ -441,6 +497,8 @@ addCommands(() => [
   { group: 'plan', label: 'Now: Done with the one thing', keys: 'D', words: ['done', 'finished', 'tick', 'check', 'now', 'one thing'], run: () => plan.now.done(), when: onNow },
   { group: 'plan', label: 'Now: Not now (later today, enough for today, another day)', keys: 'N', words: ['not now', 'later', 'tomorrow', 'set aside', 'postpone', 'another day', 'worked on'], run: () => { plan.now.asking = true; plan.redraw(); }, when: () => onNow() && !!plan.now.model().cur },
   { group: 'plan', label: 'Now: Begin the next thing', keys: 'B', words: ['begin', 'start', 'next', 'go', 'now', 'gate'], run: () => { const m = plan.now.model(); if (m.cand) plan.now.begin(m.cand.group ? 'smalls' : m.cand.item.row.id); }, when: () => onNow() && !plan.now.model().cur },
+  { group: 'plan', label: 'Talk the day through (what is in front of you today)', words: ['morning', 'talk', 'day', 'lay out', 'plan the day', 'say', 'brain dump', 'start', 'now'], run: async () => { await go({ view: 'plan', tab: 'now' }); plan.now.openTalk(); }, when: () => !!plan && !hidden().has('nowtalk') },
+  { group: 'plan', label: 'Close the day (what you did, two questions, first thing tomorrow)', words: ['evening', 'close', 'end', 'day', 'reflect', 'journal', 'done', 'tomorrow', 'shutdown', 'wrap up'], run: () => closeDayFromCard(), when: () => !!plan && !hidden().has('nowclose') },
   { group: 'plan', label: 'Now: what is next today (show or hide the list)', keys: 'Space', words: ['next', 'list', 'more today', 'choose another', 'queue', 'what is next'], run: () => { plan.now.listOpen = !plan.now.listOpen; plan.redraw(); }, when: onNow },
   { group: 'plan', label: 'Now: the day beside the one thing, or one column', keys: 'Alt+P', words: ['side by side', 'column', 'beside', 'layout', 'flip', 'now'], run: () => flipPlan(), when: () => onNow() && !touch.matches },
   { group: 'view', label: 'Plan beside the page, or on top in one column', keys: 'Alt+P', words: ['plan', 'side', 'column', 'top', 'layout', 'flip'], run: () => flipPlan(), when: () => !touch.matches },
@@ -462,6 +520,15 @@ function wireTalking() {
   capture = new CaptureScreen($('.capture'), {
     onSaved: async (saved) => {
       // Said into Now's mic: it goes on today's page and you stay on Now.
+      if (nowMic === 'day' && !saved.line.fields?.into) {
+        nowMic = false;
+        const kept = { ...saved.line, fields: { ...saved.line.fields, dayTalk: 'voice', sorted: true } };
+        await putEntries([kept]);
+        await applyRemote([...saved.rows.filter((r) => r.id !== kept.id), kept]);
+        toast('Kept. Your words go into the box once they’re written out');
+        writeOut();
+        return;
+      }
       if (nowMic && !saved.line.fields?.into) {
         nowMic = false;
         const kept = { ...saved.line, fields: { ...saved.line.fields, thought: { words: '', state: 'voice' } } };
@@ -512,6 +579,8 @@ function wireTalking() {
   // decide each thing (a task, keep thinking, split, let go).
   dayReview = new DayReview($('.day-review'), {
     card: $('.evening-card'),
+    closed: () => !!plan?.now?.st?.closed || hidden().has('nowclose'),
+    closeDay: () => closeDayFromCard(),
     ask: askServer,
     canAsk: canAskServer,
     base: () => location.origin + location.pathname,
@@ -519,6 +588,8 @@ function wireTalking() {
     onOpen: (id) => openEntry(id),
     toast
   });
+  // The day closed on Now: the 9 pm card stops offering it.
+  document.addEventListener('inkwell:now', () => dayReview?.renderCard());
   $('.tidy-nudge').addEventListener('click', () => showTidy());
   // The Tags page: every tag, grouped, merged and gone through one by one.
   tagsPage = new TagsPage({
@@ -631,7 +702,9 @@ function wireTalking() {
       floor: () => pull?.floor() || 0,
       redrawn: () => { pull?.soon(); nowStrip?.soon(); },
       thought: (text) => thoughtFromNow(text),
-      mic: () => micFromNow(),
+      mic: (kind) => micFromNow(kind),
+      talkDay: (words) => talkDayFromNow(words),
+      closeDay: (answers) => closeDayFromNow(answers),
       toast
     }
   });

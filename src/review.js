@@ -373,6 +373,7 @@ export class DayReview {
         this.box.scrollIntoView({ block: 'start', behavior: 'smooth' });
         this.run();
       });
+      this.evCard.querySelector('.ec-close')?.addEventListener('click', () => opts.closeDay?.());
       this.evCard.querySelector('.ec-skip').addEventListener('click', () => {
         try { localStorage.setItem('eveningSkip', this.iso); } catch { /* private window */ }
         this.renderCard();
@@ -392,7 +393,14 @@ export class DayReview {
   }
 
   renderCard() {
-    if (this.evCard) this.evCard.hidden = !this.evening();
+    if (!this.evCard) return;
+    this.evCard.hidden = !this.evening();
+    // "Close the day" (Now, Part 4): until it's closed; the review stays beside it.
+    const close = this.evCard.querySelector('.ec-close');
+    if (close) {
+      close.hidden = !!this.o?.closed?.();
+      this.evCard.querySelector('.ec-start')?.classList.toggle('primary', close.hidden);
+    }
   }
 
   isFolded() {
