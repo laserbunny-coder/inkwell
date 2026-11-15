@@ -10,7 +10,7 @@ import { draftHolding } from '../drafts.js';
 import { inPane } from '../panes.js';
 import { books, bookType, hasManuscript, bookOf, worldOf } from '../library.js';
 import { isoOf, isoToday } from '../dates.js';
-import { $, body, box, deskPage, editor, frame, gone, gridTouched, hstrip, inNotebook, loadStagePage, looseFoot, openBeside, pageOfPlace, panes, plan, planningView, pull, root, setGridTouched, sideNotes, state, store, tagsPage, talkThrough, view } from '../main.js';
+import { $, body, box, deskPage, editor, gone, gridTouched, hstrip, inNotebook, looseFoot, openBeside, panes, plan, planningView, pull, root, setGridTouched, sideNotes, state, store, tagsPage, talkThrough, view } from '../main.js';
 import { touch } from './scriptbar.js';
 import { notebook } from './notebookview.js';
 import { openChapter } from './manuscript.js';
@@ -18,6 +18,7 @@ import { renderCrumb, renderRail } from './rail.js';
 import { grid, renderLibrary, renderProject, renderWorld } from './libraryview.js';
 import { beside, comparer, talk } from './revising.js';
 import { loadProduction } from './productionwiring.js';
+import { frame, loadStagePage, pageOfPlace } from './workpages.js';
 
 // ---------- getting around ----------
 
