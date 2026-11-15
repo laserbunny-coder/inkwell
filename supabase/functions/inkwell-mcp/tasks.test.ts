@@ -250,4 +250,44 @@ assert.equal(get("li-a2").fields.trashed, undefined);
 assert.equal(get("li-a3").fields.trashedWith, undefined);
 assert.ok((await call("list_tasks", { from: TODAY })).tasks.some((x: any) => x.id === "li-a2"), "back on the plan");
 
+// ---------- First light and Training (set up by talking to Claude) ----------
+let fl = await call("first_light");
+assert.deepEqual(fl.todays_chapters, ["Genesis 1", "Genesis 2", "Psalm 1", "Proverbs 1", "Matthew 1", "Matthew 2"]);
+fl = await call("first_light", { old_testament: "Isaiah 40", psalms: "Psalm 23", wisdom: "Ecclesiastes", new_testament: "John 1" });
+assert.equal(fl.set, true);
+assert.deepEqual(fl.todays_chapters, ["Isaiah 40", "Isaiah 41", "Psalm 23", "Ecclesiastes 1", "John 1", "John 2"]);
+assert.equal(get("settings-plan").fields.free, 30, "the plan's other settings stay");
+assert.equal(typeof get("settings-plan").fields.reading.ot, "number");
+const flBad: any = await handle({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "first_light", arguments: { old_testament: "Psalm 3" } } }, db);
+assert.equal(flBad.result.isError, true);
+assert.match(flBad.result.content[0].text, /own tracks/);
+
+const tBad: any = await handle({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "training", arguments: {} } }, db);
+assert.match(tBad.result.content[0].text, /isn't made yet/);
+rows.push(
+  e("pg_training", "page", null, { title: "Training", fields: { training: { round: 0, order: ["Hard A", "Light", "Light", "Hard B", "Light", "Light"], step: { lever: 1 } } } }),
+  e("s-ev1", "line", "pg_training", { text: "Evaluation 1", sort: 1024, fields: { session: { once: true } } }),
+  e("s-ev2", "line", "pg_training", { text: "Evaluation 2", sort: 2048, fields: { session: { once: true } } }),
+  e("s-ha", "line", "pg_training", { text: "Hard A", sort: 3072, fields: { session: { hard: true } } }),
+  e("s-li", "line", "pg_training", { text: "Light", sort: 4096, fields: { session: {} } }),
+  e("s-hb", "line", "pg_training", { text: "Hard B", sort: 5120, fields: { session: { hard: true } } }),
+);
+let tr = await call("training");
+assert.deepEqual(tr.evaluations_left, ["Evaluation 1", "Evaluation 2"]);
+assert.equal(tr.next_in_round, "Evaluation 1");
+assert.match(tr.week, /not set/);
+tr = await call("training", { week: { monday: "hard a", tuesday: "Light", thursday: "Hard B", friday: "light", saturday: "Light", sunday: "rest" } });
+assert.deepEqual(tr.set, ["week"]);
+assert.equal(tr.week.monday, "Hard A");
+assert.equal(tr.week.wednesday, "rest");
+assert.deepEqual(get("pg_training").fields.training.week, { 1: "Hard A", 2: "Light", 4: "Hard B", 5: "Light", 6: "Light" });
+assert.deepEqual(get("pg_training").fields.training.step, { lever: 1 }, "the ladders stay");
+tr = await call("training", { next: "Hard B" });
+assert.equal(tr.next_in_round, "Hard B");
+assert.equal(get("pg_training").fields.training.round, 5);
+tr = await call("training", { week: null });
+assert.match(tr.week, /not set/);
+const trBad: any = await handle({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "training", arguments: { week: { monday: "Leg day" } } } }, db);
+assert.match(trBad.result.content[0].text, /no session called Leg day/);
+
 console.log("inkwell-mcp tasks: all checks passed");

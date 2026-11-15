@@ -309,6 +309,16 @@ try {
     assert.equal((await lines(page, '2026-11-23')).length, 0);
     await page.evaluate(() => { localStorage.setItem('hide', JSON.stringify(JSON.parse(localStorage.getItem('hide')).filter((x) => x !== 'training'))); });
   });
+  await check('a week set by Claude: each weekday its own session, the other days rest', async () => {
+    await patchState(page, { round: 8, at: null, made: null, week: { 1: 'Hard B', 3: 'Light' } });
+    await dayIs(page, '2026-11-30');
+    assert.equal((await until(() => lines(page, '2026-11-30'))).length, 1, 'Monday has its line');
+    assert.equal(await page.evaluate(() => window.__plan.now.train.session().name), 'Hard B');
+    await dayIs(page, '2026-12-01');
+    await sleep(800);
+    assert.equal((await lines(page, '2026-12-01')).length, 0, 'Tuesday rests');
+    await patchState(page, { week: null });
+  });
   assert.deepEqual(page.errors, []);
 
   // ---------- the phone ----------

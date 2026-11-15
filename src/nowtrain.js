@@ -10,7 +10,7 @@
 // the usual gate shows.
 
 import { make } from './dom.js';
-import { readTraining, sessionAt, exName, saveState, finishSession, isTraining, resultLine, bothNums } from './training.js';
+import { readTraining, sessionAt, nextSession, exName, saveState, finishSession, isTraining, resultLine, bothNums } from './training.js';
 import { getEntry, putEntries } from './db.js';
 
 export class TrainNow {
@@ -30,7 +30,7 @@ export class TrainNow {
     const at = this.tr?.state.at;
     return at && at.day === this.p.today ? { i: at.i || 0, res: Array.isArray(at.res) ? at.res : [] } : { i: 0, res: [] };
   }
-  session() { return this.tr ? sessionAt(this.tr) : null; }
+  session() { return this.tr ? sessionAt(this.tr, this.tr.state.round, this.p.today) : null; }
   ex() { const s = this.session(); return s ? s.x[Math.min(this.place().i, s.x.length - 1)] : null; }
 
   // ---------- drawing ----------
@@ -290,7 +290,7 @@ export class TrainNow {
     }
     await this.write({ at: null });
     this.reset();
-    const next = sessionAt(this.tr)?.name;
+    const next = nextSession(this.tr, this.p.today, { after: true }).s?.name;
     await this.now.after({ k: 'set', t: 'Training', where: 'training' });
     this.p.hooks.toast?.(`Training is off today. Next time is ${next || 'the same session'}`, {
       label: 'Undo',

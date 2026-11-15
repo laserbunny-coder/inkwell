@@ -11,7 +11,11 @@
 // sync like anything else:
 //   fields.training = { round, order: [session names], step: { lad: i },
 //     last: { k: n }, lastSets: { k: n }, lastMin: { k: n },
-//     at: { day, i, res: [line texts] } | null, made: day }
+//     at: { day, i, res: [line texts] } | null, made: day,
+//     week: { 1..7 (Monday = 1): session name | null } | absent }
+// With a week set (he can ask Claude to set it), each weekday has its own
+// session and the days without one are rest days; without it, the sessions
+// take turns in the round and every day but Sunday has a line.
 //
 // Each day (not Sunday) a plain task line "Training" goes on today, early
 // afternoon by default, and he drags it like any other line. It never counts
@@ -21,7 +25,7 @@
 import { getEntry, putEntries, children } from './db.js';
 import { entry } from './model.js';
 import { GAP } from './order.js';
-import { addTask, setTask, tickTask, isoOf, dateOf } from './tasks.js';
+import { addTask, setTask, tickTask, isoOf, dateOf, addDays } from './tasks.js';
 import { addLine } from './capture.js';
 
 export const TRAINING_PAGE = 'pg_training';
@@ -165,15 +169,36 @@ export async function readTraining() {
 // The session whose turn it is. Easing in (he asked on Nov 15): the first
 // time through the round, a hard day's exercises with 3 or more sets show
 // one set fewer.
-export function sessionAt(tr, round = tr.state.round) {
+export const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+export const weekdayOf = (day) => ((dateOf(day).getDay() + 6) % 7) + 1;
+const weekSet = (tr) => { const w = tr?.state?.week; return w && typeof w === 'object' && Object.values(w).some(Boolean) ? w : null; };
+// No training that day: Sunday, or a day the week leaves empty.
+export function restDay(tr, day) {
+  const w = weekSet(tr);
+  return w ? !w[weekdayOf(day)] : dateOf(day).getDay() === 0;
+}
+
+export function sessionAt(tr, round = tr.state.round, day = isoOf()) {
   const once = tr.sessions.filter((s) => s.once);
   if (round < once.length) return once[round];
   const order = (tr.state.order || ROUND).map((n) => tr.sessions.find((s) => !s.once && s.name === n)).filter(Boolean);
   const turn = order.length ? order : tr.sessions.filter((s) => !s.once);
   if (!turn.length) return null;
-  const s = turn[(round - once.length) % turn.length];
-  if (!s.hard || round - once.length >= turn.length) return s;
+  const w = weekSet(tr);
+  const named = w && w[weekdayOf(day)] ? tr.sessions.find((s) => !s.once && s.name === w[weekdayOf(day)]) : null;
+  const s = named || turn[(round - once.length) % turn.length];
+  const first = w ? Object.values(w).filter(Boolean).length : turn.length;
+  if (!s.hard || round - once.length >= first) return s;
   return { ...s, ease: true, x: s.x.map((x) => (x.n >= 3 ? { ...x, n: x.n - 1 } : x)) };
+}
+
+// The next session from a day on (that day included unless after): { s, day }.
+export function nextSession(tr, from = isoOf(), { after = false } = {}) {
+  for (let k = after ? 1 : 0; k < 8; k++) {
+    const day = addDays(from, k);
+    if (!restDay(tr, day)) return { s: sessionAt(tr, tr.state.round, day), day };
+  }
+  return { s: sessionAt(tr, tr.state.round, from), day: from };
 }
 
 // An exercise's name: a ladder says the step he's on.
@@ -196,14 +221,13 @@ export async function saveState(patch) {
 
 export const trainingToday = (items, today) => items.find((i) => isTraining(i.row) && (i.task.day === today || (i.row.fields?.done && isoOf(i.task.done_at || 0) === today)));
 
-// Today's line, once a day, not on Sunday, unless it was already made today
+// Today's line, once a day, not on a rest day (Sunday, or as the week says), unless it was already made today
 // (and since taken off). → rows written.
 export async function ensureTrainingLine(items, today = isoOf()) {
-  if (dateOf(today).getDay() === 0) return [];
   if (trainingToday(items, today)) return [];
   const rows = [...(await seedTraining())];
   const tr = await readTraining();
-  if (!tr || tr.state.made === today) return rows;
+  if (!tr || tr.state.made === today || restDay(tr, today)) return rows;
   rows.push(...(await addTrainingLine(items, today)));
   const st = await saveState({ made: today });
   if (st) rows.push(st);
@@ -278,7 +302,9 @@ export async function deskTraining() {
   const after = 'After your evaluation';
   const sec = (v, pre = '') => (v != null ? `${pre}${v} seconds` : after);
   const ladder = (lad) => { const x = xs.find((e) => e.lad === lad); return x ? `${exName(x, tr.state).replace(/ hold$/, '')}${L[x.k] != null ? `, ${L[x.k]} seconds` : ''}` : after; };
-  const next = sessionAt(tr);
+  const nx = nextSession(tr, isoOf());
+  const next = nx.s;
+  const on = nx.day !== isoOf() && weekSet(tr) ? ` on ${WEEKDAYS[weekdayOf(nx.day) - 1]}` : '';
   return {
     goals: [
       ['Vertical over 30 inches', L.vtest != null ? `${L.vtest} inches` : after],
@@ -288,6 +314,6 @@ export async function deskTraining() {
       ['Two-minute handstand', sec(L.free)]
     ],
     waiting: WAITING,
-    next: next ? `${next.name}${next.ease ? ', one set fewer for your first week' : ''}` : ''
+    next: next ? `${next.name}${on}${next.ease ? ', one set fewer for your first week' : ''}` : ''
   };
 }
