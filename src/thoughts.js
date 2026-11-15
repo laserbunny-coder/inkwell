@@ -7,8 +7,8 @@
 //   a task for later  → a task under Not planned
 //   an app or tool    → a copy tagged #workshop
 //   something to find → a copy tagged #lookup
-// The copies live on one page, "Filed thoughts", each linking back to the
-// line. The line itself only gets a quiet note ("Filed under the Drawer",
+// The copies live on one page, "Filed thoughts" (each remembers its line).
+// The line itself only gets a quiet note ("Filed under the Drawer",
 // Look switch "Where a thought was filed") and stops counting as loose.
 // A thought that is plainly an instruction about today ("put the hook first")
 // changes the plan instead, with Undo, and the line comes off the page.
@@ -69,9 +69,9 @@ async function putAway(line, places) {
     await filedPage(rows);
     if (!sort) sort = Math.max(0, ...(await children(FILED_PAGE)).map((r) => r.sort || 0));
     sort += GAP;
-    const content = [{ type: 'text', text: `${words} ` }, { type: 'entryRef', attrs: { id: line.parent_id, title: line.parent_id.replace(/^day-/, '') } }, { type: 'text', text: ` #${tag}` }];
-    const text = content.map((n) => (n.type === 'text' ? n.text : n.attrs.title)).join('');
-    const copy = entry('line', { parent_id: FILED_PAGE, sort, text, content, tags: tagsIn(text), links: [line.parent_id], fields: { done: false, gather: null, gathered: null, mirror: null, thought: { from: line.id } } });
+    // No link back to the day: today's page mustn't fill up with "Linked from".
+    const text = `${words} #${tag}`;
+    const copy = entry('line', { parent_id: FILED_PAGE, sort, text, content: [{ type: 'text', text }], tags: tagsIn(text), links: [], fields: { done: false, gather: null, gathered: null, mirror: null, thought: { from: line.id, day: line.parent_id } } });
     rows.push(copy);
     made.push(copy.id);
   }
