@@ -2,9 +2,10 @@
 import { keyboard } from '../keyboard.js';
 import { media } from '../device.js';
 import { flip, altsHere } from '../alts.js';
-import { $, alts, body, captureHere, editor, insertSection, isScript, root, setElement, writing } from '../main.js';
+import { $, alts, body, captureHere, editor, insertSection, isScript, root, setElement } from '../main.js';
 import { caretSoon, placeOutlineBar } from './notebookview.js';
 import { toggleFocus } from './pagesettings.js';
+import { writing } from './commands.js';
 
 // ---------- script bar ----------
 

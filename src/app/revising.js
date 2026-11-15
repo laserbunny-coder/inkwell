@@ -8,7 +8,7 @@ import { pieceDoc, pageDoc, startDraft } from '../drafts.js';
 import { CompareView, BesidePane } from '../compare.js';
 import { claudeNotes, TalkPanel } from '../claudenotes.js';
 import { bookType, hasManuscript } from '../library.js';
-import { $, alts, askServer, canAskServer, editor, inNotebook, notes, root, state, statusEl, store, view, writing } from '../main.js';
+import { $, alts, askServer, canAskServer, editor, inNotebook, notes, root, state, statusEl, store, view } from '../main.js';
 import { notebook } from './notebookview.js';
 import { go, openBook, remember } from './routing.js';
 import { sync } from './syncwiring.js';
@@ -16,6 +16,7 @@ import { nameOf, plural } from './tidying.js';
 import { printLater } from './sharing.js';
 import { productionOwner } from './productionwiring.js';
 import { hidden, setShown } from './pagesettings.js';
+import { writing } from './commands.js';
 
 // ---------- revising: fresh eyes, print, drafts, compare, Claude's notes ----------
 

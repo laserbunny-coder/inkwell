@@ -7,11 +7,12 @@ import { titleOf } from '../notebook.js';
 import { HistoryStrip } from '../hstrip.js';
 import { ago } from '../library.js';
 import { make } from '../dom.js';
-import { $, body, editor, inNotebook, notes, root, state, store, writing } from '../main.js';
+import { $, body, editor, inNotebook, notes, root, state, store } from '../main.js';
 import { currentEditor, notebook } from './notebookview.js';
 import { refreshWords } from './manuscript.js';
 import { chapterMenu } from './tidying.js';
 import { edgesQuietUntil } from './pagesettings.js';
+import { writing } from './commands.js';
 // The history strip (made further down, with history).
 let hstrip = null;
 // On a touch screen an edge opens on a tap, never on a hover: phones send

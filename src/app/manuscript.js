@@ -11,13 +11,14 @@ import { applyLook, renderLook, cleanLook, DEFAULT_LOOK } from '../wovenlook.js'
 import { elementsIn, plainPages, newElement } from '../production.js';
 import { threadsOf } from '../grid.js';
 import { bookType, bookOf, worldOf } from '../library.js';
-import { $, askServer, canAskServer, currentBook, editor, isScript, isWoven, notes, root, state, statusEl, store, view, writing } from '../main.js';
+import { $, askServer, canAskServer, currentBook, editor, isScript, isWoven, notes, root, state, statusEl, store, view } from '../main.js';
 import { placeScriptBar } from './scriptbar.js';
 import { openEntry, remember } from './routing.js';
 import { sync } from './syncwiring.js';
 import { renderCrumb, renderRail, renderScenes } from './rail.js';
 import { nameOf, refreshViews } from './tidying.js';
 import { beside, talk } from './revising.js';
+import { writing } from './commands.js';
 // The scene numbers in the numbered script's other chapters, around the one open.
 let numbering = { before: null, after: null, used: [] };
 // The world's places (bible pages that are locations), for guessing where a scene is.
