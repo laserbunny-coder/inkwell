@@ -138,7 +138,8 @@ function threadsOf(updates) {
 
 // The seats at the desk: one per project, yours and Claude's joined where
 // they're the same thing. worlds: [{ id, title, color, edited, star }].
-export function seatsFor({ worlds, needs, updates, settings, now }) {
+// A finished project (done) gets no seat unless something of its still needs you.
+export function seatsFor({ worlds, needs, updates, settings, now, keepDone = false }) {
   const seats = new Map();
   const byTitle = new Map(worlds.map((w) => [low(w.title), w]));
   const byId = new Map(worlds.map((w) => [w.id, w]));
@@ -186,6 +187,7 @@ export function seatsFor({ worlds, needs, updates, settings, now }) {
     seat.auto = busy || (seat.world && now - seat.world.edited < 3 * DAY) ? 'on' : now - seat.at < 30 * DAY ? 'wings' : 'back';
     seat.pinned = settings.stage[seat.key] in STAGES ? settings.stage[seat.key] : null;
     seat.stage = seat.pinned || seat.auto;
+    if (seat.world?.done && !keepDone && !seat.calls.length) continue;
     out.push(seat);
   }
   // Whatever needs you comes first, then whatever moved last, until you
@@ -396,7 +398,7 @@ export class DeskPage {
     const [list, all, settings] = [await byKind('world'), await areas(), await deskSettings()];
     const areaById = new Map(all.map((a) => [a.id, a]));
     const worlds = list.filter((w) => !w.deleted && !w.fields?.trashed)
-      .map((w) => ({ id: w.id, title: w.title, color: areaColor(areaById.get(w.area_id)), edited: editedAt(w), star: w.fields?.star || '' }));
+      .map((w) => ({ id: w.id, title: w.title, color: areaColor(areaById.get(w.area_id)), edited: editedAt(w), star: w.fields?.star || '', done: !!w.fields?.finished }));
     return { worlds, settings };
   }
 

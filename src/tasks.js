@@ -360,7 +360,8 @@ export function whenWord(task, today = isoOf()) {
 // Every task with where it lives: { row, task, root (its page, day or piece),
 // world (the project it's in, if any), mine }. Tasks inside something in the
 // Trash are left out.
-export async function loadTasks(today = isoOf()) {
+// withAway: also a finished project's open tasks (for its own Steps).
+export async function loadTasks(today = isoOf(), { withAway = false } = {}) {
   const rows = (await tasked()).filter((r) => r.kind === 'line' && !r.fields?.mirror);
   const seen = new Map();
   const get = async (id) => {
@@ -381,6 +382,9 @@ export async function loadTasks(today = isoOf()) {
       at = await get(at.parent_id);
     }
     if (!ok || !root) continue;
+    // A finished project's open tasks are put away with it (its done ones
+    // still count, for your pace); reopening it brings them back.
+    if (!withAway && world?.fields?.finished && !row.fields?.done) continue;
     // One that repeats shows on the day it's due now (see dueDay).
     const task = isRepeat(row.fields.task) ? { ...row.fields.task, day: dueDay(row.fields.task, today) } : row.fields.task;
     // Its notes: the lines written under it (blank ones don't count).

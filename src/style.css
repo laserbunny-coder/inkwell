@@ -940,6 +940,7 @@ html.line-holding .ProseMirror, html.line-holding .ProseMirror *, html.line-calm
 .lib-trash { margin-top: 36px; }
 .lib-trash summary { cursor: pointer; list-style: revert; }
 .lib-trash li .loose-title { flex: 1; }
+.lib-done + .lib-trash { margin-top: 18px; }
 
 .lib-bar { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
 .lib-bar #lib-path { flex: 1; margin: 0; }

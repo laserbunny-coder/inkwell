@@ -25,7 +25,7 @@ export async function aheadSource(fetchDesk, now = Date.now()) {
   const [list, all, settings] = [await byKind('world'), await areas(), await deskSettings()];
   const areaById = new Map(all.map((a) => [a.id, a]));
   const worlds = list.filter((w) => !w.deleted && !isTrashed(w))
-    .map((w) => ({ id: w.id, title: w.title, color: areaColor(areaById.get(w.area_id)), edited: editedAt(w), star: w.fields?.star || '' }));
+    .map((w) => ({ id: w.id, title: w.title, color: areaColor(areaById.get(w.area_id)), edited: editedAt(w), star: w.fields?.star || '', done: !!w.fields?.finished }));
   let data = null;
   try { data = await fetchDesk?.(new Date(now - 14 * DAY).toISOString()); } catch (e) { console.warn(e); }
   const updates = (data?.updates || []).map((u) => ({ ...u, at: u.at || Date.parse(u.created_at) })).sort((a, b) => a.at - b.at);

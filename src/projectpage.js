@@ -65,7 +65,7 @@ export class ProjectPage {
     const settings = await deskSettings();
     const data = this.data || { needs: [], updates: [] };
     const info = { id: w.id, title: w.title, color: this.facts.color, edited: this.facts.edited || w.updated_at || 0, star: w.fields?.star || '' };
-    const seat = seatsFor({ worlds: [info], needs: data.needs, updates: data.updates, settings, now }).find((s) => s.key === `w:${w.id}`);
+    const seat = seatsFor({ worlds: [info], needs: data.needs, updates: data.updates, settings, now, keepDone: true }).find((s) => s.key === `w:${w.id}`);
     if (!seat || this.world !== w) return;
     this.seat = seat;
     this.settings = settings;
@@ -79,6 +79,8 @@ export class ProjectPage {
   // Where it sits on the Desk; a click moves it.
   drawSeat(seat) {
     const b = this.els.seat;
+    // A finished project sits nowhere on the Desk: it says so instead.
+    if (this.world?.fields?.finished) { b.textContent = 'Finished'; b.title = 'Put away on the Library’s Finished shelf'; b.onclick = null; return; }
     b.textContent = STAGES[seat.stage];
     b.title = 'Where it sits on the Desk';
     b.onclick = () => {

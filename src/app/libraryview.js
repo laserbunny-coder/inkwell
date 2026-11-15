@@ -9,14 +9,14 @@ import { PlotGrid, worldPromises } from '../grid.js';
 import { isLife, personalArea } from '../pages.js';
 import { gatherItems } from '../stages.js';
 import { dayWord } from '../tasks.js';
-import { areas, bookType, hasManuscript, kindName, areaColor, newArea, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, worlds, worldOf, piecesIn, worldTree, worldStats, usedLabels, SHAPES, shapeOf, nextLevel, newShaped, editedAt, defaultLabel, stageOf, nextLabel, setForNew, typeForSet, stageSetOf, stagesOf, isReady } from '../library.js';
+import { isFinished, areas, bookType, hasManuscript, kindName, areaColor, newArea, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, worlds, worldOf, piecesIn, worldTree, worldStats, usedLabels, SHAPES, shapeOf, nextLevel, newShaped, editedAt, defaultLabel, stageOf, nextLabel, setForNew, typeForSet, stageSetOf, stagesOf, isReady } from '../library.js';
 import { make } from '../dom.js';
-import { isoToday } from '../dates.js';
+import { isoToday, isoOf } from '../dates.js';
 import { addCommands } from './commandlist.js';
 import { $, editor, gone, gridTouched, notes, setGridTouched, state, store, view } from '../main.js';
 import { go, openBook, openEntry } from './routing.js';
 import { areaPath, dot, renameable, renderCrumb, renderRail, subtree } from './rail.js';
-import { KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, moveBookToArea, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu } from './tidying.js';
+import { finishWorld, reopenWorld, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, moveBookToArea, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu } from './tidying.js';
 import { renderBoard } from './workpages.js';
 import { askServer, canAskServer, plan, projectPage } from './talking.js';
 let worldDates = []; // the open project's dated things besides its steps (shoot days)
@@ -93,7 +93,8 @@ async function renderLibrary() {
   const info = new Map();
   for (const w of allBooks) if (!ids || ids.has(w.area_id)) info.set(w.id, await worldStats(w));
   const recent = (w) => info.get(w.id)?.edited || w.updated_at;
-  const shown = allBooks.filter((b) => !ids || ids.has(b.area_id))
+  const inArea = allBooks.filter((b) => !ids || ids.has(b.area_id));
+  const shown = inArea.filter((b) => !isFinished(b))
     .sort(sort === 'custom' ? byMyOrder : sort === 'title' ? (a, b) => (a.title || '').localeCompare(b.title || '', undefined, { numeric: true }) : sort === 'made' ? (a, b) => b.created_at - a.created_at : (a, b) => recent(b) - recent(a));
   const sortSel = $('#lib-sort');
   sortSel.value = sort;
@@ -178,7 +179,28 @@ async function renderLibrary() {
     return li;
   }));
   $('#lib-loose-box').hidden = !loose.length;
+  renderFinished(inArea.filter(isFinished));
   await renderTrash();
+}
+
+// "today", "yesterday", "Nov 12": when a project was finished.
+const finishedWord = (w) => { const d = dayWord(isoOf(new Date(w.fields.finished))); return /^(Today|Yesterday)$/.test(d) ? d.toLowerCase() : d; };
+// The Finished shelf: projects you've finished, newest first, in the area
+// you're looking at. Open looks back; Reopen brings one back to the Desk.
+function renderFinished(list) {
+  const box = $('#lib-done-box');
+  box.hidden = !list.length;
+  $('#lib-done-count').textContent = list.length ? `(${list.length})` : '';
+  $('#lib-done').replaceChildren(...list.sort((a, b) => b.fields.finished - a.fields.finished).map((w) => {
+    const li = make('li');
+    const open = make('button', 'loose-title', w.title || 'Untitled');
+    open.addEventListener('click', () => go({ view: 'world', id: w.id }));
+    onContextMenu(open, () => worldMenu(w));
+    const back = make('button', 'ghost-btn', 'Reopen');
+    back.addEventListener('click', () => reopenWorld(w));
+    li.append(open, make('span', 'when', `Finished ${finishedWord(w)}`), back, menuButton(() => worldMenu(w), `More for ${w.title || 'this project'}`));
+    return li;
+  }));
 }
 
 function addAreaChip(parentId) {
@@ -430,6 +452,14 @@ async function renderWorld() {
   };
   title.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); title.blur(); } if (e.key === 'Escape') { e.preventDefault(); title.textContent = w.title; title.blur(); } };
   $('#wh-more').replaceChildren(menuButton(() => worldMenu(w), 'More for this world'));
+  // A finished project says so, with the way back.
+  const fin = $('#wh-finished');
+  fin.hidden = !isFinished(w);
+  if (isFinished(w)) {
+    const back = make('button', 'wp-link', 'Reopen');
+    back.addEventListener('click', () => reopenWorld(w));
+    fin.replaceChildren(document.createTextNode(`✓ Finished ${finishedWord(w)}. It’s on the Finished shelf in the Library, with everything still in it. `), back);
+  }
   const n = (x, word) => `${x.toLocaleString()} ${word}${x === 1 ? '' : 's'}`;
   $('#wh-stats').textContent = (isLife(w) ? [n(s.pieces.length, 'piece')] : [n(s.pieces.length, 'piece'), s.words && n(s.words, 'word'), n(s.pages.length, 'page')]).filter(Boolean).join(' · ');
   const areaSel = $('#wh-area');

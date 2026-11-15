@@ -40,7 +40,7 @@ export async function talkContext({ scope = null, data = null, now = Date.now(),
   const [list, settings, tasks, plan] = [await byKind('world'), await deskSettings(), await loadTasks(), await planSettings()];
   const rows = list.filter((w) => !w.deleted && !isTrashed(w));
   const byId = new Map(rows.map((w) => [w.id, w]));
-  const worlds = rows.map((w) => ({ id: w.id, title: w.title, color: '', edited: editedAt(w), star: w.fields?.star || '' }));
+  const worlds = rows.map((w) => ({ id: w.id, title: w.title, color: '', edited: editedAt(w), star: w.fields?.star || '', done: !!w.fields?.finished }));
   const updates = (data?.updates || []).map((u) => ({ ...u, at: u.at || Date.parse(u.created_at) })).sort((a, b) => a.at - b.at);
   const seats = seatsFor({ worlds, needs: data?.needs || [], updates, settings, now });
   const mine = seats.filter((s) => (scope ? s.world?.id === scope : s.stage === 'on' || s.calls.length)).slice(0, 12);

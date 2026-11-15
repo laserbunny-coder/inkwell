@@ -97,7 +97,7 @@ async function nameSectionLevels() {
 // world of its own), sections nested as they were.
 async function importFountain() {
   const here = state.worldId && (await getEntry(state.worldId));
-  const others = (await worlds()).filter((w) => w.id !== here?.id).sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  const others = (await worlds()).filter((w) => w.id !== here?.id && !w.fields?.finished).sort((a, b) => (a.title || '').localeCompare(b.title || ''));
   const places = [...(here && !gone(here) ? [[here.id, here.title || 'Untitled']] : []), ['', 'A new world of its own'], ...others.map((w) => [w.id, w.title || 'Untitled'])];
   const got = await askScript({ places });
   if (!got) return;
@@ -140,6 +140,7 @@ async function boxPlaces() {
   const out = [];
   const worldName = new Map(allWorlds.map((w) => [w.id, w.title || 'Untitled']));
   for (const w of await projectOrder()) out.push({ label: w.title || 'Untitled', what: 'project', run: () => go({ view: 'world', id: w.id }) });
+  for (const w of allWorlds.filter((x) => x.fields?.finished)) out.push({ label: w.title || 'Untitled', what: 'finished project', run: () => go({ view: 'world', id: w.id }) });
   for (const b of allBooks.sort((a, c) => c.updated_at - a.updated_at)) {
     const w = worldName.get(b.parent_id);
     if (w === (b.title || 'Untitled') && allBooks.filter((x) => x.parent_id === b.parent_id).length === 1) continue;
