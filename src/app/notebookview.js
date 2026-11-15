@@ -6,12 +6,13 @@ import { Notebook } from '../notebook.js';
 import { openHandleMenu } from '../handlemenu.js';
 import { openPicker } from '../picker.js';
 import { inPane } from '../panes.js';
-import { $, besideItem, body, captureHere, dayMenu, dayReview, editor, inNotebook, listSoon, looseFoot, looseSoon, moveLinePicker, paneMoves, plan, planningView, pull, root, sendSelectionPicker, state, statusEl, tidyNudge, whenHere, writeOut } from '../main.js';
+import { $, besideItem, body, captureHere, dayReview, editor, inNotebook, listSoon, looseFoot, looseSoon, moveLinePicker, paneMoves, plan, planningView, pull, root, sendSelectionPicker, state, statusEl, tidyNudge, whenHere, writeOut } from '../main.js';
 import { ROOM_ABOVE, ROOM_BELOW, caretRoom, rowEnd, scriptBar, tapBar, touch, typeHere } from './scriptbar.js';
 import { openEntry, remember } from './routing.js';
 import { applyRemoteChapter } from './syncwiring.js';
 import { renderCrumb, renderRail } from './rail.js';
 import { pageMenu } from './tidying.js';
+import { dayMenu } from './historyview.js';
 
 // ---------- notebook ----------
 

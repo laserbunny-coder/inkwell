@@ -11,7 +11,7 @@ import { sharesOf } from '../sharelink.js';
 import { areas, bookType, hasManuscript, kindName, newArea, pagesIn, bookOf, stats, ago, changeType, worlds, worldOf, newPiece, piecesIn, worldTree, usedLabels, SHAPES, shapeOf, levelsOf, nextLevel, FORMATS, formatName, defaultLabel, stageOf, allSets, addOwnWorkflow, dropOwnWorkflow, setById, stageSetOf, stagesIn, stagesOf } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday } from '../dates.js';
-import { $, editor, gone, hstrip, inNotebook, notes, openTalk, root, showClaudeKnows, state, store, view, writing } from '../main.js';
+import { $, editor, gone, inNotebook, notes, openTalk, root, showClaudeKnows, state, store, view, writing } from '../main.js';
 import { placeScriptBar } from './scriptbar.js';
 import { notebook } from './notebookview.js';
 import { go, openBook } from './routing.js';
@@ -22,6 +22,7 @@ import { newDraft, newDraftFrom, printCurrent } from './revising.js';
 import { openShare, sharing } from './sharing.js';
 import { production } from './productionwiring.js';
 import { stagePage } from './workpages.js';
+import { hstrip } from './historyview.js';
 
 // ---------- tidying up: rename, move, change kind, the Trash ----------
 
