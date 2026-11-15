@@ -9,19 +9,19 @@ import StarterKit from '@tiptap/starter-kit';
 import { EntryIds, SceneBreak, sectionName, SECTION_NAMES } from './schema.js';
 import { isMac, keyLabel, showKeysForThisComputer } from './keys.js';
 import { StatsPanel, record as recordProgress } from './stats.js';
-import { AltMark, ParagraphVersions, AltPanel, flip, newParagraphVersion, altsHere } from './alts.js';
+import { AltMark, ParagraphVersions, AltPanel, flip, newParagraphVersion } from './alts.js';
 import { ChapterStore } from './chapter.js';
 import { NotesLayer } from './notes.js';
 import { BlockHandle } from './blocks.js';
 import { bySort } from './order.js';
-import { getMeta, setMeta, putEntries, children, getEntry, snapshots, byKind, onLocalWrites, forgetDeleted, isTrashed, topTags } from './db.js';
+import { getMeta, setMeta, putEntries, children, getEntry, byKind, onLocalWrites, forgetDeleted, isTrashed, topTags } from './db.js';
 import { trash, restore, trashed, deleteForever, contents } from './trash.js';
 import { searchIndex, searchChanged } from './search.js';
 import { keep, versionsOf, tidyHistory, blocks as docBlocks, compare, deletedFrom, bringBack } from './history.js';
 import { editStages, newWorkflow } from './stageedit.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, askPiece, askScript, showCopy, toast, closeMenu } from './menu.js';
 import { Sync } from './sync.js';
-import { ensureSeed, hasWriting, outline, entry, wordCount, docWords, noteTypes, newId as newIdLocal } from './model.js';
+import { ensureSeed, hasWriting, outline, entry, wordCount, docWords, noteTypes } from './model.js';
 import { chapterMarkdown, bookMarkdown, download } from './export.js';
 import { EntryRef, TagMarks } from './outline.js';
 import { retitleLinks, freshenRefs } from './links.js';
@@ -31,7 +31,7 @@ import { Conflicts } from './conflicts.js';
 import { FileEmbed, insertFiles, resetLinkPics } from './filenode.js';
 import { MAX_BYTES, SPACE, spaceUsed, unsentFiles } from './files.js';
 import { vaultZip, vaultFiles, pageMarkdown } from './vault.js';
-import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain, fromOutline, looksLikeOutline, SceneCodes, NUMBER_SCENES, assignCodes, codeOrder } from './script.js';
+import { ScriptElements, ELEMENTS, elementLabel, scriptPages, toFountain, fromFountain, fromOutline, looksLikeOutline, SceneCodes, assignCodes } from './script.js';
 import { Notebook, rootOf, titleOf, dayId, renderLinkedFrom } from './notebook.js';
 import { moveLine, canMoveLine, indentLines, outdentLines, removeLine, toggleDone, foldKey, toggleChecklist, toggleBox, lineChecks, hasBox, loadDoc, replaceDoc, setLineDragOut, dropLineAt } from './outline.js';
 import { SlashMenu, setSlashItems, slashOpen } from './slash.js';
@@ -46,7 +46,7 @@ import { PlotGrid, threadsOf, worldPromises } from './grid.js';
 import { PageStrip, TodayPanel, isLife, taskHint, personalArea } from './pages.js';
 import { Nav } from './nav.js';
 import { Frame, lookPicker, startLook, toggleLight } from './frame.js';
-import { intoDrawer, gatherItems } from './stages.js';
+import { gatherItems } from './stages.js';
 import { CaptureScreen, writeOutPending, recoverRecording, writeOutAgain, requeueBlank, addLine } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, placeScribeWaiting, RAW } from './voice.js';
 import { takeShares, snapshotPending, tidyShareBlanks, keepShare } from './share.js';
@@ -55,7 +55,7 @@ import { LISTS, listOf, setList, fillList } from './lists.js';
 import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker, speakersOn, mine, sendMeetingToAcro } from './meeting.js';
 import { DayReview, getReview } from './review.js';
 import { TagsPage, tagIndex, statsOf } from './tags.js';
-import { DeskPage, DESK_ID, deskSettings } from './desk.js';
+import { DeskPage, DESK_ID } from './desk.js';
 import { ProjectPage } from './projectpage.js';
 import { Plan, tabFor, isCal, ZOOMS } from './plan.js';
 import { Pull } from './pull.js';
@@ -80,9 +80,10 @@ import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
-import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, nextLabel, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, dropOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
+import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, stageOf, nextLabel, allSets, setOwnWorkflows, addOwnWorkflow, dropOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isReady } from './library.js';
 import { make } from './dom.js';
 import { isoOf, isoToday } from './dates.js';
+import { ROOM_ABOVE, ROOM_BELOW, caretRoom, placeScriptBar, rowEnd, scriptBar, tapBar, touch, typeHere, wireScriptBar } from './app/scriptbar.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -223,120 +224,7 @@ function insertSection(at) {
 }
 const blocks = new BlockHandle(editor, $('.sheet'), { menu: paragraphMenu });
 
-// ---------- script bar ----------
-
-// On a phone there's no Tab key, so a row of element buttons rides just above
-// the keyboard while you write a script. Tapping one changes the line you're on.
-// The alternates buttons sit at the far end of the same row (the whole row
-// when it isn't a script), reached by scrolling it sideways.
-const scriptBar = $('.script-bar');
-const touch = media('touch');
-function placeScriptBar() {
-  const script = isScript();
-  const focus = root.classList.contains('focus');
-  const withAlts = !root.classList.contains('hide-alts') && !focus;
-  // Only while the keyboard is really up (keyboard.js). Focus with no script
-  // leaves just the row's end: Focus, and the keyboard down.
-  const show = touch.matches && keyboard.up && writing() && editor.isFocused;
-  const back = show && scriptBar.hidden;
-  scriptBar.hidden = !show;
-  if (back) scriptBar.scrollLeft = 0; // a row that comes back starts with the mic in view
-  scriptBar.classList.toggle('scripting', script);
-  scriptBar.classList.toggle('only-end', focus && !script);
-  scriptBar.querySelector('[data-end="focus"]').setAttribute('aria-pressed', String(focus));
-  scriptBar.classList.toggle('no-alts', !withAlts);
-  body.classList.toggle('script-bar-on', show);
-  if (!show) return;
-  const vv = window.visualViewport;
-  const bottom = vv ? window.innerHeight - (vv.offsetTop + vv.height) : 0;
-  scriptBar.style.bottom = `${Math.max(0, bottom)}px`;
-  const p = editor.state.selection.$from.parent;
-  const el = p.type.name === 'paragraph' ? p.attrs.el || 'action' : null;
-  scriptBar.querySelectorAll('button[data-el]').forEach((b) => b.classList.toggle('current', b.dataset.el === el));
-  if (!withAlts) return;
-  const here = altsHere(editor.state);
-  const button = (name) => scriptBar.querySelector(`[data-alt="${name}"]`);
-  button('word').textContent = here.word ? `Alternates · ${here.word.n}` : 'Alternates';
-  button('para').textContent = here.para ? `Paragraph ${here.para.i + 1} of ${here.para.n}` : 'Paragraph';
-  button('word').classList.toggle('current', alts.isOpen && alts.scope === 'word');
-  button('para').classList.toggle('current', alts.isOpen && alts.scope === 'para');
-  for (const name of ['prev', 'next']) button(name).classList.toggle('idle', !here.word && !here.para);
-}
-// Types # or / at the caret, with a space before it if it would touch a word
-// (the + on the phone rows types the / that opens the insert menu).
-function typeHere(ed, ch) {
-  const { $from } = ed.state.selection;
-  const before = $from.parent.textBetween(Math.max(0, $from.parentOffset - 1), $from.parentOffset);
-  ed.chain().focus().insertContent(before && before !== ' ' ? ` ${ch}` : ch).run();
-}
-
-// The rows above the keyboard: a quick tap runs a button; holding (or sliding)
-// scrolls the row instead, so a thumb resting on a button never sets it off.
-// pointerdown is held back so the keyboard stays up.
-const TAP_MS = 280;
-
-// Room kept below the caret when the page scrolls to it: the row above the
-// keyboard plus a line or so. (ProseMirror measures the visual viewport, which
-// already ends at the keyboard, so the keyboard isn't counted again here.)
-const ROOM_ABOVE = 60;
-const ROOM_BELOW = 48;
-const caretRoom = {
-  top: ROOM_ABOVE, left: 5, right: 5,
-  get bottom() {
-    const bar = [scriptBar, $('.outline-bar')].find((b) => b && !b.hidden);
-    return (bar ? bar.offsetHeight : 0) + ROOM_BELOW;
-  }
-};
-
-function tapBar(bar, selector, run) {
-  let start = null;
-  let hold = null;
-  const end = () => { clearTimeout(hold); bar.classList.remove('holding'); };
-  bar.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    const b = e.target.closest(selector);
-    start = b ? { b, x: e.clientX, y: e.clientY, t: performance.now(), left: bar.scrollLeft } : null;
-    clearTimeout(hold);
-    hold = setTimeout(() => bar.classList.add('holding'), TAP_MS);
-  });
-  bar.addEventListener('pointerup', (e) => {
-    end();
-    const s = start;
-    start = null;
-    if (!s) return;
-    const tap = performance.now() - s.t < TAP_MS && Math.hypot(e.clientX - s.x, e.clientY - s.y) < 10 && Math.abs(bar.scrollLeft - s.left) < 4;
-    if (tap) { run(s.b); caretSoon(80); }
-  });
-  bar.addEventListener('pointercancel', () => { end(); start = null; });
-}
-tapBar(scriptBar, 'button[data-el], button[data-alt], button[data-ins], button[data-talk], button[data-end]', (b) => {
-  if (b.dataset.end) return rowEnd(b.dataset.end);
-  const what = b.dataset.alt;
-  if (b.dataset.talk) captureHere({ start: true });
-  else if (b.dataset.ins) typeHere(editor, '/');
-  else if (what === 'word' || what === 'para') alts.toggle({ scope: what });
-  else if (what === 'ask') {
-    if (!alts.isOpen) alts.open({ scope: 'word' });
-    alts.askClaude();
-  } else if (what === 'prev' || what === 'next') flip(editor, what === 'prev' ? -1 : 1);
-  else if (b.dataset.el === 'section') {
-    insertSection(editor.state.selection.$from.before(1));
-  } else setElement(b.dataset.el);
-  placeScriptBar();
-});
-editor.on('transaction', placeScriptBar);
-editor.on('focus', placeScriptBar);
-editor.on('blur', () => setTimeout(placeScriptBar, 50));
-window.visualViewport?.addEventListener('resize', placeScriptBar);
-window.visualViewport?.addEventListener('scroll', placeScriptBar);
-// The fixed end of both writing rows: Focus, and the keyboard down.
-function rowEnd(what) {
-  if (what === 'down') { keyboard.down(); return; }
-  toggleFocus();
-  placeScriptBar(); placeOutlineBar();
-}
-// The rows follow the keyboard, not the caret.
-keyboard.onChange(() => { placeScriptBar(); placeOutlineBar(); });
+wireScriptBar();
 
 // ---------- notebook ----------
 
@@ -2815,7 +2703,6 @@ async function renderWorld() {
   // Steps: the project's own tasks, wherever in it they're written.
   await plan?.showSteps(w);
 
-
   // Next: what's waiting, from each page.
   const next = [];
   const items = await gatherItems(w);
@@ -3528,7 +3415,6 @@ const todayPanel = new TodayPanel($('.today-panel'), {
 window.__today = todayPanel;
 
 // ---------- the stage board: a world's pieces by stage ----------
-
 
 function renderBoard(w, pieces, el = $('#wh-board')) {
   // One button on a card moves it to the next status.
@@ -4554,7 +4440,6 @@ function pickFiles() {
   input.click();
 }
 
-
 // The piece you're in, wherever you are in it.
 function currentBookId() {
   if (view() === 'project') return state.bookId;
@@ -4622,7 +4507,6 @@ async function showTrash() {
   if (box.hidden) toast('The Trash is empty');
   else { box.open = true; box.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 }
-
 
 // Everything you can go to: books, areas, chapters, pages and recent days.
 // Move to…: send the line you're on (and what's under it) to another page or day.
@@ -6073,3 +5957,5 @@ async function startPane() {
 }
 
 start();
+
+export { $, alts, body, captureHere, caretSoon, editor, insertSection, isScript, placeOutlineBar, root, setElement, toggleFocus, writing };
