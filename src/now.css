@@ -77,7 +77,7 @@ html.has-rail.in-pane .now-top { display: flex; }
 
 /* Side by side on a computer (Alt + P): the one thing left, the day right. */
 .now-view.now-two { flex-direction: row; max-width: 1180px; gap: 40px; }
-.now-two .now-left { flex: 1 1 60%; display: flex; }
+.now-two .now-left { flex: 1 1 60%; display: flex; flex-direction: column; }
 .now-two .now-right { flex: 0 1 380px; border-left: 1px solid var(--line); padding-left: 28px; overflow-y: auto; max-height: calc(100dvh - 150px); }
 
 .now-event .now-thing { color: var(--ink); }
@@ -133,3 +133,23 @@ html.has-nowstrip body { padding-top: 36px; }
   .ns-btn { padding: 9px 10px; font-size: 14px; }
   .ns-name { font-size: 16px; min-height: 40px; }
 }
+
+/* Out of your head (Part 3): one line at the bottom of Now, and the mic. */
+.now-out { display: flex; align-items: center; gap: 6px; width: min(560px, 100%); margin: 18px auto 4px; }
+.now-out input { flex: 1; min-width: 0; border: 1px solid var(--line); background: transparent; color: var(--ink); font: 15px var(--ui); padding: 10px 14px; border-radius: 10px; outline: none; }
+.now-out input::placeholder { color: var(--faint); }
+.now-out input:focus { border-color: var(--muted); background: var(--raise); }
+.now-mic { flex: none; width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.now-mic:hover { color: var(--ink); background: var(--tint); }
+.now-mic:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (--narrow) {
+  .now-out { margin-top: 12px; }
+  .now-out input { font-size: 16px; padding: 11px 14px; }
+  .now-mic { width: 46px; height: 46px; }
+}
+
+/* Where a thought was filed: a quiet note after the line on the page. */
+.thought-note { margin-left: 10px; font: 12px var(--ui); color: var(--faint); white-space: nowrap; user-select: none; }
+html.hide-nowfiled .thought-note { display: none; }
+.loose-foot .loose-keep { color: var(--muted); }
+.loose-foot .loose-keep:hover { color: var(--ink); }

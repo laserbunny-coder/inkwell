@@ -20,7 +20,7 @@ export const TaskLine = Extension.create({
   // the label; onChip(eid, el) → the label was clicked; onToggle(eid) → Ctrl +
   // Shift + Enter on a line; loose(eid) → is this line still unfiled (only
   // asked for lines straight on the page).
-  addOptions() { return { task: () => null, label: () => '', onChip: () => {}, onToggle: () => {}, loose: () => false }; },
+  addOptions() { return { task: () => null, label: () => '', onChip: () => {}, onToggle: () => {}, loose: () => false, note: () => '' }; },
   addKeyboardShortcuts() {
     return {
       'Mod-Shift-Enter': () => {
@@ -33,7 +33,7 @@ export const TaskLine = Extension.create({
     };
   },
   addProseMirrorPlugins() {
-    const { task, label, onChip, loose } = this.options;
+    const { task, label, onChip, loose, note } = this.options;
     // Line by line, so a key press redraws only the lines it touched; new task
     // details or filing redraw them all (redrawTasks).
     const make = (node, pos, state) => {
@@ -41,6 +41,18 @@ export const TaskLine = Extension.create({
       if (!node.firstChild || !node.attrs.eid) return decos;
       const t = task(node.attrs.eid);
       if (!t) {
+        // A thought filed from Now: a quiet "Filed under the Drawer" after its words.
+        const said = note(node.attrs.eid);
+        if (said) {
+          const end = pos + 1 + node.firstChild.nodeSize - 1;
+          decos.push(Decoration.widget(end, () => {
+            const n = document.createElement('span');
+            n.className = 'thought-note';
+            n.contentEditable = 'false';
+            n.textContent = said;
+            return n;
+          }, { side: 1, key: `n-${node.attrs.eid}-${said}`, ignoreSelection: true }));
+        }
         // doc > list > item: only lines straight on the page can be loose.
         if (state.doc.resolve(pos).depth === 1 && loose(node.attrs.eid)) decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'is-loose' }));
         return decos;

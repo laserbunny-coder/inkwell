@@ -162,6 +162,7 @@ export class Now {
     const sheet = p.sheet;
     const m = (this.m = this.model());
     const held = p.held(sheet);
+    const typing = this.out && this.out.contains(document.activeElement) ? document.activeElement : null;
     const top = make('header', 'now-top');
     top.append(p.switchRow('now'));
     const face = nowFace();
@@ -174,15 +175,53 @@ export class Now {
     else if (two) {
       const left = make('div', 'now-left');
       left.append(this.mid(m));
+      if (!this.off('nowout')) left.append(this.outLine());
       const right = make('div', 'now-right');
       right.append(this.thread(m, { side: true }));
       box.append(left, right);
     } else if (face === 'line') box.append(this.thread(m));
     else if (face === 'next') box.append(this.mid(m), this.foot(m, { list: true }));
     else box.append(this.mid(m), this.foot(m, { list: this.listOpen }));
+    if (!m.active && !two && !this.off('nowout')) box.append(this.outLine());
     sheet.replaceChildren(top, box);
     p.restore(sheet, held);
+    if (typing?.isConnected) typing.focus({ preventScroll: true });
     p.just = null;
+  }
+
+  // At the bottom: one line to get a thought out of your head (and the mic).
+  // It lands on today's page; Now stays. The same box is kept through a
+  // redraw, so a phone's keyboard stays up and nothing typed is lost.
+  outLine() {
+    if (this.out) return this.out;
+    const form = make('form', 'now-out');
+    form.setAttribute('role', 'search');
+    form.setAttribute('aria-label', 'Get it out of your head');
+    const input = make('input');
+    input.type = 'text';
+    input.dataset.thought = '1';
+    input.placeholder = 'Get it out of your head';
+    input.setAttribute('aria-label', 'Get it out of your head: it goes on today’s page, and you stay here');
+    input.enterKeyHint = 'done';
+    input.autocomplete = 'off';
+    const mic = make('button', 'now-mic');
+    mic.type = 'button';
+    mic.dataset.now = 'mic';
+    mic.setAttribute('aria-label', 'Say it instead (Alt + C)');
+    mic.title = 'Say it instead (Alt + C)';
+    mic.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>';
+    form.append(input, mic);
+    form.addEventListener('submit', (e) => { e.preventDefault(); this.thought(input); });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { input.value = ''; input.blur(); } });
+    this.out = form;
+    return form;
+  }
+
+  async thought(input) {
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    await this.p.hooks.thought?.(text);
   }
 
   // The one thing, its two buttons (or the three choices under Not now).
@@ -413,6 +452,7 @@ export class Now {
       else if (act === 'ctx') { if (this.m?.cur?.item.notes) { this.ctxOpen = !this.ctxOpen; this.p.redraw(); } }
       else if (act === 'over' || act === 'missed') await this.eventDone(el.dataset.event, act === 'over');
       else if (act === 'where') await this.openWhere();
+      else if (act === 'mic') await this.p.hooks.mic?.();
       else if (act === 'plan') this.p.goTab('plan');
       else if (act === 'page') this.p.goTab('page');
     } finally { this.busy = false; }
