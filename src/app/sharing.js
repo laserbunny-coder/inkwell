@@ -7,11 +7,12 @@ import { inPane } from '../panes.js';
 import { Sharing, linkFor, commentsOn } from '../sharelink.js';
 import { ago, worldOf } from '../library.js';
 import { make } from '../dom.js';
-import { editor, hidden, inNotebook, notes, productionOwner, setShown, state, store } from '../main.js';
+import { editor, hidden, inNotebook, notes, setShown, state, store } from '../main.js';
 import { currentEditor, notebook } from './notebookview.js';
 import { openEntry } from './routing.js';
 import { sync } from './syncwiring.js';
 import { plural } from './tidying.js';
+import { productionOwner } from './productionwiring.js';
 
 // ---------- share links: read and comment ----------
 

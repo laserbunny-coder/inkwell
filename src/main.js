@@ -79,8 +79,8 @@ import { events as calendarEvents, forgetCalendar } from './calendar.js';
 import './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts } from './tidypass.js';
-import { linkFor } from './sharelink.js';
-import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newBook, pagesIn, bookOf, newPage, ago, worlds, worldOf, newPiece, worldStats, editedAt, stageOf, nextLabel, setOwnWorkflows, setById, stageSetOf, stagesIn } from './library.js';
+import './sharelink.js';
+import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newBook, pagesIn, bookOf, newPage, ago, worlds, worldOf, newPiece, editedAt, stageOf, nextLabel, setOwnWorkflows, setById, stageSetOf, stagesIn } from './library.js';
 import { make } from './dom.js';
 import { isoOf, isoToday } from './dates.js';
 import { placeScriptBar, touch, typeHere, wireScriptBar } from './app/scriptbar.js';
@@ -90,9 +90,10 @@ import { applyRemote, caretAfter, conflicts, migrateOnce, seedIfEmpty, seedNow, 
 import { biblePlaces, connectClaude, connectScribe, markScene, newAct, newChapter, numbering, openChapter, prepareShoot, refreshWords, sceneDetails, scenePop, setWoven, toggleNumbering, wireManuscript, wovenPick } from './app/manuscript.js';
 import { renderCrumb, renderRail, scheduleScenes, wireRail } from './app/rail.js';
 import { KINDS, addPiece, areaMenu, bookMenu, chapterMenu, openStages, pageMenu, plural, refreshViews, setKind, setLife, setStage, worldMenu } from './app/tidying.js';
-import { grid, nextDate, renderWorld, showNewBook, wireLibraryView } from './app/libraryview.js';
+import { nextDate, renderWorld, showNewBook, wireLibraryView } from './app/libraryview.js';
 import { accountName, askClaudeNotes, newDraft, newDraftFrom, printCurrent, revisionPiece, toggleBeside, toggleCompare, toggleFreshEyes, toggleTalk, wireRevising } from './app/revising.js';
-import { openShare, printLater, sharing, warmRooms, wireSharing } from './app/sharing.js';
+import { openShare, printLater, warmRooms, wireSharing } from './app/sharing.js';
+import { toggleGrid, toggleProduction } from './app/productionwiring.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -256,79 +257,6 @@ wireLibraryView();
 wireRevising();
 
 wireSharing();
-
-// ---------- production: shots, the kit, shoot days, posting ----------
-
-// The Make and Deliver rooms load the first time one opens (prodview.js is
-// big and most days don't need it); rooms.js fetches it once the app has
-// started (warmRooms), so it's there offline too.
-let production = null;
-async function loadProduction() {
-  if (!production) {
-    const { ProductionView } = await import('./prodview.js');
-    production ||= new ProductionView($('#prod-view'), productionHooks);
-    window.__production = production;
-  }
-  return production;
-}
-const productionHooks = {
-  open: (r) => grid.hooks.open(r),
-  openPage: (id) => go({ view: 'notebook', pageId: id }),
-  go: (place) => go(place),
-  leave: (piece) => openBook(piece.id),
-  changed(rows) { if (rows.some((r) => r && ['project', 'world', 'page'].includes(r.kind))) renderRail(); },
-  menu: (anchor, items) => popMenu(anchor, items),
-  menuButton: (items, label) => menuButton(items, label),
-  ask, askText, toast,
-  askServer: (body) => askServer(body),
-  canAsk: () => canAskServer(),
-  numberScenes: async (piece) => { await toggleNumbering(piece); await production?.refresh(); },
-  base: () => location.origin + location.pathname,
-  files: (kind, piece) => filesOut(kind, piece),
-  share: (piece) => openShare(piece),
-  shareOf: async (piece) => { const sh = await sharing.current(piece); return sh ? { url: linkFor(sh.fields.token), comments: !!sh.fields.comments } : null; },
-  moved: (place) => remember(place)
-};
-
-// The piece production is for, from where you are.
-async function productionOwner() {
-  if (view() === 'production' || view() === 'deliver') return state.prodId;
-  if (view() === 'stage' && state.stage) { const g = await getEntry(state.stage.id); if (g?.kind === 'project') return g.id; if (g?.kind === 'world') return (await worldStats(g)).pieces.find((p) => hasManuscript(p.row))?.row.id || null; }
-  if (view() === 'grid') { const g = await getEntry(state.gridId); return g?.kind === 'project' ? g.id : null; }
-  if (view() === 'write') return state.project?.id || null;
-  if (view() === 'project') return state.bookId;
-  if (view() === 'world') { const w = await getEntry(state.worldId); return (await worldStats(w)).pieces.find((p) => hasManuscript(p.row))?.row.id || null; }
-  return null;
-}
-
-// Ctrl+Shift+S: production, and back to the text.
-async function toggleProduction() {
-  if (view() === 'production') { const p = await getEntry(state.prodId); return p ? openBook(p.id) : go({ view: 'library' }); }
-  const id = await productionOwner();
-  if (!id) { toast('Open a script or draft to see its production'); return; }
-  return go({ view: 'production', id });
-}
-
-// What the grid is for, from where you are: the piece you're writing or
-// looking at, or the world.
-async function gridOwner() {
-  if (view() === 'write') return state.project?.id || null;
-  if (view() === 'project') return state.bookId;
-  if (view() === 'world') return state.worldId;
-  if (view() === 'grid') return state.gridId;
-  if (view() === 'stage' && state.stage) return state.stage.id;
-  if (view() === 'production' || view() === 'deliver') return state.prodId;
-  if (inNotebook() && notebook.page && !notebook.isDay) return (await bookOf(notebook.page))?.id || (await worldOf(notebook.page))?.id || null;
-  return null;
-}
-
-// Ctrl+Shift+G: the grid, and back to the text.
-async function toggleGrid() {
-  if (view() === 'grid') { const g = await getEntry(state.gridId); return grid.hooks.leave(g); }
-  const id = await gridOwner();
-  if (!id) { toast('Open a piece or a world to see its plot grid'); return; }
-  return go({ view: 'grid', id });
-}
 
 // ---------- the pages: Gather, Shape, Write, Revise, Make, Deliver ----------
 
@@ -3137,4 +3065,4 @@ async function startPane() {
 
 start();
 
-export { $, PAGE_NAMES, alts, askServer, besideItem, blankOnce, body, box, canAskServer, captureHere, currentBook, dayMenu, dayReview, deskPage, editor, frame, gone, gridTouched, hidden, hstrip, inNotebook, insertSection, isScript, isWoven, listSoon, loadProduction, loadStagePage, looseFoot, looseSoon, moveLinePicker, nav, notes, openAsked, openBeside, openPalette, openProjectBeside, openTalk, pageOfPlace, paneMoves, panes, plan, planningView, production, productionOwner, projectPage, pull, renderBoard, renderStrip, reviewAsked, root, scribeKept, sectionNames, sendSelectionPicker, setElement, setGridTouched, setShown, showClaudeKnows, sideNotes, stagePage, state, statusEl, store, tagsPage, talkThrough, tidyNudge, todayPanel, toggleFocus, view, whenHere, writeOut, writing };
+export { $, PAGE_NAMES, alts, askServer, besideItem, blankOnce, body, box, canAskServer, captureHere, currentBook, dayMenu, dayReview, deskPage, editor, filesOut, frame, gone, gridTouched, hidden, hstrip, inNotebook, insertSection, isScript, isWoven, listSoon, loadStagePage, looseFoot, looseSoon, moveLinePicker, nav, notes, openAsked, openBeside, openPalette, openProjectBeside, openTalk, pageOfPlace, paneMoves, panes, plan, planningView, projectPage, pull, renderBoard, renderStrip, reviewAsked, root, scribeKept, sectionNames, sendSelectionPicker, setElement, setGridTouched, setShown, showClaudeKnows, sideNotes, stagePage, state, statusEl, store, tagsPage, talkThrough, tidyNudge, todayPanel, toggleFocus, view, whenHere, writeOut, writing };
