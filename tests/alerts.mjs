@@ -95,7 +95,7 @@ try {
     assert.equal(sub.endpoint, 'https://push.example/abc');
     const test = calls.filter(([n, a]) => n === 'invoke' && a.body.action === 'test').at(-1)?.[1];
     assert.equal(test.body.app, 'inkwell');
-    assert.match(await page.locator('.al-status').innerText(), /come from Inkwell now/);
+    assert.match(await page.locator('.al-status').innerText(), /Alerts are on for this computer\.$/);
     assert.equal(await page.locator('.al-on').innerText(), 'Turn off here');
     await page.screenshot({ path: process.env.SHOTS ? `${process.env.SHOTS}/alerts-panel.png` : '/dev/null' }).catch(() => {});
   });

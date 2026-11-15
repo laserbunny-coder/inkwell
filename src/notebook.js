@@ -19,13 +19,14 @@ import { TaskLine, redrawTasks } from './taskline.js';
 import { checkLineDecos, diffLineDecos } from './linedecos.js';
 import { isLoose, inWindow } from './loosemark.js';
 import { taskOf, chipLabel, setTask, unTask, isoOf } from './tasks.js';
+import { isTouch } from './device.js';
+import { pad } from './dates.js';
 
 // The notebook: a page for every day, plus named pages, all written as nested
 // lines. Lines can link to pages, days and chapters with [[, carry #tags, and
 // every page shows the lines elsewhere that link to it.
 
 const $ = (s) => document.querySelector(s);
-const pad = (n) => String(n).padStart(2, '0');
 
 export const isoDate = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 export const dayId = (iso) => `day-${iso}`;
@@ -266,11 +267,11 @@ export class Notebook {
         const b = document.createElement('button');
         b.type = 'button';
         b.textContent = label;
-        b.addEventListener('click', () => { this.zoomTo(target); if (!matchMedia('(hover: none)').matches) this.editor.commands.focus(); });
+        b.addEventListener('click', () => { this.zoomTo(target); if (!isTouch()) this.editor.commands.focus(); });
         trail.append(b);
       };
       // On a phone the way back out is a plain "‹ Today" at the top left.
-      if (matchMedia('(hover: none)').matches) {
+      if (isTouch()) {
         const today = this.isDay && this.page?.title === isoDate();
         const b = document.createElement('button');
         b.type = 'button';
@@ -284,7 +285,7 @@ export class Notebook {
         const t = li.firstChild?.textContent.trim() || 'Untitled line';
         crumb(t.length > 40 ? `${t.slice(0, 38)}…` : t, li.attrs.eid);
       }
-      if (!matchMedia('(hover: none)').matches) this.editor.commands.focus();
+      if (!isTouch()) this.editor.commands.focus();
     }
     this.onZoom(eid);
   }
@@ -350,7 +351,7 @@ export class Notebook {
     const title = $('#nb-title');
     title.textContent = this.page ? titleOf(this.page) : '';
     // On a phone a day's head is one line: "Sat, Nov 14", its arrows and its ⋯.
-    if (this.isDay && matchMedia('(hover: none)').matches) {
+    if (this.isDay && isTouch()) {
       const [y, m, d] = this.page.title.split('-').map(Number);
       title.textContent = new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
       title.title = titleOf(this.page);

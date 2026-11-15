@@ -4,6 +4,7 @@ import { tagsIn } from './model.js';
 import { trash, restore } from './trash.js';
 import { fileInto, unfile, intoDrawer, outOfDrawer } from './stages.js';
 import { renameTag, tagIndex, cleanTag } from './tags.js';
+import { make } from './dom.js';
 
 // Claude's tidy pass. Early each Monday Claude looks over how things are kept
 // and suggests a few tidy-ups (two Christmas worlds that are one, a line that
@@ -304,13 +305,6 @@ export async function undoChange(id, hooks) {
 
 // ---------- the panel ----------
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text != null) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 const when = (iso) => {
   const d = new Date(iso);
   if (Number.isNaN(+d)) return '';

@@ -9,16 +9,10 @@ import { getEntry, byKind, isTrashed } from './db.js';
 import { areas, areaColor, editedAt, worldOf } from './library.js';
 import { seatsFor, deskSettings } from './desk.js';
 import { aheadPlan, addTask, setTask, moveTask, tickTask, renameTask, plainLine, parseEst, stepsHome, hours, addDays, dateOf } from './tasks.js';
+import { make } from './dom.js';
 
 export const WEEKS = 6;
 const DAY = 864e5;
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 const long = (iso, opts) => dateOf(iso).toLocaleDateString('en-US', opts);
 const md = (iso) => long(iso, { month: 'short', day: 'numeric' });
 const isDay = (v) => /^\d{4}-\d\d-\d\d$/.test(String(v || ''));

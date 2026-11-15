@@ -1,9 +1,8 @@
 // Phone alerts: Inkwell buzzes this phone or computer even when it's closed
-// (Web Push; public/sw.js shows them). They used to come from Daybook; once a
-// device turns them on here, they come from Inkwell instead (the server sends
-// to Inkwell's devices only, as soon as there is one).
+// (Web Push; public/sw.js shows them). The server sends to the devices that
+// turned them on here.
 // What to hear about is one switch per kind, kept on the account so every
-// device agrees (alert_prefs, shared with Daybook):
+// device agrees (alert_prefs):
 //   review  the 9 pm "Your day review"
 //   week    Monday's "Your week"
 //   month   "Your month", early in a new month
@@ -11,6 +10,7 @@
 // Turning alerts on signs this device up (push_subs, marked app 'inkwell').
 
 import { make } from './menu.js';
+import { mobileOS } from './device.js';
 
 const KEY = 'inkwell-alerts';
 export const KINDS = [
@@ -25,7 +25,7 @@ const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}');
 const keep = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* full */ } };
 const unb64 = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
 const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const phone = () => /Android|iPhone|iPad/.test(navigator.userAgent);
+const phone = mobileOS;
 const device = () => (/Android/.test(navigator.userAgent) ? 'Android phone' : /iPhone|iPad/.test(navigator.userAgent) ? 'iPhone' : /Windows/.test(navigator.userAgent) ? 'Windows computer' : 'This device');
 export const supported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 
@@ -110,7 +110,7 @@ export async function openAlerts({ backend, signedIn, toast }) {
     onBtn.className = on ? 'ghost-btn al-on' : 'pill primary al-on';
     status.textContent = !supported() ? 'This browser can’t show alerts. On your phone, open Inkwell from its home screen icon.'
       : Notification.permission === 'denied' ? 'Notifications are blocked for Inkwell. Allow them in your phone’s settings (Apps, then Inkwell, then Notifications), then come back.'
-        : on ? `Alerts are on for this ${phone() ? 'phone' : 'computer'}. They come from Inkwell now, not Daybook.`
+        : on ? `Alerts are on for this ${phone() ? 'phone' : 'computer'}.`
           : 'Get a buzz for the things below, even when Inkwell is closed.';
   };
   draw();

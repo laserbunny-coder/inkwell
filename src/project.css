@@ -59,7 +59,7 @@ span.wp-edit:empty { display: inline-block; min-width: 12ch; }
 .wp-sheet .sb-next { display: none; border: 0; padding: 0; margin-top: 3px; color: var(--accent); font-size: 11.5px; }
 .wp-sheet .sb-next::after { content: ' →'; }
 .wp-sheet .sb-card:hover .sb-next, .wp-sheet .sb-card:focus-within .sb-next { display: block; }
-@media (hover: none) { .wp-sheet .sb-next { display: block; } }
+@media (--touch) { .wp-sheet .sb-next { display: block; } }
 .wp-sheet #wh-pieces { margin-top: 10px; }
 .wp-sheet #wh-pieces[hidden] { display: none; }
 .wp-sheet #wh-pieces-empty { margin-top: 10px; }
@@ -72,9 +72,8 @@ span.wp-edit:empty { display: inline-block; min-width: 12ch; }
 .pl-when.late { color: var(--ink); }
 .pl-when.unset { color: var(--faint); opacity: 0; }
 .pl-task:hover .pl-when.unset, .pl-when.unset:focus-visible { opacity: 1; }
-@media (hover: none) { .pl-when.unset { opacity: 1; } }
+@media (--touch) { .pl-when.unset { opacity: 1; } }
 .pl-alldone { align-self: flex-start; margin: 6px 0 0 32px; }
-.wp-daybook { margin-top: 14px; max-width: 520px; }
 
 /* Crew and turns. */
 .hide-projcrew :is(#wh-crew, #wh-turns) { display: none; }

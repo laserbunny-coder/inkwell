@@ -11,6 +11,8 @@
 // this device.
 
 import { setTask, addTask, span, minutesOf } from './tasks.js';
+import { isCompact } from './device.js';
+import { make } from './dom.js';
 
 export const SNAP = 15;
 const GUTTER = 52;
@@ -23,7 +25,7 @@ const readZoom = () => { try { const v = localStorage.getItem('calHours'); retur
 const keepZoom = (z) => { try { localStorage.setItem('calHours', String(z)); } catch { /* private window */ } };
 // A length on the grid, in minutes, at the grid's zoom (--px).
 const Y = (min, less = 0) => `calc(var(--px, 1) * ${min}px${less ? ` - ${less}px` : ''})`;
-const phoneish = () => matchMedia('(hover: none), (max-width: 899px)').matches;
+const phoneish = isCompact;
 // The phone's bar at the bottom: the sheet sits on it, and drags scroll above it.
 const barH = () => {
   const bar = document.querySelector('.placebar');
@@ -32,13 +34,6 @@ const barH = () => {
   return phoneish() && r && r.height && r.top < innerHeight && getComputedStyle(bar).visibility !== 'hidden' ? Math.max(0, Math.round(innerHeight - r.top)) : 0;
 };
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 export const hm = (min) => {
   const h = Math.floor(min / 60) % 24;
   const m = Math.round(min % 60);

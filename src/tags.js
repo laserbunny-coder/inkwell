@@ -4,6 +4,8 @@ import { rootsOf, titleOf } from './notebook.js';
 import { bySort, GAP } from './order.js';
 import { ago } from './library.js';
 import { fileUrl, isImage } from './files.js';
+import { isTouch } from './device.js';
+import { make } from './dom.js';
 
 // The Tags page: every #tag you've used, with how many things carry it and
 // when it was last used, sorted into groups (Claude suggests them; you can
@@ -163,13 +165,6 @@ export async function homesOf(rows) {
 
 // ---------- the page ----------
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text != null) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 const plural = (n, one, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 const SORTS = { used: 'Most used', recent: 'Recently used', az: 'A to Z' };
 
@@ -529,7 +524,7 @@ export class TagsPage {
     sheet.append(acts);
     sheet.append(make('p', 'hint tg-keys', 'Alt + Right arrow: next · Alt + Left arrow: back · Ctrl + Enter: done'));
     commit();
-    if (note && token === this.token && !matchMedia('(hover: none)').matches) note.focus();
+    if (note && token === this.token && !isTouch()) note.focus();
   }
 
   // The notes box, kept as lines under the item: one line per line typed.

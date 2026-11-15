@@ -2,6 +2,7 @@ import { getEntry, children, putEntries, byKind } from './db.js';
 import { entry, newId } from './model.js';
 import { worldTree } from './library.js';
 import { assignCodes, codeOrder } from './script.js';
+import { addTask } from './tasks.js';
 
 // The production layer: the same story, made ready to shoot or generate.
 // Nothing here is a copy of the writing:
@@ -285,19 +286,35 @@ export async function newShootDay(pieceId, date, { type = null, scenes = [] } = 
   return row;
 }
 
-// The task Daybook gets for a shoot day: on its date, at call time.
-export function dayTask(day, piece, base) {
+// A shoot day's task in Inkwell: on its date (in the Calendar at call time,
+// when there is one), with a link back to the day. Made the first time, then
+// kept up to date: fields.task on the shoot day holds the task line's id.
+// Returns the rows changed.
+export async function shootDayTask(day, piece) {
   const f = day.fields || {};
+  const words = `${f.type === 'voice' ? 'Voice session' : 'Shoot'}: ${piece.title || 'Untitled'}${f.place ? ` at ${f.place}` : ''}`;
   const [h, m] = String(f.call || '').split(':').map(Number);
-  return {
-    id: `inkwell-${day.id}`,
-    title: `${f.type === 'voice' ? 'Voice session' : 'Shoot'}: ${piece.title || 'Untitled'}${f.place ? ` at ${f.place}` : ''}`,
-    notes: f.notes || null,
-    link: `${base}?open=${encodeURIComponent(day.id)}`,
-    deleted: false,
-    ...(f.date ? { day: f.date } : {}),
-    ...(f.date && Number.isFinite(h) ? { start_min: h * 60 + (m || 0) } : {})
-  };
+  const on = f.date && Number.isFinite(h) ? { day: f.date, at: h * 60 + (m || 0) } : null;
+  const content = [{ type: 'text', text: `${words} ` }, { type: 'entryRef', attrs: { id: day.id, title: 'call sheet' } }];
+  const old = f.task ? await getEntry(f.task) : null;
+  let line;
+  const rows = [];
+  if (old && !old.deleted && old.fields?.task) {
+    line = { ...old, text: `${words} call sheet`, content, links: [day.id], fields: { ...old.fields, task: { ...old.fields.task, day: f.date || null, on } }, updated_at: Date.now() };
+    rows.push(line);
+  } else {
+    const made = await addTask({ text: words, day: f.date || null });
+    line = made[made.length - 1];
+    line.text = `${words} call sheet`;
+    line.content = content;
+    line.links = [day.id];
+    if (on) line.fields.task = { ...line.fields.task, on };
+    rows.push(...made);
+  }
+  const sd = { ...day, fields: { ...f, task: line.id }, updated_at: Date.now() };
+  rows.push(sd);
+  await putEntries([line, sd]);
+  return rows;
 }
 
 // ---------- out to the edit ----------

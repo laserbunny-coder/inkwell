@@ -3,6 +3,7 @@ import { entry, newId, tagsIn } from './model.js';
 import { worlds, worldTree } from './library.js';
 import { setAbout } from './claudeknows.js';
 import { trash, inTrash } from './trash.js';
+import { plain as make } from './dom.js';
 
 // Bring in old notes: a section copied (or exported) out of Thymer, Tana,
 // Workflowy or OneNote, pasted or dropped here, becomes an ordinary page with
@@ -23,12 +24,6 @@ export const DRAWER_PAGE = 'pg_brought-in';
 const GAP = 1024;
 const BLANK = { done: false, gather: null, gathered: null, mirror: null };
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  return el;
-};
 
 // ---------- reading what came in ----------
 // Every reader gives { title, lines }, where a line is { text, content, kids, todo }.

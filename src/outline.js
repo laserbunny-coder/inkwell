@@ -10,6 +10,7 @@ import { newId, tagsIn } from './model.js';
 import { placeSorts, bySort } from './order.js';
 import { walKey } from './panes.js';
 import { lineDecos, changedRangeOf, insertsNodes, unitsIn } from './linedecos.js';
+import { isTouch } from './device.js';
 
 // The notebook's pages (daily pages and named pages) are outlines: lines you
 // can nest, Workflowy-style. Every line is its own entry whose parent is the
@@ -668,7 +669,7 @@ function holdDrags(view) {
   };
   const start = (e) => {
     stop();
-    if (e.touches.length !== 1 || !matchMedia('(hover: none)').matches) return;
+    if (e.touches.length !== 1 || !isTouch()) return;
     const el = e.target;
     if (el.closest?.('.line-gutter, .line-box, a, button, [contenteditable="false"]')) return;
     const li = el.closest?.('li');
@@ -772,7 +773,7 @@ export function dropLineAt(view, eid, targetEid, after, into = false) {
   tr.setSelection(TextSelection.create(tr.doc, Math.min(to + 2, tr.doc.content.size)));
   view.dispatch(tr.scrollIntoView());
   // On a phone, landing a line doesn't bring the keyboard up.
-  if (!matchMedia('(hover: none)').matches) view.focus();
+  if (!isTouch()) view.focus();
   return true;
 }
 

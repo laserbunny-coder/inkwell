@@ -6,6 +6,8 @@ import { addFile, localFile, uploadPending, lengthLabel } from './files.js';
 import { setFileNote } from './filenode.js';
 import { placeVoice } from './voice.js';
 import { speechTerms } from './terms.js';
+import { isTouch } from './device.js';
+import { pad } from './dates.js';
 
 // Capture: an idea in seconds, asking nothing. Tap, talk, tap Done. The
 // recording is kept on this device first (piece by piece while you talk, so
@@ -15,7 +17,6 @@ import { speechTerms } from './terms.js';
 // with the word-for-word text always kept. Aimed at a chapter, the write-up
 // goes into the draft instead, and the day page keeps the recording.
 
-const pad = (n) => String(n).padStart(2, '0');
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const clock = (d = new Date()) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, ' ').toLowerCase();
 
@@ -475,7 +476,7 @@ function lengthOf(file) {
     a.src = url;
   });
 }
-const phone = () => window.matchMedia?.('(hover: none)').matches;
+const phone = isTouch;
 // How long the recording could actually hear (time with the screen off left out).
 const heard = (rec) => Math.max(0, Date.now() - rec.t0 - rec.away - (rec.awayAt != null ? Date.now() - rec.awayAt : 0));
 // "40 seconds", "1 minute", "10 minutes", for the screen-off notes.

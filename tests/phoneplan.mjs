@@ -203,7 +203,7 @@ try {
       const input = p.locator('#plan input[data-add]').first();
       await input.fill(t);
       await input.press('Enter');
-      await sleep(350);
+      await p.waitForFunction((t) => [...document.querySelectorAll('#plan .pl-task .pl-words')].some((w) => w.innerText === t), t, { timeout: 10000 });
     }
     await p.evaluate(() => document.activeElement?.blur());
     // The next day: all three are carried over.
@@ -212,10 +212,12 @@ try {
     await started(p);
     await p.waitForFunction(() => document.querySelectorAll('#plan .pl-task.carried').length === 3);
     await p.evaluate(() => document.activeElement?.blur());
+    // Wait for the add to land before going on: on a slow runner the list
+    // was still being drawn after the reload, and the checks raced it.
     const add = p.locator('#plan input[data-add]').first();
     await add.fill('Pack the van');
     await add.press('Enter');
-    await sleep(350);
+    await p.waitForFunction(() => [...document.querySelectorAll('#plan .pl-task .pl-words')].some((w) => w.innerText === 'Pack the van'), null, { timeout: 10000 });
     await p.evaluate(() => document.activeElement?.blur());
     await sleep(300);
     const pc = await c.newCDPSession(p);

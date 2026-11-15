@@ -18,6 +18,7 @@ import { entry } from './model.js';
 import { areas, areaColor, editedAt } from './library.js';
 import { popMenu } from './menu.js';
 import { deskDrags, inOrder, mergeOrder } from './deskdrag.js';
+import { make } from './dom.js';
 
 export const DESK_ID = 'settings-desk';
 const KIND = { decision: 'Decide', blocked: 'Do', review: 'Try' };
@@ -57,13 +58,6 @@ const WINDOW_DAYS = 14;
 const FOLD_TRIES = 3;
 
 const root = document.documentElement;
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text != null) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 const ls = {
   get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* full or blocked */ } }
@@ -266,7 +260,7 @@ export class DeskPage {
     await this.load();
   }
 
-  // Projects changed underneath (a rename, a sync): draw again without asking Daybook.
+  // Projects changed underneath (a rename, a sync): draw again without asking the server.
   async refresh() { if (this.showing() && this.tab === 'stage' && this.now) await this.render({ now: this.now, failed: false }); }
 
   // How many calls are waiting, for the number beside Desk, without opening it.

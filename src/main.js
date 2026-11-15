@@ -1,4 +1,5 @@
 import { keyboard } from './keyboard.js';
+import { media, isTouch, isNarrow } from './device.js';
 import './style.css';
 import './frame.css';
 import './desk.css';
@@ -36,23 +37,20 @@ import { moveLine, canMoveLine, indentLines, outdentLines, removeLine, toggleDon
 import { SlashMenu, setSlashItems, slashOpen } from './slash.js';
 import { Woven, ScenePop, newScene, guessAll, redraw as redrawWoven, placeList, sceneAt, scenesOf, ensureHeading, setMarker, KINDS as SCENE_KINDS } from './woven.js';
 import { applyLook, renderLook, cleanLook, DEFAULT_LOOK } from './wovenlook.js';
-import { prepareForShoot } from './wovenprep.js';
 import { elementsIn, plainPages, newElement } from './production.js';
 import { openHandleMenu } from './handlemenu.js';
 import { openAlerts } from './alerts.js';
 import { showSaveButton } from './savebutton.js';
 import { openPicker } from './picker.js';
 import { PlotGrid, threadsOf, worldPromises } from './grid.js';
-import { ProductionView } from './prodview.js';
 import { PageStrip, TodayPanel, isLife, taskHint, personalArea } from './pages.js';
 import { Nav } from './nav.js';
 import { Frame, lookPicker, startLook, toggleLight } from './frame.js';
-import { StagePage, intoDrawer, gatherItems } from './stages.js';
+import { intoDrawer, gatherItems } from './stages.js';
 import { CaptureScreen, writeOutPending, recoverRecording, writeOutAgain, requeueBlank, addLine } from './capture.js';
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, placeScribeWaiting, RAW } from './voice.js';
 import { takeShares, snapshotPending, tidyShareBlanks, keepShare } from './share.js';
 import { LISTS, listOf, setList, fillList } from './lists.js';
-import { sendPending, queueTask } from './daybook.js';
 import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker, speakersOn, mine, sendMeetingToAcro } from './meeting.js';
 import { DayReview, getReview } from './review.js';
 import { TagsPage, tagIndex, statsOf } from './tags.js';
@@ -69,7 +67,6 @@ import { looseOn } from './loose.js';
 import { PLAN_ID, dayWord, loadTasks, addTask, stepsHome } from './tasks.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from './fonts.js';
 import { pieceDoc, pageDoc, startDraft, draftHolding } from './drafts.js';
-import { printPiece } from './print.js';
 import { CompareView, BesidePane } from './compare.js';
 import { inPane, PANE_ID, PaneHost, host as paneHost, sendChanged, onChanged, BESIDE_PLACES } from './panes.js';
 import { SideNotes } from './sidenotes.js';
@@ -81,9 +78,10 @@ import { events as calendarEvents, forgetCalendar } from './calendar.js';
 import { claudeNotes, TalkPanel } from './claudenotes.js';
 import { openClaudeKnows } from './claudeknows.js';
 import { openTidy, counts as tidyCounts, redrawTidy } from './tidypass.js';
-import { openBringIn } from './bringin.js';
 import { Sharing, linkFor, commentsOn, sharesOf } from './sharelink.js';
 import { ensureAreas, areas, books, bookType, hasManuscript, kindName, areaColor, newArea, newBook, pagesIn, loosePages, bookOf, newPage, stats, dailyMentions, ago, changeType, worlds, worldOf, newWorld, newPiece, piecesIn, worldTree, worldStats, usedLabels, ensureWorlds, SHAPES, shapeOf, levelsOf, nextLevel, newShaped, editedAt, FORMATS, formatName, defaultLabel, STAGES, stageOf, nextLabel, STAGE_SETS, allSets, setOwnWorkflows, addOwnWorkflow, dropOwnWorkflow, setForNew, typeForSet, setById, stageSetOf, stagesIn, stagesOf, isOut, isReady, TYPE_NAMES } from './library.js';
+import { make } from './dom.js';
+import { isoOf, isoToday } from './dates.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -231,7 +229,7 @@ const blocks = new BlockHandle(editor, $('.sheet'), { menu: paragraphMenu });
 // The alternates buttons sit at the far end of the same row (the whole row
 // when it isn't a script), reached by scrolling it sideways.
 const scriptBar = $('.script-bar');
-const touch = matchMedia('(hover: none)');
+const touch = media('touch');
 function placeScriptBar() {
   const script = isScript();
   const focus = root.classList.contains('focus');
@@ -564,7 +562,7 @@ const currentEditor = () => (inNotebook() ? notebook.editor : editor);
 // ---------- getting around ----------
 
 // The phone opens on Today when you've been away a while (see the start).
-const PHONE = matchMedia('(hover: none) and (pointer: coarse)');
+const PHONE = media('phone');
 const AWAY = 3 * 60 * 60 * 1000;
 function phoneAway(now = Date.now()) {
   if (!PHONE.matches || inPane) return false;
@@ -747,11 +745,11 @@ async function go(place) {
   } else if (place.view === 'production' || place.view === 'deliver') {
     state.prodId = place.id;
     remember({ view: place.view, id: place.id });
-    await production.show(place.id, { ...place, mode: place.view === 'deliver' ? 'deliver' : 'make' });
+    await (await loadProduction()).show(place.id, { ...place, mode: place.view === 'deliver' ? 'deliver' : 'make' });
   } else if (place.view === 'stage' || place.view === 'drawer') {
     state.stage = place;
     remember(place);
-    await stagePage.show(place);
+    await (await loadStagePage()).show(place);
   } else if (place.view === 'compare') {
     state.compareId = place.id;
     await comparer.show(place.id, place);
@@ -1039,8 +1037,8 @@ async function applyRemote(rows) {
   if (rows.some((r) => r.kind === 'note' && r.fields?.chapter_id === state.chapterId)) await notes.load(state.chapterId);
   if (view() === 'sidenotes' && rows.some((r) => ['note', 'para', 'scene', 'heading', 'chapter', 'settings'].includes(r.kind))) sideNotes.soon();
   if (view() === 'grid' && rows.some((r) => ['note', 'thread', 'para', 'scene', 'chapter', 'act', 'project', 'world'].includes(r.kind))) grid.refresh();
-  if ((view() === 'production' || view() === 'deliver') && rows.some((r) => ['shot', 'breakdown', 'shootday', 'file', 'page', 'note', 'para', 'scene', 'chapter', 'act', 'project', 'world', 'share'].includes(r.kind))) production.refresh();
-  if (stagePage.isOpen && rows.some((r) => ['line', 'page', 'project', 'world', 'event', 'tie', 'shootday', 'note', 'share'].includes(r.kind))) stagePage.refresh();
+  if ((view() === 'production' || view() === 'deliver') && rows.some((r) => ['shot', 'breakdown', 'shootday', 'file', 'page', 'note', 'para', 'scene', 'chapter', 'act', 'project', 'world', 'share'].includes(r.kind))) production?.refresh();
+  if (stagePage?.isOpen && rows.some((r) => ['line', 'page', 'project', 'world', 'event', 'tie', 'shootday', 'note', 'share'].includes(r.kind))) stagePage.refresh();
   if (todayPanel.isOpen && rows.some((r) => r.kind === 'line' || r.kind === 'day')) todayPanel.refresh();
   await notebook.applyRemote(rows);
   if (inNotebook() && notebook.isDay && rows.some((r) => r.kind === 'review' || r.parent_id === notebook.page.id || r.parent_id === 'pg_mulling')) dayReview?.refresh();
@@ -1230,6 +1228,7 @@ function markScene(kind) {
 async function prepareShoot() {
   if (!isWoven()) return;
   const world = state.project ? await worldOf(state.project) : null;
+  const { prepareForShoot } = await import('./wovenprep.js');
   await prepareForShoot({
     editor,
     places: (doc) => placeList(biblePlaces, doc),
@@ -1413,13 +1412,6 @@ function renameable(el, row, after) {
   el.addEventListener('blur', () => finish(true));
 }
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 const dot = (color) => { const d = make('span', 'dot'); d.style.background = color; return d; };
 
 async function areaPath(areaId, all) {
@@ -1732,8 +1724,8 @@ async function refreshViews() {
   if (view() === 'library') await renderLibrary();
   if (view() === 'project') await renderProject();
   if (view() === 'world') await renderWorld();
-  if (stagePage.isOpen) await stagePage.refresh();
-  if (view() === 'production' || view() === 'deliver') await production.refresh();
+  if (stagePage?.isOpen) await stagePage.refresh();
+  if (view() === 'production' || view() === 'deliver') await production?.refresh();
   if (inNotebook() && notebook.page && !notebook.isDay) {
     const p = await getEntry(notebook.page.id);
     if (p && !gone(p)) { notebook.page = notebook.store.page = p; notebook.renderHead(); }
@@ -2944,7 +2936,7 @@ async function printCurrent() {
   if (inNotebook() && notebook.page && !notebook.isDay) {
     await notebook.close();
     const doc = await pageDoc(notebook.page);
-    printPiece({ title: titleOf(notebook.page), type: 'page', chapters: doc, author: await accountName() });
+    printLater({ title: titleOf(notebook.page), type: 'page', chapters: doc, author: await accountName() });
     return;
   }
   const b = await revisionPiece();
@@ -2952,7 +2944,7 @@ async function printCurrent() {
   if (state.project?.id === b.id) await store.close(editor.state.doc);
   const chapters = await pieceDoc(b.id);
   const words = chapters.reduce((n, ch) => n + ch.blocks.reduce((m, x) => m + wordCount(x.text), 0), 0);
-  printPiece({ title: b.title, type: bookType(b), chapters, words, author: await accountName() });
+  printLater({ title: b.title, type: bookType(b), chapters, words, author: await accountName() });
 }
 const accountName = async () => (window.__claude ? 'Michael' : (await sync.backend?.name?.().catch(() => '')) || '');
 
@@ -3186,9 +3178,33 @@ async function openShare(target) {
   await draw();
 }
 
+// The rooms loaded on demand (Make and Deliver, a world's pages and the Drawer, print, Woven's prep for the
+// shoot, Bring in) are fetched a little after start, when the app is idle,
+// so the service worker keeps them and they open offline too. Fetching runs
+// each module's top level only, which just defines things.
+function warmRooms() {
+  const later = window.requestIdleCallback || ((fn) => setTimeout(fn, 1));
+  setTimeout(() => later(() => Promise.all([import('./prodview.js'), import('./stagepage.js'), import('./print.js'), import('./wovenprep.js'), import('./bringin.js')]).catch(() => { /* offline: next time */ })), 4000);
+}
+
+// Print (or save as PDF), loaded when first asked for.
+const printLater = async (what) => (await import('./print.js')).printPiece(what);
+
 // ---------- production: shots, the kit, shoot days, posting ----------
 
-const production = new ProductionView($('#prod-view'), {
+// The Make and Deliver rooms load the first time one opens (prodview.js is
+// big and most days don't need it); rooms.js fetches it once the app has
+// started (warmRooms), so it's there offline too.
+let production = null;
+async function loadProduction() {
+  if (!production) {
+    const { ProductionView } = await import('./prodview.js');
+    production ||= new ProductionView($('#prod-view'), productionHooks);
+    window.__production = production;
+  }
+  return production;
+}
+const productionHooks = {
   open: (r) => grid.hooks.open(r),
   openPage: (id) => go({ view: 'notebook', pageId: id }),
   go: (place) => go(place),
@@ -3199,15 +3215,13 @@ const production = new ProductionView($('#prod-view'), {
   ask, askText, toast,
   askServer: (body) => askServer(body),
   canAsk: () => canAskServer(),
-  numberScenes: async (piece) => { await toggleNumbering(piece); await production.refresh(); },
-  sendTask: async (task) => { await queueTask(task); await sendPending({ send: sendTask, canSend: canSendTask }); },
+  numberScenes: async (piece) => { await toggleNumbering(piece); await production?.refresh(); },
   base: () => location.origin + location.pathname,
   files: (kind, piece) => filesOut(kind, piece),
   share: (piece) => openShare(piece),
   shareOf: async (piece) => { const sh = await sharing.current(piece); return sh ? { url: linkFor(sh.fields.token), comments: !!sh.fields.comments } : null; },
   moved: (place) => remember(place)
-});
-window.__production = production;
+};
 
 // The piece production is for, from where you are.
 async function productionOwner() {
@@ -3459,7 +3473,7 @@ async function printRow(b) {
   if (state.project?.id === b.id) await store.close(editor.state.doc);
   const chapters = await pieceDoc(b.id);
   const words = chapters.reduce((n, ch) => n + ch.blocks.reduce((m, x) => m + wordCount(x.text), 0), 0);
-  printPiece({ title: b.title, type: bookType(b), chapters, words, author: await accountName() });
+  printLater({ title: b.title, type: bookType(b), chapters, words, author: await accountName() });
 }
 
 async function filesOut(kind, b) {
@@ -3474,7 +3488,18 @@ async function filesOut(kind, b) {
   if (kind === 'markdown') return download(`${b.title || 'Untitled'}.md`, await bookMarkdown(b, acts));
 }
 
-const stagePage = new StagePage($('#stage-view'), {
+// A world's pages (Gather, Shape, Write…) and the Drawer: loaded the first
+// time one opens, and fetched after start by warmRooms.
+let stagePage = null;
+async function loadStagePage() {
+  if (!stagePage) {
+    const { StagePage } = await import('./stagepage.js');
+    stagePage ||= new StagePage($('#stage-view'), stageHooks);
+    window.__stages = stagePage;
+  }
+  return stagePage;
+}
+const stageHooks = {
   go: (place) => go(place),
   openEntry: (id) => openEntry(id),
   openBook: (id) => openBook(id),
@@ -3490,8 +3515,7 @@ const stagePage = new StagePage($('#stage-view'), {
   revise: (action, piece, note) => revisePiece(action, piece, note),
   newPage: async (parentId) => { await go({ view: 'notebook' }); await notebook.newPage(parentId); },
   newPiece: (parentId) => addPiece(parentId)
-});
-window.__stages = stagePage;
+};
 
 // Ctrl + Shift + J: today's lines beside whatever you're doing.
 const todayPanel = new TodayPanel($('.today-panel'), {
@@ -3515,7 +3539,7 @@ function renderBoard(w, pieces, el = $('#wh-board')) {
     b.addEventListener('click', (e) => { e.stopPropagation(); setStage(p, list[list.indexOf(stageOf(p, w)) + 1]); });
     return b;
   };
-  const touch = matchMedia('(hover: none)').matches;
+  const touch = isTouch();
   // One row of columns for each set of stages in the world (a Universe can
   // have reels on AI video and a novel on Book); one set needs no label.
   const sets = [...new Set(pieces.map(({ row }) => stageSetOf(row, w).id))].map(setById);
@@ -3578,7 +3602,7 @@ function renderBoard(w, pieces, el = $('#wh-board')) {
 let edgesQuietUntil = 0;
 // On a touch screen an edge opens on a tap, never on a hover: phones send
 // stray hover events when the page shifts (the keyboard opening, say).
-const hovers = () => Date.now() > edgesQuietUntil && !matchMedia('(hover: none)').matches;
+const hovers = () => Date.now() > edgesQuietUntil && !isTouch();
 $('.edge-left').addEventListener('mouseenter', () => { if (hovers()) body.classList.add('show-outline'); });
 $('.edge-left').addEventListener('click', () => body.classList.add('show-outline'));
 $('.outline').addEventListener('mouseleave', () => body.classList.remove('show-outline'));
@@ -3841,7 +3865,7 @@ $('#history-copy').addEventListener('click', () => {
 // ---------- page width and text size (per device) ----------
 
 const DEFAULT_WIDTH = 660;
-const defaultSize = () => (matchMedia('(max-width: 700px)').matches ? 18 : 21);
+const defaultSize = () => (isNarrow() ? 18 : 21);
 const currentWidth = () => Number(localStorage.getItem('pageWidth')) || DEFAULT_WIDTH;
 const currentSize = () => Number(localStorage.getItem('textSize')) || defaultSize();
 
@@ -4306,7 +4330,7 @@ const commands = [
   { group: 'view', label: 'Show the panes beside', words: ['pane', 'peek', 'side by side'], when: () => !!panes?.count && panes.sheet && !panes.sheetOpen, run: () => panes.showSheet() },
   { group: 'view', label: 'Close the pane you’re in', keys: `${mod}⌥W`, words: ['pane', 'side by side', 'close'], when: () => inPane, run: () => paneHost()?.close(PANE_ID) },
   { group: 'view', label: 'Close all the panes beside', words: ['pane', 'side by side', 'close'], when: () => !!panes?.count, run: () => panes.closeAll() },
-  { group: 'new', label: 'Save links from your browser (Save to Inkwell button)…', keys: '', words: ['bookmark', 'bookmarklet', 'share', 'save link', 'twitter', 'x', 'web page', 'computer', 'desktop'], run: () => showSaveButton(), when: () => !matchMedia('(pointer: coarse)').matches },
+  { group: 'new', label: 'Save links from your browser (Save to Inkwell button)…', keys: '', words: ['bookmark', 'bookmarklet', 'share', 'save link', 'twitter', 'x', 'web page', 'computer', 'desktop'], run: () => showSaveButton(), when: () => !media('finger').matches },
   { group: 'new', label: 'Bring in old notes (from Thymer, Tana, Workflowy, OneNote)…', keys: '', words: ['import', 'paste', 'opml', 'markdown', 'migrate', 'old apps'], run: () => bringInOld() },
   { group: 'sync', label: 'Connect Scribe, the dictation keyboard…', keys: '', run: () => connectScribe() },
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
@@ -4464,7 +4488,6 @@ async function showSpace() {
 const timeNow = () => new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, ' ').toLowerCase();
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 function dayFrom(n) { const d = new Date(); d.setDate(d.getDate() + n); return d; }
-const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const shortDay = (d) => d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 
 function insertTime(ed) { ed.chain().focus().insertContent(`${timeNow()} `).run(); }
@@ -4551,6 +4574,7 @@ async function knowsThing() {
 // Bring in old notes: a section pasted or dropped from another app becomes a page.
 async function bringInOld() {
   const base = location.origin + location.pathname;
+  const { openBringIn } = await import('./bringin.js');
   await openBringIn({
     ask: askServer, canAsk: canAskServer, toast, base,
     open: (row) => openEntry(row.id),
@@ -4598,10 +4622,6 @@ async function showTrash() {
   else { box.open = true; box.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 }
 
-function isoToday() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 // Everything you can go to: books, areas, chapters, pages and recent days.
 // Move to…: send the line you're on (and what's under it) to another page or day.
@@ -5044,13 +5064,12 @@ async function writeLineOutAgain() {
 }
 function writeOut() {
   const opts = { ask: askServer, canAsk: canAskServer, onRows: (rows) => applyRemote(rows), typing: (id) => notebook.typingOn(id) };
-  return Promise.all([writeOutPending({ ...opts, draft: { context: draftContext, deliver: deliverDraft } }), snapshotPending(opts), meetingPending({ ...opts, ...meetingOpts }), sendPending({ send: sendTask, canSend: canSendTask })]);
+  return Promise.all([writeOutPending({ ...opts, draft: { context: draftContext, deliver: deliverDraft } }), snapshotPending(opts), meetingPending({ ...opts, ...meetingOpts })]);
 }
 // Meetings: your tasks become tasks here (a business one goes to Acro HQ).
 const meetingOpts = {
   me: () => sync.user?.user_metadata?.full_name || sync.user?.user_metadata?.name || '',
   base: () => location.origin + location.pathname,
-  sendPending: () => sendPending({ send: sendTask, canSend: canSendTask }),
   onDone: (it, notes, to) => {
     const sent = to === 'acro' ? notes.tasks.length : notes.tasks.filter((t) => mine(t.owner, meetingOpts.me())).length;
     const where = to === 'acro' ? 'Acro HQ' : 'your plan';
@@ -5106,10 +5125,7 @@ async function fixSpeaker() {
     await applyRemote(await renameSpeaker(pid, from, to));
   } })), menuSpot());
 }
-// Tasks still waiting to go to Daybook (the day review and shoot days still send there).
-const sendTask = (task) => (window.__daybook ? window.__daybook(task) : sync.backend.addTask(task));
-const canSendTask = () => !!window.__daybook || (!!sync.user && navigator.onLine && !!sync.backend?.addTask);
-// A link from Daybook (or anywhere) to ?open=<id> opens that line where it
+// A link from anywhere to ?open=<id> opens that line where it
 // lives, once this device has it.
 let asking = null;
 async function openAsked() {
@@ -5297,13 +5313,11 @@ async function openCapture(opts) {
 if (!inPane) window.addEventListener('online', () => writeOut());
 
 // The day review: Claude sums up a day's page and sorts what's on it, and you
-// decide each thing (Daybook, keep thinking, split, let go).
+// decide each thing (a task, keep thinking, split, let go).
 dayReview = new DayReview($('.day-review'), {
   card: $('.evening-card'),
   ask: askServer,
   canAsk: canAskServer,
-  areas: () => (window.__areas ? window.__areas() : sync.user && sync.backend?.areas ? sync.backend.areas() : null),
-  sendPending: () => sendPending({ send: sendTask, canSend: canSendTask }),
   base: () => location.origin + location.pathname,
   onRows: (rows) => applyRemote(rows),
   onOpen: (id) => openEntry(id),
@@ -5468,7 +5482,7 @@ plan = new Plan({
     // Weeks ahead: the lanes as the Desk seats them, and shoot days.
     ahead: () => aheadSource((since) => { const b = deskBackend(); return b ? b.desk(since) : null; }),
     talk: () => (inPane || !paneHost() || root.classList.contains('hide-panes') ? null : () => openTalk()),
-    // Google Calendar, read-only, through the reader Daybook's server already has.
+    // Google Calendar, read-only, through the server's calendar function.
     calendar: (from, to) => calendarEvents((a, b) => (window.__calendar ? window.__calendar(a, b) : sync.user && sync.invoke ? sync.invoke('calendar', { timeMin: a, timeMax: b }) : null), from, to),
     // Pull from a project: its lines open next to the plan, to drag in.
     pull: inPane ? null : () => pullFromProject(),
@@ -5558,7 +5572,7 @@ async function whenHere() {
   return false;
 }
 
-// Google Calendar, connected from Inkwell itself (it used to borrow Daybook's sign-in).
+// Google Calendar, connected from Inkwell itself.
 async function connectCalendar() {
   const b = sync.backend;
   if (!b?.connectCalendar || !sync.user) { toast('Sign in first (Ctrl + K, “Sign in”), then connect your calendar.'); return; }
@@ -5582,7 +5596,7 @@ const peekDesk = () => { if (inPane || document.hidden || Date.now() - deskPeeke
 if (!inPane) for (const ms of [4000, 20000]) setTimeout(() => { deskPeeked = Date.now(); deskPage.peek(); }, ms);
 setInterval(peekDesk, 300000);
 document.addEventListener('visibilitychange', peekDesk);
-// The 9 pm note in Daybook links to ?review=<date>: open that day and its
+// The 9 pm alert links to ?review=<date>: open that day and its
 // review, or ask Claude for one once this device has caught up.
 let reviewing = null;
 async function reviewAsked() {
@@ -5967,6 +5981,7 @@ async function start() {
   // Opened where it belongs (tests wait for this before moving around).
   root.classList.remove('starting');
   root.dataset.started = '1';
+  warmRooms();
   // The panes that were open beside come back.
   panes?.restore();
   // A recording cut short (the app closed, the phone died) is kept, not lost.
@@ -5999,9 +6014,9 @@ async function start() {
     if (signedIn) { await go({ view: 'notebook', pageId: dayId(reviewing) }); if (await getReview(reviewing)) await reviewAsked(); } else await reviewAsked();
   }
   if (asked.get('capture')) openCapture();
-  // The Monday note in Daybook links to ?tidy=<Monday>: the pass opens, and fills in as this device catches up.
+  // The Monday alert links to ?tidy=<Monday>: the pass opens, and fills in as this device catches up.
   if (asked.has('tidy')) showTidy().catch((e) => console.error(e));
-  // The monthly note in Daybook links to ?summaries: What Claude knows, with the weekly and monthly summaries.
+  // The monthly alert links to ?summaries: What Claude knows, with the weekly and monthly summaries.
   if (asked.has('summaries')) showClaudeKnows(null).catch((e) => console.error(e));
   if (asked.get('open')) { asking = asked.get('open'); await openAsked(); }
   // A phone alert for Needs you or a note from Claude opens the Desk, where they're listed.

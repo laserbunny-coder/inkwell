@@ -1,3 +1,4 @@
+import { media } from './device.js';
 import { getEntry, getMany, putEntries, byKind } from './db.js';
 import { tagsIn, entry, newId } from './model.js';
 import { loadStructure, rowsAt } from './grid.js';
@@ -8,11 +9,12 @@ import { download } from './export.js';
 import {
   ELEMENT_TYPES, typeOf, elementsIn, plainPages, newElement, setElement, namesOf,
   findElements, sceneElements, changeBreakdown, sceneSig, shotCode, newShot, shotStage, SHOT_STAGES,
-  withRenders, withPrompts, isVideo, shotForName, shootDays, newShootDay, dayTask, toCsv, toSrt, speechesIn, PLATFORMS,
+  withRenders, withPrompts, isVideo, shotForName, shootDays, newShootDay, shootDayTask, toCsv, toSrt, speechesIn, PLATFORMS,
   MADE_BY, madeBy, needsFootage, AUDIO, audioOf, toPlan,
   viewSlots, toolIdsFor, toolIdsOf, ASPECTS, RATES, rulesOf, genOf, secsOf, runsOf,
   PRICES_ID, priceList, priceOf, pricesChecked, estimate, spent, money, toEdl, cutEvents
 } from './production.js';
+import { make } from './dom.js';
 
 // The production view of a piece (Ctrl + Shift + S): its scenes, each with
 // the elements it uses and its shots; a storyboard of the stills picked;
@@ -20,13 +22,6 @@ import {
 // plot grid, nothing here is a copy: a scene is the scene heading in the
 // script, the kit is the world's bible pages.
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch { /* full */ } };
 const hidden = () => new Set(JSON.parse(pref('prodHide', '[]')));
@@ -53,7 +48,7 @@ const extOf = (name, type) => (/\.([a-z0-9]{1,5})$/i.exec(name || '')?.[1] || (t
 export class ProductionView {
   // hooks: open(row), openPage(id), leave(piece), changed(rows), menu,
   // menuButton, ask, askText, toast, askServer, canAsk, numberScenes(piece), go(place),
-  // sendTask(task), base().
+  // base().
   constructor(el, hooks) {
     this.el = el;
     this.hooks = hooks;
@@ -61,7 +56,7 @@ export class ProductionView {
     this.open = new Set();
     this.busy = Promise.resolve();
     this.timers = new Map();
-    this.touch = matchMedia('(hover: none)');
+    this.touch = media('touch');
     this.dayId = null;
     el.addEventListener('dragover', (e) => { if (this.isOpen && [...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault(); });
     el.addEventListener('drop', (e) => this.dropAnywhere(e));
@@ -1706,13 +1701,14 @@ export class ProductionView {
     const acts = make('div', 'pd-add');
     const print = make('button', 'pill', 'Print or save as PDF');
     print.addEventListener('click', () => { document.documentElement.classList.add('printing-sheet'); window.print(); setTimeout(() => document.documentElement.classList.remove('printing-sheet'), 500); });
-    const send = make('button', 'pill', f.daybook ? 'Update in Daybook' : 'Send to Daybook');
+    const send = make('button', 'pill', f.task ? 'Update the task' : 'Make it a task');
     send.title = 'A task on that day, at call time, linking back here';
     send.addEventListener('click', async () => {
-      await this.hooks.sendTask(dayTask(day, this.piece, this.hooks.base()));
-      await save({ daybook: Date.now() });
+      await this.now(`${day.id}:notes`);
+      const rows = await shootDayTask((await getEntry(day.id)) || day, this.piece);
+      this.hooks.changed(rows);
       this.render();
-      this.hooks.toast(f.date ? `On your Daybook plan for ${new Date(`${f.date}T12:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${f.call ? ` at ${clock(f.call)}` : ''}` : 'Sent to Daybook');
+      this.hooks.toast(f.date ? `On your plan for ${new Date(`${f.date}T12:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${f.call ? ` at ${clock(f.call)}` : ''}` : 'Made a task, on the Tasks page');
     });
     const del = make('button', 'ghost-btn', f.type === 'voice' ? 'Delete the session' : 'Delete the day');
     del.addEventListener('click', async () => {

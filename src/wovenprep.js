@@ -1,4 +1,5 @@
 import { scenesOf, parseSlug, buildSlug, missing, writeSlug, TITLE_LEVEL, WOVEN, TIME_CHOICES, setMarker, findScene } from './woven.js';
+import { plain as make } from './dom.js';
 
 // Prepare for shoot: everything a Woven script needs before a schedule,
 // shot list or call sheet can be made from it, filled in for you. Your words
@@ -13,7 +14,6 @@ import { scenesOf, parseSlug, buildSlug, missing, writeSlug, TITLE_LEVEL, WOVEN,
 // doesn't have yet can become place pages in one go.
 
 const titleCase = (s) => s.toLowerCase().replace(/(^|[\s\-/])(\p{L})/gu, (_m, a, b) => a + b.toUpperCase());
-const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 
 // hooks: { editor, places(doc), biblePlaces(), ask(body), canAsk(), piece(), toast(msg, action), makePlaces(list) }
 export async function prepareForShoot(hooks) {

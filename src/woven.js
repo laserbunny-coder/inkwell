@@ -2,6 +2,7 @@ import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey, TextSelection, NodeSelection, Selection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { detect } from './script.js';
+import { plain as make } from './dom.js';
 
 // Woven: a screenplay written as flowing prose. There are no INT./EXT. lines
 // on the page. A faint line marks each new scene, with your own title on it
@@ -610,7 +611,6 @@ export function redraw(editor) {
 
 // ---------- the dot's card: place, time, kind, title ----------
 
-const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 const titleCase = (s) => s.toLowerCase().replace(/(^|[\s\-/])(\p{L})/gu, (_m, a, b) => a + b.toUpperCase());
 
 // One card at a time. It stays open while you pick (so several things can be

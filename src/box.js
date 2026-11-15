@@ -16,18 +16,12 @@
 import { GROUPS } from './commandinfo.js';
 import { whenChoices } from './when.js';
 import { addDays, dateOf, isoOf } from './tasks.js';
+import { make } from './dom.js';
 
 const USED = 'boxUsed';
 const KEEP_USED = 8;
 const HERE_MAX = 4;
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 // Straight and curly apostrophes are the same thing here ("what's when").
 export const norm = (t) => String(t || '').toLowerCase().replace(/[’‘']/g, '').replace(/\s+/g, ' ').trim();
 

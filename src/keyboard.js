@@ -1,4 +1,5 @@
 // Is the phone's keyboard up? The one answer the bottom of the phone goes by.
+import { media } from './device.js';
 //
 // It used to be "the caret is in some text" (focus), but Android's back
 // gesture puts the keyboard away and leaves the caret where it was, and a page
@@ -32,7 +33,7 @@ class Keyboard {
     this.armed = 0; // when a finger last touched something you type in
     this.shrunk = false; // the page shrank while the caret was in text
     this.listeners = new Set();
-    this.touch = matchMedia('(hover: none)');
+    this.touch = media('touch');
     this.full = window.innerHeight;
     document.addEventListener('pointerdown', (e) => {
       if (!this.touch.matches) return;

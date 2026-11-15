@@ -119,7 +119,6 @@ const fake = () => {
     },
     subscribe() {}, unsubscribe() {}
   };
-  window.__daybook = (task) => window.__remote('task', task);
   window.__asked = [];
   window.__claude = async (body) => {
     window.__asked.push(body);

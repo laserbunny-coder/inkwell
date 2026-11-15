@@ -1,4 +1,5 @@
 import { openHandleMenu, closeHandleMenu } from './handlemenu.js';
+import { isTouch } from './device.js';
 // The six-dot handle beside each paragraph: drag it to move the paragraph,
 // click it (or right-click, or tap it on a phone) for that paragraph's actions.
 // On a phone it's for the menu only; dragging there was too fiddly.
@@ -40,7 +41,7 @@ export class BlockHandle {
     editor.on('selectionUpdate', () => {
       if (this.dragging || this.menuOpen) return;
       const i = editor.state.selection.$from.index(0);
-      if (matchMedia('(hover: none)').matches) this.show(i);
+      if (isTouch()) this.show(i);
     });
     this.handle.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;

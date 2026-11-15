@@ -1,5 +1,7 @@
 import './reader.css';
 import config from './config.js';
+import { media, isNarrow } from './device.js';
+import { plain as make } from './dom.js';
 
 // The page a share link opens: a piece or a bible page from Inkwell, to read
 // and comment on, with no account. Everything here comes from the copy the
@@ -7,7 +9,6 @@ import config from './config.js';
 // inkwell-share server function.
 
 const $ = (s) => document.querySelector(s);
-const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const token = decodeURIComponent(location.hash.replace(/^#/, '')).trim();
 
 // The writer, reading their own link on a browser where they're signed in to
@@ -140,7 +141,7 @@ function render() {
   $('#rd-toggle').textContent = state.hide ? `Show comments (${tops.length})` : 'Hide comments';
   const hint = $('#rd-hint');
   hint.hidden = !s.can_comment;
-  hint.textContent = matchMedia('(hover: hover)').matches ? 'To comment, click a paragraph (or select some words) and press Comment.' : 'To comment, tap a paragraph (or select some words), then Comment.';
+  hint.textContent = media('mouse').matches ? 'To comment, click a paragraph (or select some words) and press Comment.' : 'To comment, tap a paragraph (or select some words), then Comment.';
 }
 
 // ---------- picking what to comment on ----------
@@ -155,12 +156,12 @@ function pick(blockEl, quote = '') {
 
 function placeBar(el) {
   const bar = $('#rd-bar');
-  if (matchMedia('(max-width: 700px)').matches) { bar.style.top = ''; return; }
+  if (isNarrow()) { bar.style.top = ''; return; }
   bar.style.top = `${el.getBoundingClientRect().top + window.scrollY}px`;
 }
 
 document.addEventListener('mouseup', () => setTimeout(fromSelection, 0));
-document.addEventListener('selectionchange', () => { if (!matchMedia('(hover: hover)').matches) setTimeout(fromSelection, 0); });
+document.addEventListener('selectionchange', () => { if (!media('mouse').matches) setTimeout(fromSelection, 0); });
 function fromSelection() {
   if (!state.share?.can_comment || !$('#rd-compose').hidden) return;
   const sel = document.getSelection();

@@ -2,7 +2,7 @@
    Notes); the top bar's Beside button puts it away and brings it back. */
 #beside-toggle[aria-pressed="true"] { color: var(--accent); }
 html.hide-panes #beside-toggle, html.hide-panes label:has(#many-panes) { display: none; }
-@media (max-width: 899px), (hover: none) { #beside-toggle { display: none; } }
+@media (--compact) { #beside-toggle { display: none; } }
 
 .pane-tabs { flex: none; display: flex; gap: 2px; margin-left: -8px; }
 .pane-tab { border: 0; background: none; color: var(--faint); font: 12px var(--ui); padding: 4px 9px; border-radius: 99px; cursor: pointer; }

@@ -71,7 +71,7 @@ html.hs-open .hs-hide + .hs-cmp ~ * { display: none; }
 .hs-cmp.one { display: block; width: auto; margin-left: 0; transform: none; font-size: calc(var(--text-size, 18px) * .9); }
 .hs-cmp.one .hs-fold { display: block; margin: 0 auto 14px; }
 
-@media (max-width: 700px) {
+@media (--narrow) {
   .hstrip { margin: 0 -6px 18px; padding: 10px 10px 0; border-radius: 10px; }
   .hs-t { font-size: 17px; flex-basis: 100%; }
   .hs-when { gap: 8px; }

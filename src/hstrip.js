@@ -3,6 +3,8 @@ import { versionsOf, blocks as docBlocks, words as wordDiff, changedWords, nameV
 import { alignBlocks } from './drafts.js';
 import { wordCount } from './model.js';
 import { popMenu } from './menu.js';
+import { isNarrow } from './device.js';
+import { make } from './dom.js';
 
 // The history strip: hidden until asked for (the page's ⋯ menu, or
 // Ctrl + Shift + H). A line of marks, one for every kept version of the page
@@ -11,7 +13,6 @@ import { popMenu } from './menu.js';
 // marks to see them side by side. Bring back one paragraph or line, or the
 // whole page, each with Undo. Looking writes nothing.
 
-const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; if (tag === 'button') e.type = 'button'; return e; };
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const startOf = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
 const time = (ms) => new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -362,7 +363,7 @@ export class HistoryStrip {
     const B = this.marks[hi];
     const asBlocks = (doc) => docBlocks(doc).map((b) => ({ eid: b.eid, kind: kindOf(b), text: b.text, depth: b.depth, src: b }));
     const rows = alignBlocks(asBlocks(A.doc), asBlocks(B.doc));
-    const phone = matchMedia('(max-width: 700px)').matches;
+    const phone = isNarrow();
     const c = this.cmp;
     c.replaceChildren();
     c.classList.toggle('one', phone);

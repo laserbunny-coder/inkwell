@@ -45,7 +45,7 @@
 .hide-loose #outline-editor li.is-loose > .line-gutter .bullet::after { background: var(--faint); box-shadow: none; transform: none; }
 html.focus .loose-foot, .notebook.zoomed .loose-foot { display: none; }
 
-@media (max-width: 700px) {
+@media (--narrow) {
   .thru-back { place-items: end center; padding: 0; }
   .thru { width: 100%; border-radius: 18px 18px 0 0; border-bottom: 0; padding: 20px 18px calc(16px + env(safe-area-inset-bottom, 0px)); max-height: 88dvh; }
   .thru-big { font-size: 21px; }

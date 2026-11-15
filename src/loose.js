@@ -36,8 +36,9 @@ const HAS_WHEN = /\b(today|tonight|tomorrow|this week|next week|by (mon|tues|wed
 const SPARK = /^(what if|idea:|idea for|maybe a|imagine|a (film|story|song|show|short|reel|book|game|sketch) (about|where)|someone who|a [a-z]+ who)\b/i;
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// What a review card suggests, in Go through's words.
-const FROM_REVIEW = { daybook: 'task', drawer: 'drawer', mull: 'keep', let_go: 'keep' };
+// What a review card suggests, in Go through's words (the server still says
+// 'daybook' for a task, from Daybook's time).
+const FROM_REVIEW = { daybook: 'task', task: 'task', drawer: 'drawer', mull: 'keep', let_go: 'keep' };
 
 // The answer to light up first. `thread` is the day review's card holding
 // this line, when Claude has read the day (then it's Claude's guess);

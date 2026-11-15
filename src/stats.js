@@ -1,6 +1,9 @@
 import { allEntries, eachEntry, putEntries } from './db.js';
 import { entry, wordCount } from './model.js';
 import { scriptLines, LINES_PER_PAGE } from './script.js';
+import { pad, isoOf, dateOf, addDays } from './dates.js';
+
+export const dayOf = (ms) => isoOf(ms);
 
 // Progress over time. Once a day (and whenever you write) the app notes what
 // each novel, screenplay and the notes come to, in one small synced entry per
@@ -8,10 +11,6 @@ import { scriptLines, LINES_PER_PAGE } from './script.js';
 // the one before. Days from before tallies began are estimated from when each
 // paragraph or line was first written.
 
-const pad = (n) => String(n).padStart(2, '0');
-export const dayOf = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
-const dateOf = (day) => { const [y, m, d] = day.split('-').map(Number); return new Date(y, m - 1, d); };
-const addDays = (day, n) => { const d = dateOf(day); d.setDate(d.getDate() + n); return dayOf(d.getTime()); };
 const MANUSCRIPT = ['novel', 'screenplay'];
 
 // A paragraph, line or note boiled down to what counting needs, so a big

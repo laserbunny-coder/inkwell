@@ -71,10 +71,15 @@ try {
   // ---------- computer ----------
   const pc = await device({ viewport: { width: 1440, height: 900 } }, { estimates: false });
 
-  await check('computer: the switch is Today, Plan, Calendar; under today’s list, Tomorrow, This week and Further out', async () => {
+  await check('computer: the switch is Today, Plan, Calendar; under today’s list one thin “Tomorrow and later” line opens to Tomorrow, This week and Further out', async () => {
     assert.deepEqual(await pc.locator('.today-switch .tb-btn').allInnerTexts(), ['Today', 'Plan', 'Calendar']);
+    assert.equal(await pc.locator('#plan .pl-further').isVisible(), false, 'folded at first');
+    assert.match(await pc.locator('#plan .pl-today-rest').textContent(), /^Tomorrow and later/);
+    await pc.locator('#plan .pl-today-rest').click();
+    await pc.waitForSelector('#plan .pl-further', { state: 'visible' });
     const lines = await pc.locator('#plan .pl-further .ww-name').allInnerTexts();
     assert.deepEqual(lines, ['Tomorrow', 'This week', 'Further out']);
+    assert.match(await pc.locator('#plan .pl-today-rest').textContent(), /Just today/);
   });
 
   await check('computer: a task dropped on “Tomorrow” under today’s list goes to tomorrow, with Undo', async () => {

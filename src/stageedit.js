@@ -1,5 +1,6 @@
 import { allSets, setById, stageSetOf, stagesIn, stageOf, bookType, TYPE_NAMES, TOOLS, toolsIn } from './library.js';
 import { newId } from './model.js';
+import { make } from './dom.js';
 
 // A project's workflow: the steps (stages) its pieces go through and the
 // tools on Make. The same editor shows at New, filled in from what you're
@@ -10,13 +11,6 @@ import { newId } from './model.js';
 // renaming a step carries its pieces with it. Save as my own keeps a
 // workflow to start the next project from.
 
-const make = (tag, cls, text) => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  if (tag === 'button') el.type = 'button';
-  return el;
-};
 
 const rowsFor = (set, world) => stagesIn(set, world).map((name) => ({ name, was: name }));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);

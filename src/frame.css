@@ -100,7 +100,7 @@ html, body { -webkit-font-smoothing: antialiased; }
 /* ---------- The rail: the rooms, as words ---------- */
 
 .rail { display: none; }
-@media (min-width: 701px) {
+@media (--wide) {
   /* Anything scrolled into view lands below the bar, not under it. */
   html.has-rail { --rail-w: 208px; scroll-padding-top: 60px; }
   html.has-rail body { margin-left: var(--rail-w); }
@@ -252,11 +252,11 @@ html, body { -webkit-font-smoothing: antialiased; }
 /* Cards answer the pointer with colour only: they are dragged, and a card that
    lifts under the pointer loses the drag. */
 :root:not([data-motion="off"]) :is(.card, .sb-card, .st-card) { transition: border-color var(--t1) ease, background-color var(--t1) ease; }
-@media (min-width: 701px) {
+@media (--wide) {
   /* The switch at the top has Tags now. */
   html.has-rail .lib-jumps { display: none; }
 }
-@media (max-width: 700px) {
+@media (--narrow) {
   :root:is([data-look="midnight"], [data-look="paper"]) :is(#nb-title, #wh-title, #ph-title, .lib-head h1, .tags-home h1) { font-size: 34px; }
   :root:is([data-look="midnight"], [data-look="paper"]) .st-title { font-size: 30px; }
 }
