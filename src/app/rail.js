@@ -17,7 +17,7 @@ import { refreshWords } from './manuscript.js';
 import { actMenu, areaMenu, bookMenu, chapterMenu, pageMenu, worldMenu } from './tidying.js';
 import { PAGE_NAMES, frame, nav, renderStrip } from './workpages.js';
 import { openPalette } from './quickinserts.js';
-import { plan, tagsPage } from './talking.js';
+import { nowStrip, plan, tagsPage } from './talking.js';
 import { openBeside, openProjectBeside, sideNotes } from './beside.js';
 
 // ---------- names you can rename in place ----------
@@ -352,6 +352,7 @@ async function drawCrumb() {
   }
   else nav.here(lastPlace, names);
   frame.here(lastPlace);
+  nowStrip?.moved(lastPlace);
 }
 
 // Runs once at start-up, from main.js, in the place this code had there
