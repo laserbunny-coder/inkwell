@@ -10,7 +10,7 @@ import { inPane, PANE_ID, host as paneHost } from '../panes.js';
 import { areas, books, hasManuscript, areaColor, pagesIn, loosePages, bookOf, worlds, worldOf, worldTree } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday } from '../dates.js';
-import { $, editor, inNotebook, isScript, openBeside, openProjectBeside, root, sectionNames, sideNotes, state, view } from '../main.js';
+import { $, editor, inNotebook, isScript, root, sectionNames, state, view } from '../main.js';
 import { notebook } from './notebookview.js';
 import { go, lastPlace } from './routing.js';
 import { refreshWords } from './manuscript.js';
@@ -18,6 +18,7 @@ import { actMenu, areaMenu, bookMenu, chapterMenu, pageMenu, worldMenu } from '.
 import { PAGE_NAMES, frame, nav, renderStrip } from './workpages.js';
 import { openPalette } from './quickinserts.js';
 import { plan, tagsPage } from './talking.js';
+import { openBeside, openProjectBeside, sideNotes } from './beside.js';
 
 // ---------- names you can rename in place ----------
 

@@ -20,7 +20,7 @@ import { inPane, sendChanged, onChanged } from '../panes.js';
 import { redrawTidy } from '../tidypass.js';
 import { ensureWorlds, setOwnWorkflows } from '../library.js';
 import { isoToday } from '../dates.js';
-import { $, body, editor, gone, inNotebook, notes, reviewAsked, sideNotes, state, store, view } from '../main.js';
+import { $, body, editor, gone, inNotebook, notes, state, store, view } from '../main.js';
 import { notebook } from './notebookview.js';
 import { go, lastChapterAnywhere } from './routing.js';
 import { openChapter, refreshWords, renderChapterLinks } from './manuscript.js';
@@ -31,6 +31,7 @@ import { production } from './productionwiring.js';
 import { frame, stagePage, todayPanel } from './workpages.js';
 import { tidyNudge } from './quickinserts.js';
 import { blankOnce, dayReview, deskPage, looseSoon, openAsked, plan, scribeKept, tagsPage, writeOut } from './talking.js';
+import { reviewAsked, sideNotes } from './beside.js';
 
 // ---------- sync between devices ----------
 

@@ -23,7 +23,7 @@ import { aheadSource } from '../ahead.js';
 import { events as calendarEvents } from '../calendar.js';
 import { bookType, bookOf } from '../library.js';
 import { isoToday } from '../dates.js';
-import { $, editor, inNotebook, openBeside, openEntryBeside, openInMain, openTalk, pull, pullFromProject, root, state, store, view } from '../main.js';
+import { $, editor, inNotebook, root, state, store, view } from '../main.js';
 import { touch } from './scriptbar.js';
 import { currentEditor, notebook } from './notebookview.js';
 import { go, historyMode, lastPlace, openEntry, placeOf, setHistoryMode } from './routing.js';
@@ -33,6 +33,7 @@ import { frame, nav } from './workpages.js';
 import { hidden, setShown } from './pagesettings.js';
 import { writing } from './commands.js';
 import { closePalette, menuSpot, showTidy } from './quickinserts.js';
+import { openBeside, openEntryBeside, openInMain, openTalk, pull, pullFromProject } from './beside.js';
 let tagsPage = null; // the Tags page (set up with capture, below)
 let deskPage = null; // the Desk: every project, what needs you (below)
 let plan = null; // the plan: tasks by day, on a day's page and as Week and Pace (below)

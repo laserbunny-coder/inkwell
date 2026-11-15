@@ -28,7 +28,7 @@ import { dayWord, loadTasks, addTask } from '../tasks.js';
 import { inPane, PANE_ID, host as paneHost, BESIDE_PLACES } from '../panes.js';
 import { areas, books, bookType, hasManuscript, kindName, newBook, ago, worlds, newPiece } from '../library.js';
 import { isoToday } from '../dates.js';
-import { $, alts, body, connectCalendar, editor, gone, inNotebook, insertSection, isScript, isWoven, makeList, notes, openBeside, openTalk, panes, pullFromProject, root, setElement, state, store, toggleBesidePane, view, whenHere } from '../main.js';
+import { $, alts, body, editor, gone, inNotebook, insertSection, isScript, isWoven, notes, root, setElement, state, store, view } from '../main.js';
 import { touch, typeHere } from './scriptbar.js';
 import { currentEditor, notebook, toggleTypewriter } from './notebookview.js';
 import { go, lastPlace, newPageHere, openBook, openEntry } from './routing.js';
@@ -44,6 +44,7 @@ import { hstrip, openHistory } from './historyview.js';
 import { currentSize, currentWidth, hidden, lookTab, progressPanel, setPage, setShown, step, toggleFocus, togglePageSettings, toggleReading, toggleSections, toggleShortcuts } from './pagesettings.js';
 import { bringInOld, closePalette, currentBook, currentBookId, currentWorld, gatherTagHere, insertDay, insertTime, menuSpot, moveLinePicker, openPalette, pickFiles, sendSelectionPicker, showClaudeKnows, showTidy, showTrash, toggleNotes } from './quickinserts.js';
 import { canAskServer, captureHere, dayReview, deskPage, fixSpeaker, flipPlan, fromRecordingFile, makeMeeting, meetingToAcro, openModes, plan, through, todayKey, writeLineOutAgain } from './talking.js';
+import { connectCalendar, makeList, openBeside, openTalk, panes, pullFromProject, toggleBesidePane, whenHere } from './beside.js';
 // The one box (box.js), made once the commands are listed.
 let box = null;
 

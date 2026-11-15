@@ -6,7 +6,7 @@ import { Notebook } from '../notebook.js';
 import { openHandleMenu } from '../handlemenu.js';
 import { openPicker } from '../picker.js';
 import { inPane } from '../panes.js';
-import { $, besideItem, body, editor, inNotebook, listSoon, paneMoves, planningView, pull, root, state, statusEl, whenHere } from '../main.js';
+import { $, body, editor, inNotebook, root, state, statusEl } from '../main.js';
 import { ROOM_ABOVE, ROOM_BELOW, caretRoom, rowEnd, scriptBar, tapBar, touch, typeHere } from './scriptbar.js';
 import { openEntry, remember } from './routing.js';
 import { applyRemoteChapter } from './syncwiring.js';
@@ -15,6 +15,7 @@ import { pageMenu } from './tidying.js';
 import { dayMenu } from './historyview.js';
 import { moveLinePicker, sendSelectionPicker, tidyNudge } from './quickinserts.js';
 import { captureHere, dayReview, looseFoot, looseSoon, plan, writeOut } from './talking.js';
+import { besideItem, listSoon, paneMoves, planningView, pull, whenHere } from './beside.js';
 
 // ---------- notebook ----------
 
