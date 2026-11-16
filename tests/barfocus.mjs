@@ -187,7 +187,7 @@ try {
     const groups = await p.evaluate(() => [...document.querySelectorAll('.ps-group')].map((g) => `${g.dataset.group}${g.classList.contains('open') ? '*' : ''}`));
     assert.deepEqual(groups, ['writing*', 'pages', 'today', 'desk', 'around']);
     const rows = await p.evaluate(() => document.querySelectorAll('.ps-show .switch').length + document.querySelectorAll('.ps-chips').length + document.querySelectorAll('.ps-show .ps-choice').length);
-    assert.equal(rows, 39, 'thirty-nine rows on a phone (Calendar zoom came with the Calendar build; Now added ten on Nov 15: four for the strip, two for out of your head, two for the ends of the day, one for Training, one for First light)');
+    assert.equal(rows, 41, 'forty-one rows on a phone (Calendar zoom came with the Calendar build; Now added ten on Nov 15: four for the strip, two for out of your head, two for the ends of the day, one for Training, one for First light; Training streak and charts added two on Nov 16)');
     assert.ok(await p.evaluate(() => document.querySelector('.page-settings').scrollHeight < 900), 'short enough to read');
     // A switch and its command are the same thing.
     await p.locator('.ps-group[data-group="pages"] .ps-ghead').tap();
