@@ -18,6 +18,7 @@ export function amountsOf(row) {
   if (ex.n) bits.push(`${ex.n} ${ex.w || 'sets'}`);
   if (ex.u) bits.push(ex.u);
   if (ex.lad && ex.mark) bits.push(`move up at ${ex.mark}`);
+  if (ex.from > 1) bits.push(`from week ${ex.from}`);
   if (ex.link) bits.push('video');
   return bits.join(' · ') || 'amounts';
 }
@@ -55,6 +56,7 @@ export function amountsMenu(eid, anchor, { wrote = async () => {} } = {}) {
     { label: 'What to record…', run: () => ask('What do you record?', 'u', { placeholder: 'seconds, reps, inches', body: 'One number each time. Empty for nothing.' }) },
     { label: 'How to do it…', run: () => ask('How to do it', 'd', { placeholder: 'One quiet line in Now' }) },
     { label: 'The mark to move up…', run: () => ask('Move up at', 'mark', { number: true, body: 'With all sets done at this mark, Now asks if you’re ready for the next step.' }) },
+    { label: 'Starts in week…', run: () => ask('Starts in week', 'from', { number: true, body: 'Week 1 is your first time through the round. Empty to start now.' }) },
     { label: 'Notes and video link…', run: () => ask('Notes and video', 'link', { placeholder: 'https://' }) }
   ]);
 }

@@ -43,10 +43,15 @@ const LADDERS = {
 };
 const WARM = { k: 'warm', t: 'Warm up', m: 10, mw: 'minutes. Scapular pulls, leg swings, skips, three easy build-up runs' };
 const WRIST = { k: 'wrist', t: 'Wrist preparation', m: 5, mw: 'minutes' };
+// Legs (he answered Nov 15): 90-pound adjustable dumbbells, walking lunges
+// with 180 pounds, pistol squats. Hard A lunges, Hard B pistols.
+const LUNGE = { k: 'legs', t: 'Walking lunges with dumbbells', n: 3, w: 'sets', d: 'Heavy, 5 or 6 steps each leg' };
+const PISTOL = { k: 'pistol', t: 'Pistol squats', n: 3, w: 'sets', d: 'Up to 5 each leg. Hold a dumbbell once 5 are easy' };
+// From week 5 of the round (from: the week it starts in; Now leaves it out before then).
+const JUMPSQ = { k: 'jumpsq', t: 'Dumbbell jump squats', n: 3, w: 'sets', d: '5 reps, 20 to 30 pounds in each hand. Light and fast', from: 5 };
 const STRENGTH = [
   { k: 'pikelift', t: 'Pike leg lifts', n: 3, w: 'sets', u: 'reps', q: 'Reps' },
   { k: 'lsit', t: 'L-sit', n: 3, w: 'holds', u: 'seconds', q: 'Shortest hold' },
-  { k: 'legs', t: 'Squat or split squat', n: 3, w: 'sets', d: 'Heavy, 5 or 6 reps a set' },
   { k: 'calf', t: 'Single-leg calf raises', n: 3, w: 'sets', d: '10 slow reps each leg' },
   { k: 'nordic', t: 'Nordic hamstring curls', n: 2, w: 'sets', u: 'reps', q: 'Reps' }
 ];
@@ -82,7 +87,7 @@ export const SEED = [
     HOLDS,
     LOWERS,
     pullPush('pullpair', 'Pull-ups and push-ups', { k: 'pull', t: 'Pull-ups', u: 'reps', lab: 'pull-up reps' }),
-    ...STRENGTH] },
+    ...STRENGTH.slice(0, 2), LUNGE, ...STRENGTH.slice(2)] },
   { n: 'Light', x: [WRIST,
     { k: 'wall', t: 'Wall handstand holds', m: 2, mw: 'minutes in total, chest to wall', u: 'seconds', q: 'Longest hold' },
     { k: 'free', t: 'Free handstand practice', m: 10, mw: 'minutes', u: 'seconds', q: 'Best hold' },
@@ -98,10 +103,11 @@ export const SEED = [
     { k: 'sprint', t: 'Sprints', n: 5, w: 'sprints', d: '20 yards at about 80% effort, walk back' },
     { k: 'vert', t: 'Vertical jumps', n: 3, w: 'sets', d: '5 jumps a set, full effort, full rest' },
     { k: 'pogo', t: 'Pogo hops', n: 3, w: 'sets', d: '15 hops a set' },
+    JUMPSQ,
     HOLDS,
     LOWERS,
     pullPush('rowpair', 'Rows and push-ups', { k: 'rows', t: 'Tuck front lever rows', u: 'reps', lab: 'row reps' }),
-    ...STRENGTH] }
+    ...STRENGTH.slice(0, 2), PISTOL, ...STRENGTH.slice(2)] }
 ];
 // After the two evaluations, the round: Hard A, Light, Light, Hard B, Light, Light.
 export const ROUND = ['Hard A', 'Light', 'Light', 'Hard B', 'Light', 'Light'];
@@ -113,10 +119,10 @@ const blankState = () => ({ round: 0, order: [...ROUND], step: { lever: 0, planc
 // The page and its outline, written once.
 export async function seedTraining() {
   const had = await getEntry(TRAINING_PAGE);
-  if (had && !had.deleted) return [];
+  if (had && !had.deleted) return upgradeSeed(had);
   const rows = [];
   const page = entry('page', { id: TRAINING_PAGE, title: 'Training', parent_id: null, sort: 0 });
-  page.fields = { ...page.fields, training: blankState() };
+  page.fields = { ...page.fields, training: { ...blankState(), seedv: SEED_V } };
   rows.push(page);
   const line = (parent, sort, text, fields) => {
     const r = entry('line', { parent_id: parent, sort, text, content: [{ type: 'text', text }], tags: [], links: [], fields: { done: false, gather: null, gathered: null, mirror: null, ...fields } });
@@ -133,6 +139,33 @@ export async function seedTraining() {
     };
     s.x.forEach((x, xi) => exLine(top.id, (xi + 1) * GAP, x));
   });
+  await putEntries(rows);
+  return rows;
+}
+
+// A page written before the leg fix (Nov 15 evening): "Squat or split squat"
+// becomes lunges on Hard A and pistols on Hard B, and Hard B gets the jump
+// squats from week 5. Once, and only lines still as the seed wrote them.
+export const SEED_V = 2;
+async function upgradeSeed(page) {
+  const tr = page.fields?.training || {};
+  if ((tr.seedv || 1) >= SEED_V) return [];
+  const rows = [];
+  const lineFields = (x) => { const { t, ...ex } = x; return ex; };
+  for (const top of sorted(await children(TRAINING_PAGE))) {
+    const which = /^hard a$/i.test(top.text || '') ? LUNGE : /^hard b$/i.test(top.text || '') ? PISTOL : null;
+    if (!which) continue;
+    const kids = sorted(await children(top.id));
+    const old = kids.find((r) => r.fields?.ex?.k === 'legs' && /^squat or split squat$/i.test(r.text || ''));
+    if (old) rows.push({ ...old, text: which.t, content: [{ type: 'text', text: which.t }], fields: { ...old.fields, ex: { ...old.fields.ex, ...lineFields(which) } }, updated_at: Date.now() });
+    if (which === PISTOL && !kids.some((r) => r.fields?.ex?.k === JUMPSQ.k)) {
+      const pogo = kids.find((r) => r.fields?.ex?.k === 'pogo');
+      const next = pogo ? kids[kids.indexOf(pogo) + 1] : null;
+      const sort = pogo ? (next ? ((pogo.sort || 0) + (next.sort || 0)) / 2 : (pogo.sort || 0) + GAP) : (kids.at(-1)?.sort || 0) + GAP;
+      rows.push(entry('line', { parent_id: top.id, sort, text: JUMPSQ.t, content: [{ type: 'text', text: JUMPSQ.t }], tags: [], links: [], fields: { done: false, gather: null, gathered: null, mirror: null, ex: lineFields(JUMPSQ) } }));
+    }
+  }
+  rows.push({ ...page, fields: { ...page.fields, training: { ...tr, seedv: SEED_V } }, updated_at: Date.now() });
   await putEntries(rows);
   return rows;
 }
@@ -187,8 +220,11 @@ export function sessionAt(tr, round = tr.state.round, day = isoOf()) {
   if (!turn.length) return null;
   const w = weekSet(tr);
   const named = w && w[weekdayOf(day)] ? tr.sessions.find((s) => !s.once && s.name === w[weekdayOf(day)]) : null;
-  const s = named || turn[(round - once.length) % turn.length];
+  const picked = named || turn[(round - once.length) % turn.length];
   const first = w ? Object.values(w).filter(Boolean).length : turn.length;
+  // Week of the round (1 = the first time through); an exercise with from: N waits until week N.
+  const week = Math.floor((round - once.length) / Math.max(first, 1)) + 1;
+  const s = picked.x.some((x) => x.from > week) ? { ...picked, x: picked.x.filter((x) => !(x.from > week)) } : picked;
   if (!s.hard || round - once.length >= first) return s;
   return { ...s, ease: true, x: s.x.map((x) => (x.n >= 3 ? { ...x, n: x.n - 1 } : x)) };
 }
@@ -225,8 +261,8 @@ export const trainingToday = (items, today) => items.find((i) => isTraining(i.ro
 // Today's line, once a day, not on a rest day (Sunday, or as the week says), unless it was already made today
 // (and since taken off). → rows written.
 export async function ensureTrainingLine(items, today = isoOf()) {
-  if (trainingToday(items, today)) return [];
   const rows = [...(await seedTraining())];
+  if (trainingToday(items, today)) return rows;
   const tr = await readTraining();
   if (!tr || tr.state.made === today || restDay(tr, today)) return rows;
   rows.push(...(await addTrainingLine(items, today)));
