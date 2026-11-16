@@ -33,7 +33,7 @@ const task = (id, parent, sort, text, t = {}) => row(id, 'line', parent, sort, {
 const SEED = [
   row('page-tasks', 'page', null, 0, { title: 'Tasks' }),
   task('t_hook', 'page-tasks', 1, 'Write the two-minute hook'),
-  task('t_bible', 'page-tasks', 2, 'Bible reading', { habit: true, repeat: { every: 'day', n: 1, from: MON }, did: [] })
+  task('t_bible', 'page-tasks', 2, 'Bible reading', { habit: true, repeat: { every: 'day', n: 1, from: MON }, did: [['2026-11-12', null, 0], ['2026-11-13', null, 0]] })
 ];
 const CHAPTER = 'The Creation of the World\n\n[1] In the beginning, God created the heavens and the earth. [2] The earth was without form and void.\n\n  And God said,\n    “Let there be light.”\n\nScripture quotations are from the ESV® Bible, copyright © 2001 by Crossway.';
 
@@ -51,7 +51,7 @@ const reading = async (p) => (await all(p)).find((r) => r.id === 'settings-plan'
 const sheet = (p) => p.locator('#plan-sheet');
 const settle = async (p) => { await sleep(400); await still(p); };
 const press = async (p, key) => { await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press(key); await settle(p); };
-const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: `${SHOTS}/${name}.png` }); };
+const shot = async (p, name) => { if (SHOTS) { await p.evaluate(() => document.querySelectorAll('.toast').forEach((t) => t.remove())); await p.screenshot({ path: `${SHOTS}/${name}.png` }); } };
 const refs = (p) => sheet(p).locator('.now-reading li').allInnerTexts();
 const light = (p) => sheet(p).locator('.now-light').count();
 const started = (p) => p.waitForFunction(() => document.documentElement.dataset.started === '1');
@@ -133,6 +133,24 @@ try {
     assert.deepEqual((await refs(page)).slice(0, 3), ['Genesis 3', 'Genesis 4', 'Psalm 2']);
   });
 
+  await check('the morning after a day with no mark: “I read yesterday too” marks it and moves the places', async () => {
+    const before = await reading(page);
+    await shot(page, 'read-yesterday');
+    await sheet(page).locator('[data-now="lyest"]').click();
+    await settle(page);
+    const r = await reading(page);
+    assert.ok(r.days.includes(TUE), 'yesterday marked');
+    assert.ok(!r.days.includes(WED), 'today untouched');
+    assert.deepEqual([r.ot, r.ps, r.wi, r.nt], [before.ot + 2, before.ps + 1, before.wi + 1, before.nt + 2]);
+    assert.deepEqual((await refs(page)).slice(0, 3), ['Genesis 5', 'Genesis 6', 'Psalm 3']);
+    assert.equal(await sheet(page).locator('[data-now="lyest"]').count(), 0, 'gone once yesterday is marked');
+    assert.match(await page.locator('.toast').last().innerText(), /Yesterday is marked as read/);
+    await page.locator('.toast .toast-action').click();
+    await settle(page);
+    assert.deepEqual(await reading(page), before);
+    assert.deepEqual((await refs(page)).slice(0, 3), ['Genesis 3', 'Genesis 4', 'Psalm 2']);
+  });
+
   await check('Set where I am: a book and a chapter per track; each goes round at its end', async () => {
     await sheet(page).locator('[data-now="lset"]').click();
     await settle(page);
@@ -152,6 +170,53 @@ try {
     await settle(page);
     assert.deepEqual(await refs(page), ['2 Kings 6', '2 Kings 7', 'Psalm 3', 'Proverbs 1', 'Matthew 2', 'Matthew 3']);
     await press(page, 'Escape');
+  });
+
+  await check('the Desk: reading streak, seven days a week, and where you are in each track', async () => {
+    const desk = async () => { await page.evaluate(() => { history.pushState({ view: 'today' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'today' } })); }); await page.evaluate(() => { history.pushState({ view: 'desk' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'desk' } })); }); await page.waitForSelector('.dk-reading'); await settle(page); };
+    await desk();
+    // Filled once from the Bible habit's history: Nov 12 and 13, then Mon and Wed.
+    assert.deepEqual((await reading(page)).days, ['2026-11-12', '2026-11-13', MON, WED]);
+    assert.match(await page.locator('.dk-reading .dk-label').innerText(), /^READING\s*FOUR TRACKS$/i);
+    assert.equal(await page.locator('.dk-reading .tr-big').innerText(), 'Best: 2 days in a row.');
+    assert.equal(await page.locator('.rd-grid g').count() >= 7, true);
+    assert.equal(await page.locator('.rd-grid g[data-kind="r"]').count(), 4);
+    assert.match(await page.locator('.dk-reading .tr-rd').innerText(), /^Read on 4 days in the last 12 weeks\. Tap a day in the past week to correct it\.$/);
+    // Sunday is a reading day: Nov 15 shows as not read, not left out.
+    assert.equal(await page.locator('.rd-grid g[data-day="2026-11-15"]').getAttribute('data-kind'), 'm');
+    assert.equal(await page.locator('.rd-grid g[data-day="2026-11-15"]').getAttribute('class'), 'rd-tap');
+    assert.equal(await page.locator('.rd-grid .rd-tap').count(), 7, 'only the past seven days can be changed');
+    // Tap Tuesday: read, the streak joins up, the places stay.
+    const places = await reading(page);
+    await page.locator('.rd-grid g[data-day="2026-11-17"]').click();
+    await page.waitForFunction(() => /3 days in a row/.test(document.querySelector('.dk-reading .tr-big')?.textContent || ''));
+    assert.equal(await page.locator('.dk-reading .tr-big').innerText(), '3 days in a row. Your best yet.');
+    const r = await reading(page);
+    assert.deepEqual([r.ot, r.ps, r.wi, r.nt], [places.ot, places.ps, places.wi, places.nt]);
+    assert.ok(r.days.includes('2026-11-17'));
+    await shot(page, 'read-desk');
+    // Tapping it again puts it back.
+    await page.locator('.rd-grid g[data-day="2026-11-17"]').click();
+    await page.waitForFunction(() => /^Best: 2/.test(document.querySelector('.dk-reading .tr-big')?.textContent || ''));
+    assert.deepEqual((await reading(page)).days, ['2026-11-12', '2026-11-13', MON, WED]);
+    // The four tracks: short words, a thin meter, times through counted.
+    const words = await page.locator('.rd-track .rd-g').allInnerTexts();
+    assert.deepEqual(words, ['2 Kings 6', 'Psalm 3 of 150', 'Proverbs 1 · second time through', 'Matthew 2 · second time through']);
+    assert.deepEqual(await page.locator('.rd-track .rd-t').allInnerTexts(), ['Old Testament', 'Psalms', 'Wisdom', 'New Testament']);
+    assert.equal(await page.locator('.rd-meter').first().getAttribute('aria-label'), 'Old Testament: chapter 319 of 736');
+    // Above Training, when Training shows.
+    // Each switch hides its part; both off, the block is gone.
+    await page.evaluate(() => document.documentElement.classList.add('hide-readprogress'));
+    await desk();
+    assert.equal(await page.locator('.rd-track').count(), 0);
+    assert.equal(await page.locator('.rd-grid').count(), 1);
+    await page.evaluate(() => document.documentElement.classList.add('hide-readstreak'));
+    await page.evaluate(() => { history.pushState({ view: 'today' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'today' } })); });
+    await page.evaluate(() => { history.pushState({ view: 'desk' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'desk' } })); });
+    await settle(page); await sleep(600);
+    assert.equal(await page.locator('.dk-reading').count(), 0);
+    await page.evaluate(() => document.documentElement.classList.remove('hide-readprogress', 'hide-readstreak'));
+    await toNow(page);
   });
 
   await check('with the switch off, nothing before the day', async () => {
@@ -192,10 +257,14 @@ try {
     assert.equal(await sheet(k).locator('[data-now="ldone"]').innerText(), 'Amen. Show me the day');
     const kept = await k.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('firstLight')).ch));
     assert.equal(kept.length, 6, 'today’s chapters kept on the device');
+    // Two days already read: after Amen, one quiet line on the next screen.
+    await k.evaluate(() => { window.__plan.now.light.st.days = ['2026-11-14', '2026-11-15']; });
     await sheet(k).locator('[data-now="ldone"]').click();
     await settle(k);
     assert.equal(await light(k), 0);
     assert.equal((await reading(k)).read, MON);
+    assert.equal(await sheet(k).locator('.now-rnote').innerText(), 'Reading done. 3 days in a row.');
+    await shot(k, 'read-done');
   });
 
   await check('the next day, yesterday’s chapters are dropped', async () => {
@@ -218,6 +287,23 @@ try {
     await phone.waitForSelector('.now-scripture .sc-p');
     assert.equal(await phone.evaluate(() => document.scrollingElement.scrollWidth <= 412), true);
     await shot(phone, 'phone-light-read');
+  });
+
+  await check('phone: the reading block fits, one line per track', async () => {
+    await phone.evaluate(() => { window.__plan.now.light.st.days = []; });
+    const fresh = row('settings-plan', 'settings', null, 0, { title: 'Plan' });
+    await phone.evaluate(async (fresh) => { const r = indexedDB.open('writing'); await new Promise((res) => { r.onsuccess = () => { const tx = r.result.transaction(['entries'], 'readwrite'); const os = tx.objectStore('entries'); const g = os.get('settings-plan'); g.onsuccess = () => { const row = g.result || fresh; row.fields = { ...row.fields, reading: { ...(row.fields.reading || {}), filled: true, days: ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15'], rounds: { wi: 1 }, wi: 30, ot: 120 } }; os.put(row); }; tx.oncomplete = res; }; }); }, fresh);
+    await phone.evaluate(() => { history.pushState({ view: 'desk' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'desk' } })); });
+    await phone.waitForSelector('.dk-reading .rd-track');
+    await phone.locator('.dk-reading').scrollIntoViewIfNeeded();
+    await settle(phone);
+    assert.equal(await phone.evaluate(() => document.scrollingElement.scrollWidth <= 412), true, 'no sideways scroll');
+    const hs = await phone.locator('.rd-line').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+    assert.ok(hs.every((h) => h < 40), `one line each: ${hs}`);
+    assert.equal(await phone.locator('.rd-track[data-track="wi"] .rd-g').innerText(), 'Proverbs 31 · second time through');
+    await phone.locator('.dk-reading').evaluate((e) => e.scrollIntoView({ block: 'start' }));
+    await settle(phone);
+    await shot(phone, 'phone-read-desk');
   });
   assert.deepEqual(phone.errors, []);
 } catch (e) {

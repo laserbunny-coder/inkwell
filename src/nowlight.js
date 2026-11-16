@@ -8,7 +8,8 @@
 
 import { make } from './dom.js';
 import { autoOn } from './auto.js';
-import { TRACKS, posOf, placeOf, readReading, saveReading, todays, advanced, esvLink, keyState, kept, chapter, tickBibleHabit } from './firstlight.js';
+import { TRACKS, posOf, placeOf, readReading, saveReading, todays, advanced, readYesterday, missedYesterday, esvLink, keyState, kept, chapter, tickBibleHabit } from './firstlight.js';
+import { readStreak, doneLine } from './readstats.js';
 
 export class LightNow {
   constructor(now) {
@@ -73,7 +74,10 @@ export class LightNow {
     acts.append(this.now.btn('ldone', nokey ? 'I read it' : 'I read it on paper', nokey ? 'go' : '', 'I'));
     mid.append(acts);
     const quiet = make('div', 'now-endsrow');
-    quiet.append(this.now.btn('lset', 'Set where I am', 'link'), this.now.btn('lskip', 'Not this morning', 'link', 'Esc'));
+    quiet.append(this.now.btn('lset', 'Set where I am', 'link'));
+    // The morning after a day with no mark (Part 8): only there to be tapped.
+    if (missedYesterday(this.st, this.p.today)) quiet.append(this.now.btn('lyest', 'I read yesterday too', 'link'));
+    quiet.append(this.now.btn('lskip', 'Not this morning', 'link', 'Esc'));
     mid.append(quiet);
     mid.append(make('p', 'now-hint', nokey
       ? 'Tap a chapter to read it on esv.org. Your place only moves when you have read. A missed day changes nothing.'
@@ -168,6 +172,7 @@ export class LightNow {
     if (act === 'lset') { this.setting = true; this.p.redraw(); return; }
     if (act === 'lsetok') { await this.saveSet(); return; }
     if (act === 'ldone') { await this.read(); return; }
+    if (act === 'lyest') { await this.yesterday(); return; }
     if (act === 'lskip') await this.skip();
   }
 
@@ -179,6 +184,9 @@ export class LightNow {
     const today = this.p.today;
     this.st = advanced(this.st, today);
     await saveReading(this.st);
+    // One quiet line on the next screen (Part 8), with the streak switch on.
+    const root = document.documentElement;
+    this.note = root.classList.contains('hide-readstreak') ? '' : doneLine(readStreak(this.st.days, today));
     const habit = await tickBibleHabit(this.p.items, today);
     if (habit) await this.p.wrote(habit.rows);
     this.leave();
@@ -186,12 +194,22 @@ export class LightNow {
       label: 'Undo',
       run: async () => {
         this.st = was;
+        this.note = '';
         await saveReading(was);
         if (habit) { const { tickTask } = await import('./tasks.js'); await this.p.wrote(await tickTask(habit.id, false)); }
         this.p.redraw();
       }
     });
     await this.p.refresh();
+  }
+
+  // "I read yesterday too": yesterday is marked and the places move on.
+  async yesterday() {
+    const was = { ...this.st };
+    this.st = readYesterday(this.st, this.p.today);
+    await saveReading(this.st);
+    this.p.redraw();
+    this.p.hooks.toast?.('Yesterday is marked as read, and your place has moved on', { label: 'Undo', run: async () => { this.st = was; await saveReading(was); this.p.redraw(); } });
   }
 
   async skip() {
