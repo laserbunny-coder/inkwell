@@ -59,7 +59,7 @@ const sheet = (p) => p.locator('#plan-sheet');
 const settle = async (p) => { await sleep(400); await still(p); };
 const press = async (p, key) => { await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press(key); await settle(p); };
 const until = async (fn, ms = 5000) => { const end = Date.now() + ms; let v; while (Date.now() < end) { v = await fn(); if (v) return v; await sleep(100); } return v; };
-const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: `${SHOTS}/${name}.png` }); };
+const shot = async (p, name) => { if (SHOTS) { await p.evaluate(() => document.querySelectorAll('.toast').forEach((t) => t.remove())); await p.screenshot({ path: `${SHOTS}/${name}.png` }); } };
 const eyebrow = (p) => sheet(p).locator('.now-train .now-eyebrow').innerText();
 const thing = (p) => sheet(p).locator('.now-thing').first().innerText();
 const started = (p) => p.waitForFunction(() => document.documentElement.dataset.started === '1');
@@ -343,6 +343,7 @@ try {
     await page.evaluate(() => window.__plan.now.after({ k: 'done', t: 'Training: Hard A', note: 'Best yet: advanced tuck front lever, 10 seconds. 10 days in a row.' }));
     await settle(page);
     assert.equal(await sheet(page).locator('.now-tnote').innerText(), 'Best yet: advanced tuck front lever, 10 seconds. 10 days in a row.');
+    await shot(page, 'train-bestyet');
     await page.evaluate(() => window.__plan.now.after({ k: 'done', t: 'Write the two-minute hook' }));
     await settle(page);
     assert.equal(await sheet(page).locator('.now-tnote').count(), 0);
