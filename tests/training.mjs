@@ -154,6 +154,8 @@ try {
     const l = rows.find((r) => r.fields?.training === true && r.fields?.task?.day === MON);
     assert.equal(l.text, 'Training: Evaluation 1');
     assert.equal(l.fields.done, true);
+    // Part 7: the log keeps the day, the session and its numbers.
+    assert.deepEqual(st.log, [{ d: MON, s: 'Evaluation 1', h: true, n: { reach: 90, vtest: 24 }, st: {} }]);
     await shot(page, 'train-gate');
   });
 
@@ -172,6 +174,7 @@ try {
     await press(page, '4');
     assert.equal((await state(page)).round, 2);
     assert.ok((await all(page)).some((r) => r.parent_id === `day-${WED}` && r.text === 'Training: on my own'));
+    assert.deepEqual((await state(page)).log.at(-1), { d: WED, s: 'On my own', h: false, n: {}, st: {}, own: true });
   });
 
   await check('the round after the evaluations: Hard A, Light, Light, Hard B, Light, Light', async () => {
@@ -286,6 +289,67 @@ try {
     await shot(page, 'train-desk');
   });
 
+  await check('the Desk: the streak, twelve weeks of dots, and a chart behind each goal', async () => {
+    const days = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', MON, TUE];
+    const log = days.map((d, i) => ({ d, s: i % 3 ? 'Light' : 'Hard A', h: !(i % 3), n: i % 3 ? { free: 20 + i } : { lever: i < 6 ? 6 + i : 2 + i / 3, planche: 8 }, st: i % 3 ? {} : { lever: i < 6 ? 0 : 1, planche: 0 } }));
+    await patchState(page, { log });
+    await page.evaluate(() => { history.pushState({ view: 'today' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'today' } })); });
+    await page.evaluate(() => { history.pushState({ view: 'desk' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'desk' } })); });
+    await page.waitForSelector('.dk-train .tr-streak');
+    assert.equal(await page.locator('.tr-big').innerText(), '14 days in a row. Your best yet.');
+    assert.equal(await page.locator('.tr-grid g[data-kind="h"]').count(), 5);
+    assert.equal(await page.locator('.tr-grid g[data-kind="l"]').count(), 9);
+    assert.match(await page.locator('.dk-train .tr-rd').first().innerText(), /^Trained 14 days in the last 12 weeks\. Sundays are off and never count\.$/);
+    await page.locator('.tr-grid g[data-kind="h"]').first().hover();
+    assert.equal(await page.locator('.dk-train .tr-rd').first().innerText(), '2 weeks ago, Monday: hard day');
+    // A goal opens its chart; again closes it; one at a time.
+    await page.locator('.dk-goal-btn[data-goal="lever"]').click();
+    await page.waitForSelector('.tr-chart .tr-svg');
+    assert.equal(await page.locator('.tr-chart').count(), 1);
+    assert.equal(await page.locator('.tr-svg .tr-ln').count() + await page.locator('.tr-svg .tr-ln.old').count() >= 2, true, 'broken where he moved up');
+    assert.equal(await page.locator('.tr-svg .tr-ln.old').count(), 1);
+    assert.match(await page.locator('.tr-chart .tr-rd').innerText(), /^Advanced tuck front lever: 6\.33 seconds now, up from 4 at the start of this step\.$|^Advanced tuck front lever: .+ now, up from .+ at the start of this step\.$/);
+    await page.locator('.tr-svg').focus();
+    await page.keyboard.press('ArrowLeft');
+    assert.match(await page.locator('.tr-chart .tr-rd').innerText(), /^Nov \d+: .+ seconds, advanced tuck$/);
+    await page.locator('.dk-goal-btn[data-goal="free"]').click();
+    await page.waitForSelector('.dk-goal-btn[data-goal="free"][aria-expanded="true"]');
+    assert.equal(await page.locator('.tr-chart').count(), 1, 'one open at a time');
+    assert.match(await page.locator('.tr-chart svg').innerHTML(), /Goal 120/);
+    await page.locator('.dk-goal-btn[data-goal="free"]').click();
+    await page.waitForSelector('.dk-goal-btn[data-goal="free"][aria-expanded="false"]');
+    assert.equal(await page.locator('.tr-chart').count(), 0, 'tapping again closes it');
+    await page.locator('.dk-goal-btn[data-goal="vtest"]').click();
+    await page.waitForSelector('.dk-goal-btn[data-goal="vtest"][aria-expanded="true"]');
+    assert.equal(await page.locator('.tr-chart').innerText(), 'Your chart starts with your first number.');
+    await page.locator('.dk-goal-btn[data-goal="lever"]').click();
+    await page.waitForSelector('.dk-goal-btn[data-goal="lever"][aria-expanded="true"]');
+    await page.locator('.dk-train').scrollIntoViewIfNeeded();
+    await shot(page, 'train-streak');
+    // Each switch hides its part; with both off the block is Part 6's.
+    await page.evaluate(() => document.documentElement.classList.add('hide-trainstreak', 'hide-traincharts'));
+    await page.evaluate(() => { history.pushState({ view: 'today' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'today' } })); });
+    await page.evaluate(() => { history.pushState({ view: 'desk' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'desk' } })); });
+    await page.waitForSelector('.dk-train');
+    await settle(page);
+    assert.equal(await page.locator('.dk-train .tr-streak').count(), 0);
+    assert.equal(await page.locator('.dk-train .dk-goal-btn').count(), 0);
+    assert.equal(await page.locator('.dk-train div.dk-goal').count(), 5);
+    await page.evaluate(() => document.documentElement.classList.remove('hide-trainstreak', 'hide-traincharts'));
+  });
+
+  await check('the gate: one quiet line under Done.', async () => {
+    await toNow(page);
+    await page.evaluate(() => window.__plan.now.after({ k: 'done', t: 'Training: Hard A', note: 'Best yet: advanced tuck front lever, 10 seconds. 10 days in a row.' }));
+    await settle(page);
+    assert.equal(await sheet(page).locator('.now-tnote').innerText(), 'Best yet: advanced tuck front lever, 10 seconds. 10 days in a row.');
+    await page.evaluate(() => window.__plan.now.after({ k: 'done', t: 'Write the two-minute hook' }));
+    await settle(page);
+    assert.equal(await sheet(page).locator('.now-tnote').count(), 0);
+    await page.evaluate(() => { history.pushState({ view: 'desk' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'desk' } })); });
+    await page.waitForSelector('.dk-train');
+  });
+
   await check('the Training page: an outline, the amounts as a chip to tap', async () => {
     await page.locator('.dk-train button', { hasText: 'The Training page' }).click();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
@@ -323,6 +387,26 @@ try {
 
   // ---------- the phone ----------
   const { page: phone } = await open({ width: 412, height: 915 }, { hasTouch: true, isMobile: true });
+  await check('the log fills once from the Training lines on the daily pages', async () => {
+    const day = '2026-11-14';
+    const top = row('li_old', 'line', `day-${day}`, 5, { text: 'Training: Hard A', content: [{ type: 'text', text: 'Training: Hard A' }], fields: { training: 'done', done: false } });
+    const k1 = row('li_old1', 'line', 'li_old', 1, { text: 'Tuck front lever hold with Planche lean hold: 8 and 6 seconds, 5 of 5 rounds' });
+    const k2 = row('li_old2', 'line', 'li_old', 2, { text: 'Pull-ups with Pseudo planche push-ups: 6 reps and 9 reps' });
+    await put(phone, [row(`day-${day}`, 'day', null, 0, { title: day }), top, k1, k2]);
+    await phone.reload();
+    await started(phone);
+    await phone.evaluate(() => { history.pushState({ view: 'desk' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'desk' } })); });
+    await phone.waitForSelector('.dk-train .tr-streak');
+    const log = await until(async () => (await state(phone))?.log);
+    assert.deepEqual(log, [{ d: day, s: 'Hard A', h: true, n: { lever: 8, planche: 6, pull: 6, ppu: 9 }, st: { lever: 0, planche: 0 } }]);
+    await phone.locator('.dk-goal-btn[data-goal="lever"]').tap();
+    await phone.waitForSelector('.tr-chart .tr-svg');
+    assert.equal(await phone.evaluate(() => document.scrollingElement.scrollWidth <= 412), true, 'no sideways scroll');
+    const w = await phone.locator('.tr-svg').boundingBox();
+    assert.ok(w.width <= 380, `chart ${w.width}`);
+    await shot(phone, 'phone-train-chart');
+  });
+
   await check('phone: one exercise, thumb-sized dots and steppers, nothing spills', async () => {
     await phone.evaluate(() => document.querySelector('#view-toggle').click());
     await onNow(phone);

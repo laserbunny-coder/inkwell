@@ -421,6 +421,7 @@ export class Now {
       const was = make('p', `now-was${last.k === 'done' || (last.k === 'event' && last.happened) ? ' struck' : ''}`);
       was.append(make('span', 'w', last.t), make('span', 's', ` ${said}`));
       mid.append(was);
+      if (last.note) mid.append(make('p', 'now-hint now-tnote', last.note));
     }
     if (m.cand) {
       const train = !m.cand.group && isTraining(m.cand.item?.row) ? this.train.session()?.name : '';

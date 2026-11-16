@@ -652,13 +652,14 @@ TOOLS.push(
   {
     name: "training",
     title: "Training: sessions, the round and the week",
-    description: "The person's training in Inkwell. The Training page (read it with read and page id pg_training) holds the sessions as an outline: each session's exercises, with their amounts. Two evaluations come first, once each; then sessions take turns in the round (by default Hard A, Light, Light, Hard B, Light, Light, every day but Sunday), or, when a week is set, each weekday has its own session and the days left out rest. With no arguments: the sessions, the round, the week, what is next and the ladders. Only when they ask: week sets which session falls on which weekday (such as { \"monday\": \"Hard A\", \"tuesday\": \"Light\", \"sunday\": \"rest\" }; days left out rest; null goes back to the round); order sets the round; next makes a session the next one (skipping any evaluation not done yet).",
+    description: "The person's training in Inkwell. The Training page (read it with read and page id pg_training) holds the sessions as an outline: each session's exercises, with their amounts. Two evaluations come first, once each; then sessions take turns in the round (by default Hard A, Light, Light, Hard B, Light, Light, every day but Sunday), or, when a week is set, each weekday has its own session and the days left out rest. With no arguments: the sessions, the round, the week, what is next, the ladders, and the log of finished sessions with their numbers (to look at progress before adjusting the plan). Only when they ask: week sets which session falls on which weekday (such as { \"monday\": \"Hard A\", \"tuesday\": \"Light\", \"sunday\": \"rest\" }; days left out rest; null goes back to the round); order sets the round; next makes a session the next one (skipping any evaluation not done yet).",
     inputSchema: {
       type: "object",
       properties: {
         week: { type: ["object", "null"], description: "Weekday → session name or \"rest\". null clears it." },
         order: { type: "array", items: { type: "string" }, description: "The round: session names in the order they take turns." },
         next: str("A session name to make the next one."),
+        log_limit: { type: ["integer", "string"], description: "How many of the latest log entries to return, 1 to 400. Defaults to 120." },
       },
     },
   },
@@ -2670,6 +2671,13 @@ async function training(args: Record<string, unknown>, db: Db) {
     next_in_round: r < once.length ? once[r] : order[(r - once.length) % order.length] ?? null,
     week: week ? weekWords(week) : "not set: the round, every day but Sunday",
     ladder_steps: now.step ?? {},
+    // The log: every finished session (newest last) with its numbers, for
+    // looking at progress before adjusting the plan.
+    log: (Array.isArray(now.log) ? (now.log as Record<string, unknown>[]) : []).slice(-Math.max(1, Math.min(400, Number(args.log_limit) || 120))).map((e) => ({
+      day: e.d, session: e.s, ...(e.h ? { hard: true } : {}), ...(e.own ? { on_my_own: true } : {}),
+      ...(e.n && Object.keys(e.n as object).length ? { numbers: e.n } : {}), ...(e.st && Object.keys(e.st as object).length ? { ladder_step_index: e.st } : {}),
+    })),
+    log_note: Array.isArray(now.log) ? "Numbers are by exercise key (vtest inches, lever and planche seconds at the ladder step shown, presslow seconds, free seconds…). Never comment on missed days or streaks ending." : "The log starts the first time the Desk shows the Training block.",
     page: TRAINING_PAGE,
   };
 }

@@ -287,6 +287,17 @@ assert.equal(tr.next_in_round, "Hard B");
 assert.equal(get("pg_training").fields.training.round, 5);
 tr = await call("training", { week: null });
 assert.match(tr.week, /not set/);
+// The log (Part 7): Claude reads it to look at progress.
+assert.deepEqual(tr.log, []);
+get("pg_training").fields.training.log = [
+  { d: "2026-11-16", s: "Hard A", h: true, n: { lever: 8, planche: 6 }, st: { lever: 1, planche: 0 } },
+  { d: "2026-11-17", s: "On my own", h: false, own: true, n: {}, st: {} },
+];
+tr = await call("training");
+assert.equal(tr.log.length, 2);
+assert.deepEqual(tr.log[0], { day: "2026-11-16", session: "Hard A", hard: true, numbers: { lever: 8, planche: 6 }, ladder_step_index: { lever: 1, planche: 0 } });
+assert.equal(tr.log[1].on_my_own, true);
+assert.equal((await call("training", { log_limit: 1 })).log.length, 1);
 const trBad: any = await handle({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "training", arguments: { week: { monday: "Leg day" } } } }, db);
 assert.match(trBad.result.content[0].text, /no session called Leg day/);
 

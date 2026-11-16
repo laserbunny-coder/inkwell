@@ -237,3 +237,39 @@ html.hide-training .dk-train { display: none !important; }
 .now-trk { font: 15px var(--ui); color: var(--ink); }
 .now-track select, .now-track input { width: 100%; box-sizing: border-box; font: 15px var(--ui); color: var(--ink); background: var(--panel, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 8px; min-height: 40px; min-width: 0; }
 @media (max-width: 600px) { .now-scripture { font-size: 18px; } .now-track { grid-template-columns: 7.5em 1fr 64px; } }
+
+/* Training streak and charts on the Desk (Part 7). Text in the text inks;
+   only the marks use the accent. Size carries hard against light. */
+.dk-goal-btn { width: 100%; background: none; border: 0; border-bottom: 1px solid var(--line); color: inherit; cursor: pointer; text-align: left; border-radius: 0; }
+.dk-goal-btn:hover .dk-goal-t, .dk-goal-btn[aria-expanded="true"] .dk-goal-t { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line2); }
+.dk-goal-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tr-streak { margin: 6px 0 14px; max-width: 560px; }
+.tr-big { font: 17px var(--prose); color: var(--ink); margin: 0 0 8px; }
+.tr-grid, .tr-svg { display: block; max-width: 100%; height: auto; overflow: visible; }
+.tr-ax { font: 10.5px var(--ui); fill: var(--faint); }
+.tr-step { fill: var(--muted); }
+.tr-hit { fill: transparent; }
+.tr-h { fill: var(--accent); }
+.tr-l { fill: var(--accent); opacity: .55; }
+.tr-m { fill: var(--faint); opacity: .6; }
+.tr-t { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.tr-rd { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); min-height: 1.4em; }
+.tr-key { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; font-size: 12px; color: var(--faint); }
+.tr-chart { padding: 10px 0 12px; border-bottom: 1px solid var(--line); }
+.tr-gr { stroke: var(--line); stroke-width: 1; }
+.tr-goal { stroke: var(--line2); stroke-width: 1; stroke-dasharray: 4 4; }
+.tr-ln { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.tr-ln.old { stroke: var(--muted); }
+.tr-pt { fill: var(--accent); }
+.tr-pt.old { fill: var(--muted); }
+.tr-val { font: 12px var(--ui); fill: var(--ink); }
+.tr-xh { stroke: var(--muted); stroke-width: 1; }
+.tr-hd { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+.tr-svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+.tr-nums { margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+.tr-nums summary { cursor: pointer; color: var(--faint); width: max-content; }
+.tr-nums table { border-collapse: collapse; margin-top: 6px; }
+.tr-nums td { padding: 3px 18px 3px 0; border-bottom: 1px solid var(--line); }
+.now-tnote { margin-top: 10px; }
+html.hide-trainstreak .tr-streak, html.hide-trainstreak .now-tnote-s { display: none !important; }
+html.hide-traincharts .tr-chart { display: none !important; }
