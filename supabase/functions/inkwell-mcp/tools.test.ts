@@ -473,7 +473,54 @@ assert.equal((pl.fields.list as any[]).find((p) => p.model === "Kling 4.5").usd,
 assert.ok((await call("update_prices", { prices: [{ model: "X", usd: -1 }] })).error);
 assert.equal((await call("production", { piece_id: "pr-reel", scene: "1" })).cost.estimate_usd, 4.8, "Seedance 2.0 is still $0.30/s, now 5 s + 3 s");
 
+// The look wall: versions of a character's look come home to its row, by
+// name or id; one is starred; production and looks name the pick.
+const lw0 = await call("looks", { world_id: "wd-ninja" });
+assert.deepEqual(lw0.elements.map((x: any) => [x.name, x.type, x.versions]), [["Mom", "character", 0], ["Kitchen", "place", 0]]);
+const al = await call("add_look", { element: "Mother", world_id: "wd-ninja", results: ["https://cdn.gen.test/mom/warm.png", { url: "https://cdn.gen.test/mom/bold.png", name: "Mom bold cel" }, "https://cdn.gen.test/mom/clip.mp4"], model: "Nano Banana", prompt: "Mom, warm cel shading, front", cost_usd: 0.2 });
+assert.equal(al.element, "Mom", "found by another name it goes by");
+assert.equal(al.kept.length, 2, "a video isn't a look");
+assert.deepEqual(al.not_kept, ["https://cdn.gen.test/mom/clip.mp4"]);
+let momEl = rows.find((r) => r.id === "pg-mom")!;
+assert.deepEqual(momEl.fields.element.refs, al.kept.map((k: any) => k.file_id));
+assert.equal(momEl.fields.element.pick, undefined, "never starred unless asked");
+assert.equal(momEl.fields.element.snippet, "Short, calm, grey bun", "the rest of the element is kept");
+const look1 = rows.find((r) => r.id === al.kept[1].file_id)!;
+assert.equal(look1.title, "Mom bold cel");
+assert.equal(look1.fields.element, "pg-mom", "the file knows its row, so the app can put it back if the row loses it");
+assert.equal(look1.fields.look.from, "Nano Banana");
+assert.equal(look1.fields.look.by, "claude");
+assert.equal(look1.fields.look.cost_usd, 0.1, "the cost shared between the pictures");
+assert.equal(look1.fields.look.prompt, "Mom, warm cel shading, front");
+// Starring: one per element; it brings a set-aside one back; off takes it away.
+momEl.fields.element.aside = [al.kept[1].file_id];
+assert.ok((await call("pick_look", { element: "pg-mom", file_id: "fi-s1" })).error, "only one of its own looks");
+const pk = await call("pick_look", { element: "pg-mom", file_id: al.kept[1].file_id });
+assert.equal(pk.starred, "Mom bold cel");
+momEl = rows.find((r) => r.id === "pg-mom")!;
+assert.equal(momEl.fields.element.pick, al.kept[1].file_id);
+assert.deepEqual(momEl.fields.element.aside, []);
+const lw1 = await call("looks", { world_id: "wd-ninja" });
+const momLooks = lw1.elements.find((x: any) => x.name === "Mom");
+assert.equal(momLooks.versions, 2);
+assert.equal(momLooks.pick.url, `https://files.test/${al.kept[1].file_id}?sig=1`);
+assert.equal(momLooks.pick.made_in, "Nano Banana");
+assert.deepEqual(momLooks.in_the_running.map((x: any) => x.file_id), [al.kept[0].file_id]);
+const prLook = (await call("production", { piece_id: "pr-reel" })).kit.find((k: any) => k.name === "Mom");
+assert.equal(prLook.look_wall.versions, 2);
+assert.equal(prLook.look_wall.pick.url, `https://files.test/${al.kept[1].file_id}?sig=1`);
+assert.equal(prLook.looks, "Short, calm, grey bun", "the words still come as looks");
+await call("pick_look", { element: "pg-mom", file_id: al.kept[1].file_id, off: true });
+assert.equal(rows.find((r) => r.id === "pg-mom")!.fields.element.pick, null);
+// pick true stars the first; a price per picture estimates the cost.
+const al2 = await call("add_look", { element: "pg-kitchen", results: ["https://cdn.gen.test/k1.png"], model: "Still (Nano Banana, Seedream, FLUX)", pick: true });
+assert.equal(rows.find((r) => r.id === "pg-kitchen")!.fields.element.pick, al2.kept[0].file_id);
+assert.equal(al2.cost_estimated_from_prices, true);
+assert.ok((await call("add_look", { element: "Nobody", world_id: "wd-ninja", results: ["https://cdn.gen.test/x.png"] })).error);
+assert.ok((await call("add_look", { element: "pg-dentist", results: ["https://cdn.gen.test/x.png"] })).error, "a plain page isn't an element");
+assert.ok((await call("add_look", { element: "pg-mom", results: ["https://cdn.gen.test/big.png"] })).error, "nothing kept is an error");
+
 const tl2: any = await handle({ jsonrpc: "2.0", id: 0, method: "tools/list" }, db);
-for (const t of ["production", "update_shot", "add_try", "star", "prices", "update_prices"]) assert.ok(tl2.result.tools.some((x: any) => x.name === t), t);
+for (const t of ["production", "update_shot", "add_try", "star", "prices", "update_prices", "looks", "add_look", "pick_look"]) assert.ok(tl2.result.tools.some((x: any) => x.name === t), t);
 
 console.log("inkwell-mcp tools: all checks passed");

@@ -289,11 +289,11 @@ try {
     assert.deepEqual((await board(page))[0].cols, ['New idea:1', 'Drafting:0', 'Polishing:0', 'Out:0']);
     await go(page, { view: 'stage', id: 'wd_poems', page: 'make' });
     await page.waitForSelector('.st-chips .chip');
-    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['kit']);
+    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['kit', 'looks']);
     await go(page, { view: 'stage', id: 'wd_nb', page: 'make' });
     // The old world's tabs can still be up for a moment; wait for this one's.
-    await page.waitForFunction(() => document.querySelectorAll('.st-chips .chip').length === 2).catch(() => {});
-    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['kit', 'days']);
+    await page.waitForFunction(() => document.querySelectorAll('.st-chips .chip').length === 3).catch(() => {});
+    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['kit', 'looks', 'days']);
   });
 
   await check('a step moves with Alt + Left; a tool turned off leaves Make; Undo brings both back', async () => {

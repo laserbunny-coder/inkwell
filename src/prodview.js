@@ -3,7 +3,7 @@ import { getEntry, getMany, putEntries, byKind } from './db.js';
 import { tagsIn, entry, newId } from './model.js';
 import { loadStructure, rowsAt } from './grid.js';
 import { bookType, hasManuscript, worldOf, stageSetOf, toolsOf, toolsIn } from './library.js';
-import { addFile, fileUrl, fileBlob, isImage } from './files.js';
+import { addFile, fileUrl, fileBlob, thumbUrl, isImage } from './files.js';
 import { zip } from './vault.js';
 import { download } from './export.js';
 import {
@@ -12,7 +12,7 @@ import {
   withRenders, withPrompts, isVideo, shotForName, shootDays, newShootDay, shootDayTask, toCsv, toSrt, speechesIn, PLATFORMS,
   MADE_BY, madeBy, needsFootage, AUDIO, audioOf, toPlan,
   viewSlots, toolIdsFor, toolIdsOf, ASPECTS, RATES, rulesOf, genOf, secsOf, runsOf,
-  PRICES_ID, priceList, priceOf, pricesChecked, estimate, spent, money, toEdl, cutEvents
+  PRICES_ID, priceList, priceOf, pricesChecked, estimate, spent, money, toEdl, cutEvents, lookOf
 } from './production.js';
 import { make } from './dom.js';
 
@@ -1162,7 +1162,14 @@ export class ProductionView {
         const meta = id && await getEntry(id);
         if (b) files.push({ path: `References/${e.title.replace(/[\\/:*?"<>|]/g, '-')} ${slot.label.toLowerCase()}.${extOf(meta?.title, meta?.fields?.type)}`, bytes: new Uint8Array(await b.arrayBuffer()) });
       }
-      for (const [i, id] of (e.fields.element.refs || []).entries()) {
+      const look = lookOf(e);
+      if (look.pick) {
+        const b = await fileBlob(look.pick);
+        const meta = await getEntry(look.pick);
+        if (b) files.push({ path: `References/${e.title.replace(/[\\/:*?"<>|]/g, '-')} pick.${extOf(meta?.title, meta?.fields?.type)}`, bytes: new Uint8Array(await b.arrayBuffer()) });
+      }
+      // The rest still in the running; what was set aside stays home.
+      for (const [i, id] of look.kept.filter((r) => r !== look.pick).entries()) {
         const b = await fileBlob(id);
         const meta = await getEntry(id);
         if (b) files.push({ path: `References/${e.title.replace(/[\\/:*?"<>|]/g, '-')} ${i + 1}.${extOf(meta?.title, meta?.fields?.type)}`, bytes: new Uint8Array(await b.arrayBuffer()) });
@@ -1389,6 +1396,11 @@ export class ProductionView {
 
   async drawKit(body) {
     if (!this.world) { body.append(make('p', 'hint gv-empty', 'This piece isn’t in a world, so it has no kit. Move it into a world from the Library.')); return; }
+    // Every version of every character and place, side by side, on the world's Make page.
+    const wall = make('button', 'pd-wall-link', 'Open the look wall');
+    wall.title = 'Every version of every character and place, side by side, to star the one that stays';
+    wall.addEventListener('click', () => this.hooks.go({ view: 'stage', id: this.world.id, page: 'make', sub: 'looks' }));
+    body.append(wall);
     const top = make('div', 'pd-kit-top');
     const style = make('textarea', 'pd-ta pd-style');
     style.value = this.world.fields?.production?.style || '';
@@ -1499,6 +1511,19 @@ export class ProductionView {
     return tile;
   }
 
+  // A reference taken off goes to the Trash with an Undo (taking it only off
+  // the row would have it put back by the look wall's healing).
+  async removeRef(elId, fileId) {
+    const fresh = await getEntry(elId);
+    const x = fresh?.fields?.element || {};
+    const before = { refs: x.refs || [], pick: x.pick ?? null, aside: x.aside || [] };
+    await setElement(elId, { refs: before.refs.filter((r) => r !== fileId), pick: before.pick === fileId ? null : before.pick, aside: before.aside.filter((r) => r !== fileId) });
+    const file = await getEntry(fileId);
+    if (file) await putEntries([{ ...file, deleted: true, updated_at: Date.now() }]);
+    await this.render();
+    this.hooks.toast('Reference removed', { label: 'Undo', run: async () => { if (file) await putEntries([{ ...file, deleted: false, updated_at: Date.now() }]); await setElement(elId, before); this.render(); } });
+  }
+
   elementEl(e) {
     const x = e.fields.element;
     const card = make('div', 'pd-el');
@@ -1514,12 +1539,16 @@ export class ProductionView {
     ], `More for ${e.title}`));
     card.append(head);
     const refs = make('div', 'pd-renders pd-refs');
-    for (const id of x.refs || []) {
-      const tile = make('div', 'pd-render');
-      fileUrl(id).then((url) => { if (url) { const img = make('img'); img.src = url; img.alt = ''; tile.prepend(img); } else tile.classList.add('missing'); });
+    // The pick from the look wall first, starred; the rest after it.
+    const look = lookOf(e);
+    for (const id of look.pick ? [look.pick, ...look.refs.filter((r) => r !== look.pick)] : look.refs) {
+      const tile = make('div', 'pd-render' + (id === look.pick ? ' starred' : '') + (look.aside.has(id) ? ' aside' : ''));
+      tile.dataset.file = id;
+      if (id === look.pick) tile.title = 'The pick, from the look wall';
+      thumbUrl(id).then((url) => { if (url) { const img = make('img'); img.src = url; img.alt = ''; tile.prepend(img); } else tile.classList.add('missing'); });
       const del = make('button', 'pd-star', '×');
       del.setAttribute('aria-label', 'Remove this reference');
-      del.addEventListener('click', async () => { await setElement(e.id, { refs: (x.refs || []).filter((r) => r !== id) }); this.render(); });
+      del.addEventListener('click', () => this.removeRef(e.id, id));
       tile.append(del);
       refs.append(tile);
     }
@@ -1533,7 +1562,7 @@ export class ProductionView {
     input.hidden = true;
     input.addEventListener('change', async () => {
       const ids = [];
-      for (const f of input.files) { const row = await addFile(f, { element: e.id }); if (row) ids.push(row.id); }
+      for (const f of input.files) { const row = await addFile(f, { element: e.id, look: { by: 'me', at: Date.now() } }); if (row) ids.push(row.id); }
       const fresh = await getEntry(e.id);
       await setElement(e.id, { refs: [...(fresh.fields?.element?.refs || []), ...ids] });
       this.render();

@@ -130,7 +130,7 @@ export const INSTRUCTIONS = `Inkwell is this person's own writing app and notebo
 - For bigger tidying (two worlds that are the same thing, a tag that means the same as another, a line that belongs on a bible page, an idea for the Drawer, a world in the wrong area, a name that's a whole sentence), don't do it: suggest it with suggest_tidy. It waits on their tidy pass in the app until they tick yes or no. A weekly tidy pass is also made for them early each Monday.
 - Keep to the person's voice and don't add more than they asked for.
 - Say what you added and where, in plain words, since the person sees your reply, not the tool calls.
-- Production (AI video): a piece's shots, each with a code that never changes (NB-E01-S03A-04), prompts for its still and its video, how it's generated (model, seconds, first and last frame, the line it's timed to, and a group when several shots are made in one generation), and its tries with a star on the one that worked. The world's kit holds each character's sheet (front, three-quarter, side, back), each location's lighting line and angles, the show rules (frame, frame rate, always and never) and each tool's ID for an element (Higgsfield Soul ID or Element, ComfyUI LoRA, Kling reference). To make shots in another tool (Higgsfield, Kling, ComfyUI…): read them with production, write prompts that use the kit's looks, lighting, rules and tool IDs, and pass the reference picture links along. Bring results back with add_try (the file or link, model, settings, seconds, cost), star the one that worked with star, and keep prompts or generation details current with update_shot. Old prompts are never lost: they stay with the try that used them. Prices (prices, update_prices) feed the cost estimate on the Make tab; when you check prices, update them with the source.
+- Production (AI video): a piece's shots, each with a code that never changes (NB-E01-S03A-04), prompts for its still and its video, how it's generated (model, seconds, first and last frame, the line it's timed to, and a group when several shots are made in one generation), and its tries with a star on the one that worked. The world's kit holds each character's sheet (front, three-quarter, side, back), each location's lighting line and angles, the show rules (frame, frame rate, always and never) and each tool's ID for an element (Higgsfield Soul ID or Element, ComfyUI LoRA, Kling reference). To make shots in another tool (Higgsfield, Kling, ComfyUI…): read them with production, write prompts that use the kit's looks, lighting, rules and tool IDs, and pass the reference picture links along. Bring results back with add_try (the file or link, model, settings, seconds, cost), star the one that worked with star, and keep prompts or generation details current with update_shot. Old prompts are never lost: they stay with the try that used them. Prices (prices, update_prices) feed the cost estimate on the Make tab; when you check prices, update them with the source. Each character and place also has a look wall (looks): every version of its look, with one starred as the pick. Bring new versions home with add_look (by the element's id or name), star one with pick_look only when the person asks, and use the pick's link as the lead reference whenever you generate with that element.
 - Tasks and plans live in Inkwell. A task is an ordinary line with a day (or, with no exact day yet, a loose when: this week, next week, a month, or later), an estimate and a tick, and it lives where it was written: on a project's Steps page, on a daily page, or on the Tasks page for ones added straight to a plan. Today's page gathers every task on that day at its top (the person reorders it there), with Week, Weeks ahead and Pace beside it. list_tasks reads them (by day range, by project, done since a day); add_task adds one (put it in its project when it belongs to one, with notes as lines under it and a link back to where it came from); update_task moves it to another day, sets its estimate, makes it repeat or a habit, a stretch of work (until) or a date to hit (mark, hard when it can't move: never move a hard one); time puts it at a time on its day's Calendar (the hand-arranged day view; length_minutes is how long the block is), and null takes it off; order_day sets a day's order; mark_done ticks it; delete_line and rename_line delete or reword one when the person asks, and a repeating one comes round again on its next day. Each change is recorded as yours with an Undo. Keep a week's estimated hours within the person's free hours (free_hours). Habits have no hours. Only tasks owned by the person (owner me) are on their day; others are planning lines.
 - Needs you: when this chat needs the person (a decision only they can make, work blocked on them, something ready to review or try), raise_needs_you with one short line, the kind, the Claude project's name and this chat's link; raising again from the same link updates it; clear_needs_you once it no longer needs them. It shows in Inkwell's Catch-up and on Today.
 - Setting up his day by talking: first_light reads or sets where each morning Bible reading track is; training reads the sessions and sets the round, the next session, or which session falls on which weekday. The exercises and their amounts are lines on the Training page (pg_training): read it before suggesting changes.
@@ -484,6 +484,51 @@ export const TOOLS: Record<string, unknown>[] = [
       type: "object",
       required: ["shot_id", "file_id"],
       properties: { shot_id: str("The shot."), file_id: str("The file, from the shot's tries."), off: { type: ["boolean", "string"], description: "true to take the star away." } },
+    },
+  },
+  {
+    name: "looks",
+    title: "Read a world's look wall",
+    description: "A world's look wall: each character and place (and prop, wardrobe, other) with how many versions of its look there are, how many are set aside, the pick (the starred one every shot should use as its lead reference) and the versions still in the running, as links that work for a day. Use the pick's link as the lead reference when generating anything with that element.",
+    inputSchema: { type: "object", required: ["world_id"], properties: { world_id: str("The world (see list_worlds).") } },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: "add_look",
+    title: "Add looks to a character or place",
+    description: "Brings new versions of a character's or place's look home to its row on the look wall: pictures by link (kept in Inkwell, up to 50 MB each), with where they were made (the model or tool), the prompt, settings and what it cost. Give element as the element's page id, or its name with world_id. Marked as yours. Never stars them unless asked (pick true stars the first).",
+    inputSchema: {
+      type: "object",
+      required: ["element", "results"],
+      properties: {
+        element: str("The character, place, prop or outfit: its page id, or its name (with world_id)."),
+        world_id: str("The world, when element is a name."),
+        results: {
+          type: "array",
+          description: "Up to 10 pictures: each a link (https), with a name if you like.",
+          items: { anyOf: [{ type: "string" }, { type: "object", required: ["url"], properties: { url: { type: "string" }, name: { type: "string" } } }] },
+        },
+        model: str("Where it was made: the model or tool, such as Nano Banana, Seedream 5.5, ComfyUI, ChatGPT."),
+        prompt: str("The prompt it was made with."),
+        settings: str("Settings worth remembering: seed, size, LoRA weights…"),
+        cost_usd: { type: ["number", "string"], description: "What it cost in US dollars, all of them together. Leave out to estimate it from the price list." },
+        pick: { type: ["boolean", "string"], description: "true: star the first one as the pick. Only when the person asked." },
+      },
+    },
+  },
+  {
+    name: "pick_look",
+    title: "Star a look",
+    description: "Stars the version of a character's or place's look that stays (one per element; starring another replaces it, and brings it back if it was set aside). With off true, takes the star away.",
+    inputSchema: {
+      type: "object",
+      required: ["element", "file_id"],
+      properties: {
+        element: str("The element's page id, or its name (with world_id)."),
+        world_id: str("The world, when element is a name."),
+        file_id: str("The picture, from looks."),
+        off: { type: ["boolean", "string"], description: "true to take the star away." },
+      },
     },
   },
   {
@@ -1883,6 +1928,7 @@ async function production(args: Record<string, unknown>, db: Db) {
   for (const k of kit) {
     for (const id of Object.values((elOf(k).views ?? {}) as Record<string, string>)) fileIds.add(id);
     for (const id of (elOf(k).refs ?? []) as string[]) fileIds.add(id);
+    if (elOf(k).pick) fileIds.add(elOf(k).pick);
   }
   for (const { s } of sceneOut) for (const sh of s.shots) {
     const f = sh.fields ?? {};
@@ -1962,10 +2008,12 @@ async function production(args: Record<string, unknown>, db: Db) {
     kit: kit.map((k) => {
       const x = elOf(k);
       const views = Object.fromEntries((VIEWS[x.type] ?? []).filter((v) => x.views?.[v] && link.get(x.views[v])).map((v) => [VIEW_NAME[v], link.get(x.views[v])]));
-      const refs = ((x.refs ?? []) as string[]).map((id) => link.get(id)).filter(Boolean);
+      const lk = lookState(k);
+      const refs = lk.refs.filter((id) => id !== lk.pick && !lk.aside.has(id)).map((id) => link.get(id)).filter(Boolean);
       const tids = toolIds(k);
       return {
         id: k.id, name: k.title, type: x.type || "other", ...(x.also?.length ? { also_called: x.also } : {}),
+        ...(lk.refs.length ? { look_wall: { versions: lk.refs.length, set_aside: lk.aside.size, ...(lk.pick ? { pick: file(lk.pick) } : {}) } } : {}),
         ...(x.snippet ? { looks: x.snippet } : {}), ...(x.lighting ? { lighting: x.lighting } : {}),
         ...(Object.keys(tids).length ? { tool_ids: tids } : {}), ...(Object.keys(views).length ? { sheet: views } : {}), ...(refs.length ? { references: refs } : {}),
       };
@@ -2125,6 +2173,149 @@ async function star(args: Record<string, unknown>, db: Db) {
     return { ...f, star: s, star_by: CLAUDE };
   });
   return { shot: sh.id, [k]: off ? "unstarred" : "starred", file: meta.title };
+}
+
+// ---------- the look wall: versions of each character's and place's look ----------
+// The same shape as the app's src/production.js lookOf: element.refs are the
+// versions, element.pick the star, element.aside the ones set aside. A file's
+// fields.look says where it came from.
+
+function lookState(r: Entry) {
+  const x = elOf(r);
+  const refs = [...new Set(((x.refs ?? []) as string[]))];
+  const aside = new Set(((x.aside ?? []) as string[]).filter((id) => refs.includes(id)));
+  const pick = typeof x.pick === "string" && refs.includes(x.pick) && !aside.has(x.pick) ? x.pick as string : null;
+  return { refs, aside, pick };
+}
+
+/** An element by its page id, or by name (in a world, or anywhere when that's unique). */
+async function elementArg(db: Db, v: unknown, world: unknown): Promise<Entry> {
+  if (typeof v !== "string" || !v.trim()) throw new Bad("element is missing: give its page id or its name.");
+  const want = v.trim();
+  const [byId] = await db.get([want]);
+  if (byId && !gone(byId)) {
+    if (byId.kind !== "page" || !byId.fields?.element) throw new Bad(`“${byId.title}” isn't a character, place, prop or outfit yet. It becomes one in the app (Make > Kit, or Add a character on the look wall).`);
+    return byId;
+  }
+  const shape = new Shape(await db.outline());
+  const w = typeof world === "string" && world.trim() ? await worldArg(db, world) : null;
+  const all = [...shape.byId.values()].filter((r) => r.kind === "page" && r.fields?.element && (!w || shape.worldOf(r)?.id === w.id));
+  const low = want.toLowerCase();
+  let hits = all.filter((r) => (r.title || "").trim().toLowerCase() === low);
+  if (!hits.length) hits = all.filter((r) => namesOf(r).some((n) => n.toLowerCase() === low));
+  if (hits.length === 1) return hits[0];
+  if (!hits.length) throw new Bad(`No character, place, prop or outfit called “${want}”${w ? ` in ${w.title}` : ""}. Read looks for a world to see its elements.`);
+  throw new Bad(`More than one element is called “${want}” (in ${[...new Set(hits.map((h) => shape.worldOf(h)?.title || "no world"))].join(", ")}). Give world_id, or the element's id.`);
+}
+
+/** Changes an element's fields.element, reading it again if it changed in between. */
+async function changeElement(db: Db, id: string, make: (el: Record<string, any>) => Record<string, any>) {
+  for (let i = 0; i < 3; i++) {
+    const [r] = await db.get([id]);
+    if (!r || gone(r)) throw new Bad("That element was removed.");
+    if (await db.change(r.id, r.updated_at, { fields: { ...(r.fields ?? {}), element: make({ ...elOf(r) }), edited_by: CLAUDE } })) return;
+  }
+  throw new Bad("That element keeps changing in the app just now. Try again in a moment.");
+}
+
+async function looks(args: Record<string, unknown>, db: Db) {
+  const w = await worldArg(db, args.world_id);
+  const shape = new Shape(await db.outline());
+  const pageIds: string[] = [];
+  const walk = (id: string) => { for (const p of shape.under(id, "page")) { pageIds.push(p.id); walk(p.id); } };
+  walk(w.id);
+  for (const p of shape.under(w.id, "project")) walk(p.id);
+  const els = pageIds.map((id) => shape.byId.get(id)!).filter((p) => p.fields?.element);
+  const ORDER = ["character", "location", "prop", "wardrobe", "other"];
+  els.sort((a, b) => ORDER.indexOf(elOf(a).type || "other") - ORDER.indexOf(elOf(b).type || "other"));
+  const ids = new Set<string>();
+  for (const e of els) { const lk = lookState(e); for (const id of lk.refs.filter((x) => !lk.aside.has(x)).slice(-12)) ids.add(id); if (lk.pick) ids.add(lk.pick); }
+  const metas = new Map((await db.get([...ids])).filter((m) => m.kind === "file" && !gone(m)).map((m) => [m.id, m]));
+  const live = [...ids].filter((id) => metas.has(id));
+  const urls = live.length ? await db.fileLinks(live) : [];
+  const link = new Map(live.map((id, i) => [id, urls[i]]));
+  const pic = (id: string) => {
+    const m = metas.get(id);
+    if (!m) return null;
+    const lk = (m.fields?.look ?? {}) as Record<string, any>;
+    return { file_id: id, name: m.title, ...(link.get(id) ? { url: link.get(id) } : {}), ...(lk.from ? { made_in: lk.from } : lk.by === CLAUDE ? { made_in: "Claude" } : {}), ...(lk.prompt ? { prompt: lk.prompt } : {}) };
+  };
+  return {
+    world: w.title, id: w.id,
+    elements: els.map((e) => {
+      const lk = lookState(e);
+      const running = lk.refs.filter((id) => !lk.aside.has(id) && id !== lk.pick);
+      return {
+        id: e.id, name: e.title, type: elOf(e).type === "location" ? "place" : elOf(e).type || "other",
+        versions: lk.refs.length, set_aside: lk.aside.size,
+        pick: lk.pick ? pic(lk.pick) : null,
+        ...(running.length ? { in_the_running: running.slice(-12).map(pic).filter(Boolean), ...(running.length > 12 ? { earlier_not_listed: running.length - 12 } : {}) } : {}),
+      };
+    }),
+    ...(els.length ? {} : { note: "No characters or places yet. The person adds them on the world's Make page, Looks (Add a character, Add a place), or in the Kit." }),
+  };
+}
+
+async function addLook(args: Record<string, unknown>, db: Db) {
+  const el = await elementArg(db, args.element, args.world_id);
+  const list = Array.isArray(args.results) ? args.results : args.results === undefined ? [] : [args.results];
+  if (!list.length) throw new Bad("Give results: links to the pictures.");
+  if (list.length > 10) throw new Bad("Up to 10 pictures at a time.");
+  const opt = (k: string, max: number) => (typeof args[k] === "string" && (args[k] as string).trim() ? (args[k] as string).trim().slice(0, max) : undefined);
+  const model = opt("model", 120);
+  let cost: number | undefined;
+  let est = false;
+  if (args.cost_usd !== undefined && args.cost_usd !== "") {
+    cost = Number(args.cost_usd);
+    if (!(cost >= 0 && cost < 10000)) throw new Bad("cost_usd must be dollars, like 0.42.");
+  }
+  const files: Entry[] = [];
+  const notKept: string[] = [];
+  for (const r of list) {
+    const url = typeof r === "string" ? r : (r as any)?.url;
+    const name = typeof r === "object" && r ? String((r as any).name ?? "").slice(0, 200) : "";
+    if (typeof url !== "string" || !/^https:\/\//i.test(url.trim())) throw new Bad("Each result needs an https link.");
+    const got = await db.fetchFile(url.trim());
+    if (!got || !/^image\//.test(got.type) || got.bytes.length > MAX_FILE) { notKept.push(url.trim()); continue; }
+    const id = newId("fi");
+    await db.keepFile(id, got.bytes, got.type);
+    files.push(row("file", { id, title: name || got.name || `${el.title} ${files.length + 1}`, fields: { type: got.type, size: got.bytes.length, element: el.id } }));
+  }
+  if (!files.length) throw new Bad("None of the links gave a picture Inkwell could keep (a picture up to 50 MB, from a link that opens).");
+  if (cost === undefined && model) {
+    const { list: priceList } = await priceRow(db);
+    const p = priceOf(priceList, model);
+    if (p && p.unit === "picture") { cost = p.usd * files.length; est = true; }
+  }
+  const each = cost !== undefined ? Math.round((cost / files.length) * 1000) / 1000 : undefined;
+  const at = Date.now();
+  for (const f of files) f.fields.look = { by: CLAUDE, at, ...(model ? { from: model } : {}), ...(opt("prompt", 8000) ? { prompt: opt("prompt", 8000) } : {}), ...(opt("settings", 2000) ? { settings: opt("settings", 2000) } : {}), ...(each !== undefined ? { cost_usd: each, ...(est ? { cost_est: true } : {}) } : {}) };
+  await db.insert(files);
+  const pick = boolArg(args.pick, false);
+  await changeElement(db, el.id, (x) => {
+    const refs = [...new Set([...((x.refs ?? []) as string[]), ...files.map((f) => f.id)])];
+    return { ...x, refs, ...(pick ? { pick: files[0].id, aside: ((x.aside ?? []) as string[]).filter((id) => id !== files[0].id), pick_by: CLAUDE } : {}) };
+  });
+  return {
+    element: el.title, id: el.id, kept: files.map((f) => ({ file_id: f.id, name: f.title })),
+    ...(pick ? { starred: files[0].id } : {}),
+    ...(notKept.length ? { not_kept: notKept, note: "Some links weren't kept (not a picture, over 50 MB, or the link didn't open)." } : {}),
+    ...(cost !== undefined ? { cost_usd: Math.round(cost * 100) / 100, ...(est ? { cost_estimated_from_prices: true } : {}) } : {}),
+  };
+}
+
+async function pickLook(args: Record<string, unknown>, db: Db) {
+  const el = await elementArg(db, args.element, args.world_id);
+  const fileId = typeof args.file_id === "string" ? args.file_id.trim() : "";
+  if (!lookState(el).refs.includes(fileId)) throw new Bad(`That file isn't one of ${el.title}'s looks (see looks for file ids).`);
+  const [meta] = await db.get([fileId]);
+  if (!meta || gone(meta)) throw new Bad("That picture was removed.");
+  const off = boolArg(args.off, false);
+  await changeElement(db, el.id, (x) => {
+    if (off) return x.pick === fileId ? { ...x, pick: null, pick_by: CLAUDE } : x;
+    return { ...x, pick: fileId, aside: ((x.aside ?? []) as string[]).filter((id) => id !== fileId), pick_by: CLAUDE };
+  });
+  return { element: el.title, [off ? "unstarred" : "starred"]: meta.title };
 }
 
 async function prices(db: Db) {
@@ -2751,6 +2942,9 @@ async function runTool(name: string, args: Record<string, unknown>, db: Db): Pro
     case "update_shot": return updateShot(args, db);
     case "add_try": return addTry(args, db);
     case "star": return star(args, db);
+    case "looks": return looks(args, db);
+    case "add_look": return addLook(args, db);
+    case "pick_look": return pickLook(args, db);
     case "prices": return prices(db);
     case "update_prices": return updatePrices(args, db);
     case "list_tasks": return listTasks(args, db);
@@ -2782,7 +2976,7 @@ export async function handle(msg: Rpc, db: Db): Promise<unknown | null> {
       return ok({
         protocolVersion: VERSIONS.includes(want) ? want : VERSIONS[1],
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "inkwell", title: "Inkwell", version: "1.5.0" },
+        serverInfo: { name: "inkwell", title: "Inkwell", version: "1.6.0" },
         instructions: INSTRUCTIONS,
       });
     }
