@@ -21,7 +21,7 @@
 .lw-addpics, .lw-plain { border: 0; background: none; padding: 0; color: var(--muted); font: 13px var(--ui); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .lw-addpics:hover, .lw-plain:hover { color: var(--ink); }
 .lw-none, .lw-empty { color: var(--muted); font: 14px var(--ui); padding: 6px 0; }
-.lw-tiles { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(var(--tile, 150px), 100%), 1fr)); }
+.lw-tiles { display: grid; align-items: start; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(var(--tile, 150px), 100%), 1fr)); }
 .lw-tiles.big { grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)); gap: 12px; }
 .lw-tile { position: relative; background: var(--panel); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; outline: 1px solid var(--line); min-width: 0; }
 .lw-tile[data-focus="true"] { outline: 2px solid var(--accent); }
@@ -57,7 +57,7 @@
 .lw-sec { margin-top: 28px; }
 .lw-sec h3 { font: 500 12px var(--ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
 .lw-sec p { font: 13px var(--ui); color: var(--muted); margin: 0; }
-.lw-strip { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); margin-top: 10px; }
+.lw-strip { display: grid; align-items: start; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); margin-top: 10px; }
 .lw-strip .lw-who, .lw-strip .lw-stand { display: none; }
 .lw-strip h4 { font: 500 12.5px var(--ui); color: var(--muted); padding: 6px 8px; margin: 0; }
 
@@ -75,6 +75,7 @@
   .lw-tiles { grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); gap: 8px; }
   .lw-tiles.big { grid-template-columns: repeat(min(var(--n, 2), 2), minmax(0, 1fr)); }
   .lw-zoom input { width: 96px; }
-  .lw-acts button { padding: 7px 11px; font-size: 13.5px; }
+  .lw-acts { flex-direction: column; gap: 5px; padding: 0 6px 6px; }
+  .lw-acts button { padding: 7px 8px; font-size: 13.5px; width: 100%; text-align: center; }
   .lw-lb-bar button { padding: 10px 14px; }
 }
