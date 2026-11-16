@@ -195,8 +195,8 @@ try {
     assert.deepEqual([r.ot, r.ps, r.wi, r.nt], [places.ot, places.ps, places.wi, places.nt]);
     assert.ok(r.days.includes('2026-11-17'));
     await shot(page, 'read-desk');
-    // Undo puts it back.
-    await page.locator('.toast .toast-action').click();
+    // Tapping it again puts it back.
+    await page.locator('.rd-grid g[data-day="2026-11-17"]').click();
     await page.waitForFunction(() => /^Best: 2/.test(document.querySelector('.dk-reading .tr-big')?.textContent || ''));
     assert.deepEqual((await reading(page)).days, ['2026-11-12', '2026-11-13', MON, WED]);
     // The four tracks: short words, a thin meter, times through counted.
