@@ -25,6 +25,7 @@
 
 import { oneSuggestion, type Item as TidyItem, type Row as TidyRow } from "../_shared/tidy.ts";
 import { Bad as LogBad, type Db as LogDb, type Note, runNeeds, runUpdates, TOOLS as LOG_SOURCE, type Update } from "../mcp/tools.ts";
+import { placeIn, todays as readingToday, TRACKS as READING, weekFrom, weekWords } from "./reading.ts";
 import { addDays, blank, daysIn, dow, dueDay, firstOn, isRepeat, isStretch, repeatWord, roll, spanOf, spanWord, type RepeatRule, type Task, taskOf } from "./taskrules.ts";
 
 /** One Inkwell entry, as stored in writing_entries. */
@@ -132,6 +133,7 @@ export const INSTRUCTIONS = `Inkwell is this person's own writing app and notebo
 - Production (AI video): a piece's shots, each with a code that never changes (NB-E01-S03A-04), prompts for its still and its video, how it's generated (model, seconds, first and last frame, the line it's timed to, and a group when several shots are made in one generation), and its tries with a star on the one that worked. The world's kit holds each character's sheet (front, three-quarter, side, back), each location's lighting line and angles, the show rules (frame, frame rate, always and never) and each tool's ID for an element (Higgsfield Soul ID or Element, ComfyUI LoRA, Kling reference). To make shots in another tool (Higgsfield, Kling, ComfyUI…): read them with production, write prompts that use the kit's looks, lighting, rules and tool IDs, and pass the reference picture links along. Bring results back with add_try (the file or link, model, settings, seconds, cost), star the one that worked with star, and keep prompts or generation details current with update_shot. Old prompts are never lost: they stay with the try that used them. Prices (prices, update_prices) feed the cost estimate on the Make tab; when you check prices, update them with the source.
 - Tasks and plans live in Inkwell. A task is an ordinary line with a day (or, with no exact day yet, a loose when: this week, next week, a month, or later), an estimate and a tick, and it lives where it was written: on a project's Steps page, on a daily page, or on the Tasks page for ones added straight to a plan. Today's page gathers every task on that day at its top (the person reorders it there), with Week, Weeks ahead and Pace beside it. list_tasks reads them (by day range, by project, done since a day); add_task adds one (put it in its project when it belongs to one, with notes as lines under it and a link back to where it came from); update_task moves it to another day, sets its estimate, makes it repeat or a habit, a stretch of work (until) or a date to hit (mark, hard when it can't move: never move a hard one); time puts it at a time on its day's Calendar (the hand-arranged day view; length_minutes is how long the block is), and null takes it off; order_day sets a day's order; mark_done ticks it; delete_line and rename_line delete or reword one when the person asks, and a repeating one comes round again on its next day. Each change is recorded as yours with an Undo. Keep a week's estimated hours within the person's free hours (free_hours). Habits have no hours. Only tasks owned by the person (owner me) are on their day; others are planning lines.
 - Needs you: when this chat needs the person (a decision only they can make, work blocked on them, something ready to review or try), raise_needs_you with one short line, the kind, the Claude project's name and this chat's link; raising again from the same link updates it; clear_needs_you once it no longer needs them. It shows in Inkwell's Catch-up and on Today.
+- Setting up his day by talking: first_light reads or sets where each morning Bible reading track is; training reads the sessions and sets the round, the next session, or which session falls on which weekday. The exercises and their amounts are lines on the Training page (pg_training): read it before suggesting changes.
 - Catch-up: each time this chat posts a result to the person, log_update with one plain line of what changed (done, live or working), the Claude project's name, this chat's title and link, plus place (its Inkwell link, ?open=) when the work has one. One line per result, not per step.`;
 
 const str = (description: string) => ({ type: "string", description });
@@ -583,6 +585,33 @@ TOOLS.push(
       type: "object",
       required: ["line_id", "text"],
       properties: { line_id: str("The task or line, from list_tasks, read or search."), text: str("Its new words."), why: str("Optional: a few words on why, shown with the change.") },
+    },
+  },
+  {
+    name: "first_light",
+    title: "The morning Bible reading (First light)",
+    description: "The person's morning reading in Inkwell (ESV): four tracks that each go round by themselves, 2 chapters Old Testament (without Psalms, Proverbs and Ecclesiastes), 1 Psalm, 1 Wisdom (Proverbs, then Ecclesiastes), 2 New Testament. A place only moves when they say they read. With no arguments: where each track is, and today's six chapters. To set where they are (only when they tell you), pass any track as the next chapter to read, such as \"2 Kings 4\"; a book alone starts at chapter 1. The app shows the new places at once.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        old_testament: str("The next Old Testament chapter, such as \"Isaiah 40\"."),
+        psalms: str("The next Psalm, such as \"Psalm 23\"."),
+        wisdom: str("The next chapter of Proverbs or Ecclesiastes."),
+        new_testament: str("The next New Testament chapter, such as \"John 1\"."),
+      },
+    },
+  },
+  {
+    name: "training",
+    title: "Training: sessions, the round and the week",
+    description: "The person's training in Inkwell. The Training page (read it with read and page id pg_training) holds the sessions as an outline: each session's exercises, with their amounts. Two evaluations come first, once each; then sessions take turns in the round (by default Hard A, Light, Light, Hard B, Light, Light, every day but Sunday), or, when a week is set, each weekday has its own session and the days left out rest. With no arguments: the sessions, the round, the week, what is next and the ladders. Only when they ask: week sets which session falls on which weekday (such as { \"monday\": \"Hard A\", \"tuesday\": \"Light\", \"sunday\": \"rest\" }; days left out rest; null goes back to the round); order sets the round; next makes a session the next one (skipping any evaluation not done yet).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        week: { type: ["object", "null"], description: "Weekday → session name or \"rest\". null clears it." },
+        order: { type: "array", items: { type: "string" }, description: "The round: session names in the order they take turns." },
+        next: str("A session name to make the next one."),
+      },
     },
   },
 );
@@ -2420,6 +2449,96 @@ async function orderDay(args: Record<string, unknown>, db: Db) {
   return { day, order: order.map((id) => short(byId.get(id)!.row.text, 60)), change_id: cx };
 }
 
+// ---------- First light and Training (One thing at a time, Parts 5 and 6) ----------
+
+const READ_ARGS: Record<string, string> = { old_testament: "ot", psalms: "ps", wisdom: "wi", new_testament: "nt" };
+
+async function firstLight(args: Record<string, unknown>, db: Db) {
+  const [s] = await db.get([PLAN_ID]);
+  const was = { ot: 0, ps: 0, wi: 0, nt: 0, read: null, skip: null, ...((s && !s.deleted && s.fields?.reading) || {}) } as Record<string, unknown>;
+  const next = { ...was };
+  let set = false;
+  for (const [arg, k] of Object.entries(READ_ARGS)) {
+    const v = args[arg];
+    if (v === undefined || v === null || v === "") continue;
+    const got = placeIn(k, v);
+    if ("error" in got) throw new Bad(got.error);
+    next[k] = got.place;
+    set = true;
+  }
+  if (set) {
+    if (s && !s.deleted) {
+      if (!(await db.change(s.id, s.updated_at, { fields: { ...s.fields, reading: next } }))) throw new Bad("That just changed in the app. Try once more.");
+    } else await db.insert([row("settings", { id: PLAN_ID, title: "Plan", fields: { reading: next } })]);
+  }
+  const tz = await db.timeZone();
+  const six = readingToday(next);
+  const tracks = Object.fromEntries(READING.map((t) => [t.name, `next: ${six[READ_START[t.k]]}`]));
+  return {
+    ...(set ? { set: true, before: readingToday(was) } : {}),
+    tracks,
+    todays_chapters: six,
+    read_today: next.read === today(tz),
+    note: "Each chapter name in the app links to esv.org until the ESV key is approved; then the text shows in the app.",
+  };
+}
+const READ_START: Record<string, number> = { ot: 0, ps: 2, wi: 3, nt: 4 };
+
+const TRAINING_PAGE = "pg_training";
+
+async function training(args: Record<string, unknown>, db: Db) {
+  const [page] = await db.get([TRAINING_PAGE]);
+  if (!page || gone(page)) throw new Bad("The Training page isn't made yet: Inkwell makes it the first time Today opens with Training switched on (Look > Training).");
+  const tops = (await db.kids([TRAINING_PAGE])).filter((r) => !gone(r) && r.kind === "line").sort(bySort);
+  const sessions = tops.map((r) => ({ name: r.text || "Session", once: !!r.fields?.session?.once, hard: !!r.fields?.session?.hard }));
+  const names = sessions.filter((x) => !x.once).map((x) => x.name);
+  const once = sessions.filter((x) => x.once).map((x) => x.name);
+  const st = { round: 0, order: ["Hard A", "Light", "Light", "Hard B", "Light", "Light"], step: {}, ...(page.fields?.training || {}) } as Record<string, unknown>;
+  const patch: Record<string, unknown> = {};
+  if (args.week !== undefined) {
+    if (args.week === null || (typeof args.week === "object" && !Object.keys(args.week as object).length)) patch.week = null;
+    else { const w = weekFrom(args.week, names); if ("error" in w) throw new Bad(w.error); patch.week = w.week; }
+  }
+  if (args.order !== undefined) {
+    if (!Array.isArray(args.order) || !args.order.length) throw new Bad("order must be a list of session names.");
+    const order = (args.order as unknown[]).map((v) => names.find((n) => n.toLowerCase() === String(v).toLowerCase().trim()) ?? String(v));
+    const bad = order.find((n) => !names.includes(n));
+    if (bad) throw new Bad(`There's no session called ${bad}. The sessions are ${names.join(", ")}.`);
+    patch.order = order;
+  }
+  const order = (patch.order ?? st.order) as string[];
+  if (args.next !== undefined && args.next !== null && args.next !== "") {
+    const n = names.find((x) => x.toLowerCase() === String(args.next).toLowerCase().trim());
+    if (!n) throw new Bad(`There's no session called ${args.next}. The sessions are ${names.join(", ")}.`);
+    const i = order.indexOf(n);
+    if (i < 0) throw new Bad(`${n} isn't in the round (${order.join(", ")}).`);
+    const r = Number(st.round) || 0;
+    const base = Math.max(r, once.length);
+    const len = order.length;
+    let round = once.length + Math.floor((base - once.length) / len) * len + i;
+    if (round < base) round += len;
+    patch.round = round;
+  }
+  const changed = Object.keys(patch).length > 0;
+  if (changed) {
+    const fields = { ...page.fields, training: { ...(page.fields?.training || {}), ...patch } };
+    if (!(await db.change(page.id, page.updated_at, { fields }))) throw new Bad("That just changed in the app. Try once more.");
+  }
+  const now = { ...st, ...patch } as Record<string, unknown>;
+  const r = Number(now.round) || 0;
+  const week = now.week && typeof now.week === "object" && Object.values(now.week as object).some(Boolean) ? now.week : null;
+  return {
+    ...(changed ? { set: Object.keys(patch) } : {}),
+    sessions: sessions.map((x) => ({ name: x.name, ...(x.once ? { once: true } : {}), ...(x.hard ? { hard: true } : {}) })),
+    evaluations_left: once.slice(Math.min(r, once.length)),
+    round: order,
+    next_in_round: r < once.length ? once[r] : order[(r - once.length) % order.length] ?? null,
+    week: week ? weekWords(week) : "not set: the round, every day but Sunday",
+    ladder_steps: now.step ?? {},
+    page: TRAINING_PAGE,
+  };
+}
+
 async function freeHours(args: Record<string, unknown>, db: Db) {
   const tz = await db.timeZone();
   const now = today(tz);
@@ -2494,6 +2613,8 @@ async function runTool(name: string, args: Record<string, unknown>, db: Db): Pro
     case "free_hours": return freeHours(args, db);
     case "delete_line": return deleteLine(args, db);
     case "rename_line": return renameLine(args, db);
+    case "first_light": return firstLight(args, db);
+    case "training": return training(args, db);
   }
   if (LOG_NAMES.includes(name)) return logTool(name, args, db);
   throw new Bad(`There's no tool called ${name}.`);
@@ -2514,7 +2635,7 @@ export async function handle(msg: Rpc, db: Db): Promise<unknown | null> {
       return ok({
         protocolVersion: VERSIONS.includes(want) ? want : VERSIONS[1],
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "inkwell", title: "Inkwell", version: "1.3.0" },
+        serverInfo: { name: "inkwell", title: "Inkwell", version: "1.4.0" },
         instructions: INSTRUCTIONS,
       });
     }

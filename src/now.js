@@ -23,6 +23,7 @@ import { make } from './dom.js';
 import { talkView, heardView, closeView } from './nowends.js';
 import { TrainNow } from './nowtrain.js';
 import { isTraining } from './training.js';
+import { LightNow } from './nowlight.js';
 import './now.css';
 
 export const SMALLS = 'smalls';
@@ -98,13 +99,14 @@ export class Now {
     this.close = { also: [], alive: '', drained: '', first: '', busy: false };
     this.forms = {};
     this.train = new TrainNow(this); // Training, one exercise at a time (Part 6)
+    this.light = new LightNow(this); // First light, the morning reading (Part 5)
     document.addEventListener('keydown', (e) => this.key(e));
   }
 
   get shown() { return this.p.pageShown && this.p.tab === 'now'; }
   off(name) { return !!this.p.hooks.off?.(name); }
 
-  async load() { this.st = await readNow(this.p.today); await this.train.load(); }
+  async load() { this.st = await readNow(this.p.today); await this.train.load(); await this.light.load(); }
 
   // Runs one action at a time (a key, Enter in a number).
   run(fn) {
@@ -186,11 +188,13 @@ export class Now {
     const face = nowFace();
     const two = hover.matches && nowSide() && !!m.cur && !m.active;
     if (this.mode === 'heard' && m.cur) this.mode = null;
-    const mode = m.active ? null : this.mode;
+    const light = !m.active && this.light.due(m);
+    const mode = m.active ? null : light ? 'light' : this.mode;
     const box = make('div', `now-view now-${m.active ? 'event' : mode ? 'ends' : m.cur ? face : 'gate'}${two && !mode ? ' now-two' : ''}`);
     box.setAttribute('role', 'region');
     box.setAttribute('aria-label', 'Now');
     if (m.active) box.append(this.eventView(m));
+    else if (mode === 'light') box.append(this.light.view());
     else if (mode === 'talk') box.append(talkView(this));
     else if (mode === 'heard') box.append(heardView(this, m));
     else if (mode === 'close') box.append(closeView(this, m));
@@ -481,7 +485,8 @@ export class Now {
     const act = el.dataset.now;
     this.busy = true;
     try {
-      if (['tset', 'tmin', 'tnum', 'tskip', 'tback', 'tup'].includes(act)) await this.train.click(act, el);
+      if (['tset', 'tmin', 'tnum', 'tnum2', 'tskip', 'tback', 'tup'].includes(act)) await this.train.click(act, el);
+      else if (/^l(read|next|back|list|set|setok|done|skip)$/.test(act)) await this.light.click(act);
       else if (act === 'done') await this.done();
       else if (act === 'skip') await this.skip();
       else if (act === 'notnow') { this.asking = true; this.p.redraw(); this.focusFirst('.now-choice'); }
@@ -718,6 +723,7 @@ export class Now {
     else if (this.asking && k === '4' && this.train.active(m.cur)) go = () => this.aside('own');
     else if (this.asking && e.key === 'Escape') go = () => { this.asking = false; this.p.redraw(); };
     else if (m.active) return;
+    else if (this.light.due(m)) go = this.light.key(k, e);
     else if (this.mode === 'heard' && k === 'b' && m.cand) go = () => { this.mode = null; return this.begin(m.cand.group ? SMALLS : m.cand.item.row.id); };
     else if (this.mode && e.key === 'Escape') go = () => this.endMode();
     else if (this.mode) return;
