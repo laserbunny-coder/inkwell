@@ -7,6 +7,7 @@
 // on paper" is "I read it". The plan and places are in firstlight.js.
 
 import { make } from './dom.js';
+import { autoOn } from './auto.js';
 import { TRACKS, posOf, placeOf, readReading, saveReading, todays, advanced, esvLink, keyState, kept, chapter, tickBibleHabit } from './firstlight.js';
 
 export class LightNow {
@@ -24,7 +25,7 @@ export class LightNow {
 
   // Showing now? Before anything else, once a day, unless something is begun.
   due(m) {
-    if (!this.st || this.now.off('firstlight')) return false;
+    if (!this.st || this.now.off('firstlight') || !autoOn('firstlight')) return false;
     if (this.forced) return true;
     if (m.cur || this.now.mode) return false;
     const today = this.p.today;

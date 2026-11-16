@@ -23,6 +23,7 @@ import { NowStrip } from '../nowstrip.js';
 import { writeThought, fileThought, waitingThoughts } from '../thoughts.js';
 import { dayBody, layOutDay, writeClose } from '../dayends.js';
 import { ensureTrainingLine, seedTraining, TRAINING_PAGE } from '../training.js';
+import { autoOn } from '../auto.js';
 import { inPane, host as paneHost } from '../panes.js';
 import { aheadSource } from '../ahead.js';
 import { events as calendarEvents } from '../calendar.js';
@@ -710,7 +711,8 @@ function wireTalking() {
       // First light (Part 5): one ESV chapter from the server (no key yet: { nokey }).
       bible: (body) => (canAskServer() ? askServer(body) : null),
       // Training (Part 6): today's line, once a day, not on Sunday.
-      daily: (items, today) => (inPane || hidden().has('training') ? [] : ensureTrainingLine(items, today)),
+      // Not in automated test runs unless asked for (src/auto.js).
+      daily: (items, today) => (inPane || hidden().has('training') || !autoOn('training') ? [] : ensureTrainingLine(items, today)),
       closeDay: (answers) => closeDayFromNow(answers),
       toast
     }

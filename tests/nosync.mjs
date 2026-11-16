@@ -26,6 +26,8 @@ export function withoutSync(browser) {
     if (estimates) await ctx.addInitScript(() => { try { if (!localStorage.getItem('estimatesOff')) localStorage.setItem('estimatesOff', '1'); } catch { /* no storage here */ } });
     if (rowDetails) await ctx.addInitScript(() => { try { if (!localStorage.getItem('rowDetailsOff')) localStorage.setItem('rowDetailsOff', '1'); } catch { /* no storage here */ } });
     if (!training) await ctx.addInitScript(() => { try { if (!localStorage.getItem('trainingOffOnce')) { const h = JSON.parse(localStorage.getItem('hide') || '[]'); if (!h.includes('training')) h.push('training'); localStorage.setItem('hide', JSON.stringify(h)); localStorage.setItem('trainingOffOnce', '1'); } } catch { /* no storage here */ } });
+    const on = [training && 'training', firstlight && 'firstlight'].filter(Boolean).join(',');
+    if (on) await ctx.addInitScript((on) => { try { localStorage.setItem('autoOn', on); } catch { /* no storage here */ } }, on);
     if (!firstlight) await ctx.addInitScript(() => { try { if (!localStorage.getItem('firstlightOffOnce')) { const h = JSON.parse(localStorage.getItem('hide') || '[]'); if (!h.includes('firstlight')) h.push('firstlight'); localStorage.setItem('hide', JSON.stringify(h)); localStorage.setItem('firstlightOffOnce', '1'); } } catch { /* no storage here */ } });
     if (!todayNow) await ctx.addInitScript(() => { try { if (!localStorage.getItem('todayOpens')) localStorage.setItem('todayOpens', 'page'); } catch { /* no storage here */ } });
     return ctx;
