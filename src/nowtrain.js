@@ -10,7 +10,8 @@
 // the usual gate shows.
 
 import { make } from './dom.js';
-import { readTraining, sessionAt, nextSession, exName, saveState, finishSession, isTraining, resultLine, bothNums } from './training.js';
+import { readTraining, sessionAt, nextSession, exName, saveState, finishSession, isTraining, resultLine, bothNums, ladderSteps } from './training.js';
+import { gateLine } from './trainstats.js';
 import { getEntry, putEntries } from './db.js';
 
 export class TrainNow {
@@ -28,7 +29,9 @@ export class TrainNow {
   // Where he is in today's session: { i, res }.
   place() {
     const at = this.tr?.state.at;
-    return at && at.day === this.p.today ? { i: at.i || 0, res: Array.isArray(at.res) ? at.res : [] } : { i: 0, res: [] };
+    return at && at.day === this.p.today
+      ? { i: at.i || 0, res: Array.isArray(at.res) ? at.res : [], nums: at.nums || {}, st: at.st || {} }
+      : { i: 0, res: [], nums: {}, st: {} };
   }
   session() { return this.tr ? sessionAt(this.tr, this.tr.state.round, this.p.today) : null; }
   ex() { const s = this.session(); return s ? s.x[Math.min(this.place().i, s.x.length - 1)] : null; }
@@ -220,6 +223,10 @@ export class TrainNow {
     const last = { ...st.last };
     for (const [m, v] of mems) if (m.u) last[m.k] = v;
     if (mems.some(([m]) => m.u)) patch.last = last;
+    // For the log (Part 7): each number, and a ladder's step when it was recorded.
+    const { nums, st: steps } = this.place();
+    for (const [m, v] of mems) if (m.u && v != null) { nums[m.k] = v; if (m.lad) steps[m.lad] = st.step?.[m.lad] || 0; }
+    this.got = { nums, st: steps };
     const cur = x.pair ? mems.map(([m, v]) => (m.u ? v : null)) : (x.u ? this.cur : null);
     const line = resultLine(x, exName(x, st), { cur, sets: x.n ? this.sets : null, min: x.m ? this.min : null });
     const allSets = !x.n || this.sets >= x.n;
@@ -243,12 +250,14 @@ export class TrainNow {
   // To the next exercise (or back one); past the last, the session is over.
   async move(d, line) {
     const s = this.session();
-    const { i, res } = this.place();
+    const { i, res, nums, st } = this.place();
+    const got = this.got || { nums, st };
+    this.got = null;
     const kept = line ? [...res, line] : res;
     this.reset();
     const to = Math.max(0, i + d);
-    if (to >= s.x.length) return this.finish(kept);
-    await this.write({ at: { day: this.p.today, i: to, res: kept } });
+    if (to >= s.x.length) return this.finish(kept, { nums: got.nums, st: got.st });
+    await this.write({ at: { day: this.p.today, i: to, res: kept, nums: got.nums, st: got.st } });
     this.p.redraw();
     return undefined;
   }
@@ -258,15 +267,18 @@ export class TrainNow {
     if (row) { this.tr.state = { ...this.tr.state, ...patch }; await this.p.hooks.changed?.([row]); }
   }
 
-  async finish(res, { own = false } = {}) {
+  async finish(res, { own = false, nums = {}, st = {} } = {}) {
     const s = this.session();
     const lineId = this.now.m?.cur?.item.row.id || null;
-    const got = await finishSession({ name: s?.name || '', res, lineId, today: this.p.today, own });
+    const got = await finishSession({ name: s?.name || '', hard: !!(s?.hard || s?.once), nums, st, res, lineId, today: this.p.today, own });
     this.reset();
     await this.p.wrote(got.rows);
     await this.load();
     const t = own ? 'Training on your own' : `Training: ${s?.name || ''}`;
-    await this.now.after({ k: 'done', t });
+    // At most one quiet line under "Done.": a best yet and the streak, each by its switch.
+    const off = (id) => document.documentElement.classList.contains(`hide-${id}`);
+    const note = got.entry ? gateLine(this.tr?.state.log || [], got.entry, this.p.today, { charts: !off('traincharts'), streak: !off('trainstreak'), steps: ladderSteps(this.tr) }) : '';
+    await this.now.after({ k: 'done', t, ...(note ? { note } : {}) });
     this.p.hooks.toast?.(`${t}, on today’s page`, { label: 'Show', run: () => this.p.hooks.go?.({ view: 'notebook', pageId: `day-${this.p.today}`, line: got.line.id }) });
   }
 

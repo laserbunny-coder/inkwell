@@ -22,11 +22,12 @@
 // toward the five big things. A missed day changes nothing: the place moves
 // only when a session is finished or he trained on his own.
 
-import { getEntry, putEntries, children } from './db.js';
+import { getEntry, putEntries, children, byKind } from './db.js';
 import { entry } from './model.js';
 import { GAP } from './order.js';
 import { addTask, setTask, tickTask, isoOf, dateOf, addDays } from './tasks.js';
 import { addLine } from './capture.js';
+import { trimLog, entryFromLines } from './trainstats.js';
 
 export const TRAINING_PAGE = 'pg_training';
 export const PLAN_URL = 'https://claude.ai/artifact/7kTRn4UhijdxmAS5RGbMN4';
@@ -270,8 +271,11 @@ export function resultLine(ex, name, { cur = null, sets = null, min = null } = {
 
 // The session is over: a line on today's page with a child per number, the
 // day's task ticked and named, the place moves on. → rows written.
-export async function finishSession({ name, res = [], lineId = null, today = isoOf(), own = false }) {
+export async function finishSession({ name, res = [], lineId = null, today = isoOf(), own = false, hard = false, nums = {}, st = {} }) {
   const rows = [];
+  // The log as it was, before this session's lines go on the day (so the
+  // one-time fill from the days can't count this one twice).
+  const had = await logOf(await getEntry(TRAINING_PAGE));
   const title = own ? 'Training: on my own' : `Training: ${name}`;
   const top = await addLine([{ type: 'text', text: title }], { training: 'done', sorted: true }, today);
   rows.push(...top.rows);
@@ -286,9 +290,70 @@ export async function finishSession({ name, res = [], lineId = null, today = iso
     }
   }
   const page = await getEntry(TRAINING_PAGE);
-  const st = await saveState({ round: (page?.fields?.training?.round || 0) + 1, at: null });
-  if (st) rows.push(st);
-  return { rows, line: top.line };
+  // The log (Part 7): one entry for the day, for the streak and the charts.
+  const entry = { d: today, s: own ? 'On my own' : name, h: !own && !!hard, n: own ? {} : { ...nums }, st: own ? {} : { ...st }, ...(own ? { own: true } : {}) };
+  const saved = await saveState({ round: (page?.fields?.training?.round || 0) + 1, at: null, log: trimLog([...had, entry], today) });
+  if (saved) rows.push(saved);
+  return { rows, line: top.line, entry };
+}
+
+// ---------- the log (Part 7) ----------
+
+// Each ladder's step names: { lever: [...], planche: [...] }.
+export function ladderSteps(tr) {
+  const out = {};
+  for (const x of (tr?.sessions || []).flatMap((s) => s.x).flatMap((e) => (e.pair ? [e, ...e.pair] : [e]))) if (x.lad && x.steps?.length && !out[x.lad]) out[x.lad] = x.steps;
+  return out;
+}
+
+// The log, filled once from the "Training: …" lines Part 6 left on his days.
+async function logOf(page) {
+  const log = page?.fields?.training?.log;
+  if (Array.isArray(log)) return log;
+  return fillFromDays();
+}
+export async function fillFromDays() {
+  const tr = await readTraining();
+  const names = new Map();
+  const sessions = new Map();
+  for (const s of tr?.sessions || []) {
+    sessions.set(s.name.toLowerCase(), { hard: s.hard, once: s.once });
+    for (const x of s.x.flatMap((e) => (e.pair ? [e, ...e.pair] : [e]))) {
+      if (!x.u) continue;
+      names.set(String(x.t).toLowerCase(), { k: x.k });
+      if (x.lad) (x.steps || []).forEach((step, i) => { names.set(`${step} hold`.toLowerCase(), { k: x.k, lad: x.lad, i }); names.set(step.toLowerCase(), { k: x.k, lad: x.lad, i }); });
+    }
+  }
+  const out = [];
+  const lines = (await byKind('line')).filter((r) => !r.deleted && !r.fields?.trashed && r.fields?.training === 'done');
+  for (const r of lines) {
+    const day = await dayOf(r);
+    if (!day) continue;
+    const kids = (await children(r.id)).filter((c) => !c.deleted).sort((a, b) => (a.sort || 0) - (b.sort || 0)).map((c) => c.text || '');
+    const e = entryFromLines(day, r.text, kids, names, sessions);
+    if (e) out.push(e);
+  }
+  return out.sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
+}
+// The day a line is on: its day page, up the tree.
+async function dayOf(r) {
+  let x = r;
+  for (let i = 0; x && i < 12; i++) {
+    const m = /^day-(\d{4}-\d{2}-\d{2})$/.exec(x.parent_id || '');
+    if (m) return m[1];
+    x = x.parent_id ? await getEntry(x.parent_id) : null;
+  }
+  return null;
+}
+// The log for the Desk: filled and saved once if it isn't there yet.
+export async function trainingLog() {
+  const page = await getEntry(TRAINING_PAGE);
+  if (!page || page.deleted) return [];
+  const log = page.fields?.training?.log;
+  if (Array.isArray(log)) return log;
+  const filled = await fillFromDays();
+  await saveState({ log: trimLog(filled, isoOf()) });
+  return filled;
 }
 
 // ---------- the Desk ----------
@@ -307,12 +372,14 @@ export async function deskTraining() {
   const on = nx.day !== isoOf() && weekSet(tr) ? ` on ${WEEKDAYS[weekdayOf(nx.day) - 1]}` : '';
   return {
     goals: [
-      ['Vertical over 30 inches', L.vtest != null ? `${L.vtest} inches` : after],
-      ['Front lever', ladder('lever')],
-      ['Straddle planche', ladder('planche')],
-      ['Press to handstand', sec(L.presslow, 'Lowering, ')],
-      ['Two-minute handstand', sec(L.free)]
+      ['Vertical over 30 inches', L.vtest != null ? `${L.vtest} inches` : after, 'vtest'],
+      ['Front lever', ladder('lever'), 'lever'],
+      ['Straddle planche', ladder('planche'), 'planche'],
+      ['Press to handstand', sec(L.presslow, 'Lowering, '), 'presslow'],
+      ['Two-minute handstand', sec(L.free), 'free']
     ],
+    steps: ladderSteps(tr),
+    marks: Object.fromEntries(xs.filter((x) => x.lad && x.mark != null).map((x) => [x.lad, x.mark])),
     waiting: WAITING,
     next: next ? `${next.name}${on}${next.ease ? ', one set fewer for your first week' : ''}` : ''
   };

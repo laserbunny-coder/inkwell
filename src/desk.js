@@ -19,7 +19,9 @@ import { areas, areaColor, editedAt } from './library.js';
 import { popMenu } from './menu.js';
 import { deskDrags, inOrder, mergeOrder } from './deskdrag.js';
 import { make } from './dom.js';
-import { deskTraining, TRAINING_PAGE, PLAN_URL, trainingToday, addTrainingLine, seedTraining } from './training.js';
+import { deskTraining, TRAINING_PAGE, PLAN_URL, trainingToday, addTrainingLine, seedTraining, trainingLog } from './training.js';
+import { streakBlock, chartBox } from './trainview.js';
+import { GOALS } from './trainstats.js';
 
 export const DESK_ID = 'settings-desk';
 const KIND = { decision: 'Decide', blocked: 'Do', review: 'Try' };
@@ -767,7 +769,8 @@ export class DeskPage {
   }
 
   // One quiet block: the training goals on stage with where each stands, the
-  // ones waiting their turn, and the next session. No charts, no streaks.
+  // ones waiting their turn, and the next session; the streak and a chart
+  // behind each goal (Part 7), each with its own switch in Look.
   async trainingBlock() {
     await seedTraining();
     const t = await deskTraining();
@@ -776,8 +779,29 @@ export class DeskPage {
     const h = make('h2', 'dk-label', 'Training');
     h.append(make('span', 'dk-label-more', 'four goals, and the handstand'));
     sec.append(h);
+    const root = document.documentElement;
+    const streakOn = !root.classList.contains('hide-trainstreak');
+    const chartsOn = !root.classList.contains('hide-traincharts');
+    const today0 = isoOf();
+    const log = streakOn || chartsOn ? await trainingLog() : [];
+    if (streakOn) sec.append(streakBlock(log, today0));
     const list = make('div', 'dk-goals');
-    for (const [goal, at] of t.goals) { const r = make('div', 'dk-goal'); r.append(make('span', 'dk-goal-t', goal), make('span', 'dk-goal-at', at)); list.append(r); }
+    for (const [goal, at, k] of t.goals) {
+      if (!chartsOn) { const r = make('div', 'dk-goal'); r.append(make('span', 'dk-goal-t', goal), make('span', 'dk-goal-at', at)); list.append(r); continue; }
+      const r = make('button', 'dk-goal dk-goal-btn');
+      r.type = 'button';
+      r.dataset.goal = k;
+      r.setAttribute('aria-expanded', String(this.openGoal === k));
+      r.append(make('span', 'dk-goal-t', goal), make('span', 'dk-goal-at', at));
+      list.append(r);
+      if (this.openGoal === k) {
+        const g = GOALS.find((x) => x.k === k);
+        const lad = g?.lad;
+        list.append(chartBox(g, log, today0, { steps: lad ? t.steps[lad] || [] : [], mark: lad ? t.marks[lad] ?? null : null, phone: window.innerWidth < 600 }));
+      }
+      // One open at a time; tapping again closes it.
+      r.addEventListener('click', () => { this.openGoal = this.openGoal === k ? null : k; this.render({ now: this.now, failed: false }); });
+    }
     sec.append(list);
     sec.append(make('p', 'hint dk-wait', `Waiting their turn: ${t.waiting.join(', ')}.`));
     const foot = make('p', 'hint dk-tnext');
