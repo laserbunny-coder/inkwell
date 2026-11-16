@@ -188,6 +188,40 @@ try {
     await patchState(page, { round: 2, at: null });
   });
 
+  await check('legs: lunges on Hard A, pistols on Hard B, and jump squats wait for week 5', async () => {
+    const names = async (r) => { await patchState(page, { round: r, at: null }); await page.evaluate(async () => { await window.__plan.now.train.load(); }); return page.evaluate(() => { const s = window.__plan.now.train.session(); return { name: s.name, x: s.x.map((x) => x.t) }; }); };
+    const a = await names(2);
+    assert.equal(a.name, 'Hard A');
+    assert.ok(a.x.includes('Walking lunges with dumbbells') && !a.x.some((t) => /squat or split/i.test(t)));
+    const b1 = await names(5);
+    assert.equal(b1.name, 'Hard B');
+    assert.ok(b1.x.includes('Pistol squats'));
+    assert.ok(!b1.x.includes('Dumbbell jump squats'), 'not in week 1');
+    const b4 = await names(5 + 6 * 3);
+    assert.ok(!b4.x.includes('Dumbbell jump squats'), 'not in week 4');
+    const b5 = await names(5 + 6 * 4);
+    assert.equal(b5.name, 'Hard B');
+    assert.equal(b5.x[b5.x.indexOf('Pogo hops') + 1], 'Dumbbell jump squats', 'week 5, after the pogo hops');
+    // A page written before the fix is put right once.
+    const rows = await all(page);
+    const hb = rows.find((r) => r.parent_id === 'pg_training' && r.text === 'Hard B');
+    const pis = rows.find((r) => r.parent_id === hb.id && r.text === 'Pistol squats');
+    const jsq = rows.find((r) => r.parent_id === hb.id && r.text === 'Dumbbell jump squats');
+    const pg = rows.find((r) => r.id === 'pg_training');
+    const { seedv, ...oldTr } = pg.fields.training;
+    assert.equal(seedv, 2);
+    await put(page, [{ ...pis, text: 'Squat or split squat', content: [{ type: 'text', text: 'Squat or split squat' }], fields: { ...pis.fields, ex: { k: 'legs', n: 3, w: 'sets', d: 'Heavy, 5 or 6 reps a set' } } }, { ...jsq, deleted: true }, { ...pg, fields: { ...pg.fields, training: oldTr } }]);
+    await page.reload(); await started(page); await toNow(page);
+    const after = await until(async () => { const rs = await all(page); return rs.find((r) => r.id === 'pg_training')?.fields?.training?.seedv === 2 && rs; });
+    const kids = after.filter((r) => r.parent_id === hb.id && !r.deleted).sort((x, y) => x.sort - y.sort);
+    assert.ok(kids.some((r) => r.id === pis.id && r.text === 'Pistol squats' && r.fields.ex.k === 'pistol'));
+    const t = kids.map((r) => r.text);
+    assert.equal(t[t.indexOf('Pogo hops') + 1], 'Dumbbell jump squats');
+    assert.equal(kids.find((r) => r.text === 'Dumbbell jump squats').fields.ex.from, 5);
+    await patchState(page, { round: 2, at: null });
+    await page.evaluate(async () => { await window.__plan.now.train.load(); });
+  });
+
   await check('Hard A: fewer minutes from last time are shown, and the first week has one set fewer', async () => {
     await dayIs(page, TUE);
     await beginTraining(page);
