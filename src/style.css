@@ -1286,6 +1286,8 @@ div.pd-scene-title { cursor: default; }
 .pd-render[data-kind="video"]::after { content: '▶'; position: absolute; left: 6px; bottom: 4px; font-size: 10px; color: #fff; text-shadow: 0 0 3px #000; }
 .pd-render.add { color: var(--faint); font-size: 20px; border-style: dashed; }
 .pd-render.add:hover { color: var(--ink); border-color: var(--faint); }
+.pd-render.aside { opacity: .4; }
+.pd-wall-link { align-self: flex-start; border: 0; background: none; padding: 0; margin: 0 0 12px; color: var(--accent); font: 14px var(--ui); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .pd-star { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .5); color: #fff; font-size: 13px; line-height: 22px; padding: 0; opacity: 0; }
 .pd-render:hover .pd-star, .pd-render.starred .pd-star { opacity: 1; }
 .pd-render.starred .pd-star { color: #F5C26B; }

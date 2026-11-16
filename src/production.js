@@ -575,3 +575,114 @@ export function cutEvents(scenes, files, { stills = true } = {}) {
   }
   return out;
 }
+
+// ---------- the look wall ----------
+
+// Every version of a character or place sits on its row before it is ever
+// starred: the row is the element's refs (the Kit's "Other references" and
+// the wall are the same list). element.pick is the one that stays (one per
+// element); element.aside are set aside, still kept. Where a picture came
+// from is on its file entry, fields.look {from, prompt, settings, cost_usd, by, at}.
+export const WALL_TYPES = ['character', 'location'];
+export const lookOf = (el) => {
+  const x = el?.fields?.element || el || {};
+  const refs = [...new Set(x.refs || [])];
+  const aside = new Set((x.aside || []).filter((id) => refs.includes(id)));
+  const pick = x.pick && refs.includes(x.pick) && !aside.has(x.pick) ? x.pick : null;
+  return { refs, aside, pick, kept: refs.filter((id) => !aside.has(id)) };
+};
+
+// Starring sets the pick (and brings it back if it was set aside); starring
+// the pick again takes the star away. Returns the element patch.
+export function starPatch(el, fileId) {
+  const { pick, aside } = lookOf(el);
+  if (pick === fileId) return { pick: null };
+  aside.delete(fileId);
+  return { pick: fileId, aside: [...aside] };
+}
+// Setting aside (or bringing back). Setting aside the pick takes its star.
+export function asidePatch(el, fileId) {
+  const { pick, aside } = lookOf(el);
+  if (aside.has(fileId)) { aside.delete(fileId); return { aside: [...aside] }; }
+  aside.add(fileId);
+  return { aside: [...aside], ...(pick === fileId ? { pick: null } : {}) };
+}
+// What shows for an element when it has no pick: its first kept picture,
+// marked as a stand-in.
+export function standIn(el) {
+  const { pick, kept, refs } = lookOf(el);
+  if (pick) return { id: pick, stand: false };
+  const id = kept[0] || null;
+  return id ? { id, stand: true } : { id: refs[0] || null, stand: true };
+}
+// Together: tapping a picture swaps in the next version not set aside, and
+// that becomes the pick.
+export function nextPick(el) {
+  const { kept } = lookOf(el);
+  if (!kept.length) return null;
+  const cur = standIn(el).id;
+  return kept[(kept.indexOf(cur) + 1) % kept.length];
+}
+
+// A picture dropped on the wall outside any row finds its row by a name in
+// the file name ("Kenji v3 bold.png" goes to Kenji). A name inside a longer
+// matching name gives way to it ("Kenji room" over "Kenji"); two different
+// elements still matching is no match (never guess).
+export function elementForName(fileName, elements) {
+  const base = String(fileName || '').replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[_\-.]+/g, ' ');
+  const hits = [];
+  for (const el of elements) {
+    for (const n of namesOf(el)) {
+      if (new RegExp(`(?<![\\p{L}\\p{N}])${escape(n)}(?![\\p{L}\\p{N}])`, 'iu').test(base)) hits.push({ id: el.id, n: n.toLowerCase() });
+    }
+  }
+  const left = hits.filter((h) => !hits.some((o) => o.id !== h.id && o.n.length > h.n.length && o.n.includes(h.n)));
+  const ids = [...new Set(left.map((h) => h.id))];
+  return ids.length === 1 ? ids[0] : null;
+}
+
+// Files whose element is set but that its row lost (the app saved the whole
+// element row from another device at the same moment, and that copy won) go
+// back on the row. Only pictures that came in as looks; a view slot or a
+// reference taken off by hand is left alone. Returns { id: [fileIds] }.
+export function lostLooks(elements, files) {
+  const byId = new Map(elements.map((e) => [e.id, e]));
+  const out = {};
+  for (const f of files) {
+    const el = byId.get(f.fields?.element);
+    if (!el || f.deleted || f.fields?.trashed || !f.fields?.look || f.fields?.view) continue;
+    if ((el.fields?.element?.refs || []).includes(f.id)) continue;
+    (out[el.id] ||= []).push(f.id);
+  }
+  return out;
+}
+
+// The scenes of a world's scripts and prose, each with the place and the
+// cast it uses (from the breakdown: found in the words, plus added, less
+// dropped). Only scenes with a place or a cast on the wall.
+export async function worldScenes(world, elements) {
+  const { rowsAt: at, loadStructure: load } = await import('./grid.js');
+  const { worldTree: tree, hasManuscript: has, bookType: bt } = await import('./library.js');
+  const out = [];
+  const byId = new Map(elements.map((e) => [e.id, e]));
+  const bds = new Map((await byKind('breakdown')).map((b) => [b.parent_id, b]));
+  for (const { row: piece } of (await tree(world.id)).pieces) {
+    if (!has(piece) || piece.deleted || piece.fields?.trashed) continue;
+    const script = bt(piece) === 'screenplay';
+    const st = await load(piece);
+    if (!st.acts.length) continue;
+    const texts = new Map();
+    for (const act of st.acts) for (const ch of act.chapters) for (const r of ch.rows) texts.set(r.id, r);
+    for (const s of at(script ? 'slug' : 'scene', st, piece).filter((x) => x.type === 'row')) {
+      const rows = s.members.map((id) => texts.get(id)).filter(Boolean);
+      const text = rows.map((r) => (r.kind === 'scene' ? r.title || '' : r.text || '')).join('\n');
+      const cues = rows.filter((r) => r.fields?.el === 'character').map((r) => r.text || '');
+      const uses = sceneElements(findElements(text, cues, elements), bds.get(s.id)).filter((id) => byId.has(id));
+      const place = uses.find((id) => byId.get(id).fields.element.type === 'location') || null;
+      const cast = uses.filter((id) => byId.get(id).fields.element.type === 'character');
+      if (!place && !cast.length) continue;
+      out.push({ id: s.id, piece: piece.id, pieceTitle: piece.title || 'Untitled', code: s.code || '', title: s.title || 'Scene', place, cast });
+    }
+  }
+  return out;
+}

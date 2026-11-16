@@ -316,7 +316,7 @@ try {
   await check('Make for the world: tools only, the kit and every shoot day (the status board lives on Overview)', async () => {
     await page.keyboard.press('Alt+Digit5');
     await page.waitForSelector('.st-chips .chip[data-sub="kit"]');
-    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['kit', 'days']);
+    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['kit', 'looks', 'days']);
     assert.equal(await page.locator('#st-board').count(), 0);
     // Make opens on the kit.
     await page.waitForSelector('.st-chips .chip[data-sub="kit"].on');

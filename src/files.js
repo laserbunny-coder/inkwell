@@ -198,3 +198,51 @@ export function filePath(id, name) {
   const safe = (name || 'file').replace(/[\\/:*?"<>|#\s]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'file';
   return `Files/${id}-${safe}`;
 }
+
+// A small copy of a picture for walls of tiles (the look wall can hold
+// hundreds): made once from the kept copy, then kept in its own little
+// database so a tile never reads the full picture again. Anything that can't
+// be shrunk (a GIF, an SVG, a browser without createImageBitmap) shows as is.
+const THUMB_DB = 'writing-thumbs';
+export const THUMB_SIDE = 480;
+let thumbDb = null;
+function openThumbs() {
+  thumbDb ||= new Promise((resolve, reject) => {
+    const req = indexedDB.open(THUMB_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('thumbs', { keyPath: 'id' });
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return thumbDb;
+}
+async function thumbStore(mode = 'readonly') { return (await openThumbs()).transaction('thumbs', mode).objectStore('thumbs'); }
+const thumbUrls = new Map();
+export function thumbUrl(id) {
+  if (!thumbUrls.has(id)) {
+    thumbUrls.set(id, (async () => {
+      try {
+        const kept = await result((await thumbStore()).get(id));
+        if (kept?.blob) return URL.createObjectURL(kept.blob);
+      } catch { /* no thumbs here: make one */ }
+      const blob = await fileBlob(id);
+      if (!blob) { thumbUrls.delete(id); return null; }
+      if (!/^image\/(jpeg|png|webp)$/.test(blob.type) || typeof createImageBitmap !== 'function') return fileUrl(id);
+      try {
+        const bmp = await createImageBitmap(blob);
+        const scale = Math.min(1, THUMB_SIDE / Math.max(bmp.width, bmp.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(bmp.width * scale));
+        canvas.height = Math.max(1, Math.round(bmp.height * scale));
+        canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
+        bmp.close?.();
+        const small = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.82));
+        if (!small) return fileUrl(id);
+        try { await result((await thumbStore('readwrite')).put({ id, blob: small })); } catch { /* kept for this visit only */ }
+        return URL.createObjectURL(small);
+      } catch {
+        return fileUrl(id);
+      }
+    })());
+  }
+  return thumbUrls.get(id);
+}

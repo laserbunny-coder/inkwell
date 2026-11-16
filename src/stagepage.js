@@ -942,7 +942,23 @@ export class StagePage {
     const sub = this.sub(list, 'kit');
     body.append(this.chips(list, sub, (id) => this.pickSub(id)));
     if (sub === 'kit') await this.drawKit(body);
+    if (sub === 'looks') await this.drawLooks(body);
     if (sub === 'days') await this.drawDays(body);
+  }
+
+  // The look wall: every version of every character and place, side by side.
+  async drawLooks(body) {
+    if (!this.lookWall) {
+      const { LookWall } = await import('./lookwall.js');
+      this.lookWall ||= new LookWall({
+        changed: (rows) => this.changed(rows),
+        toast: (t, a) => this.hooks.toast(t, a),
+        menu: (anchor, items) => this.hooks.menu(anchor, items),
+        askText: (o) => this.hooks.askText(o),
+        openPage: (id) => this.hooks.go({ view: 'notebook', pageId: id })
+      });
+    }
+    await this.lookWall.draw(body, this.world || this.owner);
   }
 
   async drawKit(body) {
