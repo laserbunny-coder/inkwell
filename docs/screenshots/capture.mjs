@@ -416,6 +416,28 @@ const record = async (page, ms = 1800) => {
   await blur(page);
   await shot(page, 'desktop-today');
 
+  // The day: a few tasks on today, then Now (one thing at a time), the Plan
+  // and the Calendar (Alt + 1 to Alt + 4 on Today).
+  for (const t of ['Storyboard the cold open', 'Write the two-minute hook', 'Reply to Dana about the roof set', 'Back up the drives']) {
+    const input = page.locator('#plan input[data-add]').first();
+    await input.fill(t).catch(() => console.log('no add box'));
+    await input.press('Enter').catch(() => {});
+    await sleep(350);
+  }
+  await blur(page);
+  for (const [key, name] of [['Alt+1', 'desktop-now'], ['Alt+3', 'desktop-plan'], ['Alt+4', 'desktop-calendar']]) {
+    await page.keyboard.press(key);
+    await sleep(1200);
+    await shot(page, name);
+  }
+  await page.keyboard.press('Alt+2');
+  await sleep(800);
+
+  // The Desk: every project, what needs you and who's working on it.
+  await page.locator('.rail-rooms button', { hasText: 'Desk' }).click().catch(() => console.log('no Desk button'));
+  await sleep(1500);
+  await shot(page, 'desktop-desk');
+
   // The world's Overview, then each workflow tab.
   await go(page, { view: 'world', id: NB });
   await shot(page, 'desktop-overview');
@@ -425,16 +447,6 @@ const record = async (page, ms = 1800) => {
   await shot(page, 'desktop-shape');
   await go(page, { view: 'stage', id: NB, page: 'shape', sub: 'promises' });
   await shot(page, 'desktop-promises');
-  await go(page, { view: 'stage', id: NB, page: 'make', sub: 'board' });
-  await shot(page, 'desktop-stage-board');
-  // Stages…: each kind of piece goes through its own set, editable per project.
-  await page.getByRole('button', { name: 'Stages…' }).first().click().catch(() => console.log('no Stages… button'));
-  await page.waitForSelector('.stage-edit', { state: 'visible' }).catch(() => {});
-  await sleep(600);
-  await shot(page, 'desktop-stage-sets', { top: false });
-  await page.keyboard.press('Escape');
-  await sleep(300);
-
   // The script, with its sections, summaries and scene numbers.
   await go(page, { view: 'write', chapterId: R2.id }, 1500);
   await blur(page);
@@ -529,6 +541,7 @@ const record = async (page, ms = 1800) => {
   for (const pl of [{ view: 'write', chapterId: 'ch_salt1' }, { view: 'production', id: 'pr_r2', tab: 'shots' }, { view: 'write', chapterId: R2.id }, { view: 'stage', id: NB, page: 'shape' }, { view: 'notebook', pageId: `day-${today}` }]) await go(page, pl, 900);
   await blur(page);
   await sleep(600);
+  // Today's tasks come over from the computer through the stand-in sync.
   await shot(page, 'phone-today');
   await go(page, { view: 'world', id: NB });
   await shot(page, 'phone-overview');

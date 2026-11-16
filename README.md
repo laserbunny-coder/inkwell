@@ -40,20 +40,44 @@ Every screenshot here uses made-up sample data: **The Ninja Bunch**, an anime mo
 
 ## The whole tour
 
-### Start here: four things
+### Three rooms
 
-You only need four things to use Inkwell. Everything else is there when you reach for it.
+The rail on the left has three rooms. **Today** (`Ctrl + J`) is your day. **Desk** (`Ctrl + Shift + U`) shows every project, what needs you and who's working on it. **Library** (`Ctrl + Shift + O`) holds every world. Under them are your projects, and at the bottom are **Capture** (`Alt + C`), **Go** (`Ctrl + K`) and **Look** (looks, text size and a switch for every part). Anything you don't use can be switched off in Look.
 
 | | Computer | Phone |
 |---|---|---|
-| **Today**, your daily page | `Ctrl + J` | Today in the bottom bar |
-| **Talk**, one voice button | `Alt + C` (again to keep it) | the mic in the bottom bar, or long-press the Inkwell icon |
-| **Every command** | `Ctrl + K` | ⋯ in the bottom bar |
+| **Today**, **Desk**, **Library** | `Ctrl + J`, `Ctrl + Shift + U`, `Ctrl + Shift + O` | the bottom bar |
+| **Capture**, one voice button | `Alt + C` (again to keep it) | the mic in the bottom bar, or long-press the Inkwell icon |
+| **Go**: search, jump, every command, or type a task | `Ctrl + K` | Go in the bottom bar |
 | **A project's tabs** | `Alt + 0` to `Alt + 6` | the tabs along the top |
+
+### One thing at a time
+
+Today has four faces along the top: **Now**, **Page**, **Plan** and **Calendar** (`Alt + 1` to `Alt + 4`).
+
+**Now** shows the one thing you're on in large type, with nothing else on the screen. **Begin** (`B`) opens it, **Done** (`D`) finishes it, and **Not now** (`N`) moves it to later today, enough for today, or another day. Between things, a quiet gate says what's next. Small things go together as one entry, and a calendar event takes over five minutes before it starts. "Get it out of your head" at the bottom catches a thought without leaving what you're doing. In the morning, **Talk the day through** lays the day out from what you say. In the evening, **Close the day** shows what you did and asks what's first tomorrow. Nothing undone is ever counted, and there are no time estimates.
+
+![Now: one thing at a time](docs/screenshots/desktop-now.webp)
+
+**Plan** is today, tomorrow, this week, next week, this month, later and not planned, as one outline. Drag a line to reorder it, or drag it to another day. `Alt + W` on any line plans it.
+
+![The plan](docs/screenshots/desktop-plan.webp)
+
+**Calendar** shows the day, the week or six weeks, with your Google Calendar's events woven in. Drag a block to move it, or its handle to make it longer.
+
+![The week](docs/screenshots/desktop-calendar.webp)
+
+**First light** (if you want it) shows the day's Bible reading before anything else the first time Today opens: two Old Testament chapters, a Psalm, one from Proverbs or Ecclesiastes and two New Testament chapters, each track going round by itself. **Training** puts a session on its days and takes you through it in Now, one exercise at a time, with ladders that ask before moving you up.
+
+### The Desk
+
+Every project on one page: your next step in each, what Claude's threads did and what needs you, plus where your training stands. **Talk it through** (`Alt + T`) opens a conversation with Claude beside whatever you're looking at.
+
+![The Desk](docs/screenshots/desktop-desk.webp)
 
 ### Catch it
 
-**Today's page** (`Ctrl + J`) is one page a day for anything: plans, ideas, research, links to pieces and pages, and #tags. A voice capture lands with a play button, the time, and a small chip naming the mode Claude wrote it up in (here, Idea). "Note to self" became its own line, and the words you really said are always kept.
+**Today's page** (Page on Today, `Alt + 2`) is one page a day for anything, with the plan beside it: plans, ideas, research, links to pieces and pages, and #tags. A voice capture lands with a play button, the time, and a small chip naming the mode Claude wrote it up in (here, Idea). "Note to self" became its own line, and the words you really said are always kept.
 
 
 **One voice button.** `Alt + C` (or the mic on the phone) records and lands where you are: on today's page, into the draft at the cursor, or on the page you're looking at, with a link line on today either way. The record screen says where it will go, with "Today instead" if you change your mind. Said out loud, "scratch that", "start again", "new paragraph" and "next scene" are carried out.
@@ -74,9 +98,11 @@ Voice modes (Idea, Journal, Scene, Text message, Email, or your own) are yours t
 
 **The Library** (`Ctrl + Shift + O`) holds every world, sorted into areas you make yourself (Writing › Novels › Working). "New" asks what you're making: one piece, a book series, a show, a collection, or a life project like a kitchen remodel, and you can change it any time.
 
+When a project is done, "Finish project…" in its ⋯ menu (or "Finish this project" in Go) puts it on the Library's Finished shelf, off the Desk and the plan, with everything still in it. Reopening brings it all back.
+
 ![The Library](docs/screenshots/desktop-library.webp)
 
-**Overview** (`Alt + 0`) is a world's home: its logline, pieces by stage, and what to do next (things to file, promises not paid off, the next shoot day). The Ninja Bunch is a Show, so it talks in seasons and episodes, alongside its reels, gags and songs. Each piece has its own label and stage.
+**Overview** (`Alt + 0`) is a world's home: its logline, pieces by status, and what to do next (things to file, promises not paid off, the next shoot day). The Ninja Bunch is a Show, so it talks in seasons and episodes, alongside its reels, gags and songs. Each piece has its own label and stage.
 
 
 ### The seven tabs
@@ -119,13 +145,9 @@ Prose is just the page. Notes sit in the margin beside the paragraph they belong
 - **Claude's notes** gives margin notes and a fix list when you ask, and "Talk this chapter over with Claude" opens a conversation about it.
 - **Print** (`Ctrl + P`) gives clean pages to print or save as PDF.
 
-**Make** (`Alt + 5`) is production. The stage board shows every piece by stage; drag a card to move it on. Each kind of piece goes through its own **stage set**: AI video (Idea, Written, Boarded, Generated, Edited, Posted), Live action (… Prepped, Shot, Edited, Released), Book (… Outlined, Drafted, Revised, Edited, Published), Stage and Short writing. Here the reels are AI video, Reel 3 is shot live on the bakery roof, and the song is short writing. The last stage always means out in the world.
+**Statuses and workflows.** Each kind of piece goes through its own workflow: AI video (New idea, Writing, Boarding, Generating, Editing, Posted), Live action (… Prepping, Shooting, Editing, Released), Book (… Outlining, Drafting, Revising, Editing, Published), Stage and Short writing. The status board on Overview shows every piece by status, with one button to move a piece on. "Workflow" on Overview sets the steps and the Make tools for this project, and you can save your own. The last step always means out in the world.
 
-![Make: the stage board, one row per stage set](docs/screenshots/desktop-stage-board.webp)
-
-"Stages…" picks which set scripts, prose and outlines go through in this project, and renames, adds, removes or reorders a set's stages. It says first what will move, and has Undo. One piece can go through another set from its ⋯ menu.
-
-![Stages… for The Ninja Bunch](docs/screenshots/desktop-stage-sets.webp)
+**Make** (`Alt + 5`) is production: the Kit and Shoot days.
 
 Inside a piece, **Production** (`Ctrl + Shift + S`) turns the script into what's needed to generate or shoot it. Each scene shows the bible elements it uses (found in its words), its production notes and its shots. Shot codes like `NB-R02-S01-01` never change, so file names and Resolve clips keep pointing at the right shot. Each shot has still and video prompts and its renders; the star marks the one that worked, and earlier prompts are never lost. Each shot says how it's made (Generated, From reference, or Live action), and each scene with lines says whether its voices are recorded, generated or both. "Download kit" zips a shot's prompts and reference pictures for PixAI, Seedance or ComfyUI.
 
@@ -143,13 +165,13 @@ The **storyboard** shows every shot in order with its starred still. "Play" runs
 
 ### Getting around
 
-On a computer, a faint line at the top left says where you are and offers "‹ last place". `Ctrl + O` opens the **Go panel**: search anything, jump back to your last five places, go up the path, pick one of this project's tabs, or open Today, the Drawer, the Library or Tags. `Ctrl + O` then `Enter` flips back to where you just were.
+`Ctrl + K` opens **Go**: search anything, jump back to your last places, pick one of this project's tabs, open a room, run any command, or just type a task. `Ctrl + O` opens it on search.
 
-![The Go panel](docs/screenshots/desktop-go.webp)
+![Go](docs/screenshots/desktop-go.webp)
 
-`Ctrl + K` opens one menu for every command, grouped so it stays short.
+Commands are grouped so the list stays short.
 
-![The command menu](docs/screenshots/desktop-command-menu.webp)
+![Commands in Go](docs/screenshots/desktop-command-menu.webp)
 
 **Tags** lists every #tag with how often and how recently it's used. Claude can sort them into groups and point out ones that look like the same thing; "Go through a tag" takes you through everything tagged, one at a time.
 
@@ -157,10 +179,10 @@ On a computer, a faint line at the top left says where you are and offers "‹ l
 
 ### On an Android phone
 
-Inkwell installs to the home screen from Chrome and syncs with the computer. The bottom bar is always there (it hides while you type): **‹ Back**, named for where it goes; the place you're in, which opens the **Go sheet**; **Today**; the **mic**; and **⋯** for every command. The mic is also first on the rows above the keyboard, so you can talk without closing it.
+Inkwell installs to the home screen from Chrome and syncs with the computer. The bottom bar is always there (it hides while you type): **Today**, **Desk**, the **mic** in the middle, **Library** and **Go**, which opens the Go sheet for everything else. Now, Page, Plan and Calendar sit along the top of Today, sized for your thumb. The mic is also first on the rows above the keyboard, so you can talk without closing it.
 
 <p>
-  <img src="docs/screenshots/phone-today.webp" width="240" alt="Today's page on a phone, with the bottom bar">
+  <img src="docs/screenshots/phone-today.webp" width="240" alt="Today's plan on a phone, with the bottom bar">
   <img src="docs/screenshots/phone-go.webp" width="240" alt="The Go sheet on a phone">
   <img src="docs/screenshots/phone-record.webp" width="240" alt="Recording on a phone">
 </p>
@@ -173,9 +195,9 @@ Inkwell installs to the home screen from Chrome and syncs with the computer. The
   <img src="docs/screenshots/phone-grid.webp" width="240" alt="The plot grid on a phone">
 </p>
 
-### Light mode
+### Looks
 
-`Ctrl + Shift + L` switches between dark and light.
+Look (at the bottom of the rail) has the looks, from light paper to the warm night looks Ember, Candle and Night shift, plus text size and a switch for every part of the app. `Ctrl + Shift + L` switches between dark and light. The look is kept per device.
 
 ![A novel chapter in light mode](docs/screenshots/desktop-manuscript-light.webp)
 
@@ -185,7 +207,7 @@ Inkwell installs to the home screen from Chrome and syncs with the computer. The
 - **Structure**: fill a thread's grid cells from the draft, and point out promises not paid off.
 - **Production**: find the elements in every scene, suggest shots, write prompts from the scene, the elements' looks and the show's style rules, and draft captions.
 - **Revision**: notes and a fix list, talking a chapter over, and continuity checks against canon.
-- **The connector.** "Connect Claude to Inkwell" in `Ctrl + K` makes a private address to add in Claude (Settings, then Connectors, then Add custom connector). Claude can then read and search your worlds, pages and daily pages from any chat and add to them, always marked as Claude's. It never changes or deletes anything you wrote.
+- **The connector.** "Connect Claude to Inkwell" in `Ctrl + K` makes a private address to add in Claude (Settings, then Connectors, then Add custom connector). Claude can then read and search your worlds, pages and daily pages from any chat and add to them, always marked as Claude's. When you ask, it can also tick, move, plan, rename or delete a task or line, put your day in order, make an area, finish a project, move it to another area or put it in the Trash, and set where your reading and training are. Each change is shown to you with an Undo. Bigger tidy-ups wait as suggestions on your tidy pass until you say yes.
 
 Every line, paragraph and page records who wrote it, you or Claude.
 
@@ -193,7 +215,8 @@ Every line, paragraph and page records who wrote it, you or Claude.
 
 Being built right now, and not in the screenshots yet:
 
-- **Meeting notes** from a recording: speakers, a summary, decisions and tasks.
+- **Training charts and streaks** on the Desk.
+- **The Bible text in the app.** Until the ESV key arrives, First light's chapter names open on esv.org.
 
 ## Shortcuts
 
@@ -201,11 +224,16 @@ All of them are also in `Ctrl + /`.
 
 | Keys | What it does |
 |---|---|
-| `Ctrl + J` | Today's page (again goes back) |
+| `Ctrl + J` | Today (again goes back) |
+| `Alt + 1` to `Alt + 4` | On Today: Now, Page, Plan, Calendar |
+| `B` / `D` / `N` | In Now: Begin, Done, Not now |
+| `Alt + W` | When: plan this line |
+| `Alt + T` | Talk it through with Claude |
+| `Ctrl + Shift + U` | Desk |
 | `Ctrl + Shift + J` | The Today panel beside what you're doing |
 | `Alt + C` | Record; again to keep it (lands where you are) |
-| `Ctrl + K` | Every command |
-| `Ctrl + O` | Go panel (`Enter` flips back) |
+| `Ctrl + K` | Go: search, jump, every command, or type a task |
+| `Ctrl + O` | Go, on search |
 | `Ctrl + Shift + O` | Library |
 | `Alt + 0` to `Alt + 6` | Overview, Gather, Shape, Write, Revise, Make, Deliver |
 | `Ctrl + .` | Focus |
@@ -233,7 +261,7 @@ All of them are also in `Ctrl + /`.
 - **Everything is an entry.** Worlds, pieces, acts, chapters, every paragraph, pages, lines, notes, threads, shots and shoot days are rows of one shape (`src/model.js`) with a stable id, tags and room for links and typed fields, so anything can link to anything. A world is `kind: 'world'` (its shape in `fields.shape`); a piece is `kind: 'project'` under a world or another piece, with `fields.type` (prose, script or outline), `fields.label` and `fields.stage`. `fields.by` and `fields.edited_by` record who wrote it.
 - **Local first.** Each change is written at once to a write-ahead copy, then only the changed paragraphs go to the browser's database (IndexedDB), so a dying tab never loses text. It installs to the home screen and works offline (`public/sw.js`).
 - **Sync** between devices runs on Supabase. The server half (the database migrations and every server function, including the `inkwell` connector, alerts, the calendar and the Acro HQ sync) lives in `supabase/` in this repository; `.github/workflows/server.yml` checks it on each pull request and publishes it from main. Pictures and recordings go to a private storage bucket. A nightly backup goes to a private repo.
-- Main parts: the daily page and pages (`src/notebook.js`, `src/outline.js`), capture and voice (`src/capture.js`, `src/voice.js`), the workflow tabs and Drawer (`src/pages.js`, `src/stages.js`), plot grid (`src/grid.js`), production (`src/production.js`, `src/prodview.js`), revision (`src/drafts.js`, `src/compare.js`, `src/review.js`), sharing (`src/sharelink.js`, `read.html`), getting around (`src/nav.js`).
+- Main parts: the rooms and rail (`src/frame.js`, `src/app/rail.js`), Now, the plan and the calendar (`src/now.js`, `src/plan.js`, `src/plancal.js`, `src/tasks.js`), the Desk (`src/desk.js`), First light and Training (`src/firstlight.js`, `src/training.js`), the daily page and pages (`src/notebook.js`, `src/outline.js`), capture and voice (`src/capture.js`, `src/voice.js`), the workflow tabs and Drawer (`src/pages.js`, `src/stages.js`), plot grid (`src/grid.js`), production (`src/production.js`, `src/prodview.js`), revision (`src/drafts.js`, `src/compare.js`, `src/review.js`), sharing (`src/sharelink.js`, `read.html`), getting around (`src/nav.js`).
 
 ## Run it
 
