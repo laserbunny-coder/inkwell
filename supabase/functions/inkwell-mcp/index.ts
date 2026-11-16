@@ -126,7 +126,7 @@ function dbFor(userId: string): Db {
     async change(id, was, patch) {
       // Only where a line sits and its fields; the words are never part of it.
       const safe: Record<string, unknown> = {};
-      for (const k of ["parent_id", "sort", "fields"] as const) if (k in patch) safe[k] = patch[k];
+      for (const k of ["parent_id", "sort", "fields", "area_id"] as const) if (k in patch) safe[k] = patch[k];
       let q = sb.from("writing_entries").update(safe).eq("user_id", userId).eq("id", id).not("kind", "in", "(about,digest,change,tidy)");
       if (was) q = q.eq("updated_at", was);
       const { data, error } = await q.select("id");

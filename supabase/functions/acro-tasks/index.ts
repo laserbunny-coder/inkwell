@@ -158,8 +158,10 @@ async function runInkwell(db: ReturnType<typeof admin>, url: string, userId: str
     const full: Meeting[] = [];
     for (const d of changed.slice(0, 10)) full.push(await callTool(url, "board_get", { collection: "meetings", id: d.id }) as unknown as Meeting);
     const plan = planMeetings(full, { meetingsPage: (pages.get(home) ?? null) as Page | null, pages, lines: byPage }, world.id, BOARD_URL);
-    const write = [...plan.pages.map((p) => ({ ...p, text: "", tags: [], user_id: userId })), ...plan.lines.map((l) => ({ ...l, user_id: userId }))];
-    for (let i = 0; i < write.length; i += 500) { const { error } = await db.from("writing_entries").upsert(write.slice(i, i + 500)); if (error) throw error; }
+    // Pages and lines go up in one batch, so each row carries every column the
+    // other has (a line with no title went up as null and the whole batch failed).
+    const write = [...plan.pages.map((p) => ({ ...p, text: "", content: null, tags: [], user_id: userId })), ...plan.lines.map((l) => ({ title: "", ...l, user_id: userId }))];
+    for (let i = 0; i < write.length; i += 500) { const { error } = await db.from("writing_entries").upsert(write.slice(i, i + 500), { defaultToNull: false }); if (error) throw error; }
     if (plan.gone.length) await db.from("writing_entries").update({ deleted: true }).eq("user_id", userId).in("id", plan.gone);
     if (plan.pages.length) done.push(`meetings: ${plan.pages.filter((p) => p.id.startsWith("pg-hq-mtg-")).length} written`);
   } catch (e) {

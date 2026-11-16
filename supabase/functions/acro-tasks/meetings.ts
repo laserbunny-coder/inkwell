@@ -68,11 +68,11 @@ export function planMeetings(meetings: Meeting[], have: Have, worldId: string, b
       rows.forEach(([text, kids], i) => {
         const lid = lineId(page, k++);
         made.add(lid);
-        lines.push({ id: lid, kind: "line", parent_id: page, sort: (i + 1) * GAP, ...textRow(text), fields: { done: false, by: "hq", readonly: true }, deleted: false } as Line);
+        lines.push({ id: lid, kind: "line", parent_id: page, sort: (i + 1) * GAP, title: "", ...textRow(text), fields: { done: false, by: "hq", readonly: true }, deleted: false } as Line);
         kids.forEach((kid, j) => {
           const cid = lineId(page, k++);
           made.add(cid);
-          lines.push({ id: cid, kind: "line", parent_id: lid, sort: (j + 1) * GAP, ...textRow(kid), fields: { done: false, by: "hq", readonly: true }, deleted: false } as Line);
+          lines.push({ id: cid, kind: "line", parent_id: lid, sort: (j + 1) * GAP, title: "", ...textRow(kid), fields: { done: false, by: "hq", readonly: true }, deleted: false } as Line);
         });
       });
       for (const old of have.lines.get(page) ?? []) if (!made.has(old.id) && !old.deleted) gone.push(old.id);
