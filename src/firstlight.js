@@ -15,7 +15,8 @@
 // is the way through. Only today's chapters are kept on the device.
 
 import { getEntry } from './db.js';
-import { PLAN_ID, savePlanSettings, isoOf, tickTask } from './tasks.js';
+import { PLAN_ID, savePlanSettings, isoOf, tickTask, addDays } from './tasks.js';
+import { withDay, withoutDay, cleanDays, trackWords, daysFromHistory } from './readstats.js';
 
 const OT = [['Genesis', 50], ['Exodus', 40], ['Leviticus', 27], ['Numbers', 36], ['Deuteronomy', 34], ['Joshua', 24], ['Judges', 21], ['Ruth', 4], ['1 Samuel', 31], ['2 Samuel', 24], ['1 Kings', 22], ['2 Kings', 25], ['1 Chronicles', 29], ['2 Chronicles', 36], ['Ezra', 10], ['Nehemiah', 13], ['Esther', 10], ['Job', 42], ['Song of Solomon', 8], ['Isaiah', 66], ['Jeremiah', 52], ['Lamentations', 5], ['Ezekiel', 48], ['Daniel', 12], ['Hosea', 14], ['Joel', 3], ['Amos', 9], ['Obadiah', 1], ['Jonah', 4], ['Micah', 7], ['Nahum', 3], ['Habakkuk', 3], ['Zephaniah', 3], ['Haggai', 2], ['Zechariah', 14], ['Malachi', 4]];
 const NT = [['Matthew', 28], ['Mark', 16], ['Luke', 24], ['John', 21], ['Acts', 28], ['Romans', 16], ['1 Corinthians', 16], ['2 Corinthians', 13], ['Galatians', 6], ['Ephesians', 6], ['Philippians', 4], ['Colossians', 4], ['1 Thessalonians', 5], ['2 Thessalonians', 3], ['1 Timothy', 6], ['2 Timothy', 4], ['Titus', 3], ['Philemon', 1], ['Hebrews', 13], ['James', 5], ['1 Peter', 5], ['2 Peter', 3], ['1 John', 5], ['2 John', 1], ['3 John', 1], ['Jude', 1], ['Revelation', 22]];
@@ -41,7 +42,7 @@ export function placeOf(books, b, ch) {
   return i + Math.min(Math.max(1, Math.floor(ch) || 1), books[b][1]) - 1;
 }
 
-const blank = () => ({ ot: 0, ps: 0, wi: 0, nt: 0, read: null, skip: null });
+const blank = () => ({ ot: 0, ps: 0, wi: 0, nt: 0, read: null, skip: null, days: [], rounds: {} });
 export async function readReading() {
   const row = await getEntry(PLAN_ID);
   const r = row && !row.deleted ? row.fields?.reading : null;
@@ -55,10 +56,50 @@ export function todays(st) {
   for (const t of TRACKS) for (let n = 0; n < t.per; n++) { const [b, ch] = posOf(t.books, (st[t.k] || 0) + n); out.push(`${t.books[b][0]} ${ch}`); }
   return out;
 }
-// Read: each track moves on by its share, round to the start at its end.
+// Read: each track moves on by its share, round to the start at its end
+// (which counts a time through), and the day goes in the log (Part 8).
+function moved(st) {
+  const next = { ...st, rounds: { ...(st.rounds || {}) } };
+  for (const t of TRACKS) {
+    const at = (st[t.k] || 0) + t.per;
+    if (at >= total(t.books)) next.rounds[t.k] = (next.rounds[t.k] || 0) + 1;
+    next[t.k] = at % total(t.books);
+  }
+  return next;
+}
 export function advanced(st, day = isoOf()) {
-  const next = { ...st, read: day, skip: null };
-  for (const t of TRACKS) next[t.k] = ((st[t.k] || 0) + t.per) % total(t.books);
+  return { ...moved(st), read: day, skip: null, days: withDay(st.days, day, day) };
+}
+// "I read yesterday too": yesterday goes in the log and each place moves on
+// by one day's reading. Today stays as it was.
+export function readYesterday(st, today = isoOf()) {
+  const y = addDays(today, -1);
+  return { ...moved(st), read: st.read && st.read > y ? st.read : y, days: withDay(st.days, y, today) };
+}
+// Offered the morning after a day with no mark, once he has read at least once.
+export const missedYesterday = (st, today = isoOf()) => !!(st.days?.length || st.read) && !(st.days || []).includes(addDays(today, -1)) && st.read !== addDays(today, -1) && st.read !== today;
+// A day in the past week switched between read and not read. Places stay.
+export function toggledDay(st, day, today = isoOf()) {
+  const has = (st.days || []).includes(day);
+  return { ...st, days: has ? withoutDay(st.days, day) : withDay(st.days, day, today) };
+}
+export const totalOf = (t) => total(t.books);
+// Each track: { k, name, words, pos, total } for the Desk.
+export function trackRows(st) {
+  return TRACKS.map((t) => {
+    const pos = st[t.k] || 0;
+    const [b, ch] = posOf(t.books, pos);
+    return { k: t.k, name: t.name, pos, total: total(t.books), words: trackWords(t.books[b][0], ch, t.books.length, total(t.books), st.rounds?.[t.k] || 0) };
+  });
+}
+
+// Filled once from his Bible habit's history and First light's last day.
+const isBibleHabit = (i) => i.mine !== false && i.task?.habit && BIBLE.test(i.row?.text || '');
+export async function readingLog(items = [], today = isoOf()) {
+  const st = await readReading();
+  if (st.filled) return st;
+  const next = { ...st, filled: true, days: cleanDays([...(st.days || []), ...daysFromHistory(st, items.filter(isBibleHabit).map((i) => i.task))], today) };
+  await saveReading(next);
   return next;
 }
 

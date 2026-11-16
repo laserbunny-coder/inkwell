@@ -16,12 +16,14 @@ import { getEntry, putEntries, byKind, children, isTrashed } from './db.js';
 import { taskOf, tickTask, chipLabel, loadTasks, isoOf } from './tasks.js';
 import { entry } from './model.js';
 import { areas, areaColor, editedAt } from './library.js';
-import { popMenu } from './menu.js';
+import { popMenu, toast } from './menu.js';
 import { deskDrags, inOrder, mergeOrder } from './deskdrag.js';
 import { make } from './dom.js';
 import { deskTraining, TRAINING_PAGE, PLAN_URL, trainingToday, addTrainingLine, seedTraining, trainingLog } from './training.js';
 import { streakBlock, chartBox } from './trainview.js';
 import { GOALS } from './trainstats.js';
+import { readingLog, readReading, saveReading, toggledDay } from './firstlight.js';
+import { readBlock } from './readview.js';
 
 export const DESK_ID = 'settings-desk';
 const KIND = { decision: 'Decide', blocked: 'Do', review: 'Try' };
@@ -489,6 +491,9 @@ export class DeskPage {
       parts.push(l);
     }
 
+    // Reading (Part 8): the streak and where he is in each track, above Training.
+    { const r = await this.readingBlock(); if (r) parts.push(r); }
+
     // Training (Part 6): the goals on stage, where each stands, and what's next.
     if (!document.documentElement.classList.contains('hide-training')) { const t = await this.trainingBlock(); if (t) parts.push(t); }
 
@@ -771,6 +776,31 @@ export class DeskPage {
   // One quiet block: the training goals on stage with where each stands, the
   // ones waiting their turn, and the next session; the streak and a chart
   // behind each goal (Part 7), each with its own switch in Look.
+  async readingBlock() {
+    const root = document.documentElement;
+    const streak = !root.classList.contains('hide-readstreak');
+    const progress = !root.classList.contains('hide-readprogress');
+    if (root.classList.contains('hide-firstlight') || (!streak && !progress)) return null;
+    const today = isoOf();
+    const st = await readingLog(await loadTasks(), today);
+    const sec = make('section', 'dk-sec dk-reading');
+    const h = make('h2', 'dk-label', 'Reading');
+    h.append(make('span', 'dk-label-more', 'four tracks'));
+    sec.append(h);
+    // A day in the past week, tapped: read or not, for the days he read on
+    // paper and never opened the app. His places stay where they are.
+    const toggle = async (day) => {
+      const was = await readReading();
+      const next = toggledDay(was, day, today);
+      await saveReading(next);
+      this.render({ now: this.now, failed: false });
+      const on = next.days.includes(day);
+      toast(on ? 'Marked as read' : 'Marked as not read', { label: 'Undo', run: async () => { await saveReading(was); this.render({ now: this.now, failed: false }); } });
+    };
+    sec.append(readBlock(st, today, { streak, progress, toggle }));
+    return sec;
+  }
+
   async trainingBlock() {
     await seedTraining();
     const t = await deskTraining();

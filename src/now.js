@@ -210,6 +210,8 @@ export class Now {
     else if (face === 'next') box.append(this.mid(m), this.foot(m, { list: true }));
     else box.append(this.mid(m), this.foot(m, { list: this.listOpen }));
     if (!m.active && !two && !mode && !this.off('nowout')) box.append(this.outLine());
+    // "Reading done. 13 days in a row." on the screen after First light (Part 8).
+    if (this.light.note && mode !== 'light' && !m.active) { const at = box.querySelector('.now-mid') || box; at.prepend(make('p', 'now-hint now-rnote', this.light.note)); }
     sheet.replaceChildren(top, box);
     p.restore(sheet, held);
     if (typing?.isConnected) typing.focus({ preventScroll: true });
@@ -485,9 +487,10 @@ export class Now {
     if (!el || !this.shown || this.busy) return false;
     const act = el.dataset.now;
     this.busy = true;
+    if (!/^l/.test(act)) this.light.note = '';
     try {
       if (['tset', 'tmin', 'tnum', 'tnum2', 'tskip', 'tback', 'tup'].includes(act)) await this.train.click(act, el);
-      else if (/^l(read|next|back|list|set|setok|done|skip)$/.test(act)) await this.light.click(act);
+      else if (/^l(read|next|back|list|set|setok|done|skip|yest)$/.test(act)) await this.light.click(act);
       else if (act === 'done') await this.done();
       else if (act === 'skip') await this.skip();
       else if (act === 'notnow') { this.asking = true; this.p.redraw(); this.focusFirst('.now-choice'); }
