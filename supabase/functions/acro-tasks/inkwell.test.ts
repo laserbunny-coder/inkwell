@@ -150,6 +150,8 @@ assert.deepEqual(writeOut(m), ["Nate [0:00]: Here's Wednesday.", "Michael [0:16]
 let mp = planMeetings([m, { id: "rec-2", version: 1, data: { status: "written", title: "Not yet" } }], { meetingsPage: null, pages: new Map(), lines: new Map() }, "wd", "https://hq.example");
 assert.deepEqual(mp.pages.map((p) => p.title), ["Meetings", "2026-11-01 · First meeting test", "Write-out"]);
 assert.equal(mp.pages[1].fields.readonly, true);
+// Every row goes up in one batch with a title (a line without one failed the whole mirror, Nov 2026).
+assert.ok([...mp.pages, ...mp.lines].every((r) => typeof (r as any).title === "string"));
 assert.equal(mp.lines.filter((l) => l.parent_id === "pg-hq-mtg-rec-1").length, 5);
 // Unchanged in HQ: nothing written. Changed: written again, and lines no longer there go.
 const pages = new Map(mp.pages.map((p) => [p.id, p]));

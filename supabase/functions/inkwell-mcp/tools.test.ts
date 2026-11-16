@@ -263,6 +263,33 @@ u = await call("undo_change", { change_id: c.change_id });
 assert.equal("life" in x2.fields, false);
 assert.ok((await call("set_life_project", { world_id: "pg-gifts" })).error);
 
+// Areas and whole projects, when the person asks.
+let ar = await call("new_area", { name: "Business" });
+assert.ok(ar.id && ar.area === "Business");
+assert.equal((await call("new_area", { name: "business" })).note, "It's already there.");
+const sub = await call("new_area", { name: "Ideas", inside: "Writing" });
+assert.equal(sub.area, "Writing › Ideas");
+assert.ok((await call("new_area", { name: "X", inside: "Nowhere" })).error);
+assert.equal((await call("new_world", { title: "Acro HQ", area: "Writing › Ideas" })).area, "Ideas");
+c = await call("move_to_area", { world_id: "wd-xmas2", area: "business" });
+assert.equal(rows.find((r) => r.id === "wd-xmas2")!.area_id, ar.id);
+assert.equal(c.now, "Business");
+assert.ok((await call("move_to_area", { world_id: "wd-xmas2", area: "Nope" })).error);
+u = await call("undo_change", { change_id: c.change_id });
+assert.equal(rows.find((r) => r.id === "wd-xmas2")!.area_id ?? null, null);
+c = await call("finish_project", { world_id: "wd-xmas2" });
+assert.equal(typeof rows.find((r) => r.id === "wd-xmas2")!.fields.finished, "number");
+assert.equal((await call("finish_project", { world_id: "wd-xmas2" })).note, "It already was.");
+u = await call("undo_change", { change_id: c.change_id });
+assert.equal("finished" in rows.find((r) => r.id === "wd-xmas2")!.fields, false);
+assert.ok((await call("finish_project", { world_id: "pg-gifts" })).error, "only a world");
+c = await call("trash_project", { world_id: "wd-xmas2" });
+assert.equal(c.things_in_it, 1);
+assert.equal(rows.find((r) => r.id === "pg-gifts")!.fields.trashedWith, "wd-xmas2");
+u = await call("undo_change", { change_id: c.change_id });
+assert.equal("trashed" in rows.find((r) => r.id === "pg-gifts")!.fields, false);
+assert.equal("trashed" in rows.find((r) => r.id === "wd-xmas2")!.fields, false);
+
 // The list of changes, newest first with undone ones marked.
 const ch = await call("changes", {});
 assert.ok(ch.changes.length >= 5);

@@ -292,6 +292,16 @@ export async function undoChange(id, hooks) {
     const home = await getEntry(c.before.parent_id);
     if (gone(home)) throw fail('Where it came from is in the Trash now.');
     rows.push({ ...r, parent_id: c.before.parent_id, sort: c.before.sort ?? r.sort, updated_at: Date.now() });
+  } else if (c.type === 'finish') {
+    if ((r.fields?.finished ?? null) !== (c.after.finished ?? null)) throw fail('You’ve changed it since, so it stays as you have it.');
+    const fields = { ...r.fields };
+    if (c.before.finished) fields.finished = c.before.finished; else delete fields.finished;
+    rows.push({ ...r, fields, updated_at: Date.now() });
+  } else if (c.type === 'area') {
+    if ((r.area_id ?? null) !== (c.after.area_id ?? null)) throw fail('You’ve moved it since, so it stays where it is.');
+    const home = c.before.area_id ? await getEntry(c.before.area_id) : null;
+    if (c.before.area_id && gone(home)) throw fail('The area it came from is in the Trash now.');
+    rows.push({ ...r, area_id: c.before.area_id ?? null, updated_at: Date.now() });
   } else if (c.type === 'life') {
     if (!!r.fields?.life !== !!c.after.life) throw fail('You’ve changed it since, so it stays as you have it.');
     await hooks.setLife(r, !!c.before.life);

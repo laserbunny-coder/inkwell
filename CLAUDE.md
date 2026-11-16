@@ -51,3 +51,11 @@ the Daybook repo. Server changes go here; `server.yml` runs the server checks
 on a pull request and publishes from main once the Supabase secrets are set in
 this repository. A pull request that only touches `supabase/` does not
 republish the app.
+
+## Artifact pages that keep data
+
+Claude artifact pages (review pages, trackers, guides with picks) that use the
+artifact database: the data `onSnapshot` hands back is read-only (frozen).
+Writing to it fails silently, so every button on an already-saved item looks
+dead while it still re-saves. Deep-copy it first (`structuredClone(d.data())`)
+before keeping or changing it.
