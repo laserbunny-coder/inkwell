@@ -53,7 +53,10 @@ jobs:
       - uses: supabase/setup-cli@v1
         if: steps.ready.outputs.ok == 'true'
         with:
-          version: latest
+          # A named version, not "latest": finding the latest asks GitHub's
+          # API without a key, and that hit a rate limit (Nov 16 2026).
+          # 3.1.0 is the one the last good publish used.
+          version: 3.1.0
       - name: Update database
         if: steps.ready.outputs.ok == 'true'
         run: |
