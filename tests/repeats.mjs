@@ -264,28 +264,33 @@ try {
     assert.deepEqual([(await T(page, 'Standup')).day, (await T(page, 'Standup')).did || []], ['2026-11-09', []]);
   });
 
-  await check('the next morning a daily one is simply today’s; a weekly one that was missed waits on top', async () => {
+  await check('the next morning a daily one is simply today’s; a missed weekly one lapses and waits for its next day', async () => {
     await page.clock.setFixedTime(new Date('2026-11-10T08:30:00-08:00'));
     await day(page, '2026-11-10');
     await page.waitForSelector('#plan .pl-task');
     await sleep(300);
     assert.ok(await row(page, 'Stretch').evaluate((el) => !el.classList.contains('carried') && !el.classList.contains('ghost')));
     assert.ok(await row(page, 'Morning pages').evaluate((el) => !el.classList.contains('carried') && !el.classList.contains('ghost')));
-    assert.ok(await row(page, 'Review the week').evaluate((el) => el.classList.contains('carried')));
-    assert.equal(await row(page, 'Review the week').locator('.pl-from').innerText(), 'from Mon, Nov 9');
-    // Run is Monday, Wednesday and Friday: yesterday's is still open, and waits.
-    assert.ok(await row(page, 'Run').evaluate((el) => el.classList.contains('carried')));
+    // Missed ones never carry over (Nov 16 2026): Monday's weekly one and
+    // Monday's run are simply gone from today, nothing on top.
+    assert.equal(await row(page, 'Review the week', '.carried').count() + await row(page, 'Run', '.carried').count(), 0);
+    assert.equal(await row(page, 'Review the week').count(), 0);
+    assert.equal(await row(page, 'Run').count(), 0);
     await row(page, 'Stretch').locator('.pl-check').click();
     await sleep(400);
     await page.locator('#plan .pl-took button', { hasText: 'as planned' }).click();
     await sleep(400);
-    let t = await T(page, 'Stretch');
+    const t = await T(page, 'Stretch');
     assert.deepEqual([t.day, t.did.map((d) => d[0])], ['2026-11-11', ['2026-11-10']]);
-    // Late, the weekly one is done today and comes back next Monday.
-    await row(page, 'Review the week').locator('.pl-check').click();
-    await sleep(400);
-    t = await T(page, 'Review the week');
-    assert.deepEqual([t.day, t.did.at(-1)[0]], ['2026-11-16', '2026-11-10']);
+    // Run (Monday, Wednesday, Friday) is Wednesday's, the weekly one next Monday's.
+    await day(page, '2026-11-11');
+    await page.waitForSelector('#plan .pl-task');
+    assert.ok(await row(page, 'Run').evaluate((el) => !el.classList.contains('carried')));
+    await day(page, '2026-11-16');
+    await page.waitForSelector('#plan .pl-task');
+    assert.equal(await row(page, 'Review the week').count(), 1);
+    await day(page, '2026-11-10');
+    await page.waitForSelector('#plan .pl-task');
   });
 
   await check('ticked in its words on a page, it moves on just the same', async () => {
@@ -311,7 +316,7 @@ try {
     await go(page, { view: 'plan', tab: 'pace' });
     await page.waitForSelector('.pc-row');
     const rows = await page.locator('.pc-t').allInnerTexts();
-    assert.ok(rows.includes('Stretch') && rows.includes('Review the week'), rows.join(' | '));
+    assert.ok(rows.includes('Stretch'), rows.join(' | ') + JSON.stringify(await T(page, 'Stretch')));
     assert.ok(!rows.includes('Morning pages'));
     await go(page, { view: 'plan', tab: 'ahead' });
     await page.waitForSelector('.ah-hrs');

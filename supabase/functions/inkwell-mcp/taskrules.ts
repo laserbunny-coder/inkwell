@@ -81,11 +81,10 @@ export function nextOn(rule: RepeatRule | null | undefined, after: string): stri
 }
 export const firstOn = (rule: RepeatRule, day: string) => (lands(rule, day) ? day : nextOn(rule, day));
 
-/** The day a task is due: a repeating one that was missed moves up to the latest day it has come round since. */
+/** The day a task is due: a repeating one that was missed never carries over; it lapses and is the next one, on the next day it comes round (today, if it lands today). */
 export function dueDay(t: Task, today: string): string | null {
   if (!isRepeat(t) || !t.day || t.day >= today) return t.day || null;
-  for (let iso = today; iso > t.day; iso = addDays(iso, -1)) if (lands(t.repeat, iso)) return iso;
-  return t.day;
+  return firstOn(t.repeat as RepeatRule, today) || t.day;
 }
 /** Every day in a range a task is on: its own day, or each day a repeating one comes round (from its due day on). */
 export function daysIn(t: Task, from: string, to: string, today: string): string[] {

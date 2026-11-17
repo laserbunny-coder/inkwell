@@ -196,12 +196,12 @@ export function parseAdd(text) {
   return { title, est, repeat: r.rule };
 }
 
-// The day a task is due. One that repeats and was missed moves up to the
-// latest day it has come round since, so a daily one is always today's.
+// The day a task is due. One that repeats and was missed never carries over
+// (Michael, Nov 16 2026): the missed time simply lapses and the line is the
+// next one, on the next day it comes round (today, when it lands today).
 export function dueDay(task, today = isoOf()) {
   if (!isRepeat(task) || !task.day || task.day >= today) return task?.day || null;
-  for (let iso = today; iso > task.day; iso = addDays(iso, -1)) if (lands(task.repeat, iso)) return iso;
-  return task.day;
+  return firstOn(task.repeat, today) || task.day;
 }
 // The days after its due day that a repeating task comes round on, in a range.
 export function comingOn(task, from, to, today = isoOf()) {
@@ -226,8 +226,10 @@ export function history(task, today = isoOf()) {
     const until = came[n + 1]?.iso || addDays(today, 1);
     for (let iso = c.iso; iso < until; iso = addDays(iso, 1)) if (did.has(iso)) { c.done = true; break; }
   });
-  // The latest one may still be open: that doesn't break a run.
-  const run = came.length && !came.at(-1).done ? came.slice(0, -1) : came;
+  // Today's may still be open: that doesn't break a run. One from an
+  // earlier day that wasn't ticked lapsed: it stays missed.
+  const live = came.length && !came.at(-1).done && came.at(-1).iso === today;
+  const run = live ? came.slice(0, -1) : came;
   let streak = 0;
   for (let n = run.length - 1; n >= 0 && run[n].done; n--) streak += 1;
   const by = new Map(came.map((c) => [c.iso, c]));
@@ -239,8 +241,9 @@ export function history(task, today = isoOf()) {
     for (let d = 0; d < 7; d++) {
       const iso = addDays(first, w * 7 + d);
       const c = by.get(iso);
-      const state = did.has(iso) ? 'done' : iso > today ? (lands(rule, iso) ? 'ahead' : 'off') : c && !c.done ? (c === came.at(-1) ? 'open' : 'missed') : 'off';
-      if (iso <= today && c && !(c === came.at(-1) && !c.done)) { due += 1; if (c.done) done += 1; }
+      const open = live && c === came.at(-1);
+      const state = did.has(iso) ? 'done' : iso > today ? (lands(rule, iso) ? 'ahead' : 'off') : c && !c.done ? (open ? 'open' : 'missed') : 'off';
+      if (iso <= today && c && !open) { due += 1; if (c.done) done += 1; }
       row.push({ iso, state });
     }
     weeks.push(row);
@@ -430,7 +433,8 @@ const ghosts = (items, day, today) => items.filter((i) => !isDone(i) && isRepeat
 export function dayPlan(items, day, today = isoOf()) {
   const mine = items.filter((i) => i.mine && !isStretch(i.task));
   const open = [...mine.filter((i) => !isDone(i) && i.task.day === day), ...ghosts(mine, day, today)].sort(byOrder);
-  const carried = day === today ? mine.filter((i) => !isDone(i) && i.task.day && i.task.day < today).sort(byCarried) : [];
+  // A day's Training line (Part 6) lapses like a repeat: never carried over.
+  const carried = day === today ? mine.filter((i) => !isDone(i) && i.task.day && i.task.day < today && i.row.fields?.training !== true).sort(byCarried) : [];
   const done = [...mine.filter((i) => isDone(i) && doneDay(i) === day), ...didOn(mine, day)].sort((a, b) => (a.task.done_at || 0) - (b.task.done_at || 0));
   const todo = [...carried, ...open];
   return { open, carried, done, todo, next: todo.find((i) => !i.ghost) || null, left: todo.reduce((a, i) => a + est(i), 0), spent: done.reduce((a, i) => a + real(i), 0) };

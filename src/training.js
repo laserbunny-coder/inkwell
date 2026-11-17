@@ -25,8 +25,9 @@
 import { getEntry, putEntries, children, byKind } from './db.js';
 import { entry } from './model.js';
 import { GAP } from './order.js';
-import { addTask, setTask, tickTask, isoOf, dateOf, addDays } from './tasks.js';
+import { addTask, setTask, tickTask, isoOf, dateOf, addDays, PLAN_ID } from './tasks.js';
 import { addLine } from './capture.js';
+import { trash } from './trash.js';
 import { trimLog, entryFromLines } from './trainstats.js';
 
 export const TRAINING_PAGE = 'pg_training';
@@ -262,6 +263,7 @@ export const trainingToday = (items, today) => items.find((i) => isTraining(i.ro
 // (and since taken off). → rows written.
 export async function ensureTrainingLine(items, today = isoOf()) {
   const rows = [...(await seedTraining())];
+  rows.push(...(await lapseTraining(items, today)));
   if (trainingToday(items, today)) return rows;
   const tr = await readTraining();
   if (!tr || tr.state.made === today || restDay(tr, today)) return rows;
@@ -269,6 +271,36 @@ export async function ensureTrainingLine(items, today = isoOf()) {
   const st = await saveState({ made: today });
   if (st) rows.push(st);
   return rows;
+}
+
+// Missed training never piles up (Michael, Nov 16 2026): an open Training
+// line from an earlier day lapses and goes, and when two devices each made
+// today's line before they synced, the extra one goes. The log keeps the
+// days he trained, so a missed day stays missed there. A line he wrote
+// under is put in the Trash rather than gone. → rows written.
+const madeAt = (i) => (typeof i.row.created_at === 'number' ? i.row.created_at : Date.parse(i.row.created_at) || 0);
+export async function lapseTraining(items, today = isoOf()) {
+  const open = items.filter((i) => isTraining(i.row) && !i.row.fields?.done && !i.occ && !i.ghost);
+  const stale = open.filter((i) => i.task.day && i.task.day < today);
+  const todays = items.filter((i) => isTraining(i.row) && i.task.day === today && !i.occ && !i.ghost);
+  if (!stale.length && todays.length < 2) return [];
+  // Keep a finished one, else the one Now is on, else the first made.
+  const nowOn = (await getEntry(PLAN_ID))?.fields?.now;
+  const pointed = nowOn?.day === today ? nowOn.task : null;
+  const keep = todays.find((i) => i.row.fields?.done) || todays.find((i) => i.row.id === pointed) || todays.find((i) => i.task.run) || [...todays].sort((a, b) => madeAt(a) - madeAt(b) || (a.row.id < b.row.id ? -1 : 1))[0];
+  const extra = todays.filter((i) => i !== keep && !i.row.fields?.done);
+  const gone = [...new Map([...stale, ...extra].map((i) => [i.row.id, i])).values()];
+  const out = [];
+  for (const i of gone) {
+    const r = await getEntry(i.row.id);
+    if (!r || r.deleted || r.fields?.done || r.fields?.trashed) continue;
+    const kids = (await children(r.id)).filter((c) => !c.deleted && String(c.text || '').trim());
+    if (kids.length) { await trash(r); out.push(r); continue; }
+    const row = { ...r, deleted: true, updated_at: Date.now() };
+    await putEntries([row]);
+    out.push(row);
+  }
+  return out;
 }
 
 // A "Training" line on a day, after the rest (early afternoon among events).
