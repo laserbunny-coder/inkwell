@@ -48,7 +48,10 @@ try {
     assert.equal(await p.locator('.zm-ruler').isVisible(), true);
     assert.equal(await p.locator('.rail').isVisible(), false);
     const words = await p.locator('.zm-stop .zm-word').allInnerTexts();
-    assert.deepEqual(words, ['Year', 'Weeks', 'Week', 'Today', 'Now', 'Project', 'Desk', 'Library']);
+    assert.deepEqual(words, ['Month', 'Week', 'Today', 'Now', 'Project', 'Desk', 'Library']);
+    const r0 = await p.locator('.zm-ruler').boundingBox();
+    const n0 = await p.locator('.zm-stop[data-stop="now"]').boundingBox();
+    assert.ok(Math.abs(n0.x + n0.width / 2 - (r0.x + r0.width / 2)) <= 1.5, 'Now in the exact middle');
     const r = await p.locator('.zm-ruler').boundingBox();
     assert.ok(r.y + r.height >= 799, 'at the very bottom');
     assert.match(await p.locator('.topbar .zm-when').innerText(), /·/);
@@ -56,10 +59,10 @@ try {
     assert.equal(await p.locator('.zm-mic').isVisible(), true);
   });
 
-  await check('Esc leaves the text; then 1 to 8 jump to each stop', async () => {
+  await check('Esc leaves the text; then 1 to 7 jump to each stop', async () => {
     await p.keyboard.press('Escape');
     await p.waitForFunction(() => !document.activeElement?.isContentEditable);
-    const want = { 1: ['year', 'plan', 'year'], 2: ['weeks', 'plan', 'ahead'], 3: ['week', 'plan', 'week'], 4: ['today', 'plan', 'day'], 5: ['now', 'plan', 'now'], 7: ['desk', 'desk'], 8: ['library', 'library'] };
+    const want = { 1: ['month', 'plan', 'ahead'], 2: ['week', 'plan', 'week'], 3: ['today', 'plan', 'day'], 4: ['now', 'plan', 'now'], 6: ['desk', 'desk'], 7: ['library', 'library'] };
     for (const [k, [stop, view, tab]] of Object.entries(want)) {
       await blur(p);
       await p.keyboard.press(k);
@@ -79,7 +82,7 @@ try {
     await at(p, 'desk');
     await p.keyboard.press('Escape');
     await at(p, 'library');
-    await p.keyboard.press('6');
+    await p.keyboard.press('5');
     await at(p, 'project');
     assert.equal((await place(p)).view, 'world', 'Project goes back to the last project');
   });
@@ -93,7 +96,7 @@ try {
     await p.keyboard.press('-');
     await at(p, 'week');
     await p.keyboard.press('-');
-    await at(p, 'weeks');
+    await at(p, 'month');
     await p.keyboard.press('Enter');
     await at(p, 'week');
     await p.keyboard.press('+');
@@ -101,7 +104,7 @@ try {
   });
 
   await check('Shift + Right is the week after; Back (Alt + Left) returns', async () => {
-    await p.keyboard.press('3');
+    await p.keyboard.press('2');
     await at(p, 'week');
     await p.keyboard.press('Shift+ArrowRight');
     await p.waitForFunction(() => !!history.state?.week);
@@ -109,13 +112,24 @@ try {
     await p.waitForFunction(() => history.state?.tab === 'week' && !history.state?.week);
   });
 
-  await check('Weeks is four weeks; Year is twelve months with Sometime this year', async () => {
-    await p.keyboard.press('2');
-    await at(p, 'weeks');
+  await check('Month is four weeks; 1 again (or the year) is twelve months with Sometime this year', async () => {
+    await p.keyboard.press('1');
+    await at(p, 'month');
     await p.waitForSelector('.ah');
     assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('.ah')).getPropertyValue('--weeks').trim()), '4');
+    assert.match(await p.locator('.pl-top h1').first().innerText(), /Four weeks/);
     await p.keyboard.press('1');
-    await at(p, 'year');
+    await p.waitForSelector('.yr-month');
+    await at(p, 'month');
+    assert.equal((await place(p)).tab, 'year');
+    assert.equal(await p.locator('.zm-stop[data-stop="month"] .zm-word').innerText(), 'Year', 'the stop reads Year');
+    await p.keyboard.press('-');
+    await sleep(150);
+    assert.equal((await place(p)).tab, 'year', 'out from the Year does nothing');
+    await p.keyboard.press('Enter');
+    await p.waitForSelector('.ah');
+    assert.equal(await p.locator('.zm-stop[data-stop="month"] .zm-word').innerText(), 'Month');
+    await p.locator('.ah-year').click();
     await p.waitForSelector('.yr-month');
     assert.equal(await p.locator('.yr-month').count(), 12);
     assert.equal(await p.locator('.yr-later').isVisible(), true);
@@ -125,7 +139,7 @@ try {
   });
 
   await check('Today has three faces under its date, and comes back on the one used last', async () => {
-    await p.keyboard.press('4');
+    await p.keyboard.press('3');
     await at(p, 'today');
     assert.deepEqual(await p.locator('.plan-home .zm-faces button').allInnerTexts(), ['List', 'Page', 'Hours']);
     assert.equal(await p.locator('.pl-switch').count(), 0, 'no old Now / Page / Plan / Calendar switch');
@@ -137,9 +151,9 @@ try {
     await p.waitForSelector('.notebook .zm-faces [data-face="page"][aria-current="page"]');
     await p.keyboard.press('Escape');
     await blur(p);
-    await p.keyboard.press('5');
-    await at(p, 'now');
     await p.keyboard.press('4');
+    await at(p, 'now');
+    await p.keyboard.press('3');
     await at(p, 'today');
     assert.equal((await place(p)).view, 'notebook', 'Today opens on the Page face again');
     await p.locator('.notebook .zm-faces [data-face="list"]').click();
@@ -147,10 +161,10 @@ try {
   });
 
   await check('Alt + ` is Now from anywhere, even while typing', async () => {
-    await p.keyboard.press('6');
+    await p.keyboard.press('5');
     await at(p, 'project');
     await p.locator('.zm-faces').count();
-    await p.keyboard.press('8');
+    await p.keyboard.press('7');
     await at(p, 'library');
     await p.keyboard.press('Control+J');
     await p.waitForFunction(() => document.activeElement?.isContentEditable);
@@ -175,7 +189,7 @@ try {
   await check('true focus: typing in a piece fades the ruler and the top line; the bottom edge brings the ruler back; Esc everything', async () => {
     await p.keyboard.press('Escape');
     await blur(p);
-    await p.keyboard.press('6');
+    await p.keyboard.press('5');
     await at(p, 'project');
     await p.keyboard.press('Control+J');
     await p.keyboard.press('Control+J');
@@ -233,10 +247,15 @@ try {
   // ---------- the phone ----------
   const pctx = await browser.newContext({ zoom: true, ...devices['Pixel 7'], colorScheme: 'dark' });
   const ph = await open(pctx);
-  await check('phone: the ruler takes the bottom bar’s place; Weeks reads 4 wk; the top line has the glass', async () => {
+  await check('phone: the ruler takes the bottom bar’s place; seven equal columns, Now in the middle; the top line has the glass', async () => {
     assert.equal(await ph.locator('.placebar').isVisible(), false);
     assert.equal(await ph.locator('.zm-ruler').isVisible(), true);
-    assert.equal(await ph.locator('.zm-stop[data-stop="weeks"]').innerText(), '4 wk');
+    assert.equal(await ph.locator('.zm-stop[data-stop="month"]').innerText(), 'Month');
+    const boxes = await ph.locator('.zm-stop').evaluateAll((bs) => bs.map((b) => b.getBoundingClientRect().width));
+    assert.equal(boxes.length, 7);
+    assert.ok(Math.max(...boxes) - Math.min(...boxes) < 1.5, 'equal columns');
+    const n = await ph.locator('.zm-stop[data-stop="now"]').boundingBox();
+    assert.ok(Math.abs(n.x + n.width / 2 - 412 / 2) <= 2, 'Now in the middle');
     assert.equal(await ph.locator('.topbar .zm-go').isVisible(), true);
     const w = await ph.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
     assert.ok(w, 'no sideways scroll');
@@ -261,7 +280,7 @@ try {
     await touch('touchStart', [{ x: 100, y: 420 }, { x: 300, y: 420 }]);
     for (let d = 0; d <= 80; d += 10) await touch('touchMove', [{ x: 100 + d, y: 420 }, { x: 300 - d, y: 420 }]);
     await touch('touchEnd', []);
-    await at(ph, 'weeks');
+    await at(ph, 'month');
     await touch('touchStart', [{ x: 180, y: 420 }, { x: 220, y: 420 }]);
     for (let d = 0; d <= 100; d += 10) await touch('touchMove', [{ x: 180 - d, y: 420 }, { x: 220 + d, y: 420 }]);
     await touch('touchEnd', []);

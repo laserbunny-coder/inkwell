@@ -20,7 +20,10 @@ html.zoom .zm-ruler {
   view-transition-name: zm-ruler; transition: opacity var(--t2, .24s) ease;
 }
 html.zoom body { padding-bottom: calc(50px + env(safe-area-inset-bottom, 0px)); }
-.zm-row { display: flex; align-items: center; gap: 1px; min-width: 0; max-width: 100%; }
+.zm-row { display: grid; grid-template-columns: 1fr auto auto auto 1fr; align-items: center; width: 100%; min-width: 0; }
+.zm-half { display: flex; align-items: center; gap: 1px; min-width: 0; }
+.zm-half.l { justify-content: flex-end; }
+.zm-half.r { justify-content: flex-start; }
 .zm-cap { font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--faint); padding: 0 10px; user-select: none; }
 .zm-sep { flex: none; width: 8px; height: 1px; background: var(--line2); }
 .zm-sep.mid { width: 12px; }
@@ -35,7 +38,6 @@ html.zoom body { padding-bottom: calc(50px + env(safe-area-inset-bottom, 0px)); 
 /* Something needs you: a small amber dot on Desk. Amber means nothing else. */
 .zm-stop.need::after { content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--signal); }
 html.hide-deskcount .zm-stop.need::after { display: none; }
-.zm-short { display: none; }
 
 /* ---------- the top line ---------- */
 html.zoom .zm-when { display: inline; flex: none; color: var(--faint); font: 12.5px var(--ui); white-space: nowrap; font-variant-numeric: tabular-nums; margin-right: 8px; }
@@ -66,6 +68,8 @@ html.zoom body:is(.typing, .kb-up, .script-bar-on, .outline-bar-on, .go-on) .zm-
 html.zoom[data-view="plan"]:has(#plan-sheet[data-tab="now"]) .zm-mic { display: none; }
 
 /* ---------- Today's faces: the list, the page, the hours ---------- */
+.ah-year { border: 0; background: transparent; color: var(--muted); font: inherit; letter-spacing: inherit; text-transform: inherit; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 3px; }
+.ah-year:hover, .ah-year:focus-visible { color: var(--ink); }
 .zm-faces { display: flex; gap: 2px; align-self: flex-end; }
 .zm-faces button { border: 0; background: transparent; color: var(--muted); font: 13px var(--ui); padding: 5px 11px; border-radius: 99px; cursor: pointer; }
 .zm-faces button:hover { color: var(--ink); }
@@ -102,11 +106,11 @@ html.zoom body.typing.in-piece.peek-top .topbar, html.zoom.has-rail body.typing.
 @media (--narrow), (--touch) {
   .zm-cap, .zm-sep { display: none; }
   html.zoom .zm-ruler { padding-top: 4px; }
-  .zm-row { width: 100%; max-width: 520px; justify-content: space-between; }
+  /* Seven equal columns across the bar; Now is the fourth. */
+  .zm-row { grid-template-columns: repeat(7, minmax(0, 1fr)); max-width: 560px; }
+  .zm-half { display: contents; }
   .zm-stop { flex: 1 1 0; min-width: 0; padding: 10px 2px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
   .zm-stop.home .zm-word::before { margin-right: 4px; }
-  .zm-stop[data-stop="weeks"] .zm-word { display: none; }
-  .zm-stop[data-stop="weeks"] .zm-short { display: inline; }
   html.zoom body { padding-bottom: calc(52px + env(safe-area-inset-bottom, 0px)); }
   html.zoom .zm-mic { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); right: max(14px, env(safe-area-inset-right, 0px)); width: 50px; height: 50px; }
   .yr-months { grid-template-columns: repeat(2, minmax(0, 1fr)); }

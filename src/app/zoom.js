@@ -1,11 +1,12 @@
 // The zoom, Part 1 (Nov 17 2026): one ruler at the bottom of the window, on
 // the computer and on the phone alike, with Now in the middle.
 //
-//   when:  Year · Weeks · Week · Today | Now | Project · Desk · Library  :where
+//   when:  Month · Week · Today | Now | Project · Desk · Library  :where
 //
 // Every stop is a place Inkwell already has (Plan's Today list, the week,
-// four of the weeks ahead, the project's page, the Desk, the Library), plus a
-// new Year. Going to a stop is go(place), so Back, Forward and Android's back
+// four of the weeks ahead, the project's page, the Desk, the Library). The
+// Year has no stop of its own: Month again (or 1 again) opens it, the stop
+// then reads Year, and once more comes back to the four weeks. Going to a stop is go(place), so Back, Forward and Android's back
 // keep working; each step pushes a place, so Back is "out one step".
 //
 // The ruler takes the place of the rail, the phone's bottom bar and Today's
@@ -13,7 +14,7 @@
 // back until the old views are retired.
 //
 // Keys, when the caret is not in text (press Esc first when it is):
-//   1 to 8 a stop · Left and Right walk the ruler · Esc or minus out one step ·
+//   1 to 7 a stop (1 again: the Year) · Left and Right walk the ruler · Esc or minus out one step ·
 //   Enter or plus in one step · / Go. Alt + ` is Now from anywhere, in text too.
 // Phone: tap a stop, pinch in to step out, pinch out to step in, swipe
 // sideways for the week before or after.
@@ -38,10 +39,9 @@ const roomy = media('roomy');
 const touch = media('touch');
 const calm = matchMedia('(prefers-reduced-motion: reduce)');
 
-// The eight stops, in order. key: the plain key that jumps there.
+// The seven stops, in order; the number keys follow the list.
 export const STOPS = [
-  { id: 'year', word: 'Year', title: 'Year: twelve months from now' },
-  { id: 'weeks', word: 'Weeks', short: '4 wk', title: 'Weeks: the next four weeks' },
+  { id: 'month', word: 'Month', title: 'Month: the next four weeks (again for the Year)' },
   { id: 'week', word: 'Week', title: 'Week: seven days and what’s for any day this week' },
   { id: 'today', word: 'Today', title: 'Today: the list, the day’s page or the hours' },
   { id: 'now', word: 'Now', title: 'Now: the one thing you’re on' },
@@ -58,7 +58,7 @@ export function stopOf(place) {
   const v = place?.view || 'write';
   if (v === 'plan') {
     const t = place.tab || 'week';
-    return t === 'now' ? 'now' : t === 'year' ? 'year' : t === 'ahead' || t === 'pace' ? 'weeks' : t === 'week' ? 'week' : 'today';
+    return t === 'now' ? 'now' : t === 'year' || t === 'ahead' || t === 'pace' ? 'month' : t === 'week' ? 'week' : 'today';
   }
   if (v === 'notebook') return !place.pageId || String(place.pageId).startsWith('day-') ? 'today' : 'project';
   if (v === 'desk') return 'desk';
@@ -99,8 +99,7 @@ async function projectPlace() {
 
 async function placeOfStop(id) {
   const today = isoToday();
-  if (id === 'year') return { view: 'plan', tab: 'year' };
-  if (id === 'weeks') return { view: 'plan', tab: 'ahead' };
+  if (id === 'month') return { view: 'plan', tab: 'ahead' };
   if (id === 'week') return { view: 'plan', tab: 'week' };
   if (id === 'today') return facePlace(todayFace(), today);
   if (id === 'now') return { view: 'plan', tab: 'now' };
@@ -147,8 +146,16 @@ export async function zoomGo(place, way = 'rise') {
   return shown;
 }
 
+const onYear = (p = lastPlace) => p?.view === 'plan' && p.tab === 'year';
+// The Year, from the Month stop (or back to the four weeks with on false).
+export function toYear(on = true) {
+  return zoomGo(on ? { view: 'plan', tab: 'year' } : { view: 'plan', tab: 'ahead' }, on ? 'out' : 'in');
+}
+
 export async function toStop(id) {
   const from = stopOf(lastPlace);
+  // Month again: the Year, and again back to the four weeks.
+  if (id === 'month' && from === 'month') return toYear(!onYear());
   // The Project stop again from inside a piece: out to the project's own page.
   if (id === from && id !== 'project') return;
   const place = await placeOfStop(id);
@@ -163,8 +170,8 @@ export async function zoomOut() {
   const s = stopOf(p);
   if (s === 'now') return toStop('today');
   if (s === 'today') return toStop('week');
-  if (s === 'week') return toStop('weeks');
-  if (s === 'weeks') return toStop('year');
+  if (s === 'week') return toStop('month');
+  if (s === 'month') return onYear(p) ? null : toYear(true);
   if (s === 'project') {
     if (p?.view === 'world') return toStop('desk');
     let w = state.worldId && (await liveWorld(state.worldId));
@@ -177,11 +184,13 @@ export async function zoomOut() {
 }
 // In one step: toward Now.
 export function zoomIn() {
+  if (onYear()) return toYear(false);
   const i = at(stopOf(lastPlace));
   if (i < 0 || i === NOW) return null;
   return toStop(STOPS[i + (i < NOW ? 1 : -1)].id);
 }
 function walk(dir) {
+  if (onYear() && dir > 0) return toStop('week');
   const i = at(stopOf(lastPlace));
   const to = STOPS[(i < 0 ? NOW : i) + dir];
   return to ? toStop(to.id) : null;
@@ -205,20 +214,22 @@ const micIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" w
 function build() {
   ruler = make('nav', 'zm-ruler');
   ruler.setAttribute('aria-label', 'Zoom: when and where');
+  // Two equal halves around Now, so Now sits in the exact middle.
   const row = make('div', 'zm-row');
-  row.append(make('span', 'zm-cap', 'when'));
+  const halfL = make('div', 'zm-half l');
+  const halfR = make('div', 'zm-half r');
+  halfL.append(make('span', 'zm-cap', 'when'));
   STOPS.forEach((s, i) => {
-    if (i) row.append(make('i', `zm-sep${i === NOW || i === NOW + 1 ? ' mid' : ''}`));
     const b = make('button', `zm-stop${s.id === 'now' ? ' home' : ''}`);
     b.type = 'button';
     b.dataset.stop = s.id;
     b.title = `${s.title} (${i + 1})`;
     b.append(make('span', 'zm-word', s.word));
-    if (s.short) b.append(make('span', 'zm-short', s.short));
     b.addEventListener('click', () => toStop(s.id));
-    row.append(b);
+    if (i < NOW) { halfL.append(b); if (i < NOW - 1) halfL.append(make('i', 'zm-sep')); } else if (i > NOW) { if (i > NOW + 1) halfR.append(make('i', 'zm-sep')); halfR.append(b); } else row.append(halfL, make('i', 'zm-sep mid'), b, make('i', 'zm-sep mid'));
   });
-  row.append(make('span', 'zm-cap', 'where'));
+  halfR.append(make('span', 'zm-cap', 'where'));
+  row.append(halfR);
   ruler.append(row);
 
   mic = make('button', 'zm-mic');
@@ -279,6 +290,9 @@ function place() {
 function light(place) {
   lit = stopOf(place);
   if (!ruler) return;
+  // On the Year the Month stop reads Year, and stays lit.
+  const word = ruler.querySelector('[data-stop="month"] .zm-word');
+  if (word) word.textContent = onYear(place) ? 'Year' : 'Month';
   for (const b of ruler.querySelectorAll('.zm-stop')) {
     if (b.dataset.stop === lit) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   }
@@ -320,10 +334,10 @@ function key(e) {
   if (e.altKey && !m && !e.shiftKey && e.code === 'Backquote') { e.preventDefault(); toStop('now'); return; }
   if (e.defaultPrevented) return;
   if (m || e.altKey) return;
-  if (inText(t) || inText(document.activeElement) || busy() || e.repeat && /^[1-8]$/.test(e.key)) return;
+  if (inText(t) || inText(document.activeElement) || busy() || e.repeat && /^[1-7]$/.test(e.key)) return;
   const k = e.key;
   let run = null;
-  if (/^[1-8]$/.test(k) && !e.shiftKey) run = () => toStop(STOPS[Number(k) - 1].id);
+  if (/^[1-7]$/.test(k) && !e.shiftKey) run = () => toStop(STOPS[Number(k) - 1].id);
   else if (k === 'ArrowLeft' && !e.shiftKey) run = () => walk(-1);
   else if (k === 'ArrowRight' && !e.shiftKey) run = () => walk(1);
   else if ((k === 'ArrowLeft' || k === 'ArrowRight') && e.shiftKey) run = () => pan(k === 'ArrowLeft' ? -1 : 1);
@@ -404,8 +418,8 @@ function sync() {
 
 addCommands(() => [
   { group: 'go', label: 'Now, from anywhere', keys: 'Alt+`', words: ['now', 'one thing', 'ruler', 'zoom', 'current'], run: () => toStop('now'), when: zoomOn },
-  { group: 'go', label: 'Year: twelve months from now', keys: '1', words: ['year', 'months', 'zoom', 'ruler', 'sometime this year', 'later'], run: () => toStop('year'), when: zoomOn },
-  { group: 'go', label: 'Weeks: the next four weeks', keys: '2', words: ['weeks', 'four weeks', 'month', 'ahead', 'zoom', 'ruler'], run: () => toStop('weeks'), when: zoomOn },
+  { group: 'go', label: 'Month: the next four weeks', keys: '1', words: ['month', 'four weeks', 'weeks', 'ahead', 'zoom', 'ruler'], run: () => (onYear() ? toYear(false) : toStop('month')), when: zoomOn },
+  { group: 'go', label: 'Year: twelve months from now', keys: '1 twice', words: ['year', 'months', 'zoom', 'ruler', 'sometime this year', 'later'], run: () => toYear(true), when: zoomOn },
   { group: 'go', label: 'Zoom out one step', keys: 'Esc', words: ['zoom', 'out', 'step out', 'further', 'ruler', 'back'], run: () => zoomOut(), when: zoomOn },
   { group: 'go', label: 'Zoom in one step', keys: 'Enter', words: ['zoom', 'in', 'step in', 'closer', 'ruler'], run: () => zoomIn(), when: zoomOn },
   { group: 'view', label: 'Classic layout: the rail, the phone’s bottom bar and Today’s switch (on / off)', keys: '', words: ['classic', 'old', 'rail', 'bottom bar', 'layout', 'ruler', 'zoom', 'safety', 'back to how it was'], run: () => setLayout(zoomOn()) }
@@ -428,6 +442,15 @@ export function wireZoom() {
   window.addEventListener('keydown', key);
   gestures();
   edges();
+  // Ctrl + scroll over the ruler steps out and in (elsewhere it stays the browser's zoom).
+  let wheelAt = 0;
+  ruler.addEventListener('wheel', (e) => {
+    if (!zoomOn() || !e.ctrlKey || Math.abs(e.deltaY) < 1) return;
+    e.preventDefault();
+    if (Date.now() - wheelAt < 350) return;
+    wheelAt = Date.now();
+    if (e.deltaY > 0) zoomOut(); else zoomIn();
+  }, { passive: false });
   if (!classicLayout() && !root.classList.contains('zoom')) root.classList.add('zoom');
   light(lastPlace);
   const input = document.getElementById('classic-layout');
