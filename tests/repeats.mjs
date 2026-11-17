@@ -276,6 +276,7 @@ try {
     assert.equal(await row(page, 'Review the week', '.carried').count() + await row(page, 'Run', '.carried').count(), 0);
     assert.equal(await row(page, 'Review the week').count(), 0);
     assert.equal(await row(page, 'Run').count(), 0);
+    await shot(page, 'lapse-today');
     await row(page, 'Stretch').locator('.pl-check').click();
     await sleep(400);
     await page.locator('#plan .pl-took button', { hasText: 'as planned' }).click();

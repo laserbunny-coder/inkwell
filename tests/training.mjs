@@ -196,6 +196,7 @@ try {
     await until(async () => (await lines(page, '2026-11-19')).length === 0);
     assert.deepEqual([(await lines(page, '2026-11-19')).length, (await lines(page, '2026-11-20')).length], [0, 1]);
     assert.equal(await page.locator('#plan .pl-task.carried').count(), 0);
+    await shot(page, 'lapse-training');
   });
 
   await check('the round after the evaluations: Hard A, Light, Light, Hard B, Light, Light', async () => {
