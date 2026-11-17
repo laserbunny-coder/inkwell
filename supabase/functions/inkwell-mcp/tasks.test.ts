@@ -2,7 +2,7 @@
 // pretend vault: run with  node --experimental-strip-types supabase/functions/inkwell-mcp/tasks.test.ts
 import assert from "node:assert/strict";
 import { type Db, type Entry, handle } from "./tools.ts";
-import { addDays, dow, lands, nextOn } from "./taskrules.ts";
+import { addDays, dow, dueDay, lands, nextOn } from "./taskrules.ts";
 
 const TZ = "America/Los_Angeles";
 const TODAY = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -300,5 +300,14 @@ assert.equal(tr.log[1].on_my_own, true);
 assert.equal((await call("training", { log_limit: 1 })).log.length, 1);
 const trBad: any = await handle({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "training", arguments: { week: { monday: "Leg day" } } } }, db);
 assert.match(trBad.result.content[0].text, /no session called Leg day/);
+
+// Missed repeats never carry over (Nov 16 2026): Monday's weekly one, missed,
+// is next Monday's; a daily one is today's; Monday/Wednesday/Friday on a Tuesday is Wednesday's.
+assert.equal(dueDay({ day: "2026-11-09", repeat: { every: "week", n: 1, days: [1], from: "2026-10-26" } } as any, "2026-11-10"), "2026-11-16");
+assert.equal(dueDay({ day: "2026-11-09", repeat: { every: "day", n: 1, from: "2026-10-26" } } as any, "2026-11-10"), "2026-11-10");
+assert.equal(dueDay({ day: "2026-11-09", repeat: { every: "week", n: 1, days: [1, 3, 5], from: "2026-10-26" } } as any, "2026-11-10"), "2026-11-11");
+// A day's Training line that was missed lapses: it isn't carried onto today.
+rows.push(e("li-train-old", "line", "page-tasks", { text: "Training", fields: { ...task(addDays(TODAY, -2)), training: true } }));
+assert.ok(!(await call("list_tasks", { from: "today" })).tasks.some((t: any) => t.id === "li-train-old"));
 
 console.log("inkwell-mcp tasks: all checks passed");

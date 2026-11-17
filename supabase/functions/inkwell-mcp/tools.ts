@@ -2534,7 +2534,8 @@ async function listTasks(args: Record<string, unknown>, db: Db) {
       if (done && !withDone) continue;
       if (isStretch(p.task)) { if (p.task.day! <= b && p.task.until! >= a) out.push(taskOut(p, tz)); continue; }
       // Open ones from before today wait at the top of today.
-      if (!done && !isRepeat(p.task) && p.task.day && p.task.day < now && now >= a && now <= b) { out.push({ ...taskOut(p, tz, now), carried_from: p.task.day }); continue; }
+      // A day's Training line lapses (never carried over), like a repeat.
+      if (!done && !isRepeat(p.task) && p.row.fields?.training !== true && p.task.day && p.task.day < now && now >= a && now <= b) { out.push({ ...taskOut(p, tz, now), carried_from: p.task.day }); continue; }
       for (const d of daysIn(p.task, a, b, now)) out.push(taskOut(p, tz, d));
     }
     const sortKey = (x: any) => `${x.on ?? x.day ?? "9999"}|${String(all.find((p) => p.row.id === x.id)?.task.order ?? 0).padStart(6, "0")}`;
@@ -2894,7 +2895,7 @@ async function freeHours(args: Record<string, unknown>, db: Db) {
     let mins = 0;
     for (const p of all) {
       if (p.row.fields?.done) { if (!isRepeat(p.task) && p.task.day && p.task.day >= a && p.task.day <= b) mins += p.task.actual ?? p.task.est ?? 0; continue; }
-      const carried = w === 0 && !isRepeat(p.task) && p.task.day && p.task.day < a;
+      const carried = w === 0 && !isRepeat(p.task) && p.row.fields?.training !== true && p.task.day && p.task.day < a;
       mins += (carried ? 1 : daysIn(p.task, a, b, now).length) * (p.task.est || 0);
     }
     const h = hoursOf(mins);

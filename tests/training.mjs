@@ -177,6 +177,28 @@ try {
     assert.deepEqual((await state(page)).log.at(-1), { d: WED, s: 'On my own', h: false, n: {}, st: {}, own: true });
   });
 
+  await check('missed training never piles up: an old open line lapses, a second copy of today’s goes', async () => {
+    // As when he was sick: Tuesday's line never ticked, and two devices each made today's.
+    const tl = (id, day, made) => { const r = task(id, 'page-tasks', 50, 'Training', { day }); return { ...r, created_at: made, fields: { ...r.fields, training: true } }; };
+    await put(page, [tl('tr_tue', TUE, Date.parse(at(TUE, '00:10'))), tl('tr_wed2', WED, Date.parse(at(WED, '00:20'))), tl('tr_wed3', WED, Date.parse(at(WED, '00:30')))]);
+    await dayIs(page, WED);
+    await until(async () => (await lines(page, TUE)).length === 0);
+    assert.equal((await lines(page, TUE)).length, 0);
+    // Today's done line stays; the open copies are gone.
+    const wed = await lines(page, WED);
+    assert.deepEqual(wed.map((r) => r.fields.done), [true]);
+    // And Thursday, with Wednesday's line done and none open, brings just one.
+    await dayIs(page, '2026-11-19');
+    await until(async () => (await lines(page, '2026-11-19')).length === 1);
+    assert.equal((await lines(page, '2026-11-19')).length, 1);
+    // Friday after a missed Thursday: Thursday's goes, Friday's is the one line.
+    await dayIs(page, '2026-11-20');
+    await until(async () => (await lines(page, '2026-11-19')).length === 0);
+    assert.deepEqual([(await lines(page, '2026-11-19')).length, (await lines(page, '2026-11-20')).length], [0, 1]);
+    assert.equal(await page.locator('#plan .pl-task.carried').count(), 0);
+    await shot(page, 'lapse-training');
+  });
+
   await check('the round after the evaluations: Hard A, Light, Light, Hard B, Light, Light', async () => {
     const seen = [];
     for (const r of [2, 3, 4, 5, 6, 7, 8]) {
