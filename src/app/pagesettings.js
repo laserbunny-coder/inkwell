@@ -117,6 +117,7 @@ function lookPanel(panel) {
       input.type = 'checkbox';
       if (r.id === 'typewriter') input.id = 'typewriter-mode';
       else if (r.id === 'manypanes') input.id = 'many-panes';
+      else if (r.id === 'classic') input.id = 'classic-layout';
       else input.dataset.show = r.id;
       label.append(input, ` ${r.label}`);
       if (r.keys) { const k = make('span', 'keys', keyLabel(r.keys)); label.append(' ', k); }

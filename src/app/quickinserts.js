@@ -36,6 +36,7 @@ import { currentSize, currentWidth, progressPanel, setPage, step, toggleFocus, t
 import { box, commands, toggleTheme, writing } from './commands.js';
 import { askServer, canAskServer, capture, captureHere, flipPlan, inToday, openToday, plan, todayKey } from './talking.js';
 import { openTalk, paneKeys, pull, toggleBesidePane, whenHere } from './beside.js';
+import { zoomOn } from '../zoomstate.js';
 
 // Pictures and files from this device, put in where the caret is.
 // ---------- quick inserts (the / menu, Ctrl+Shift+; and Ctrl+;) ----------
@@ -560,7 +561,7 @@ function wireQuickInserts() {
     // tabs have Alt + 0 to 6. Alt + 2, 3, 4 in Today: Page, Plan, Calendar
     // (again in a calendar: the next zoom).
     else if (e.altKey && !m && !e.shiftKey && e.code === 'Digit1' && !strip.byNumber(1)) { e.preventDefault(); todayKey(1); }
-    else if (e.altKey && !m && !e.shiftKey && /^Digit[2-4]$/.test(e.code) && inToday()) { e.preventDefault(); todayKey(Number(e.code.slice(5))); }
+    else if (e.altKey && !m && !e.shiftKey && /^Digit[2-4]$/.test(e.code) && inToday() && !zoomOn()) { e.preventDefault(); todayKey(Number(e.code.slice(5))); }
     // Alt + W: When (today, this week, next week, later…) for the line or lines here.
     else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyW') { e.preventDefault(); whenHere(); }
     // Alt + Left / Right: Back and Forward, everywhere (in a line too), so a task

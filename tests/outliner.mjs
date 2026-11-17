@@ -7,6 +7,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 import { setOutline, readOutline, clean } from './outliner-kit.mjs';
+import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -25,7 +26,7 @@ const fake = () => {
   };
 };
 
-const browser = pageFirst(await chromium.launch());
+const browser = classic(pageFirst(await chromium.launch()));
 let failed = 0;
 async function check(name, fn) {
   try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message}`); }

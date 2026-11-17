@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
+import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -67,7 +68,7 @@ const treeOf = async (p, id) => {
   return out.join('\n');
 };
 
-const browser = await chromium.launch();
+const browser = classic(await chromium.launch());
 const ctx = await browser.newContext({ colorScheme: 'dark' });
 await ctx.addInitScript(fake);
 const page = await ctx.newPage();

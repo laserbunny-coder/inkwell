@@ -621,7 +621,7 @@ function wireTalking() {
     go: (place) => go(place),
     base: () => location.origin + location.pathname,
     changed: (rows) => applyRemote(rows),
-    onCount: (n) => { frame.count(n); nav.count(n); },
+    onCount: (n) => { frame.count(n); nav.count(n); document.dispatchEvent(new CustomEvent('inkwell:needs', { detail: n })); },
     // The Desk's order changed (a drag, or what's on stage): the rail follows.
     ordered: () => frame.drawProjects(),
     // "Add one" under "No next step yet": the project's Steps page, the caret on a new step.
