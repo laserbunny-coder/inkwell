@@ -71,6 +71,8 @@ export const SHOWS = [
   { id: 'pagetabs', group: 'around', label: 'Page tabs at the top', keys: '⌥0–6', cmd: 'Show or hide the page tabs', hint: 'A project’s pages (Overview, Gather, Shape, Write…) as tabs at the top.', words: ['tabs', 'pages', 'overview', 'gather', 'shape', 'top'] },
   { id: 'panes', group: 'around', label: 'Beside: a pane next to the page, and middle-click opens things there', keys: '⌘\\', cmd: 'Show or hide the Beside pane', hint: 'A pane next to the page (today’s plan, notes, anything you middle-click).', words: ['beside', 'pane', 'split', 'side by side'] },
   { id: 'manypanes', group: 'around', under: 'panes', label: 'Up to three panes in a row', special: true },
+  // The zoom (Nov 2026): one ruler at the bottom. This brings the old way back until Part 6.
+  { id: 'classic', group: 'around', label: 'Classic layout: the rail, the phone’s bottom bar and Today’s switch, instead of the ruler', special: true },
   { id: 'quietdrafts', group: 'around', phone: true, label: 'Quiet drafts: in a chapter or script the bar rests as a tab', cmd: 'Quiet drafts: the bar rests as a tab in a draft (on / off)', hint: 'On the phone, in a chapter or script with the keyboard down, the bar waits as a small tab you tap.', words: ['bar', 'bottom bar', 'tab', 'quiet', 'hide the bar', 'menu'] }
 ];
 

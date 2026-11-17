@@ -175,6 +175,12 @@ export const INFO = [
 
   // ---------- View ----------
   { l: 'Focus: just the text (on / off)', g: 'view', h: 'Hides everything but the words you’re writing.', w: ['distraction free', 'zen', 'clean', 'hide everything', 'full screen', 'quiet', 'quiet mode'], i: 0 },
+  { l: 'Now, from anywhere', g: 'go', h: 'The one thing you’re on, from wherever you are, even while you type (Alt + `).', w: ['now', 'one thing', 'ruler', 'zoom', 'current'] },
+  { l: 'Month: the next four weeks', g: 'go', h: 'Four weeks ahead, a lane for each project on stage (1). Press 1 again, or tap Month again, for the Year.', w: ['month', 'four weeks', 'weeks', 'ahead', 'zoom', 'ruler'] },
+  { l: 'Year: twelve months from now', g: 'go', h: 'The furthest out in time, on the Month stop (1 twice): each month’s planned lines and dates to hit, and what’s for sometime this year.', w: ['year', 'months', 'zoom', 'ruler', 'sometime this year', 'later'] },
+  { l: 'Zoom out one step', g: 'go', h: 'One stop further out on the ruler: Now to Today to Week to Month to Year, or a piece to its project to the Desk to the Library.', w: ['zoom', 'out', 'step out', 'further', 'ruler', 'back'] },
+  { l: 'Zoom in one step', g: 'go', h: 'One stop closer to Now on the ruler.', w: ['zoom', 'in', 'step in', 'closer', 'ruler'] },
+  { l: 'Classic layout: the rail, the phone’s bottom bar and Today’s switch (on / off)', g: 'view', h: 'The way Inkwell looked before the ruler: the rail of rooms, the phone’s bottom bar and Today’s Now, Page, Plan, Calendar switch. Off: the ruler at the bottom.', w: ['classic', 'old', 'rail', 'bottom bar', 'layout', 'ruler', 'zoom', 'safety', 'back to how it was'] },
   { l: 'Typewriter mode: the line you’re on stays put', g: 'view', h: 'Keeps the line you’re typing in the middle of the screen.', w: ['scroll', 'center', 'middle', 'typewriter'] },
   { l: 'Plan beside the page, or on top in one column', g: 'view', h: 'On Today: the plan at the side of the page, or above it in one column.', w: ['plan', 'side', 'column', 'top', 'layout', 'flip', 'one column'], at: ['today'], n: N.computer },
   { l: 'Show or hide earlier days (under the day page)', g: 'view', h: 'The days before, under today’s page.', w: ['earlier days', 'past days', 'yesterday', 'scroll back'], n: N.day },

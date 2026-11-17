@@ -6,6 +6,7 @@ import { onContextMenu } from '../menu.js';
 import { outline } from '../model.js';
 import { titleOf, dayId } from '../notebook.js';
 import { tabFor, ZOOMS } from '../plan.js';
+import { zoomOn } from '../zoomstate.js';
 import { inPane, PANE_ID, host as paneHost } from '../panes.js';
 import { areas, books, hasManuscript, areaColor, pagesIn, loosePages, bookOf, worlds, worldOf, worldTree } from '../library.js';
 import { make } from '../dom.js';
@@ -285,6 +286,10 @@ async function drawCrumb() {
     parts.push(link(PAGE_NAMES[state.stage.page] || '', () => {}, 'here'));
   } else if (view() === 'drawer') {
     parts.push(lib, link('Drawer', () => {}, 'here'));
+  } else if (view() === 'plan' && zoomOn()) {
+    // On the zoom the ruler says which stop this is; the crumb only names Plan's own list and Pace.
+    const tab = tabFor(lastPlace?.tab);
+    if (tab === 'plan' || tab === 'pace') parts.push(link(tab === 'plan' ? 'Plan' : 'Pace', () => {}, 'here'));
   } else if (view() === 'plan') {
     if (lastPlace?.tab === 'day') parts.push(link('Today', () => {}, 'here'));
     else {

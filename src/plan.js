@@ -22,6 +22,8 @@ import { children, getEntry, isTrashed } from './db.js';
 import { media } from './device.js';
 import { make } from './dom.js';
 import { Now, SMALLS, isSmall } from './now.js';
+import { zoomOn } from './zoomstate.js';
+import { drawYear } from './year.js';
 
 const ICON = {
   play: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4 2.5v11l9-5.500z" fill="currentColor"/></svg>',
@@ -38,7 +40,12 @@ export const ZOOMS = [['calday', 'Day'], ['week', 'Week'], ['ahead', 'Six weeks'
 const CAL = new Set(ZOOMS.map((z) => z[0]));
 export const isCal = (tab) => CAL.has(tab);
 // A remembered place or an old link: What's when is Plan now.
-export const tabFor = (tab) => (tab === 'when' ? 'plan' : ['now', 'plan', 'day', ...CAL].includes(tab) ? tab : 'week');
+export const tabFor = (tab) => (tab === 'when' ? 'plan' : ['now', 'plan', 'day', 'year', ...CAL].includes(tab) ? tab : 'week');
+// Today's three faces on the zoom (Nov 2026): the list, the day's page, the hours.
+export const FACES = [['list', 'List', 'Today’s list, with the events of the day'], ['page', 'Page', 'Today’s page'], ['hours', 'Hours', 'Today by the hour']];
+export function todayFace() { try { const f = localStorage.getItem('todayFace'); return FACES.some((x) => x[0] === f) ? f : 'list'; } catch { return 'list'; } }
+export function faceTo(face) { try { localStorage.setItem('todayFace', face); } catch { /* no storage here */ } }
+export const facePlace = (face, today) => (face === 'page' ? { view: 'notebook', pageId: `day-${today}` } : face === 'hours' ? { view: 'plan', tab: 'calday' } : { view: 'plan', tab: 'day' });
 // Now, Page, Plan, Calendar: Alt + 1 to 4, on a computer and a phone alike.
 const TABS = [['now', 'Now', 'now', 'Alt+1'], ['today', 'Page', 'today-page', 'Alt+2'], ['plan', 'Plan', 'plan', 'Alt+3'], ['cal', 'Calendar', 'calendar', 'Alt+4']];
 const PHONE_TABS = [['now', 'Now', 'now'], ['page', 'Page', 'today-page'], ['plan', 'Plan', 'today-plan'], ['cal', 'Calendar', 'calendar']];
@@ -207,7 +214,8 @@ export class Plan {
       if (this.tab === 'now') this.now.draw();
       else if (this.tab === 'pace') this.drawPace();
       else if (this.tab === 'ahead') drawAhead(this);
-      else if (this.tab === 'day') this.drawDay(this.sheet, this.today);
+      else if (this.tab === 'day') { this.drawDay(this.sheet, this.today); if (zoomOn()) this.sheet.prepend(this.zoomTop()); }
+      else if (this.tab === 'year') drawYear(this);
       else if (this.tab === 'calday') this.drawCalDay();
       else if (this.tab === 'plan') this.drawOutline(this.sheet);
       else this.drawWeek();
@@ -300,9 +308,38 @@ export class Plan {
     row.after(...after);
   }
 
+  // The zoom's quiet strip under Today's date: the list, the day's page and the
+  // hours. Anything that isn't one of Today's faces has no strip: the ruler at
+  // the bottom says where you are.
+  facesRow(current) {
+    const here = current === 'page' ? 'page' : current === 'calday' ? 'hours' : current === 'day' ? 'list' : null;
+    if (!here) { const none = make('span', 'zm-nofaces'); none.hidden = true; return none; }
+    const row = make('nav', 'zm-faces');
+    row.setAttribute('aria-label', 'Today as');
+    for (const [id, label, title] of FACES) {
+      const b = make('button', '', label);
+      b.type = 'button';
+      b.dataset.face = id;
+      b.title = title;
+      if (id === here) b.setAttribute('aria-current', 'page');
+      b.addEventListener('click', () => { faceTo(id); if (id !== here) this.hooks.go(facePlace(id, this.today)); });
+      row.append(b);
+    }
+    return row;
+  }
+  // Today's list on the zoom: the date, Today, and its faces.
+  zoomTop() {
+    const head = make('header', 'pl-top zm-today-top');
+    const left = make('div');
+    left.append(make('div', 'pl-eyebrow', long(this.today, { weekday: 'long', month: 'long', day: 'numeric' })), make('h1', '', 'Today'));
+    head.append(left, this.facesRow('day'));
+    return head;
+  }
+
   // Today, Plan, Calendar (Page, Plan, Calendar on a phone). On a calendar the
   // zoom comes with it: a row under the switch on a phone, beside it on a computer.
   switchRow(current) {
+    if (zoomOn()) return this.facesRow(current);
     const small = !hover.matches;
     const row = make('div', `pl-switch${small ? ' pl-switch-phone' : ''}`);
     row.setAttribute('role', 'group');
@@ -355,13 +392,22 @@ export class Plan {
   // ---------- the day on a phone: Page or Plan ----------
 
   // Page or Plan, the last one picked on this device (Plan the first time).
-  get phoneDay() { try { return localStorage.getItem('todayPhone') === 'page' ? 'page' : 'plan'; } catch { return 'plan'; } }
+  get phoneDay() { if (zoomOn()) return 'page'; try { return localStorage.getItem('todayPhone') === 'page' ? 'page' : 'plan'; } catch { return 'plan'; } }
   set phoneDay(v) { try { localStorage.setItem('todayPhone', v); } catch { /* no storage here */ } }
   // On a phone a day's page opens on one of the two, with the switch above it.
   phoneShow(on) {
     const nb = this.box.closest('.notebook');
     const sw = this.phoneSw;
     if (!nb) return;
+    // The zoom: the day's page is one of Today's faces, so it shows the page (its
+    // plan is the List face), with the faces under the title on both devices.
+    if (zoomOn()) {
+      nb.classList.toggle('tp-on', !!on);
+      if (on) nb.dataset.tp = 'page'; else delete nb.dataset.tp;
+      const today = !!this.day && this.day === this.today;
+      if (sw) { sw.hidden = !today; if (today) sw.replaceChildren(this.facesRow('page')); }
+      return;
+    }
     nb.classList.toggle('tp-on', !!on);
     if (on) nb.dataset.tp = this.phoneDay; else delete nb.dataset.tp;
     if (sw) {
@@ -393,6 +439,8 @@ export class Plan {
       const dy = e.changedTouches[0].clientY - was.y;
       if (Date.now() - was.t > 700 || Math.abs(dx) < 70 || Math.abs(dx) < 2 * Math.abs(dy)) return;
       if (getSelection && !getSelection()?.isCollapsed) return;
+      // On the zoom a swipe is earlier or later (zoom.js), not the old switch.
+      if (zoomOn()) return;
       this.flipBy(dx < 0 ? 1 : -1);
     }, { passive: true });
   }
@@ -535,7 +583,7 @@ export class Plan {
       b.title = flip === 'side' ? 'The plan on top of the page, in one column (Alt + P)' : 'The plan in a column beside the page (Alt + P)';
       head.append(b);
     }
-    head.append(this.switchRow('day'));
+    if (!zoomOn()) head.append(this.switchRow('day'));
     const { list, typing } = this.dayListIn(box, day, bits);
     // Today: "Tomorrow and later" folded under the day (open, Tomorrow and This week
     // take a dropped task to push it out), then the rest of the plan as one.
@@ -623,7 +671,7 @@ export class Plan {
   calHead(tab, eyebrow) {
     const head = make('header', 'pl-top');
     const left = make('div');
-    left.append(make('div', 'pl-eyebrow', eyebrow), make('h1', '', tab === 'plan' ? 'Plan' : 'Calendar'));
+    left.append(make('div', 'pl-eyebrow', eyebrow), make('h1', '', tab === 'plan' ? 'Plan' : zoomOn() && tab === 'calday' ? 'Today' : 'Calendar'));
     const side = make('div', 'pl-side');
     side.append(...[tab === 'plan' || tab === 'week' ? this.pullButton() : null].filter(Boolean), this.switchRow(tab));
     head.append(left, side);

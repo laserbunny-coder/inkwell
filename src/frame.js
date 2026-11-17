@@ -232,7 +232,8 @@ export class Frame {
 
   // Which way the next place lies from this one, for the way it arrives.
   turn(from, to, page, tab) {
-    if (!moves()) { delete root.dataset.turn; this.lastTab = tab || null; return; }
+    // The zoom moves the whole view itself (app/zoom.js): no second motion inside it.
+    if (!moves() || root.dataset.zt) { delete root.dataset.turn; this.lastTab = tab || null; return; }
     const a = roomOf(from);
     const b = roomOf(to);
     let turn = 'rise';

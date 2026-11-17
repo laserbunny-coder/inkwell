@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
+import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -67,7 +68,7 @@ const pieceCount = (p) => p.evaluate(() => new Promise((res) => {
 }));
 const outlineText = (p) => p.locator('#outline-editor .ProseMirror').innerText();
 
-const browser = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
+const browser = classic(await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] }));
 const ctx = await browser.newContext({ permissions: ['microphone'], colorScheme: 'dark' });
 await ctx.exposeFunction('__remote', remote);
 await ctx.addInitScript(fake);

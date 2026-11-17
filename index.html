@@ -26,6 +26,8 @@
       const mo = localStorage.getItem('motion');
       if (mo) d.dataset.motion = mo;
       if (matchMedia('(min-width: 701px) and (hover: hover)').matches && window.parent === window) d.classList.add('has-rail');
+      // The zoom (Nov 2026): one ruler at the bottom, unless this device asked for the Classic layout.
+      if (localStorage.getItem('layout') !== 'classic' && window.parent === window) d.classList.add('zoom');
       const f = localStorage.getItem('font'), fh = localStorage.getItem('fontHref');
       if (f) d.dataset.font = f;
       if (f && fh) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.id = 'font-' + f; l.href = fh; document.head.appendChild(l); }

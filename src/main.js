@@ -10,6 +10,7 @@ import './style.css';
 import './frame.css';
 import './desk.css';
 import './plan.css';
+import './zoom.css';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { EntryIds, SceneBreak, sectionName, SECTION_NAMES } from './schema.js';
@@ -107,6 +108,7 @@ import { wireCommands } from './app/commands.js';
 import { sendSelectionPicker, showClaudeKnows, showTidy, wireQuickInserts } from './app/quickinserts.js';
 import { asking, landShares, openAsked, openCapture, setAsking, showCapture, wireTalking } from './app/talking.js';
 import { besideItem, paneMoves, panes, reviewAsked, reviewing, setReviewing, wireBeside } from './app/beside.js';
+import { wireZoom } from './app/zoom.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -275,6 +277,7 @@ wireQuickInserts();
 wireTalking();
 
 wireBeside();
+wireZoom();
 
 // ---------- start ----------
 

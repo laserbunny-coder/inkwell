@@ -10,6 +10,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 import { lookOf, starPatch, asidePatch, standIn, nextPick, elementForName, lostLooks } from '../src/production.js';
+import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -145,7 +146,7 @@ pic('fi_a1', 'Aiko one.png', { element: 'pg_n_a' });
 pic('fi_a2', 'Aiko two.png', { element: 'pg_n_a' });
 pic('fi_s1', 'Street.png', { element: 'pg_n_street' });
 
-const browser = pageFirst(await chromium.launch());
+const browser = classic(pageFirst(await chromium.launch()));
 async function device(opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, colorScheme: 'dark', ...opts });
   await ctx.exposeFunction('__remote', remote);

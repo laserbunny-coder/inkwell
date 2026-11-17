@@ -2,7 +2,10 @@
 // this, so they run as a device without sync whether or not the build has the
 // Supabase settings (the publish run's build does). Every new context opens
 // with window.__syncBackend = null, unless the test sets its own stand-in.
+import { classic } from './classic.mjs';
+
 export function withoutSync(browser) {
+  classic(browser);
   const open = browser.newContext.bind(browser);
   browser.newContext = async (opts = {}) => {
     // Time estimates start off on a new device; most tests were written with them

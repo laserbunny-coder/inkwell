@@ -1,0 +1,157 @@
+/* The zoom (app/zoom.js): one ruler at the bottom, the top line, the mic that
+   floats, and true focus. Everything here is under html.zoom; "Classic
+   layout" (Look) takes html.zoom away and the rail and the phone's bar are
+   back as they were. */
+
+.zm-ruler, .zm-mic, .zm-when, .zm-go, .zm-more { display: none; }
+
+/* ---------- what the ruler takes the place of ---------- */
+html.zoom.has-rail { --rail-w: 0px; }
+html.zoom .rail, html.zoom .placebar, html.zoom .pb-tab, html.zoom .pb-focus { display: none !important; }
+html.zoom .tb-m .place-switch, html.zoom #tb-back { display: none !important; }
+html.zoom .tb-r :is(#notes-toggle, #focus-toggle, #beside-toggle) { display: none !important; }
+html.zoom .now-top .pl-switch, html.zoom .pl-switch-phone { display: none !important; }
+
+/* ---------- the ruler ---------- */
+html.zoom .zm-ruler {
+  display: flex; justify-content: center; position: fixed; left: 0; right: 0; bottom: 0; z-index: 36;
+  padding: 5px max(8px, env(safe-area-inset-right, 0px)) calc(5px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+  background: var(--panel); border-top: 1px solid var(--line); font-family: var(--ui);
+  view-transition-name: zm-ruler; transition: opacity var(--t2, .24s) ease;
+}
+html.zoom body { padding-bottom: calc(50px + env(safe-area-inset-bottom, 0px)); }
+.zm-row { display: grid; grid-template-columns: 1fr auto auto auto 1fr; align-items: center; width: 100%; min-width: 0; }
+.zm-half { display: flex; align-items: center; gap: 1px; min-width: 0; }
+.zm-half.l { justify-content: flex-end; }
+.zm-half.r { justify-content: flex-start; }
+.zm-cap { font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--faint); padding: 0 10px; user-select: none; }
+.zm-sep { flex: none; width: 8px; height: 1px; background: var(--line2); }
+.zm-sep.mid { width: 12px; }
+.zm-stop {
+  position: relative; border: 0; background: transparent; color: var(--muted); padding: 6px 10px; border-radius: 7px;
+  font: 500 13px var(--ui); white-space: nowrap; cursor: pointer; transition: color var(--t1, .12s), background var(--t1, .12s);
+}
+.zm-stop:hover, .zm-stop:focus-visible { color: var(--ink); }
+.zm-stop[aria-current="page"] { color: var(--ink); background: var(--raise); }
+/* Now: a small accent dot. */
+.zm-stop.home .zm-word::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: 1px; }
+/* Something needs you: a small amber dot on Desk. Amber means nothing else. */
+.zm-stop.need::after { content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--signal); }
+html.hide-deskcount .zm-stop.need::after { display: none; }
+
+/* ---------- the top line ---------- */
+html.zoom .zm-when { display: inline; flex: none; color: var(--faint); font: 12.5px var(--ui); white-space: nowrap; font-variant-numeric: tabular-nums; margin-right: 8px; }
+html.zoom :is(.zm-go, .zm-more) {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 30px; padding: 0;
+  border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: 17px/1 var(--ui); cursor: pointer;
+}
+html.zoom :is(.zm-go, .zm-more):hover { color: var(--ink); background: var(--raise); }
+.zm-go svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
+html.zoom .topbar { view-transition-name: zm-top; }
+
+/* ---------- the mic floats at the bottom right ---------- */
+html.zoom .zm-mic {
+  display: flex; align-items: center; justify-content: center; position: fixed; z-index: 37;
+  right: max(18px, env(safe-area-inset-right, 0px)); bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+  width: 46px; height: 46px; border-radius: 50%; padding: 0; cursor: pointer;
+  background: var(--raise); border: 1px solid var(--line2); color: var(--ink); box-shadow: 0 6px 20px rgba(0, 0, 0, .35);
+  transition: opacity var(--t2, .24s) ease, scale var(--t1, .12s);
+  view-transition-name: zm-mic;
+}
+.zm-mic svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
+.zm-mic:hover { border-color: var(--accent); }
+.zm-mic:active { scale: .94; }
+/* It steps aside while you type, and when a panel takes the bottom. */
+html.zoom body:is(.typing, .kb-up, .script-bar-on, .outline-bar-on, .go-on) .zm-mic, html.zoom.focus .zm-mic { opacity: 0; pointer-events: none; }
+
+/* On Now its own line to get things out of your head has its mic: one is enough. */
+html.zoom[data-view="plan"]:has(#plan-sheet[data-tab="now"]) .zm-mic { display: none; }
+
+/* ---------- Today's faces: the list, the page, the hours ---------- */
+.ah-year { border: 0; background: transparent; color: var(--muted); font: inherit; letter-spacing: inherit; text-transform: inherit; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 3px; }
+.ah-year:hover, .ah-year:focus-visible { color: var(--ink); }
+.zm-faces { display: flex; gap: 2px; align-self: flex-end; }
+.zm-faces button { border: 0; background: transparent; color: var(--muted); font: 13px var(--ui); padding: 5px 11px; border-radius: 99px; cursor: pointer; }
+.zm-faces button:hover { color: var(--ink); }
+.zm-faces button[aria-current="page"] { color: var(--ink); background: var(--raise); }
+.tp-switch .zm-faces { margin: 0 0 4px -11px; }
+.zm-today-top { margin-bottom: 14px; }
+
+/* ---------- Year ---------- */
+.yr-months { display: grid; grid-auto-rows: min-content; align-content: start; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 14px; margin: 18px 0 26px; font-family: var(--ui); }
+.yr-month { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 10px 0 12px; border-top: 1px solid var(--line); min-width: 0; }
+.yr-name { border: 0; background: none; padding: 0; color: var(--ink); font: 400 19px var(--title, var(--prose)); cursor: pointer; text-align: left; }
+.yr-name:hover { color: var(--accent); }
+.yr-month.now .yr-name::after { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: 8px; vertical-align: 3px; }
+.yr-n { color: var(--muted); font-size: 12.5px; min-height: 1.3em; }
+.yr-date { display: flex; align-items: baseline; gap: 7px; border: 0; background: none; padding: 1px 0; color: var(--soft); font: 13px var(--ui); cursor: pointer; text-align: left; max-width: 100%; }
+.yr-date i { flex: none; width: 7px; height: 7px; transform: rotate(45deg); border-radius: 1px; background: var(--muted); }
+.yr-date.hard i { background: var(--signal); }
+.yr-date:hover .yr-text { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.yr-day { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+.yr-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yr-more { color: var(--faint); font-size: 12px; }
+.yr-later { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; font-family: var(--ui); }
+.yr-line { border: 0; background: none; padding: 4px 0; color: var(--ink); font: 15.5px/1.4 var(--prose); cursor: pointer; text-align: left; }
+.yr-line:hover { color: var(--accent); }
+.yr-foot { margin-top: 18px; }
+
+/* ---------- true focus: typing in a piece, only the words are left ---------- */
+html.zoom body.typing.in-piece :is(.zm-ruler, .zm-mic) { opacity: 0; }
+html.zoom body.typing.in-piece .topbar, html.zoom.has-rail body.typing.in-piece .topbar { opacity: 0 !important; transition: opacity var(--t2, .24s) ease; }
+html.zoom body.typing.in-piece.peek-bottom .zm-ruler { opacity: 1; }
+html.zoom body.typing.in-piece.peek-top .topbar, html.zoom.has-rail body.typing.in-piece.peek-top .topbar { opacity: 1 !important; }
+
+/* ---------- the phone ---------- */
+@media (--narrow), (--touch) {
+  .zm-cap, .zm-sep { display: none; }
+  html.zoom .zm-ruler { padding-top: 4px; }
+  /* Seven equal columns across the bar; Now is the fourth. */
+  .zm-row { grid-template-columns: repeat(7, minmax(0, 1fr)); max-width: 560px; }
+  .zm-half { display: contents; }
+  .zm-stop { flex: 1 1 0; min-width: 0; padding: 10px 2px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  .zm-stop.home .zm-word::before { margin-right: 4px; }
+  html.zoom body { padding-bottom: calc(52px + env(safe-area-inset-bottom, 0px)); }
+  html.zoom .zm-mic { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); right: max(14px, env(safe-area-inset-right, 0px)); width: 50px; height: 50px; }
+  .yr-months { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (--touch) {
+  /* Two fingers are the zoom's, not the browser's: pinching steps in and out, it never blows the page up. */
+  html.zoom, html.zoom body { touch-action: pan-x pan-y; }
+  /* The keyboard is the switch: while it's up, the bottom holds only the writing row. */
+  html.zoom body:is(.kb-up, .script-bar-on, .outline-bar-on, .go-on) .zm-ruler { display: none; }
+  html.zoom body.kb-up { padding-bottom: 0; }
+  /* The top line is always there on the phone: the date, this place's pages, the glass and More. */
+  html.zoom .topbar { display: flex !important; transform: none !important; opacity: 1 !important; align-items: center; gap: 6px; padding: 6px 8px 6px 12px; }
+  html.zoom .topbar > .zm-when { order: 0; }
+  html.zoom .topbar > :is(.zm-go, .zm-more) { order: 3; }
+  html.zoom body.kb-up .topbar { opacity: 0 !important; pointer-events: none; }
+  html.zoom body:not(.looking) :is(.notebook, .page) { padding-top: calc(var(--topbar-h, 44px) + 18px); }
+}
+
+/* ---------- the motion of a zoom ---------- */
+::view-transition-group(zm-ruler), ::view-transition-group(zm-mic) { animation: none; }
+::view-transition-old(zm-ruler), ::view-transition-new(zm-ruler), ::view-transition-old(zm-mic), ::view-transition-new(zm-mic) { animation: none; }
+html[data-zt]::view-transition-old(root), html[data-zt]::view-transition-new(root) { animation-duration: 240ms; animation-timing-function: cubic-bezier(.2, .75, .2, 1); animation-fill-mode: both; }
+html[data-zt="in"]::view-transition-old(root) { animation-name: zt-away-big; }
+html[data-zt="in"]::view-transition-new(root) { animation-name: zt-come-small; }
+html[data-zt="out"]::view-transition-old(root) { animation-name: zt-away-small; }
+html[data-zt="out"]::view-transition-new(root) { animation-name: zt-come-big; }
+html[data-zt="next"]::view-transition-old(root) { animation-name: zt-away-left; }
+html[data-zt="next"]::view-transition-new(root) { animation-name: zt-come-right; }
+html[data-zt="prev"]::view-transition-old(root) { animation-name: zt-away-right; }
+html[data-zt="prev"]::view-transition-new(root) { animation-name: zt-come-left; }
+html[data-zt="rise"]::view-transition-new(root) { animation-name: zt-come-small; }
+html[data-zt="rise"]::view-transition-old(root) { animation-name: zt-fade-out; }
+@keyframes zt-away-big { to { opacity: 0; transform: scale(1.06); } }
+@keyframes zt-come-small { from { opacity: 0; transform: scale(.96); } }
+@keyframes zt-away-small { to { opacity: 0; transform: scale(.95); } }
+@keyframes zt-come-big { from { opacity: 0; transform: scale(1.04); } }
+@keyframes zt-away-left { to { opacity: 0; transform: translateX(-36px); } }
+@keyframes zt-come-right { from { opacity: 0; transform: translateX(36px); } }
+@keyframes zt-away-right { to { opacity: 0; transform: translateX(36px); } }
+@keyframes zt-come-left { from { opacity: 0; transform: translateX(-36px); } }
+@keyframes zt-fade-out { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  html[data-zt]::view-transition-old(root), html[data-zt]::view-transition-new(root) { animation: none; }
+}

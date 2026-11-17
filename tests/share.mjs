@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
+import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -67,7 +68,7 @@ const lines = (p) => p.evaluate(() => new Promise((res) => {
 }));
 const outlineText = (p) => p.locator('#outline-editor .ProseMirror').innerText();
 
-const browser = await chromium.launch();
+const browser = classic(await chromium.launch());
 const ctx = await browser.newContext({ colorScheme: 'dark' });
 await ctx.exposeFunction('__remote', remote);
 await ctx.addInitScript(fake);

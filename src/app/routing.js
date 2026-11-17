@@ -5,6 +5,7 @@ import { closeMenu } from '../menu.js';
 import { outline, entry } from '../model.js';
 import { rootOf, dayId } from '../notebook.js';
 import { tabFor } from '../plan.js';
+import { zoomOn } from '../zoomstate.js';
 import { closeWhen } from '../when.js';
 import { draftHolding } from '../drafts.js';
 import { inPane } from '../panes.js';
@@ -106,7 +107,8 @@ async function go(place) {
   if (place.view === 'notebook' && !place.pageId && notebook.page && !notebook.isDay && gone(await getEntry(notebook.page.id))) place = { view: 'notebook', pageId: dayId(isoToday()) };
   // Today's plan on its own, and the notes of the draft next door, only live
   // beside something: in the main window they'd be the day's page.
-  if (!inPane && ((place.view === 'plan' && place.tab === 'day') || place.view === 'sidenotes' || place.view === 'talk')) place = { view: 'notebook', pageId: dayId(isoToday()) };
+  // On the zoom, Today's list is a place of its own (the List face of Today).
+  if (!inPane && ((place.view === 'plan' && place.tab === 'day' && !zoomOn()) || place.view === 'sidenotes' || place.view === 'talk')) place = { view: 'notebook', pageId: dayId(isoToday()) };
   const from = view();
   // Switch at once so the next keystroke lands in the right place; saving catches up.
   if (from === 'write' && place.view !== 'write') store.close(editor.state.doc);
@@ -207,6 +209,8 @@ async function go(place) {
   }
   renderCrumb();
   renderRail();
+  // The ruler lights the stop you're at (app/zoom.js).
+  document.dispatchEvent(new CustomEvent('inkwell:place', { detail: lastPlace }));
   // Notes beside follow the main window.
   if (!inPane) panes?.mainMoved(lastPlace);
   // The project pane stays with the planning views (and comes back with them).

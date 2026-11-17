@@ -11,7 +11,8 @@ import { seatsFor, deskSettings } from './desk.js';
 import { aheadPlan, addTask, setTask, moveTask, tickTask, renameTask, plainLine, parseEst, stepsHome, hours, addDays, dateOf } from './tasks.js';
 import { make } from './dom.js';
 
-export const WEEKS = 6;
+// Six weeks, or four on the zoom (its Weeks stop is four weeks, Nov 2026).
+export const weeksShown = () => (document.documentElement.classList.contains('zoom') ? 4 : 6);
 const DAY = 864e5;
 const long = (iso, opts) => dateOf(iso).toLocaleDateString('en-US', opts);
 const md = (iso) => long(iso, { month: 'short', day: 'numeric' });
@@ -55,7 +56,7 @@ export function drawAhead(plan) {
   if (plan.aheadHeld) return;
   const today = plan.today;
   const src = plan.aheadSrc || { lanes: [], dates: [] };
-  const model = aheadPlan(plan.items, { today, weeks: WEEKS, free: plan.free, lanes: src.lanes, dates: src.dates });
+  const model = aheadPlan(plan.items, { today, weeks: weeksShown(), free: plan.free, lanes: src.lanes, dates: src.dates });
   // A project in the wings only gets a lane when something of its is in view.
   model.lanes = model.lanes.filter((l) => !l.faint || l.bars.length || l.dates.length || l.loose.length || plan.aheadAdd?.world === l.id);
   plan.ahead = model;
@@ -65,7 +66,18 @@ export function drawAhead(plan) {
 
   const head = make('header', 'pl-top');
   const left = make('div');
-  left.append(make('div', 'pl-eyebrow', 'Six weeks, a lane for each project'), make('h1', '', 'Calendar'));
+  if (weeksShown() === 4) {
+    // The ruler's Month: the four weeks' dates, and a quiet way out to the Year.
+    const short = (iso) => dateOf(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const cols = model.weeks;
+    const eye = make('div', 'pl-eyebrow', `${short(cols[0].iso)} to ${short(cols[cols.length - 1].last)} · `);
+    const yr = make('button', 'ah-year', 'the year');
+    yr.type = 'button';
+    yr.title = 'Out to the Year (minus, or tap Month again)';
+    yr.addEventListener('click', () => plan.hooks.go({ view: 'plan', tab: 'year' }));
+    eye.append(yr);
+    left.append(eye, make('h1', '', 'Four weeks'));
+  } else left.append(make('div', 'pl-eyebrow', 'Six weeks, a lane for each project'), make('h1', '', 'Calendar'));
   const side = make('div', 'pl-side');
   if (plan.hooks.talk?.()) {
     const b = make('button', 'ghost-btn ah-talk', '✦ Plan it out with Claude');
@@ -80,7 +92,7 @@ export function drawAhead(plan) {
 
   const wrap = make('div', 'ah-wrap');
   const grid = make('div', 'ah');
-  grid.style.setProperty('--weeks', String(WEEKS));
+  grid.style.setProperty('--weeks', String(weeksShown()));
   grid.append(make('div', 'ah-corner'));
   model.weeks.forEach((w) => {
     const h = make('div', `ah-h${w.now ? ' now' : ''}${w.over ? ' over' : ''}`);
@@ -157,7 +169,7 @@ export function drawAhead(plan) {
       const col = model.weeks.findIndex((w) => w.iso === adding.week) + 1;
       if (col > 0) {
         const f = make('div', 'ah-add');
-        f.style.gridColumn = `${col} / ${Math.min(WEEKS, col + 1) + 1}`;
+        f.style.gridColumn = `${col} / ${Math.min(weeksShown(), col + 1) + 1}`;
         const input = make('input');
         input.type = 'text';
         input.value = held;
@@ -324,7 +336,7 @@ export function aheadDrags(plan, root) {
     const bar = e.target.closest?.('.ah-bar');
     if (!bar || !root.contains(bar)) return;
     const lane = bar.closest('.ah-rows');
-    const col = lane.getBoundingClientRect().width / WEEKS;
+    const col = lane.getBoundingClientRect().width / weeksShown();
     drag = { bar, x: e.clientX, col, grip: !!e.target.closest('.ah-grip'), from: Number(bar.dataset.from), to: Number(bar.dataset.to), by: 0, moved: false, id: e.pointerId };
   });
   root.addEventListener('pointermove', (e) => {
@@ -334,7 +346,7 @@ export function aheadDrags(plan, root) {
     if (!drag.moved) { drag.moved = true; plan.aheadHeld = true; drag.bar.classList.add('dragging'); try { drag.bar.setPointerCapture(drag.id); } catch { /* gone */ } }
     let by = Math.round(dx / drag.col);
     // Stay inside the six weeks; a bar can't end before it starts.
-    by = drag.grip ? Math.max(drag.from - drag.to, Math.min(WEEKS - drag.to, by)) : Math.max(1 - drag.from, Math.min(WEEKS - drag.to, by));
+    by = drag.grip ? Math.max(drag.from - drag.to, Math.min(weeksShown() - drag.to, by)) : Math.max(1 - drag.from, Math.min(weeksShown() - drag.to, by));
     if (by === drag.by) return;
     drag.by = by;
     drag.bar.style.gridColumn = drag.grip ? `${drag.from} / ${drag.to + by + 1}` : `${drag.from + by} / ${drag.to + by + 1}`;
