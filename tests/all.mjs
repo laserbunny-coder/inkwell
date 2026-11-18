@@ -29,7 +29,10 @@ const mine = new Set(loads[part - 1].files);
 const run = names.filter((n) => mine.has(n));
 if (parts > 1) console.log(`share ${part} of ${parts}: ${run.join(', ')} (about ${loads[part - 1].secs} s)`);
 
+// Every file runs, so one run lists every failure; the share fails at the end.
+const failed = [];
 for (const name of run) {
   const r = spawnSync(process.execPath, [`tests/${name}.mjs`], { stdio: 'inherit' });
-  if (r.status !== 0) { console.log(`\ntests/${name}.mjs failed`); process.exit(r.status || 1); }
+  if (r.status !== 0) { console.log(`\ntests/${name}.mjs failed`); failed.push(name); }
 }
+if (failed.length) { console.log(`\n${failed.length} failed: ${failed.join(', ')}`); process.exit(1); }
