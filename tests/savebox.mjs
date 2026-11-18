@@ -7,7 +7,6 @@ import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { bookmarklet } from '../src/savebutton.js';
-import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -23,7 +22,7 @@ const lines = (p) => p.evaluate(() => new Promise((res) => {
   r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').index('kind').getAll('line'); q.onsuccess = () => res(q.result.filter((l) => !l.deleted)); };
 }));
 
-const browser = classic(await chromium.launch());
+const browser = await chromium.launch();
 const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1280, height: 800 } });
 // No server: the snapshot just waits.
 await ctx.addInitScript(() => { window.__claude = async () => { throw Object.assign(new Error('offline'), { status: 503 }); }; });

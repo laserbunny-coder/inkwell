@@ -13,7 +13,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
-import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -80,7 +79,7 @@ const wav = (() => {
 const wavPath = join(dir, 'Walk by the river.wav');
 writeFileSync(wavPath, wav);
 
-const browser = classic(pageFirst(await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] })));
+const browser = pageFirst(await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] }));
 const ctx = await browser.newContext({ permissions: ['microphone', 'clipboard-read', 'clipboard-write'], colorScheme: 'dark', viewport: { width: 1280, height: 860 } });
 await ctx.exposeFunction('__remote', remote);
 await ctx.addInitScript(fake);

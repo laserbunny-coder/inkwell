@@ -81,7 +81,6 @@ import './sidenotes.js';
 import './talk.js';
 import './hstrip.js';
 import './hstrip.css';
-import './ahead.js';
 import './calendar.js';
 import './claudenotes.js';
 import './claudeknows.js';

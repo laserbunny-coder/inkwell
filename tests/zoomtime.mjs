@@ -62,7 +62,7 @@ async function run(p, label) {
 const listText = (p) => p.evaluate(() => [...document.querySelectorAll('#plan-sheet .pl-list [data-task]')].filter((el) => !el.parentElement.closest('[data-task]')).map((el) => (el.dataset.part ? `[${el.dataset.part}]` : el.querySelector('.pl-words')?.textContent || el.textContent).trim()));
 
 try {
-  const ctx = await browser.newContext({ zoom: true, colorScheme: 'dark', viewport: { width: 1280, height: 800 } });
+  const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1280, height: 800 } });
   const p = await open(ctx);
   await p.keyboard.press('Control+Shift+O');
   await p.waitForFunction(() => document.documentElement.dataset.view === 'library');
@@ -236,7 +236,7 @@ try {
   await ctx.close();
 
   // The phone: a hold picks a line, and its bar moves it; nothing scrolls sideways.
-  const pctx = await browser.newContext({ ...devices['Pixel 7'], zoom: true, colorScheme: 'dark' });
+  const pctx = await browser.newContext({ ...devices['Pixel 7'], colorScheme: 'dark' });
   const ph = await open(pctx);
   await add(ph, 'Pay the rent');
   await add(ph, 'Board scene 3');

@@ -4,7 +4,6 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
-import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -69,7 +68,7 @@ put({ id: 'ch_o1', kind: 'chapter', parent_id: 'ac_o', title: 'Chapter 1', sort:
 para('pa_o1', 'ch_o1', 0, 'Words worth keeping.', { trashed: trashedAt, trashedWith: 'pr_old' });
 const before = new Map([...table.values()].map((r) => [r.id, { ...r }]));
 
-const browser = classic(await chromium.launch());
+const browser = await chromium.launch();
 async function device() {
   const ctx = await browser.newContext({ viewport: { width: 1300, height: 850 } });
   await ctx.exposeFunction('__remote', remote);

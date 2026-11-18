@@ -32,11 +32,10 @@ import { printCurrent, toggleCompare, toggleFreshEyes } from './revising.js';
 import { toggleGrid, toggleProduction } from './productionwiring.js';
 import { goPage, nav, strip, todayPanel } from './workpages.js';
 import { closeHistory, hstrip, openHistory } from './historyview.js';
-import { currentSize, currentWidth, progressPanel, setPage, step, toggleFocus, togglePageSettings, toggleReading, toggleSections, toggleShortcuts } from './pagesettings.js';
+import { currentSize, currentWidth, progressPanel, setPage, step, togglePageSettings, toggleReading, toggleSections, toggleShortcuts } from './pagesettings.js';
 import { box, commands, toggleTheme, writing } from './commands.js';
-import { askServer, canAskServer, capture, captureHere, flipPlan, inToday, openToday, plan, todayKey } from './talking.js';
+import { askServer, canAskServer, capture, captureHere, openToday, plan } from './talking.js';
 import { openTalk, paneKeys, pull, toggleBesidePane, whenHere } from './beside.js';
-import { zoomOn } from '../zoomstate.js';
 
 // Pictures and files from this device, put in where the caret is.
 // ---------- quick inserts (the / menu, Ctrl+Shift+; and Ctrl+;) ----------
@@ -512,7 +511,6 @@ function wireQuickInserts() {
     if (cmd === 'new-act') newAct();
     if (cmd === 'new-page') newPageHere();
     if (cmd === 'view') toggleWriteToday();
-    if (cmd === 'focus') toggleFocus();
     if (cmd === 'shortcuts') toggleShortcuts();
     if (cmd === 'stats') progressPanel.toggle();
     if (cmd === 'library') go({ view: 'library', area: null });
@@ -534,10 +532,9 @@ function wireQuickInserts() {
     if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
     if (cmd === 'tags') go({ view: 'tags' });
     if (cmd === 'week') go({ view: 'plan', tab: 'week' });
-    if (cmd === 'when' || cmd === 'plan') go({ view: 'plan', tab: 'plan' });
+    if (cmd === 'when' || cmd === 'plan') go({ view: 'plan', tab: 'day' });
     if (cmd === 'calendar') plan.goTab('cal');
     if (cmd === 'ahead') go({ view: 'plan', tab: 'ahead' });
-    if (cmd === 'pace') go({ view: 'plan', tab: 'pace' });
     if (cmd === 'desk') go({ view: 'desk' });
     if (cmd === 'desk-history') go({ view: 'desk', tab: 'history' });
     if (cmd === 'close-tag') { $('.tag-results').hidden = true; currentEditor().commands.focus(); }
@@ -549,19 +546,15 @@ function wireQuickInserts() {
     // Ctrl + K: the box; again while it's open and empty, All commands.
     if (m && !e.shiftKey && k === 'k') { e.preventDefault(); if ($('.palette').hidden) openBox({ find: true }); else if (boxOpen() && !box.all && !$('#palette-input').value) box.setAll(true); else closePalette(); }
     else if (m && e.shiftKey && !e.altKey && e.code === 'Period') { e.preventDefault(); toggleSections(); }
-    else if (m && e.key === '.') { e.preventDefault(); toggleFocus(); }
     else if (m && !e.shiftKey && !e.altKey && e.code === 'Backslash') { e.preventDefault(); toggleBesidePane(); }
     // Alt + T: talk it through with Claude, beside where you are.
     else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyT') { e.preventDefault(); openTalk(); }
     // Alt + Shift + T: everything left from earlier days onto today.
     else if (e.altKey && !m && e.shiftKey && e.code === 'KeyT') { e.preventDefault(); plan.bringToday(); }
     // Alt + P: the plan beside today's page, or on top of it.
-    else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyP' && !inPane) { e.preventDefault(); flipPlan(); }
     // Alt + 1: Now, from anywhere (in text too), except where a project's page
     // tabs have Alt + 0 to 6. Alt + 2, 3, 4 in Today: Page, Plan, Calendar
     // (again in a calendar: the next zoom).
-    else if (e.altKey && !m && !e.shiftKey && e.code === 'Digit1' && !strip.byNumber(1)) { e.preventDefault(); todayKey(1); }
-    else if (e.altKey && !m && !e.shiftKey && /^Digit[2-4]$/.test(e.code) && inToday() && !zoomOn()) { e.preventDefault(); todayKey(Number(e.code.slice(5))); }
     // Alt + W: When (today, this week, next week, later…) for the line or lines here.
     else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyW') { e.preventDefault(); whenHere(); }
     // Alt + Left / Right: Back and Forward, everywhere (in a line too), so a task
@@ -579,7 +572,6 @@ function wireQuickInserts() {
     else if (m && e.shiftKey && k === 'j') { e.preventDefault(); todayPanel.toggle(); }
     else if (m && e.shiftKey && !e.altKey && k === 'u') { e.preventDefault(); go({ view: 'desk' }); }
     else if (m && k === 'j') { e.preventDefault(); toggleWriteToday(); }
-    else if (m && k === '1') { e.preventDefault(); body.classList.toggle('pin-outline'); }
     else if (m && k === '2' && writing()) { e.preventDefault(); toggleNotes(); }
     else if (((m && e.shiftKey) || (!isMac && e.altKey && !m && !e.shiftKey)) && e.code === 'KeyN' && writing()) { e.preventDefault(); notes.add(); }
     else if (e.altKey && e.shiftKey && !m && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && writing() && editor.isFocused) { e.preventDefault(); blocks.moveCurrent(e.key === 'ArrowUp' ? -1 : 1); }

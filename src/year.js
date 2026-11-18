@@ -6,7 +6,6 @@
 // opens where it is written.
 import { make } from './dom.js';
 import { addDays, dateOf, isoOf, isRepeat, spanOf, weekOf } from './tasks.js';
-import { zoomOn } from './zoomstate.js';
 import { media } from './device.js';
 
 const hover = media('mouse');
@@ -55,7 +54,7 @@ export function yearModel(items, today = isoOf()) {
 // plan: the Plan (plan.js) whose sheet this draws into.
 export function drawYear(plan) {
   const today = plan.today;
-  const { months, later, loose } = yearModel(plan.items, today);
+  const { months, later } = yearModel(plan.items, today);
   const sheet = plan.sheet;
   const head = make('header', 'pl-top');
   const left = make('div');
@@ -70,12 +69,12 @@ export function drawYear(plan) {
     box.dataset.drop = `month:${m.ym}`;
     const name = make('button', 'yr-name', m.year !== months[0].year && m.ym.endsWith('-01') ? `${m.label} ${m.year}` : m.label);
     name.type = 'button';
-    name.title = zoomOn() ? `Into ${m.label}: its four weeks` : `Open the first week of ${m.label}`;
+    name.title = `Into ${m.label}: its four weeks`;
     name.addEventListener('click', () => {
       // The month's first whole week (the one it starts in, if it starts on a Monday).
       const w0 = weekOf(m.first)[0];
       const week = m.ym === ym(today) ? null : w0 < m.first ? addDays(w0, 7) : w0;
-      plan.hooks.go({ view: 'plan', tab: zoomOn() ? 'ahead' : 'week', ...(week ? { week } : {}) });
+      plan.hooks.go({ view: 'plan', tab: 'ahead', ...(week ? { week } : {}) });
     });
     const n = make('span', 'yr-n', m.n ? `${m.n} ${m.loose.length || m.dates.length ? 'more ' : ''}planned` : '');
     box.append(name, n);
@@ -99,16 +98,7 @@ export function drawYear(plan) {
   if (!later.length) some.append(make('p', 'hint', 'Nothing yet. Alt + W on a line, then Later, puts it here.'));
   some.dataset.drop = 'year';
   for (const i of later) some.append(lineButton(plan, i, 'yr-line'));
-  const foot = make('div', 'yr-foot');
-  if (loose) {
-    const b = make('button', 'ghost-btn yr-loose', `Not planned · ${loose}`);
-    b.type = 'button';
-    b.title = 'The lines with no day and no time yet, in Plan';
-    b.addEventListener('click', () => plan.hooks.go({ view: 'plan', tab: 'plan' }));
-    foot.append(b);
-  }
-  if (zoomOn()) foot.replaceChildren();
-  sheet.replaceChildren(head, grid, some, foot);
+  sheet.replaceChildren(head, grid, some);
   plan.just = null;
 }
 

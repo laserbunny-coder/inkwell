@@ -1,5 +1,4 @@
 // The command box (Ctrl + K) and go-to (Ctrl + O).
-import { zoomOn } from '../zoomstate.js';
 import { media } from '../device.js';
 import { SECTION_NAMES } from '../schema.js';
 import { keyLabel, showKeysForThisComputer } from '../keys.js';
@@ -18,7 +17,7 @@ import { showSaveButton } from '../savebutton.js';
 import { toggleLight } from '../frame.js';
 import { addLine } from '../capture.js';
 import { tabFor } from '../plan.js';
-import { fiveAtMost, CHOICES, nowChanged } from '../now.js';
+import { fiveAtMost } from '../now.js';
 import { Box } from '../box.js';
 import { describe } from '../commandinfo.js';
 import { SHOWS } from '../shows.js';
@@ -223,7 +222,6 @@ addCommands(() => [
   { group: 'write', label: 'Previous alternate', keys: '⌥↑', run: () => flip(editor, -1), when: writing },
   { group: 'write', label: 'Scene break', keys: `${mod}⇧↵`, run: () => editor.chain().focus().insertSceneBreak().run(), when: writing },
   { group: 'write', label: 'Note categories: add, rename, recolour', keys: '', run: () => notes.editTypes() },
-  { group: 'view', label: 'Sidebar (keep open)', keys: `${mod}1`, run: () => body.classList.toggle('pin-outline') },
   { group: 'page', label: 'Light / dark', keys: `${mod}⇧L`, run: toggleTheme },
   { group: 'page', label: 'Change the writing font', keys: '', words: ['typeface', 'mono', 'serif'], run: () => setTimeout(openFontPicker, 60) },
   { group: 'sync', label: 'Export this chapter as Markdown', keys: '', run: exportChapter, when: () => writing() && !isScript() },
@@ -246,10 +244,6 @@ function wireCommands() {
   // The "Show or hide …" commands come from the same list as the Show tab
   // (shows.js); the ones written above by hand keep their own.
   for (const sh of SHOWS) {
-    if (sh.choice) {
-      for (const [v, l] of sh.choice) commands.push({ group: 'plan', label: `${sh.cmd}: ${l}`, keys: '', hint: sh.hint, words: sh.words, run: () => { CHOICES[sh.id]?.[1](v); plan?.redraw(); nowChanged(); toast(`${sh.label}: ${l}`); } });
-      continue;
-    }
     if (!sh.cmd || commands.some((c) => c.label === sh.cmd)) continue;
     commands.push({ group: 'view', label: sh.cmd, keys: sh.keys || '', hint: sh.hint, words: sh.words, run: () => { setShown(sh.id, hidden().has(sh.id)); toast(`${sh.label}: ${hidden().has(sh.id) ? 'off' : 'on'}`); }, when: sh.phone ? () => touch.matches : undefined, needs: sh.phone ? 'On a phone only' : undefined });
   }
@@ -264,25 +258,6 @@ function wireCommands() {
     usable: (c) => !c.when || c.when(),
     recent: () => nav.recent,
     jump: (place) => go(place),
-    rooms: () => {
-      // In the zoom the ruler is the rooms (Part 4): Go keeps search, back and projects.
-      if (zoomOn()) return [];
-      const v = view();
-      const active = strip.ctx?.active || null;
-      const inside = strip.tabs.some((t) => t.n != null);
-      const on = (id) => !inside && (active === id || (id === 'library' && v === 'library') || (id === 'drawer' && v === 'drawer') || (id === 'tags' && v === 'tags') || (id === 'desk' && v === 'desk'));
-      const all = [['today', 'Today', '⌘J'], ['desk', 'Desk', '⌘⇧U'], ['library', 'Library', '⌘⇧O'], ['drawer', 'Drawer', ''], ['tags', 'Tags', ''], ['catchup', 'Catch-up', '']];
-      // The phone's bottom bar has Today, Desk and Library already.
-      const list = touch.matches ? all.filter(([id]) => !['today', 'desk', 'library'].includes(id)) : all;
-      const out = list.map(([id, label, keys]) => ({ id, label, keys: keyLabel(keys), on: on(id) }));
-      if (touch.matches) out.push({ id: 'outline', label: 'Outline', quiet: true });
-      return out;
-    },
-    room: (id) => {
-      if (id === 'look') { if ($('.page-settings').hidden) togglePageSettings(); $('.page-settings').scrollTop = 0; return; }
-      if (id === 'outline') { body.classList.add('show-outline'); return; }
-      return goPage(id);
-    },
     tabs: () => {
       if (!strip.tabs.some((t) => t.n != null)) return null;
       const active = strip.ctx?.active || null;

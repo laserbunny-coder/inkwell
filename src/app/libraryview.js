@@ -19,7 +19,6 @@ import { areaPath, dot, renameable, renderCrumb, renderRail, subtree } from './r
 import { setLife, finishWorld, reopenWorld, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, moveBookToArea, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu } from './tidying.js';
 import { renderBoard, goPage } from './workpages.js';
 import { askServer, canAskServer, deskPage, plan, projectPage } from './talking.js';
-import { zoomOn } from '../zoomstate.js';
 import { seatMap, seatWord } from './seats.js';
 let worldDates = []; // the open project's dated things besides its steps (shoot days)
 
@@ -193,7 +192,7 @@ async function renderLibrary() {
 // carried onto a seat (the bar above the ruler) or right-clicked for it.
 async function renderZoomLibrary(allAreas, allBooks) {
   const box = $('#lib-zoom');
-  box.hidden = !zoomOn();
+  box.hidden = false;
   if (box.hidden) { box.replaceChildren(); return; }
   const seats = await seatMap();
   const order = await deskPage.order().catch(() => []);
@@ -440,8 +439,8 @@ async function renderProject() {
   stageSel.onchange = () => setStage(b, stageSel.value);
   // In the zoom: its stage as small dots under its name (click one to set it).
   const dots = $('#ph-dots');
-  dots.hidden = !zoomOn();
-  if (zoomOn()) {
+  dots.hidden = false;
+  {
     const list = stagesOf(b, world);
     const here = list.indexOf(stageOf(b, world));
     dots.replaceChildren(...list.map((st, i) => {
@@ -621,7 +620,7 @@ async function renderWorld() {
   const shape = shapeOf(w, s.pieces.filter((p) => p.depth === 0).length);
   $('#wh-kind').textContent = shape.id === 'one' ? '' : shape.name;
   // In the zoom, "Life project" beside the name is the switch (it was buried in ⋯ > Shape).
-  if (life && zoomOn()) {
+  if (life) {
     const b = make('button', 'wp-lifeword', 'Life project');
     b.type = 'button';
     b.title = 'A life project: steps, notes and pages. Click to make it a story world';
@@ -651,7 +650,7 @@ async function renderWorld() {
   const canBoard = !life && s.pieces.length > 0;
   // In the zoom: one thin line of how many pieces are at each stage (into the
   // stage board on Make), and the pieces as a list under it.
-  const thin = zoomOn() && canBoard;
+  const thin = canBoard;
   if (thin) stageLine(w, s.pieces);
   const asList = !canBoard || thin || localStorage.getItem('piecesAs') === 'list';
   status.hidden = asList;

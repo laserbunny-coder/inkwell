@@ -12,7 +12,6 @@ import { readFile } from 'node:fs/promises';
 import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 import { shotCode, shotNumber, shotForName, findElements, sceneElements, withRenders, withPrompts, shotStage, toSrt, speechesIn, toCsv, guessType, pad } from '../src/production.js';
-import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -173,7 +172,7 @@ put({ id: 'pg_katana', kind: 'page', parent_id: 'pg_props', title: 'Katana', sor
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDK+mmyAAAAABJRU5ErkJggg==', 'base64');
 
-const browser = classic(pageFirst(await chromium.launch()));
+const browser = pageFirst(await chromium.launch());
 async function device(opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, colorScheme: 'dark', acceptDownloads: true, ...opts });
   await ctx.exposeFunction('__remote', remote);

@@ -7,22 +7,15 @@
 
 import { popMenu, askText } from './menu.js';
 import { trash, restore } from './trash.js';
-import {
-  loadTasks, dayPlan, weekPlan, pace, planSettings, savePlanSettings, setTask, unTask, tickTask, tookTask, startTimer, stopTimer,
-  addTask, renameTask, arrange, arrangeCarried, weave, plainLine, parseEst, readSpan, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE, stepsPage, stepsHome,
-  moveTask, isStretch, stretchWord, isRepeat, repeatWord, readDays, parseAdd, history, occItem, setRepeat, skipTask, rollTicked, dow, areaHours,
-  setWhen, whenSnap, whenBack, rankAll, horizon, whenHeadings, whenOf, whenWord, spanOf, taskOf
-} from './tasks.js';
+import { loadTasks, dayPlan, weekPlan, planSettings, savePlanSettings, setTask, unTask, tickTask, tookTask, startTimer, stopTimer, addTask, renameTask, arrange, arrangeCarried, weave, plainLine, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE, stepsPage, stepsHome, moveTask, isStretch, stretchWord, isRepeat, repeatWord, readDays, parseAdd, history, occItem, setRepeat, skipTask, rollTicked, dow, setWhen, whenSnap, whenBack, rankAll, horizon, whenHeadings, whenOf, whenWord, spanOf, taskOf } from './tasks.js';
 import { pickWhen, currentChoice } from './when.js';
-import { areas, areaColor } from './library.js';
-import { drawAhead, aheadClick, aheadContext, aheadDrags } from './ahead.js';
-import { clockWord, freeLeft } from './calendar.js';
+import { areas } from './library.js';
+import { clockWord } from './calendar.js';
 import { drawCalendar } from './plancal.js';
 import { children, getEntry, isTrashed } from './db.js';
 import { media } from './device.js';
 import { make } from './dom.js';
 import { Now, SMALLS, isSmall } from './now.js';
-import { zoomOn } from './zoomstate.js';
 import { drawYear } from './year.js';
 import { drawMonth } from './month.js';
 import { isLight } from './firstlight.js';
@@ -35,25 +28,21 @@ const ICON = {
   pause: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4 3h3v10H4zM9 3h3v10H9z" fill="currentColor"/></svg>',
   check: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M3 8.500l3.200 3.200L13 4.800" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 };
-const ESTS = [5, 10, 15, 30, 45, 60, 90, 120, 180];
 // Today in three words, each with one job: Page (where you write today),
 // Plan (where you decide what's when: one list from today outward) and
 // Calendar (where you look: the same plan drawn on time, with a zoom of Day,
 // Week and Six weeks, and Pace while time estimates are on). On a computer
 // the first is "Today": the page and the plan together. Keys: Alt + 1, 2, 3.
-export const ZOOMS = [['calday', 'Day'], ['week', 'Week'], ['ahead', 'Six weeks'], ['pace', 'Pace']];
-const CAL = new Set(ZOOMS.map((z) => z[0]));
+const CAL = new Set(['calday', 'week', 'ahead']);
 export const isCal = (tab) => CAL.has(tab);
 // A remembered place or an old link: What's when is Plan now.
-export const tabFor = (tab) => (tab === 'when' ? 'plan' : ['now', 'plan', 'day', 'year', ...CAL].includes(tab) ? tab : 'week');
+// Plan's own list and Pace went with the old layout (Nov 17 2026): they open Today and Week.
+export const tabFor = (tab) => (tab === 'when' || tab === 'plan' ? 'day' : ['now', 'day', 'year', ...CAL].includes(tab) ? tab : 'week');
 // Today's three faces on the zoom (Nov 2026): the list, the day's page, the hours.
 export const FACES = [['list', 'List', 'Today’s list, with the events of the day'], ['page', 'Page', 'Today’s page'], ['hours', 'Hours', 'Today by the hour']];
 export function todayFace() { try { const f = localStorage.getItem('todayFace'); return FACES.some((x) => x[0] === f) ? f : 'list'; } catch { return 'list'; } }
 export function faceTo(face) { try { localStorage.setItem('todayFace', face); } catch { /* no storage here */ } }
 export const facePlace = (face, today) => (face === 'page' ? { view: 'notebook', pageId: `day-${today}` } : face === 'hours' ? { view: 'plan', tab: 'calday' } : { view: 'plan', tab: 'day' });
-// Now, Page, Plan, Calendar: Alt + 1 to 4, on a computer and a phone alike.
-const TABS = [['now', 'Now', 'now', 'Alt+1'], ['today', 'Page', 'today-page', 'Alt+2'], ['plan', 'Plan', 'plan', 'Alt+3'], ['cal', 'Calendar', 'calendar', 'Alt+4']];
-const PHONE_TABS = [['now', 'Now', 'now'], ['page', 'Page', 'today-page'], ['plan', 'Plan', 'today-plan'], ['cal', 'Calendar', 'calendar']];
 const clip = (t, n = 40) => { const s = String(t || 'Untitled').replace(/\s+/g, ' ').trim() || 'Untitled'; return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
 const hover = media('mouse');
 const long = (iso, opts) => dateOf(iso).toLocaleDateString('en-US', opts);
@@ -96,7 +85,6 @@ export class Plan {
       el.addEventListener('keydown', (e) => this.key(e));
       el.addEventListener('dblclick', (e) => this.dblclick(e));
       el.addEventListener('contextmenu', (e) => {
-        if (el === sheet && aheadContext(this, e)) return;
         const row = e.target.closest('[data-task]');
         if (!row || e.target.closest('input')) return;
         e.preventDefault();
@@ -108,13 +96,8 @@ export class Plan {
     this.phoneSw = make('nav', 'tp-switch');
     this.phoneSw.hidden = true;
     box.before(this.phoneSw);
-    this.swipes(box.closest('.notebook'));
     // The plan beside the page needs a wide window: crossing 1100 px moves it.
     matchMedia('(min-width: 1100px)').addEventListener('change', () => { if (this.dayShown) this.redraw(); });
-    this.swipes(sheet);
-    this.aheadSrc = null; // the lanes and dates Weeks ahead was last drawn with
-    this.aheadAdd = null; // { world, week, day } while something is being typed into a lane
-    aheadDrags(this, sheet);
     this.now = new Now(this);
     this.zpick = new Pick(this);
     this.shelf = new Shelf(this);
@@ -158,14 +141,11 @@ export class Plan {
     // 'day' is today's plan on its own: what "Plan" shows beside another page.
     // What's when is Plan now; Week, Weeks ahead and Pace are zooms of Calendar.
     this.tab = tabFor(place.tab);
-    if (isCal(this.tab)) this.calZoom = this.tab;
     this.week = place.week || null;
     // The zoom (Part 2): a line opened on the Now stop without moving it.
     this.lineId = this.tab === 'now' ? place.line || null : null;
     // The zoom (Part 3): another day, gone into from the Week (Today's stop).
     this.dayAt = this.tab === 'day' && place.day && place.day !== this.today ? place.day : null;
-    this.aheadAdd = null;
-    this.aheadHeld = false;
     this.sheet.dataset.tab = this.tab;
     await this.refresh();
   }
@@ -185,7 +165,7 @@ export class Plan {
     }
     if (!this.dayShown && !this.pageShown && !this.stepsShown) return;
     const turn = (this.turn = (this.turn || 0) + 1);
-    const [items, settings, src, areaList] = await Promise.all([loadTasks(undefined, { withAway: this.stepsShown && !this.dayShown && !this.pageShown }), planSettings(), this.pageShown && this.tab === 'ahead' ? this.hooks.ahead?.() : null, this.pageShown && this.tab === 'week' ? areas() : null]);
+    const [items, settings, areaList] = await Promise.all([loadTasks(undefined, { withAway: this.stepsShown && !this.dayShown && !this.pageShown }), planSettings(), this.pageShown && this.tab === 'week' ? areas() : null]);
     if (turn !== this.turn) return;
     // Lines that come by themselves each day (Training, Part 6): once made, look again.
     if (this.hooks.daily && !this.dailying) {
@@ -201,7 +181,6 @@ export class Plan {
     this.targets = settings.areas;
     this.parts = settings.parts;
     if (areaList) this.areaList = areaList;
-    if (src) this.aheadSrc = src;
     this.loadCalendar(turn);
     this.redraw();
     this.tickClock();
@@ -225,12 +204,10 @@ export class Plan {
     if (this.stepsShown) this.drawSteps();
     if (this.pageShown) {
       if (this.tab === 'now') this.now.draw();
-      else if (this.tab === 'pace') this.drawPace();
-      else if (this.tab === 'ahead') { if (zoomOn()) drawMonth(this); else drawAhead(this); }
-      else if (this.tab === 'day') { this.drawDay(this.sheet, (zoomOn() && this.dayAt) || this.today); if (zoomOn()) this.sheet.prepend(this.zoomTop()); }
+      else if (this.tab === 'ahead') drawMonth(this);
+      else if (this.tab === 'day') { this.drawDay(this.sheet, this.dayAt || this.today); this.sheet.prepend(this.zoomTop()); }
       else if (this.tab === 'year') drawYear(this);
       else if (this.tab === 'calday') this.drawCalDay();
-      else if (this.tab === 'plan') this.drawOutline(this.sheet);
       else this.drawWeek();
     }
     this.zpick?.paint();
@@ -277,7 +254,6 @@ export class Plan {
     return el;
   }
 
-  get estimates() { return !this.hooks.off?.('estimates'); }
 
   // After the plan writes: the open page hears about it, and the plan redraws.
   async wrote(rows) {
@@ -382,141 +358,25 @@ export class Plan {
     return zoomTo({ place: d === this.today ? { view: 'plan', tab: 'day' } : { view: 'plan', tab: 'day', day: d }, way: n < 0 ? 'prev' : 'next' });
   }
 
-  // Today, Plan, Calendar (Page, Plan, Calendar on a phone). On a calendar the
-  // zoom comes with it: a row under the switch on a phone, beside it on a computer.
-  switchRow(current) {
-    if (zoomOn()) return this.facesRow(current);
-    const small = !hover.matches;
-    const row = make('div', `pl-switch${small ? ' pl-switch-phone' : ''}`);
-    row.setAttribute('role', 'group');
-    row.setAttribute('aria-label', 'Views of Today');
-    const here = isCal(current) ? 'cal' : current === 'day' ? (small ? 'plan' : 'today') : current === 'page' && !small ? 'today' : current;
-    for (const [id, label, cmd, keys] of small ? PHONE_TABS : TABS) {
-      const b = make('button', '', label);
-      b.dataset.cmd = cmd;
-      if (keys) b.title = `${label} (${keys.replace('+', ' + ')}${id === 'cal' ? ', again for the next zoom' : ''})`;
-      else if (!small) b.title = label;
-      if (id === here) b.setAttribute('aria-current', 'page');
-      row.append(b);
-    }
-    if (!isCal(current)) return row;
-    const both = make('div', 'pl-switches');
-    both.append(row, this.zoomRow(current));
-    return both;
-  }
-  zoomRow(current) {
-    const row = make('div', 'pl-zoom');
-    row.setAttribute('role', 'group');
-    row.setAttribute('aria-label', 'How far to look');
-    for (const [tab, label] of ZOOMS) {
-      if (tab === 'pace' && !this.estimates) continue;
-      const b = make('button', '', label);
-      b.dataset.act = 'zoom';
-      b.dataset.tab = tab;
-      b.setAttribute('aria-pressed', String(tab === current));
-      if (hover.matches) b.title = `${label} (Alt + 3 steps the zoom)`;
-      row.append(b);
-    }
-    return row;
-  }
-  // The zoom the calendar opens on: the one used last on this device.
-  get calZoom() {
-    let z = 'week';
-    try { z = localStorage.getItem('calZoom') || 'week'; } catch { /* no storage here */ }
-    return isCal(z) && (z !== 'pace' || this.estimates) ? z : 'week';
-  }
-  set calZoom(v) { try { localStorage.setItem('calZoom', v); } catch { /* no storage here */ } }
-  // Alt + 3 in a calendar: the next zoom (Day, Week, Six weeks, then Day again).
-  stepZoom() {
-    const list = ZOOMS.map((z) => z[0]).filter((z) => z !== 'pace' || this.estimates);
-    const at = this.pageShown && isCal(this.tab) ? list.indexOf(this.tab) : -1;
-    const to = at < 0 ? this.calZoom : list[(at + 1) % list.length];
-    this.calZoom = to;
-    return this.hooks.go({ view: 'plan', tab: to });
-  }
-
-  // ---------- the day on a phone: Page or Plan ----------
-
-  // Page or Plan, the last one picked on this device (Plan the first time).
-  get phoneDay() { if (zoomOn()) return 'page'; try { return localStorage.getItem('todayPhone') === 'page' ? 'page' : 'plan'; } catch { return 'plan'; } }
-  set phoneDay(v) { try { localStorage.setItem('todayPhone', v); } catch { /* no storage here */ } }
-  // On a phone a day's page opens on one of the two, with the switch above it.
+  switchRow(current) { return this.facesRow(current); }
+  // A day's page: Today's faces under its title, on both devices.
   phoneShow(on) {
     const nb = this.box.closest('.notebook');
     const sw = this.phoneSw;
     if (!nb) return;
     // The zoom: the day's page is one of Today's faces, so it shows the page (its
     // plan is the List face), with the faces under the title on both devices.
-    if (zoomOn()) {
-      nb.classList.toggle('tp-on', !!on);
-      if (on) nb.dataset.tp = 'page'; else delete nb.dataset.tp;
-      const today = !!this.day && this.day === this.today;
-      if (sw) { sw.hidden = !today; if (today) sw.replaceChildren(this.facesRow('page')); }
-      return;
-    }
     nb.classList.toggle('tp-on', !!on);
-    if (on) nb.dataset.tp = this.phoneDay; else delete nb.dataset.tp;
-    if (sw) {
-      sw.hidden = !on;
-      if (on) sw.replaceChildren(this.switchRow(this.phoneDay === 'page' ? 'page' : 'plan'));
-    }
+    if (on) nb.dataset.tp = 'page'; else delete nb.dataset.tp;
+    const today = !!this.day && this.day === this.today;
+    if (sw) { sw.hidden = !today; if (today) sw.replaceChildren(this.facesRow('page')); }
   }
-  // On a phone, today's Plan is the whole outline, from today outward.
-  get outlineHere() { return this.dayShown && !hover.matches && this.day === this.today; }
-  // A sideways swipe on a phone flips to the view next door. A hold on a task
-  // (to move it), a hold on a line, picked words and Six weeks' own sideways
-  // scroll all keep the finger.
-  swipes(root) {
-    if (!root) return;
-    let s = null;
-    root.addEventListener('touchstart', (e) => {
-      s = null;
-      if (hover.matches || e.touches.length !== 1) return;
-      if (e.target.closest?.('.ah-wrap, .dc, .pu, input, textarea, .pop-menu, .pl-pickbar, .pl-zoom')) return;
-      s = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
-    }, { passive: true });
-    root.addEventListener('touchend', (e) => {
-      const was = s;
-      s = null;
-      if (!was) return;
-      const html = document.documentElement;
-      if (['pl-touchdrag', 'line-holding', 'pl-calm', 'pull-dropping'].some((c) => html.classList.contains(c))) return;
-      const dx = e.changedTouches[0].clientX - was.x;
-      const dy = e.changedTouches[0].clientY - was.y;
-      if (Date.now() - was.t > 700 || Math.abs(dx) < 70 || Math.abs(dx) < 2 * Math.abs(dy)) return;
-      if (getSelection && !getSelection()?.isCollapsed) return;
-      // On the zoom a swipe is earlier or later (zoom.js), not the old switch.
-      if (zoomOn()) return;
-      this.flipBy(dx < 0 ? 1 : -1);
-    }, { passive: true });
-  }
-  flipBy(n) {
-    const order = ['now', 'page', 'plan', 'cal'];
-    const here = this.dayShown ? (this.day === this.today ? this.phoneDay : null) : this.pageShown ? (isCal(this.tab) ? 'cal' : this.tab === 'plan' || this.tab === 'now' ? this.tab : null) : null;
-    const at = order.indexOf(here);
-    const to = order[at + n];
-    if (at < 0 || !to) return false;
-    this.goTab(to);
-    return true;
-  }
-  // Open one of Today's views (Page and Plan are today's page on a phone).
+  // Open one of Today's faces: Now, the day's page, its list, or by the hour.
   goTab(id) {
-    if (id === 'day') id = 'plan';
     if (id === 'now') return this.hooks.go({ view: 'plan', tab: 'now' });
-    if (id === 'page' && hover.matches) return this.hooks.go({ view: 'notebook', pageId: `day-${this.today}` });
-    if (id === 'page' || id === 'plan') {
-      if (this.dayShown && this.day === this.today) return this.setPhoneDay(id);
-      this.phoneDay = id;
-      return this.hooks.go({ view: 'notebook', pageId: `day-${this.today}` });
-    }
-    if (id === 'cal') return this.hooks.go({ view: 'plan', tab: this.calZoom });
-    return this.hooks.go({ view: 'plan', tab: id });
-  }
-  setPhoneDay(v) {
-    if (v !== 'page' && v !== 'plan') return;
-    this.phoneDay = v;
-    if (this.dayShown && !hover.matches) { this.phoneShow(true); this.redraw(); }
-    document.scrollingElement?.scrollTo?.(0, 0);
+    if (id === 'page') return this.hooks.go({ view: 'notebook', pageId: `day-${this.today}` });
+    if (id === 'cal') return this.hooks.go({ view: 'plan', tab: 'calday' });
+    return this.hooks.go({ view: 'plan', tab: id === 'plan' ? 'day' : id });
   }
 
   // "From a project": a project's lines open next to the plan (beside it on
@@ -578,7 +438,7 @@ export class Plan {
     const eve = Number.isFinite(p.eve) ? Math.max(p.eve, aft) : Infinity;
     return { aft, eve };
   }
-  partsShown() { return zoomOn() && !this.hooks.off?.('dayparts'); }
+  partsShown() { return !this.hooks.off?.('dayparts'); }
   withParts(above, day) {
     if (!this.partsShown()) return above;
     const at = this.partsOf(day);
@@ -662,7 +522,6 @@ export class Plan {
   }
 
   drawDay(box = this.box, day = this.day) {
-    if (box === this.box && this.outlineHere && this.phoneDay === 'plan') return this.drawOutline(box);
     const today = this.today;
     const bits = this.dayBits(day);
     const { p, evs } = bits;
@@ -670,13 +529,10 @@ export class Plan {
     const head = make('div', 'pl-head');
     head.append(make('h2', 'pl-label', 'Plan'));
     const said = [];
-    // Time estimates are off unless switched on under Look: then it's only how many.
-    const est = this.estimates;
-    if (p.todo.length) said.push(est && p.left ? `${span(p.left)} to do` : `${p.todo.length} to do`);
-    if (p.done.length) said.push(est && p.spent ? `${span(p.spent)} done` : `${p.done.length} done`);
+    // Order only, never time (Nov 2026): how many, not how long.
+    if (p.todo.length) said.push(`${p.todo.length} to do`);
+    if (p.done.length) said.push(`${p.done.length} done`);
     head.append(make('span', 'pl-sum', said.join(' · ')));
-    // Today: the time still free before your day ends, less what's on the calendar.
-    if (est && day === today && p.todo.length) head.append(this.leftToday(p, evs));
     // On a computer the plan sits beside the page or on top of it: one click flips it.
     const flip = this.hooks.layout && box === this.box && hover.matches ? this.hooks.layout() : null;
     if (flip) {
@@ -685,7 +541,6 @@ export class Plan {
       b.title = flip === 'side' ? 'The plan on top of the page, in one column (Alt + P)' : 'The plan in a column beside the page (Alt + P)';
       head.append(b);
     }
-    if (!zoomOn()) head.append(this.switchRow('day'));
     const { list, typing } = this.dayListIn(box, day, bits);
     // Today: "Tomorrow and later" folded under the day (open, Tomorrow and This week
     // take a dropped task to push it out), then the rest of the plan as one.
@@ -703,16 +558,6 @@ export class Plan {
     if (box === this.box) this.backAgain();
   }
 
-  // "6 h 25 min left today": the time still free before your day ends.
-  leftToday(p, evs) {
-    const free = Math.floor(freeLeft(evs, Date.now(), this.dayEnd) / 5) * 5;
-    const left = make('button', `pl-left${p.left > free ? ' over' : ''}`, `${span(free)} left today`);
-    left.dataset.act = 'dayend';
-    const h = Math.floor(this.dayEnd);
-    const m = Math.round((this.dayEnd % 1) * 60);
-    left.title = `Until ${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h < 12 || h === 24 ? 'am' : 'pm'}${evs.some((e) => !e.allDay) ? ', less what’s on your calendar' : ''}: click to change when your day ends`;
-    return left;
-  }
 
   // Under today's list: one clean thin line, as in Plan, its words ("Tomorrow
   // and later") showing only on hover (a tap opens it on a phone). Opened
@@ -773,7 +618,7 @@ export class Plan {
   calHead(tab, eyebrow) {
     const head = make('header', 'pl-top');
     const left = make('div');
-    left.append(make('div', 'pl-eyebrow', eyebrow), make('h1', '', tab === 'plan' ? 'Plan' : zoomOn() && tab === 'calday' ? 'Today' : 'Calendar'));
+    left.append(make('div', 'pl-eyebrow', eyebrow), make('h1', '', tab === 'plan' ? 'Plan' : tab === 'calday' ? 'Today' : 'Calendar'));
     const side = make('div', 'pl-side');
     side.append(...[tab === 'plan' || tab === 'week' ? this.pullButton() : null].filter(Boolean), this.switchRow(tab));
     head.append(left, side);
@@ -795,7 +640,7 @@ export class Plan {
   // The line: "▸ 8 from earlier days", To today, Go through, ⋯. Three or fewer
   // never fold; with "Fold earlier days" off under Look they're always open.
   earlyLine(carried, { fold = true } = {}) {
-    if (zoomOn() && fold && carried.length) return this.earlyQuiet(carried);
+    if (fold && carried.length) return this.earlyQuiet(carried);
     if (carried.length <= 3) return null;
     const foldable = fold && !this.hooks.off?.('foldearlier');
     const open = !foldable || this.earlyOpen;
@@ -1118,7 +963,7 @@ export class Plan {
       acts.append(b);
     }
     // The timer goes with time estimates: with them off it isn't there at all.
-    if (!done && !ghost && !t.habit && (this.estimates || t.run)) {
+    if (!done && !ghost && !t.habit && t.run) {
       const play = make('button', 'pl-play');
       play.innerHTML = t.run ? ICON.pause : ICON.play;
       play.dataset.act = 'timer';
@@ -1128,13 +973,8 @@ export class Plan {
     const est = make('button', 'pl-est');
     est.dataset.act = 'est';
     if (t.run) { est.textContent = clock(t, Date.now()); est.dataset.timer = id; est.classList.add('live'); est.setAttribute('aria-label', 'Time on the clock'); }
-    else if (done && !this.estimates) { est.textContent = t.actual ? span(t.actual) : ''; est.hidden = !t.actual; est.setAttribute('aria-label', 'How long it took'); }
-    else if (done) { est.textContent = t.actual && t.est && t.actual !== t.est ? `${span(t.est)} → ${span(t.actual)}` : t.actual || t.est ? span(t.actual || t.est) : ''; est.setAttribute('aria-label', 'How long it took'); }
-    // With estimates off, an open task says nothing about how long it takes.
-    else if (!this.estimates) est.hidden = true;
-    else { est.textContent = t.est ? span(t.est) : 'how long?'; if (!t.est) est.classList.add('unset'); est.setAttribute('aria-label', t.est ? `Takes about ${span(t.est)}; click to change` : 'Say how long it takes'); }
-    // A habit has no hours: nothing to guess, nothing to say afterwards.
-    if (t.habit) est.hidden = true;
+    // Order only: a row never says how long a task takes or took (time estimates went on Nov 17 2026).
+    else est.hidden = true;
     const more = make('button', 'pl-more', '⋯');
     more.dataset.act = 'more';
     more.setAttribute('aria-label', 'More for this task');
@@ -1149,7 +989,6 @@ export class Plan {
     row.append(check, title, meta);
     const out = [row];
     if (open) out.push(this.kidsBox(id));
-    if (this.took === id && done) out.push(this.tookRow(i));
     return out;
   }
 
@@ -1194,27 +1033,6 @@ export class Plan {
     return box;
   }
 
-  // "How long did it take?", right under the task just ticked.
-  tookRow(i) {
-    const t = i.task;
-    const row = make('div', 'pl-took');
-    row.dataset.took = i.row.id;
-    row.append(make('span', '', 'How long did it take?'));
-    const on = timed(t);
-    const base = t.est ? [...new Set([Math.max(5, Math.round(t.est / 2 / 5) * 5), t.est, Math.round((t.est * 1.5) / 5) * 5, t.est * 2])] : [15, 30, 60, 120];
-    const add = (m, label, lit) => {
-      const b = make('button', lit ? 'on' : '', label);
-      b.dataset.act = 'took';
-      b.dataset.m = String(m);
-      row.append(b);
-    };
-    if (on) add(on, `${span(on)} timed`, true);
-    for (const m of base) if (m !== on) add(m, `${span(m)}${m === t.est ? ' as planned' : ''}`);
-    const other = make('button', '', 'Another…');
-    other.dataset.act = 'took-other';
-    row.append(other);
-    return row;
-  }
 
   // Where a task lives, said short. Nothing for the Tasks page, or for the
   // very day page the plan sits on.
@@ -1278,122 +1096,7 @@ export class Plan {
     return this.items.filter((i) => i.mine && !i.row.fields?.done && !isStretch(i.task) && !i.ghost && !whenOf(i.task, h));
   }
 
-  // Plan: one outline from today outward. The tasks from earlier days fold
-  // into their own line; Today is the real day list (your order, repeats,
-  // events woven in, Add a task); then Tomorrow, This week, Next week, the
-  // month, Later and Not planned, each folding with its count. Drop a task
-  // or a project's step on any heading, folded or open.
-  drawOutline(box = this.sheet) {
-    const { h, heads } = this.whenModel();
-    const today = h.today;
-    const opens = this.planOpen();
-    const held = this.held(box);
-    const inDay = box === this.box;
-    const head = inDay ? null : this.calHead('plan', long(today, { weekday: 'long', month: 'long', day: 'numeric' }));
-    const sec = (id, label, n, cls = '') => {
-      const open = opens.has(id);
-      const el = make('section', `ww-sec${open ? '' : ' folded'}${n ? '' : ' empty'}${cls}`);
-      el.dataset.bucket = id;
-      const hd = make('h2', 'ww-h');
-      const fold = make('button', 'ww-fold');
-      fold.dataset.act = 'ww-fold';
-      fold.setAttribute('aria-expanded', String(open));
-      fold.setAttribute('aria-label', `${open ? 'Fold' : 'Unfold'} ${label}`);
-      fold.append(make('span', 'ww-tri', open ? '▾' : '▸'), make('span', 'ww-name', label), make('span', 'ww-n', n ? String(n) : ''));
-      hd.append(fold);
-      el.append(hd);
-      return { el, open };
-    };
-    // Today: the day list itself.
-    const bits = this.dayBits(today);
-    const t = sec('today', 'Today', bits.p.todo.length, ' ol-today');
-    if (this.estimates && bits.p.todo.length) t.el.querySelector('.ww-h').append(this.leftToday(bits.p, bits.evs));
-    const { list, typing } = this.dayListIn(box, today, bits, 'pl-list ww-list');
-    list.hidden = !t.open;
-    bits.cal.hidden = bits.cal.hidden || !t.open;
-    const shortDay = (iso) => `${long(iso, { weekday: 'short' })} ${dateOf(iso).getDate()}`;
-    const rest = [];
-    for (const x of heads.slice(1)) {
-      const s = sec(x.id, x.label, x.items.length);
-      const l = make('div', 'pl-list ww-list');
-      l.dataset.bucket = x.id;
-      l.hidden = !s.open;
-      // A day inside a loose heading says which ("Wed 18"); none says "any day".
-      const loose = x.id !== 'tomorrow';
-      if (s.open) l.append(...x.items.flatMap((i) => this.taskRow(i, {
-        tag: !loose ? '' : i.task.day ? shortDay(i.task.day) : x.id === 'later' && spanOf(i.task) && spanOf(i.task).kind !== 'later' ? whenWord(i.task, today) : x.id === 'week' || x.id === 'next' ? 'any day' : ''
-      })));
-      s.el.append(l);
-      rest.push(s.el);
-    }
-    rest.push(this.unplannedSec(h, opens.has('none')));
-    // The rest waits behind one thin line, so Plan opens on Today alone.
-    // A drag opens it for as long as it lasts, so every heading takes a drop.
-    const later = heads.slice(1).reduce((a, x) => a + x.items.length, 0) + this.unplanned(h).length;
-    const more = this.restLine(later);
-    const wrap = make('div', `pl-rest${this.restOpen() ? ' open' : ''}`);
-    wrap.append(...rest);
-    rest.length = 0;
-    rest.push(more, wrap);
-    if (typing) {
-      // Adding one after another: Today stays where it is, the rest is drawn around it.
-      const keep = list.closest('.ww-sec');
-      for (const el of [...box.children]) if (el !== keep) el.remove();
-      for (const el of [...keep.children]) if (el !== list) el.remove();
-      keep.className = t.el.className;
-      keep.prepend(...t.el.children, bits.cal);
-      keep.before(...[head].filter(Boolean));
-      keep.after(...rest);
-    } else {
-      t.el.append(bits.cal, list);
-      box.replaceChildren(...[head].filter(Boolean), t.el, ...rest);
-      this.restore(box, held);
-    }
-    box.classList.toggle('pl-outline', true);
-    box.dataset.n = String(bits.p.todo.length + bits.p.done.length);
-    this.just = null;
-    if (box === this.box) this.backAgain();
-  }
 
-  // Not planned: grouped by project, each group folded with its count, then
-  // "Tasks with no project". It never counts toward Today and never nags.
-  unplannedSec(h, open) {
-    const list = this.unplanned(h);
-    const groups = new Map();
-    for (const i of list) {
-      const key = i.world?.id || '';
-      if (!groups.has(key)) groups.set(key, { key, title: i.world?.title || 'Tasks with no project', items: [] });
-      groups.get(key).items.push(i);
-    }
-    const sorted = [...groups.values()].sort((a, b) => (!a.key) - (!b.key) || String(a.title).localeCompare(String(b.title)));
-    this.groupsOpen ||= new Set();
-    const sec = make('section', `ww-sec ww-none${open ? '' : ' folded'}${list.length ? '' : ' empty'}`);
-    sec.dataset.bucket = 'none';
-    const hd = make('h2', 'ww-h');
-    const fold = make('button', 'ww-fold');
-    fold.dataset.act = 'ww-fold';
-    fold.setAttribute('aria-expanded', String(open));
-    fold.setAttribute('aria-label', `${open ? 'Fold' : 'Unfold'} Not planned`);
-    fold.append(make('span', 'ww-tri', open ? '▾' : '▸'), make('span', 'ww-name', 'Not planned'), make('span', 'ww-n', list.length ? String(list.length) : ''));
-    hd.append(fold);
-    const body = make('div', 'pl-list ww-list');
-    body.dataset.bucket = 'none';
-    body.hidden = !open;
-    if (open) {
-      for (const g of sorted) {
-        const on = this.groupsOpen.has(g.key);
-        const gb = make('button', 'ww-group');
-        gb.dataset.act = 'ww-group';
-        gb.dataset.group = g.key;
-        gb.setAttribute('aria-expanded', String(on));
-        gb.append(make('span', 'ww-tri', on ? '▾' : '▸'), make('span', 'ww-name', g.title), make('span', 'ww-n', String(g.items.length)));
-        body.append(gb);
-        if (on) body.append(...g.items.sort((a, b) => (a.row.created_at || 0) - (b.row.created_at || 0)).flatMap((i) => this.taskRow(i, { place: '' })));
-      }
-    }
-    sec.append(hd, body);
-    return sec;
-  }
 
   // Every task under a heading, in its order, with these at the end: where a
   // drop on a folded heading (or one of the lines under today's list) lands.
@@ -1522,17 +1225,10 @@ export class Plan {
         const after = onHead ? all.at(-1) || null : afterIn(all);
         return { bucket: sec.dataset.bucket, list, rows: rest, after: after && after.classList.contains('carried') ? null : after, sec };
       }
-      if (this.pageShown && this.tab === 'plan') return null;
     }
     if (this.pageShown && this.tab === 'week') {
       const zone2 = el.closest?.('.pw-day, .pw-tray');
       return zone2 && this.sheet.contains(zone2) ? { zone: zone2 } : null;
-    }
-    if (this.pageShown && this.tab === 'ahead') {
-      if (!el.closest?.('.ah')) return null;
-      const col = [...this.sheet.querySelectorAll('.ah-h')].find((c) => { const b = c.getBoundingClientRect(); return x >= b.left && x < b.right; });
-      const week = col?.querySelector('.ah-week')?.dataset.week;
-      return week ? { week, col } : null;
     }
     if (this.dayShown || (this.pageShown && this.tab === 'day')) {
       const box = this.dayShown ? this.box : this.sheet;
@@ -1661,7 +1357,7 @@ export class Plan {
     next.dataset.act = 'week-next';
     next.setAttribute('aria-label', 'The week after');
     nav.append(prev, now, next);
-    side.append(...(this.estimates ? [this.meter(w.min, this.free * 60)] : []), nav, ...[this.pullButton()].filter(Boolean), this.switchRow('week'));
+    side.append(nav, ...[this.pullButton()].filter(Boolean), this.switchRow('week'));
     head.append(left, side);
 
     // On a phone the whole week fits one screen: a row a day (its first
@@ -1701,7 +1397,7 @@ export class Plan {
       const h = make('button', 'pw-h');
       h.dataset.act = 'open-day';
       h.title = 'Open this day';
-      h.append(make('b', '', String(dateOf(d.iso).getDate())), make('span', '', `${long(d.iso, { weekday: 'short' })}${d.min && this.estimates ? ` · ${span(d.min)}` : ''}`));
+      h.append(make('b', '', String(dateOf(d.iso).getDate())), make('span', '', long(d.iso, { weekday: 'short' })));
       col.append(h);
       for (const e of this.cal.filter((x) => x.day === d.iso)) col.append(this.eventLine(e, 'pw-ev'));
       for (const i of d.open) col.append(this.chip(i));
@@ -1717,9 +1413,6 @@ export class Plan {
     chips.append(this.addRow(null, 'Add'));
     tray.append(chips);
     const parts = [head, grid, tray];
-    // Hours by area go with time estimates: with them off, no hours anywhere.
-    const byArea = this.estimates ? this.areaRows(first) : null;
-    if (byArea) parts.push(byArea);
     // Left from before this week: the same line as on today's plan, with its ways out.
     if (w.late && thisWeek) {
       const before = dayPlan(this.items, today, today).carried.filter((i) => i.task.day < first);
@@ -1740,56 +1433,10 @@ export class Plan {
     if (i.ghost) { b.dataset.ghost = i.ghost; b.title = `${repeatWord(i.task.repeat)}: it comes round on this day`; }
     if (!done && !i.ghost) { b.dataset.move = '1'; if (hover.matches) b.draggable = true; }
     b.append(make('span', 'pw-t', i.row.text || 'Untitled'));
-    const mins = i.task.habit || !this.estimates ? 0 : done ? i.task.actual || i.task.est : i.task.est;
-    if (mins) b.append(make('small', '', span(mins)));
-    else if (isRepeat(i.task) && !done) b.append(make('small', 'pw-rep', '↻'));
+    if (isRepeat(i.task) && !done) b.append(make('small', 'pw-rep', '↻'));
     return b;
   }
 
-  // Under the week: hours worked in each area against the hours you mean to
-  // give it. An area shows once it has a target, or hours this week.
-  areaRows(anyDay) {
-    // An area that sits in another comes right under it.
-    const list = [];
-    const walk = (parent) => { for (const a of this.areaList || []) if ((a.parent_id || null) === parent && !list.includes(a)) { list.push(a); walk(a.id); } };
-    walk(null);
-    for (const a of this.areaList || []) if (!list.includes(a)) list.push(a);
-    if (!list.length) return null;
-    const worked = areaHours(this.items, list, anyDay);
-    const targets = this.targets || {};
-    const shown = list.filter((a) => Number(targets[a.id]) > 0 || (!a.parent_id && worked.get(a.id)));
-    const box = make('section', 'pw-areas');
-    box.append(make('h2', 'pl-label', 'Areas this week'));
-    const rows = make('div', 'pa-rows');
-    for (const a of shown) {
-      const min = worked.get(a.id) || 0;
-      const of = Number(targets[a.id]) > 0 ? Number(targets[a.id]) * 60 : 0;
-      const m = make('div', 'pl-meter pa-row');
-      m.dataset.area = a.id;
-      const dot = make('i', 'pa-dot');
-      dot.style.background = areaColor(a);
-      const name = make('span', `pl-meter-n${a.parent_id ? ' sub' : ''}`);
-      name.append(dot, a.title || 'Untitled');
-      const track = make('span', 'pl-track');
-      const fill = make('i', of && min >= of ? 'met' : '');
-      fill.style.width = `${of ? Math.min(100, (min / of) * 100) : 0}%`;
-      track.append(fill);
-      if (!of) track.classList.add('bare');
-      const say = make('button', 'pl-meter-v', of ? `${hours(min)} h of ${hours(of)} h` : `${hours(min)} h`);
-      say.dataset.act = 'area-target';
-      say.title = of ? 'Hours a week you mean to give this area: click to change' : 'Click to say how many hours a week this area should get';
-      m.append(name, track, say);
-      rows.append(m);
-    }
-    const rest = list.filter((a) => !shown.includes(a));
-    if (rest.length) {
-      const more = make('button', 'wp-link pa-more', shown.length ? 'Another area…' : 'Give an area its hours…');
-      more.dataset.act = 'area-pick';
-      rows.append(more);
-    }
-    box.append(rows);
-    return box;
-  }
 
   async askTarget(areaId) {
     const a = (this.areaList || []).find((x) => x.id === areaId);
@@ -1820,68 +1467,6 @@ export class Plan {
 
   // ---------- Pace ----------
 
-  drawPace() {
-    const p = pace(this.items, Date.now());
-    const head = make('header', 'pl-top');
-    const left = make('div');
-    left.append(make('div', 'pl-eyebrow', 'Looking back · last 7 days'), make('h1', '', 'Pace'));
-    const side = make('div', 'pl-side');
-    side.append(this.switchRow('pace'));
-    head.append(left, side);
-    const parts = [head];
-    if (!p.rows.length) {
-      parts.push(make('p', 'pl-note', 'Nothing ticked off in the last 7 days yet. Tick a task and say how long it took, and it shows here, planned against real.'));
-      this.sheet.replaceChildren(...parts);
-      return;
-    }
-    if (p.measured) {
-      const ratio = p.real / p.planned;
-      const read = ratio > 1.15 ? `It took about ${ratio >= 2 ? `${Math.round(ratio * 10) / 10} times` : `${Math.round((ratio - 1) * 100)}% longer than`} what you planned.`
-        : ratio < 0.85 ? `It took about ${Math.round((1 - ratio) * 100)}% less than you planned.` : 'Your guesses were close.';
-      parts.push(make('p', 'pl-read', `You planned ${span(p.planned)} and it took ${span(p.real)}. ${read}`));
-    }
-    const max = Math.max(...p.rows.map((r) => Math.max(r.est || 0, r.real || 0)), 1);
-    const table = make('div', 'pc-table');
-    table.setAttribute('role', 'table');
-    const th = make('div', 'pc-row pc-head');
-    th.append(make('span', '', 'Task'), make('span', 'pc-n', 'Planned'), make('span', 'pc-n', 'Real'), make('span', ''));
-    table.append(th);
-    for (const r of p.rows) {
-      const row = make('div', 'pc-row');
-      row.dataset.task = r.id;
-      const t = make('button', 'pc-t', r.title);
-      t.dataset.act = 'open';
-      t.title = 'Open it where it’s written';
-      const bars = make('span', 'pc-bars');
-      const a = make('i');
-      a.style.width = `${((r.est || 0) / max) * 100}%`;
-      const b = make('i', r.est && r.real > r.est * 2 ? 'over' : 'real');
-      b.style.width = `${((r.real || 0) / max) * 100}%`;
-      bars.append(a, b);
-      row.append(t, make('span', 'pc-n', r.est ? span(r.est) : '–'), make('span', 'pc-n', r.real ? span(r.real) : '–'), bars);
-      table.append(row);
-    }
-    parts.push(table);
-    const groups = (title, list) => {
-      if (!list.length) return;
-      parts.push(make('h2', 'pl-label pc-sub', title));
-      const box = make('div', 'pc-groups');
-      const top = list[0][1];
-      for (const [name, min] of list.slice(0, 8)) {
-        const m = make('div', 'pl-meter');
-        const track = make('span', 'pl-track');
-        const fill = make('i');
-        fill.style.width = `${(min / top) * 100}%`;
-        track.append(fill);
-        m.append(make('span', 'pl-meter-n', name), track, make('span', 'pl-meter-v', span(min)));
-        box.append(m);
-      }
-      parts.push(box);
-    };
-    groups('Time by project', p.byProject);
-    groups('Time by tag', p.byTag);
-    this.sheet.replaceChildren(...parts);
-  }
 
   // ---------- doing ----------
 
@@ -1889,7 +1474,6 @@ export class Plan {
     const el = e.target.closest('[data-act]');
     if (!el) return;
     const act = el.dataset.act;
-    if (act.startsWith('ahead-')) return aheadClick(this, act, el);
     const row = el.closest('[data-task], [data-took]');
     let i = row ? this.item(row.dataset.task || row.dataset.took) : null;
     // One time a repeating task was done, or a later day it comes round on.
@@ -1897,23 +1481,14 @@ export class Plan {
     if (i && row.dataset.ghost) i = { ...i, ghost: row.dataset.ghost };
     if (act === 'week-prev' || act === 'week-next') return this.hooks.go({ view: 'plan', tab: 'week', week: addDays(weekOf(this.week || this.today)[0], act === 'week-prev' ? -7 : 7) });
     if (act === 'week-now') return this.hooks.go({ view: 'plan', tab: 'week' });
-    if (act === 'open-day' && zoomOn()) return this.intoDay(el.closest('[data-day]').dataset.day);
+    if (act === 'open-day') return this.intoDay(el.closest('[data-day]').dataset.day);
     if (act === 'open-day') return this.hooks.go({ view: 'notebook', pageId: `day-${el.closest('[data-day]').dataset.day}` });
     if (act === 'day-prev') return this.dayStep(-1);
     if (act === 'day-next') return this.dayStep(1);
     if (act === 'day-today') return zoomTo({ stop: 'today' });
-    if (act === 'zoom') { this.calZoom = el.dataset.tab; return this.hooks.go({ view: 'plan', tab: el.dataset.tab }); }
-    if (act === 'open-plan') { if (el.dataset.bucket) this.planFold(el.dataset.bucket, true); return this.hooks.go({ view: 'plan', tab: 'plan' }); }
+    if (act === 'open-plan') { if (el.dataset.bucket) this.planFold(el.dataset.bucket, true); return this.hooks.go({ view: 'plan', tab: 'day' }); }
     if (act === 'thru-carried') return this.hooks.goThrough?.();
-    if (act === 'week-day' && zoomOn()) { const day = el.closest('[data-day]').dataset.day; return day ? this.intoDay(day) : null; }
-    if (act === 'week-day') {
-      // A day of the week on a phone: that day in Plan (Any day: Plan, at This week).
-      const day = el.closest('[data-day]').dataset.day;
-      if (!day) { this.planFold('week', true); return this.goTab('plan'); }
-      if (day === this.today) return this.goTab('plan');
-      this.phoneDay = 'plan';
-      return this.hooks.go({ view: 'notebook', pageId: `day-${day}` });
-    }
+    if (act === 'week-day') { const day = el.closest('[data-day]').dataset.day; return day ? this.intoDay(day) : null; }
     if (act === 'open-today') return this.hooks.go({ view: 'notebook', pageId: `day-${this.today}` });
     if (act === 'early-fold') { this.earlyOpen = !this.earlyOpen; return this.redraw(); }
     if (act === 'early-today') return this.bringToday();
@@ -1948,9 +1523,8 @@ export class Plan {
     if (act === 'tick' && i.ghost) return this.hooks.toast?.(`It comes round on ${long(i.ghost, { weekday: 'long' })}. Tick it then, or tick the one that’s due.`);
     if (act === 'tick') return this.tick(i, !i.row.fields?.done);
     if (act === 'timer') return this.timerFor(i);
-    if (act === 'est') return i.row.fields?.done ? this.askTook(i) : popMenu(el, this.estItems(i));
     // The zoom: a line in the week opens (its menu is a right-click or a hold away).
-    if (act === 'more' && zoomOn() && !inPane && el.classList.contains('pw-task') && !i.ghost && !e.ctrlKey && !e.metaKey) return this.open(i);
+    if (act === 'more' && !inPane && el.classList.contains('pw-task') && !i.ghost && !e.ctrlKey && !e.metaKey) return this.open(i);
     if (act === 'more') return this.menu(i, el);
     if (act === 'open') return this.hooks.openEntry(i.row.id);
     if (act === 'fold') { this.fold(i.row.id, !this.unfolded(i.row.id)); return this.redraw(); }
@@ -1966,8 +1540,6 @@ export class Plan {
       this.opening = setTimeout(() => this.open(i), 260);
       return;
     }
-    if (act === 'took') return this.tookFor(i, Number(el.dataset.m));
-    if (act === 'took-other') return this.askTook(i);
   }
 
   // Open a task the way an outliner zooms into a line: it becomes the page,
@@ -1975,7 +1547,7 @@ export class Plan {
   open(i) {
     clearTimeout(this.opening);
     this.left(i.row.id);
-    if (zoomOn() && !inPane) return this.openLine(i);
+    if (!inPane) return this.openLine(i);
     return (this.hooks.openTask || this.hooks.openEntry)(i.row.id);
   }
 
@@ -2250,8 +1822,8 @@ export class Plan {
     this.took = null;
     if (done && row && !row.fields.task.habit) {
       // With the question switched off, a timed task still keeps its time.
-      if (!this.estimates) { const on = timed(row.fields.task); if (on) await tookTask(id, on); }
-      else if (this.dayShown) this.took = id;
+      const on = timed(row.fields.task);
+      if (on) await tookTask(id, on);
     }
     await this.wrote(row);
     // Out of sight once ticked: Undo is right there, in case it was the wrong one.
@@ -2260,18 +1832,7 @@ export class Plan {
     }
   }
 
-  async tookFor(i, minutes) {
-    this.took = null;
-    await this.wrote(await tookTask(i.row.id, minutes, i.occ || null));
-  }
 
-  async askTook(i) {
-    const v = await askText({ title: 'How long did it take?', value: i.task.actual ? String(i.task.actual) : '', placeholder: '45, 1h, 1h 20m', ok: 'Save', body: i.row.text || '' });
-    if (v === null || v === undefined || v === false) return;
-    const m = readSpan(String(v));
-    if (!m) { if (String(v).trim()) this.hooks.toast?.('Didn’t catch that. Try 45, 1h or 1h 20m.'); return; }
-    await this.tookFor(i, m);
-  }
 
   async timerFor(i) {
     await this.wrote(i.task.run ? await stopTimer(i.row.id) : await startTimer(i.row.id));
@@ -2286,13 +1847,6 @@ export class Plan {
     await this.wrote(await setTask(i.row.id, { est: minutes }));
   }
 
-  async askEst(i) {
-    const v = await askText({ title: 'How long does it take?', value: i.task.est ? String(i.task.est) : '', placeholder: '45, 1h, 1h 20m', ok: 'Save', body: i.row.text || '' });
-    if (v === null || v === undefined || v === false) return;
-    const m = readSpan(String(v));
-    if (!m) { if (String(v).trim()) this.hooks.toast?.('Didn’t catch that. Try 45, 1h or 1h 20m.'); return; }
-    await this.est(i, m);
-  }
 
   async askFree() {
     const v = await askText({ title: 'Free hours in a week', value: String(this.free), type: 'number', ok: 'Save', body: 'The hours you really have for tasks in a week. Each week’s plan is weighed against it.' });
@@ -2311,14 +1865,6 @@ export class Plan {
     await this.wrote(await savePlanSettings({ dayEnd: hour }));
   }
 
-  estItems(i) {
-    const t = i.task;
-    return [
-      ...ESTS.map((m) => ({ label: span(m), current: t.est === m, run: () => this.est(i, m) })),
-      { label: 'Another length…', run: () => this.askEst(i) },
-      { label: 'No estimate', current: !t.est, run: () => this.est(i, null) }
-    ];
-  }
 
   // The menu for a task, the same wherever the task shows (the plan, a week,
   // the label after its words on a page).
@@ -2328,21 +1874,20 @@ export class Plan {
     const done = !!i.row.fields?.done;
     const items = [];
     const rep = isRepeat(t);
-    // One time a repeating task was done: take it back, or say how long it took.
+    // One time a repeating task was done: take it back.
     if (i.occ) {
       items.push({ label: 'Not done after all', run: () => this.tick(i, false) });
-      if (!t.habit) items.push({ label: t.actual ? `It took ${span(t.actual)}` : 'How long it took…', run: () => this.askTook(i) });
       items.push('sep', { label: 'How it’s going', sub: this.historyItems(i) }, { label: 'Open it where it’s written', run: () => this.hooks.openEntry(i.row.id) });
       return popMenu(anchor, items, at);
     }
-    if (done) items.push({ label: 'Not done after all', run: () => this.tick(i, false) }, { label: t.actual ? `It took ${span(t.actual)}` : 'How long it took…', run: () => this.askTook(i) });
+    if (done) items.push({ label: 'Not done after all', run: () => this.tick(i, false) });
     else {
       items.push({ label: 'Done', run: () => this.tick(i, true) });
-      items.push({ label: t.run ? 'Stop the timer' : 'Start the timer', run: () => this.timerFor(i) });
+      if (t.run) items.push({ label: 'Stop the timer', run: () => this.timerFor(i) });
     }
     // On a phone, a quick way to the ends of the day without sliding past everything.
     // With plain rows, what the row no longer says is said here.
-    if (this.hooks.off?.('rowdetails')) {
+    {
       const bits = [];
       const where = this.placeOf(i);
       if (where) bits.push(`In ${where}`);
@@ -2350,7 +1895,6 @@ export class Plan {
       else if (!done && t.day && t.day !== this.today) bits.push(dayWord(t.day, this.today));
       else if (!done && !t.day && spanOf(t)) bits.push(whenWord(t, this.today));
       if (t.owner && t.owner !== 'me') bits.push(String(t.owner));
-      if (this.estimates && t.est && !done) bits.push(`About ${span(t.est)}`);
       if (Array.isArray(t.worked) && t.worked.length) bits.push(`Worked on ${t.worked.length === 1 ? 'once' : `${t.worked.length} times`}`);
       if (bits.length) items.push({ note: bits.join(' · ') });
       if (!done && t.day && t.day < this.today && !rep && !i.ghost) items.push({ label: 'Put it on today', run: () => this.bringToday([i.row.id]) });
@@ -2361,7 +1905,6 @@ export class Plan {
     const list = !done && anchor?.dataset?.move && anchor.closest?.('.pl-list');
     if (list) items.push('sep', { label: 'Move to the top', run: () => this.toEnd(list, i.row.id, true) }, { label: 'Move to the bottom', run: () => this.toEnd(list, i.row.id, false) });
     items.push('sep', { label: `When…${hover.matches ? '  (Alt + W)' : ''}`, run: () => this.pickWhenFor(this.movingIds(i.row.id), { anchor, at }) }, 'sep',
-      ...(t.habit || !this.estimates ? [] : [{ label: t.est ? `Takes ${span(t.est)}` : 'How long it takes', sub: this.estItems(i) }]),
       // A small thing rides with the others in Now (habits always do).
       ...(!done && !t.habit ? [{ label: 'A small thing', current: !!t.small, run: async () => { await this.wrote(await setTask(i.row.id, { small: !t.small })); this.hooks.toast?.(t.small ? 'A big thing again: it has its own place in Now' : 'A small thing: in Now it rides with the others, done in one go'); } }] : []),
       // It can come round again; one that does can be a habit, with no hours.
@@ -2489,13 +2032,13 @@ export class Plan {
     const restOn = (stop) => {
       if (rest?.stop === stop) return;
       clearTimeout(rest?.timer);
-      rest = stop ? { stop, timer: setTimeout(() => { if (zoomOn()) zoomTo({ stop }); }, 700) } : null;
+      rest = stop ? { stop, timer: setTimeout(() => zoomTo({ stop }), 700) } : null;
     };
     const clear = () => root.querySelectorAll('.drop-before, .drop-after, .drop-on').forEach((x) => x.classList.remove('drop-before', 'drop-after', 'drop-on'));
     const spot = (e, target = e.target) => {
       // The zoom (Part 3): a place that names its time (a week, a month, the
       // Not planned shelf) or a stop on the ruler.
-      const dz = zoomOn() ? target?.closest?.('[data-drop], .zm-ruler .zm-stop[data-stop]') : null;
+      const dz = target?.closest?.('[data-drop], .zm-ruler .zm-stop[data-stop]');
       if (dz) { const drop = dz.dataset.drop || stopKey(dz.dataset.stop, this.today); if (drop) return { drop, dz, stop: dz.dataset.stop || null }; }
       const zone = target?.closest?.('.pw-day, .pw-tray');
       if (zone) return { zone };

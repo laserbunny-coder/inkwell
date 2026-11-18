@@ -49,7 +49,7 @@ async function add(p, text, dayWord = false) {
 }
 
 try {
-  const ctx = await browser.newContext({ zoom: true, firstlight: true, colorScheme: 'dark', viewport: { width: 1280, height: 800 } });
+  const ctx = await browser.newContext({ firstlight: true, colorScheme: 'dark', viewport: { width: 1280, height: 800 } });
   const p = await open(ctx);
   // Typed inside the piece Inkwell opens on: a step for that piece.
   assert.equal(await p.evaluate(() => document.documentElement.dataset.view || 'write'), 'write');
@@ -159,7 +159,7 @@ try {
   await ctx.close();
 
   // ---------- the phone ----------
-  const pctx = await browser.newContext({ zoom: true, ...devices['Pixel 7'], colorScheme: 'dark' });
+  const pctx = await browser.newContext({ ...devices['Pixel 7'], colorScheme: 'dark' });
   const ph = await open(pctx);
   await ph.keyboard.press('Control+K');
   await sleep(200);

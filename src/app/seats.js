@@ -15,7 +15,6 @@ import { getEntry } from '../db.js';
 import { deskSettings, saveDeskSettings, seatsFor } from '../desk.js';
 import { toast } from '../menu.js';
 import { isFinished } from '../library.js';
-import { zoomOn } from '../zoomstate.js';
 import { finishWorld, setFinished, refreshViews } from './tidying.js';
 import { deskPage, projectPage } from './talking.js';
 import { $, state, view } from '../main.js';
@@ -153,7 +152,7 @@ class SeatBar {
     document.documentElement.classList.add('zm-seating');
   }
   async open(id) {
-    if (!zoomOn() || !id) return;
+    if (!id) return;
     this.id = id;
     await this.draw(id);
     this.el.querySelector('[aria-current]')?.focus({ preventScroll: true });
@@ -201,7 +200,7 @@ export function wireSeats() {
   // Alt + S: this project's seat. Then 1 to 4.
   document.addEventListener('keydown', (e) => {
     if (bar.key(e)) return;
-    if (!zoomOn() || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.code !== 'KeyS') return;
+    if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.code !== 'KeyS') return;
     const id = projectHere();
     if (!id) return;
     e.preventDefault();
@@ -211,12 +210,11 @@ export function wireSeats() {
   // A seat word anywhere opens the bar.
   document.addEventListener('click', (e) => {
     const w = e.target.closest?.('[data-seatfor]');
-    if (w && zoomOn()) { e.preventDefault(); e.stopPropagation(); bar.open(w.dataset.seatfor); return; }
+    if (w) { e.preventDefault(); e.stopPropagation(); bar.open(w.dataset.seatfor); return; }
     if (bar.el && !bar.el.hidden && !bar.carrying && !e.target.closest('.zm-seatbar')) bar.close();
   }, true);
   // Right-click a project (a phone's hold sends the same): the bar as a menu.
   document.addEventListener('contextmenu', (e) => {
-    if (!zoomOn()) return;
     const el = e.target.closest?.('[data-pid]');
     if (!el || e.target.closest('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]')) return;
     e.preventDefault();
@@ -226,7 +224,7 @@ export function wireSeats() {
   // Carrying a project: the bar comes up to take it.
   document.addEventListener('dragstart', (e) => {
     const el = e.target.closest?.('[data-pid][draggable="true"]');
-    if (!el || !zoomOn()) return;
+    if (!el || false) return;
     e.dataTransfer.setData('text/x-project', el.dataset.pid);
     e.dataTransfer.effectAllowed = 'move';
     bar.carry(el.dataset.pid);
@@ -260,7 +258,6 @@ export function wireSeats() {
     if (t.on && t.zone.matches('.zd-projs, .zd-wings')) placeBefore(id, t.on.dataset.pid);
     else if (t.zone.dataset.seat) setSeat(id, t.zone.dataset.seat);
   });
-  document.addEventListener('inkwell:layout', () => bar.close());
 }
 
 export const seatBar = () => $('.zm-seatbar');

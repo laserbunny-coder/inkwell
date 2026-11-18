@@ -13,7 +13,7 @@
 // wings, backstage) is worked out from what's happening unless you say.
 
 import { getEntry, putEntries, byKind, children, isTrashed } from './db.js';
-import { taskOf, tickTask, chipLabel, loadTasks, isoOf } from './tasks.js';
+import { taskOf, chipLabel, loadTasks, isoOf } from './tasks.js';
 import { entry } from './model.js';
 import { areas, areaColor, editedAt } from './library.js';
 import { popMenu, toast } from './menu.js';
@@ -24,7 +24,6 @@ import { streakBlock, chartBox } from './trainview.js';
 import { GOALS } from './trainstats.js';
 import { readingLog, readReading, saveReading, toggledDay } from './firstlight.js';
 import { readBlock } from './readview.js';
-import { zoomOn } from './zoomstate.js';
 
 export const DESK_ID = 'settings-desk';
 const KIND = { decision: 'Decide', blocked: 'Do', review: 'Try' };
@@ -38,7 +37,6 @@ const STATUS = { waiting: 'Waiting on you', loose: 'Closed, still open', working
 export const closedLine = (text) => /^\s*closed:/i.test(String(text || ''));
 // The "thread closed" tag and the filter can be switched off under Look.
 const showClosed = () => true;
-const showNext = () => !root.classList.contains('hide-nextstep');
 
 // A project's next step: the first open task on its Steps page, in order
 // (a step's own steps count, in the order they're written). null: none.
@@ -88,7 +86,6 @@ const low = (s) => String(s || '').trim().toLowerCase();
 // Times as the person reads them.
 const tz = () => (globalThis.__deskTz || Intl.DateTimeFormat().resolvedOptions().timeZone || PACIFIC);
 const clock = (ms) => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz() }).toLowerCase().replace(/\s/g, ' ');
-const dayLabel = (ms) => new Date(ms).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: tz() });
 export const shortDay = (ms) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: tz() });
 const localDate = (ms) => new Date(ms).toLocaleDateString('en-CA', { timeZone: tz() });
 // Midnight where the person is, n days back, as a time.
@@ -445,98 +442,12 @@ export class DeskPage {
   async callDone(id) { await this.done(id); if (this.showing()) this.load({ quiet: true }); }
   async callLater(id) { await this.later(id, new Date(tomorrowMorning(Date.now())).toISOString()); if (this.showing()) this.load({ quiet: true }); }
 
-  async stageParts({ now, failed }) {
-    if (zoomOn()) return this.zoomParts({ now, failed });
-    const { worlds, settings } = await this.seating();
-    const data = this.data || { needs: [], updates: [] };
-    const seats = seatsFor({ worlds, needs: data.needs, updates: data.updates, settings, now });
-    this.settings = settings;
-    this.worlds = worlds;
-    const isNew = (ms) => !!this.seen && ms > this.seen;
-    const calls = seats.flatMap((s) => s.calls);
-    const later = seats.flatMap((s) => s.later);
-
-    const sum = make('div', 'dk-calls');
-    // How many of them come from threads already closed (when the tag is on).
-    const fromClosed = showClosed() ? calls.filter((c) => this.closed?.has(c.link)).length : 0;
-    if (calls.length) sum.append(make('i', 'dk-sig'), document.createTextNode(`${calls.length === 1 ? '1 call' : `${calls.length} calls`} waiting · about ${minutes(calls.reduce((m, c) => m + (MINUTES[c.kind] || 5), 0))}${fromClosed ? ` · ${fromClosed} from closed threads` : ''}`));
-    else if (this.data) sum.textContent = 'Nothing needs you';
-    // More than one: walk them one at a time.
-    if (calls.length > 1 && this.through) {
-      const b = make('button', 'dk-through', 'Go through them');
-      b.type = 'button';
-      b.addEventListener('click', () => this.through());
-      sum.append(b);
-    }
-    // Beside the count: talk the whole stage through with Claude.
-    const say = this.talk?.();
-    if (say) {
-      const b = make('button', 'dk-talk', '✦ Talk it through');
-      b.title = 'Talk it through with Claude, beside the Desk (Alt + T)';
-      b.addEventListener('click', say);
-      sum.append(b);
-    }
-    const parts = [this.head(dayLabel(now), 'Desk', sum)];
-
-    if (this.data) {
-      const read = make('p', 'dk-read');
-      parts.push(read);
-      const since = midnight(now, this.span === 'week' ? 6 : this.span === 'two' ? 1 : 0);
-      this.fillRead(read, calls, data.updates.filter((u) => u.at >= since), now);
-    } else parts.push(this.note(failed));
-
-    const on = seats.filter((s) => s.stage === 'on');
-    // Each card's next step, read before the cards are drawn.
-    this.next = new Map();
-    if (showNext()) for (const s of on) if (s.world) this.next.set(s.world.id, await nextStep(s.world.id));
-    const chairs = make('div', 'dk-chairs');
-    chairs.dataset.drop = 'seat';
-    chairs.dataset.stage = 'on';
-    chairs.dataset.n = String(Math.min(on.length, 3));
-    for (const s of on) chairs.append(this.chair(s, now, isNew));
-    if (on.length) parts.push(chairs);
-    else parts.push(make('p', 'hint dk-empty', 'Nothing is on stage. A project comes on stage when a Claude thread is working on it, when something needs you, or when you put it here from its ⋯ menu below.'));
-
-    if (later.length) {
-      const l = make('p', 'hint dk-later', `${later.length} set aside until tomorrow morning. `);
-      const back = make('button', 'dk-link', 'Bring back');
-      back.addEventListener('click', async () => {
-        for (const n of later) await this.later(n.id, null).catch((e) => console.warn(e));
-        this.load({ quiet: true });
-      });
-      l.append(back);
-      parts.push(l);
-    }
-
-    // Reading (Part 8): the streak and where he is in each track, above Training.
-    { const r = await this.readingBlock(); if (r) parts.push(r); }
-
-    // Training (Part 6): the goals on stage, where each stands, and what's next.
-    if (!document.documentElement.classList.contains('hide-training')) { const t = await this.trainingBlock(); if (t) parts.push(t); }
-
-    for (const [stage, label] of [['wings', 'In the wings'], ['back', 'Backstage']]) {
-      const rows = seats.filter((s) => s.stage === stage);
-      if (!rows.length) continue;
-      const sec = make('section', `dk-sec dk-${stage}`);
-      sec.append(make('h2', 'dk-label', label));
-      const box = make('div', 'dk-rows');
-      box.dataset.drop = 'seat';
-      box.dataset.stage = stage;
-      for (const s of rows) box.append(this.row(s, now));
-      sec.append(box);
-      parts.push(sec);
-    }
-
-    if (this.data) parts.push(this.catchup(data.updates, now, isNew));
-    return parts;
-  }
-
   // ---- The Desk in the zoom (Part 4) ----
   // The projects on stage in his order, each with its next two steps; one
   // folded line at the top for what needs you and who is working (it opens
   // Needs you, Working, Catch-up and History right there); one quiet row
   // "In the wings"; Reading and Training below, as they are.
-  async zoomParts({ now, failed }) {
+  async stageParts({ now, failed }) {
     const { worlds, settings } = await this.seating();
     const data = this.data || { needs: [], updates: [] };
     const seats = seatsFor({ worlds, needs: data.needs, updates: data.updates, settings, now });
@@ -688,72 +599,6 @@ export class DeskPage {
     return el;
   }
 
-  // One project on stage: what it's for, where it stands, what needs you, who's on it.
-  chair(seat, now, isNew) {
-    const el = make('section', 'dk-chair');
-    el.dataset.key = seat.key;
-    el.dataset.drag = 'seat';
-    const h = make('h3');
-    const dot = make('i', 'dk-dot');
-    if (seat.color) dot.style.background = seat.color;
-    h.append(dot, this.nameLink(seat), this.more(seat));
-    el.append(h);
-    // The north star shows on the card once it's written; the prompt to write
-    // it lives on the project's own page.
-    if (seat.world?.star) el.append(this.star(seat));
-    const nowLine = make('p', 'dk-now');
-    if (seat.last) {
-      nowLine.append(document.createTextNode(`${seat.last.text} `), make('span', 'dk-when', when(seat.last.at, now)));
-    } else if (seat.world) nowLine.textContent = `Last touched ${when(seat.world.edited, now)}`;
-    if (nowLine.textContent) el.append(nowLine);
-    if (seat.world && this.next?.has(seat.world.id)) el.append(this.nextLine(seat.world, this.next.get(seat.world.id)));
-
-    if (seat.calls.length) {
-      el.append(make('div', 'dk-sub', 'Needs you'));
-      // Answers first. A pile of things to try folds into one line, so it never buries them.
-      const tries = seat.calls.filter((c) => c.kind === 'review');
-      const fold = tries.length > FOLD_TRIES;
-      const list = make('div', 'dk-list');
-      list.dataset.drop = 'call';
-      for (const c of seat.calls) if (!fold || c.kind !== 'review') list.append(this.call(c, now, isNew));
-      el.append(list);
-      if (fold) {
-        const box = make('details', 'dk-tries');
-        box.open = this.triesOpen.has(seat.key);
-        box.addEventListener('toggle', () => { if (box.open) this.triesOpen.add(seat.key); else this.triesOpen.delete(seat.key); });
-        const sum = make('summary');
-        sum.append(make('i', 'dk-sig'), make('span', 'dk-tries-t', `${tries.length} to try, about 10 minutes each`));
-        const fresh = tries.filter((c) => isNew(c.at)).length;
-        if (fresh) sum.append(make('span', 'dk-call-m', `${fresh} new`));
-        box.append(sum);
-        const inner = make('div', 'dk-list');
-        inner.dataset.drop = 'call';
-        for (const c of tries) inner.append(this.call(c, now, isNew));
-        box.append(inner);
-        el.append(box);
-      }
-    }
-    if (seat.crew.length || seat.finished) {
-      el.append(make('div', 'dk-sub', 'Crew'));
-      const list = make('div', 'dk-list');
-      list.dataset.drop = 'crew';
-      for (const c of seat.crew) {
-        const row = make('a', 'dk-crew');
-        row.href = web(c.link); row.target = '_blank'; row.rel = 'noopener';
-        row.dataset.drag = 'crew';
-        row.dataset.key = c.link;
-        row.append(make('i', `dk-pulse${c.quiet ? ' off' : ''}`), make('span', 'dk-crew-t', c.title), make('span', 'dk-crew-s', c.quiet ? `quiet since ${shortDay(c.at)}` : when(c.at, now)));
-        list.append(row);
-      }
-      if (seat.crew.length) el.append(list);
-      if (seat.finished) {
-        const f = make('button', 'dk-crew dk-done', seat.finished === 1 ? '1 thread finished this week' : `${seat.finished} threads finished this week`);
-        f.addEventListener('click', () => { this.filter = 'finished'; this.query = seat.claude[0] || ''; this.go({ view: 'desk', tab: 'history' }); });
-        el.append(f);
-      }
-    }
-    return el;
-  }
 
   // A project's name: yours opens in Inkwell, a Claude project opens in Claude.
   nameLink(seat) {
@@ -894,42 +739,6 @@ export class DeskPage {
     await this.render({ now: this.now, failed: false });
   }
 
-  // "Your next step": the first open step, with its circle to tick it here
-  // and its when at the right; none: a way to add one.
-  nextLine(world, step) {
-    const box = make('div', 'dk-next');
-    box.append(make('div', 'dk-sub', 'Your next step'));
-    const line = make('div', 'dk-next-line');
-    if (!step) {
-      line.append(make('span', 'dk-next-none', 'No next step yet'));
-      const add = make('button', 'dk-link dk-next-add', 'Add one');
-      add.type = 'button';
-      add.addEventListener('click', () => this.addStep?.(world.id));
-      line.append(add);
-      box.append(line);
-      return box;
-    }
-    const tick = make('button', 'dk-tick');
-    tick.type = 'button';
-    tick.setAttribute('aria-label', `Done: ${step.text}`);
-    tick.title = 'Tick it done';
-    tick.addEventListener('click', async () => {
-      tick.disabled = true;
-      tick.classList.add('on');
-      const row = await tickTask(step.id, true);
-      if (row) this.changed?.([row]);
-      this.toast?.(`Done: “${step.text}”`);
-      await this.render({ now: this.now || Date.now(), failed: false });
-    });
-    const name = make('button', 'dk-next-name', step.text);
-    name.type = 'button';
-    name.addEventListener('click', () => this.open?.(step.id));
-    line.append(tick, name);
-    const t = taskOf(step);
-    if (t && (t.day || t.span?.kind)) line.append(make('span', 'dk-when', chipLabel({ ...t, est: null, run: null }).toLowerCase()));
-    box.append(line);
-    return box;
-  }
 
   // A project waiting in the wings or backstage: one line.
   row(seat, now) {
@@ -1082,37 +891,6 @@ export class DeskPage {
     return a;
   }
 
-  // ---- Claude's read ----
-  fillRead(el, calls, updates, now) {
-    el.hidden = true;
-    if (!calls.length && !updates.length) return;
-    // Switched off in Look: no line, and Claude isn't asked.
-    if (root.classList.contains('hide-deskread')) return;
-    const body = {
-      mode: 'catchup',
-      now: `${dayLabel(now)}, ${clock(now)}`,
-      updates: updates.slice(-80).map((u) => ({ project: u.project, thread: u.thread || '', text: u.text, state: u.state, at: clock(u.at) })),
-      needs: calls.slice(0, 60).map((n) => ({ project: n.project || '', title: n.title, kind: n.kind, days: Math.floor((now - n.at) / DAY) }))
-    };
-    const key = JSON.stringify([body.updates.map((u) => [u.text, u.state]), body.needs.map((n) => [n.title, n.kind, n.days])]);
-    let cached = null;
-    try { cached = JSON.parse(ls.get('deskRead', 'null')); } catch { /* old */ }
-    if (cached?.key === key && cached.line) { el.textContent = cached.line; el.hidden = false; return; }
-    if (cached?.line) { el.textContent = cached.line; el.classList.add('stale'); el.hidden = false; }
-    if (!this.canAsk() || this.asking === key) return;
-    this.asking = key;
-    Promise.resolve(this.ask(body)).then((got) => {
-      const line = (got?.line || '').trim();
-      if (!line) return;
-      ls.set('deskRead', JSON.stringify({ key, line }));
-      if (root.classList.contains('hide-deskread')) return;
-      // The line drawn now, and this one too: the answer can come back
-      // before this draw is on the page (the cards' next steps are read first).
-      for (const now2 of new Set([this.sheet.querySelector('.dk-read'), el])) {
-        if (now2) { now2.textContent = line; now2.classList.remove('stale'); now2.hidden = false; }
-      }
-    }).catch((e) => console.warn(e)).finally(() => { if (this.asking === key) this.asking = null; });
-  }
 
   // ---- History ----
 

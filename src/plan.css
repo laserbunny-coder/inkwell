@@ -80,7 +80,6 @@ html.has-rail .pl-switch { display: none; }
 .pl-took span { margin-right: 4px; }
 .pl-took button { border: 1px solid var(--line2); background: none; color: var(--soft); font: 12px var(--ui); padding: 4px 10px; border-radius: 99px; cursor: pointer; }
 .pl-took button:hover, .pl-took button.on { border-color: var(--accent); color: var(--ink); }
-.hide-estimates .pl-took { display: none; }
 .pl-task.dragging { opacity: .35; }
 .pl-task.pl-armed, .pw-task.pl-armed { background: var(--tint); transition: background .15s; }
 .pl-touchdrag, .pl-touchdrag body { overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
@@ -242,7 +241,6 @@ button.pl-meter-v:hover { color: var(--ink); background: var(--raise); }
 .ah-talk { color: var(--muted); }
 .ah-talk:hover { color: var(--ink); }
 html.hide-panes .ah-talk { display: none; }
-.hide-estimates :is(.ah-hrs, .ah-h .pl-track, .ah-note) { display: none; }
 /* A date that can't move, on a project's steps. */
 .pl-when.hard { color: var(--signal); }
 @media (--narrow) {
@@ -293,7 +291,6 @@ html.hide-panes .ah-talk { display: none; }
 .pw-ev .ev-t { min-width: 0; }
 .pw-ev .ev-w { flex-basis: 100%; padding-left: 11px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .hide-calendar :is(.pl-cal, .pw-ev) { display: none; }
-.hide-estimates .pl-left { display: none; }
 @media (max-width: 760px) { .pw-ev { flex-wrap: nowrap; font-size: 13px; } .pw-ev .ev-w { flex-basis: auto; padding-left: 0; } .pl-ev { font-size: 14px; } }
 
 /* ---------- area hours, under the week ---------- */
@@ -307,7 +304,6 @@ html.hide-panes .ah-talk { display: none; }
 .pa-row .pl-track.bare { visibility: hidden; }
 .pa-row .pl-track i.met { background: var(--good, var(--accent)); }
 .pa-more { align-self: flex-start; margin-top: 2px; }
-.hide-estimates .pw-areas { display: none; }
 /* Acro HQ: whose a task is, and its card on the board */
 .pl-owner { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; line-height: 18px; }
 .pl-hq { font-size: 11px; letter-spacing: .04em; color: var(--muted); text-decoration: none; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; line-height: 17px; }
@@ -610,7 +606,6 @@ html.focus .notebook.plan-side > #plan, .notebook.plan-side.zoomed > #plan { dis
   .pl-early { gap: 4px 6px; }
   .pl-early-b { padding: 6px 8px; }
 }
-.hide-estimates [data-cmd="pace"] { display: none !important; }
 @media (--narrow) {
   .pl-task:not(.one-row) .pl-acts { grid-row: 1 / span 2; align-self: center; }
 }

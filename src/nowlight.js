@@ -11,7 +11,6 @@ import { autoOn } from './auto.js';
 import { TRACKS, posOf, placeOf, readReading, saveReading, todays, advanced, readYesterday, missedYesterday, esvLink, keyState, kept, chapter, tickBibleHabit } from './firstlight.js';
 import { readStreak, doneLine } from './readstats.js';
 import { tickLight, lightToday, dropLine } from './firstlight.js';
-import { zoomOn } from './zoomstate.js';
 
 export class LightNow {
   constructor(now) {
@@ -27,14 +26,11 @@ export class LightNow {
   async load() { this.st = await readReading(); }
 
   // Showing now? Before anything else, once a day, unless something is begun.
-  due(m) {
+  due() {
     if (!this.st || this.now.off('firstlight') || !autoOn('firstlight')) return false;
-    if (this.forced) return true;
-    // On the zoom First light is a line of the day, opened like any line (Part 2).
-    if (zoomOn()) return false;
-    if (m.cur || this.now.mode) return false;
-    const today = this.p.today;
-    return this.st.read !== today && this.st.skip !== today;
+    // On the zoom First light is a line of the day, opened like any line (Part 2):
+    // it only takes over Now when asked for from the commands.
+    return this.forced;
   }
 
   noKey() { return keyState(this.p.today) !== false; }

@@ -83,7 +83,7 @@ export function splitWhen(text, today = isoOf()) {
 export class Box {
   // el: the .palette element (input #palette-input, list #palette-list).
   // hooks: commands() → [command], usable(c), recent() → [{ place, name, context }],
-  // jump(place), rooms() → [{ id, label, keys }], room(id), tabs() → { title, tabs } | null,
+  // jump(place), tabs() → { title, tabs } | null,
   // here() → the room tags for where you are, places() → Promise [{ label, what, run }],
   // tasks() → Promise [{ label, what, run }], catchup() → [{ label, what, run }],
   // addTask(title, choice, text), addLine(text), search(text), isTouch(), keyLabel(text),
@@ -343,8 +343,6 @@ export class Box {
       this.section('Projects');
       this.chips(this.projects.map((w) => ({ label: w.title || 'Untitled', on: w.current, run: () => this.hooks.openProject(w.id) })), 'box-projects');
     }
-    this.section('Rooms');
-    this.chips(this.hooks.rooms().map((r) => ({ label: r.label, keys: r.keys, on: r.on, cls: r.quiet ? 'quiet' : '', run: () => this.hooks.room(r.id) })), 'box-rooms');
     const here = this.hereList(HERE_MAX);
     if (here.length) {
       this.section(this.hereName());

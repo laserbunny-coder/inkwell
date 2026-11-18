@@ -12,7 +12,6 @@
 import { make } from './dom.js';
 import { media } from './device.js';
 import { addDays, weekOf, isoOf, spanOf, dateOf } from './tasks.js';
-import { zoomOn } from './zoomstate.js';
 
 const hover = media('mouse');
 const ym = (iso) => String(iso || '').slice(0, 7);
@@ -156,7 +155,7 @@ export class Pick {
     document.addEventListener('keydown', (e) => this.key(e), true);
     document.addEventListener('contextmenu', (e) => this.context(e), true);
   }
-  active() { return zoomOn() && this.plan.pageShown && TIME_TABS.includes(this.plan.tab) && document.documentElement.dataset.view === 'plan'; }
+  active() { return this.plan.pageShown && TIME_TABS.includes(this.plan.tab) && document.documentElement.dataset.view === 'plan'; }
   rows() {
     return [...this.plan.sheet.querySelectorAll('[data-task]:not([data-part]):not([data-ghost])')]
       .filter((el) => !el.parentElement?.closest('[data-task]') && el.getClientRects().length);
@@ -323,7 +322,7 @@ export class Shelf {
     const plan = this.plan;
     const btn = document.querySelector('.zm-np');
     if (btn) { const n = this.count(); btn.textContent = `Not planned · ${n}`; btn.setAttribute('aria-expanded', String(!!this.open)); btn.dataset.drop = 'none'; }
-    if (!this.open || !zoomOn()) { if (this.el) this.el.hidden = true; document.documentElement.classList.remove('zm-shelf-on'); return; }
+    if (!this.open || false) { if (this.el) this.el.hidden = true; document.documentElement.classList.remove('zm-shelf-on'); return; }
     if (!this.el) {
       this.el = make('aside', 'zm-shelf');
       this.el.setAttribute('aria-label', 'Not planned');
@@ -396,7 +395,7 @@ export function rulerDrops(plan, Plan) {
   const stopEl = (e) => e.target.closest?.('.zm-ruler .zm-stop[data-stop]');
   const clear = () => document.querySelectorAll('.zm-ruler .zm-dropon').forEach((x) => x.classList.remove('zm-dropon'));
   document.addEventListener('dragover', (e) => {
-    const el = Plan.dragging && zoomOn() ? stopEl(e) : null;
+    const el = Plan.dragging ? stopEl(e) : null;
     const key = el ? stopKey(el.dataset.stop, plan.today) : null;
     if (!key) { if (!e.target.closest?.('.zm-ruler')) return; clear(); clearTimeout(rest?.timer); rest = null; return; }
     e.preventDefault();
@@ -411,7 +410,7 @@ export function rulerDrops(plan, Plan) {
   });
   document.addEventListener('dragleave', (e) => { if (stopEl(e)) { clear(); } });
   document.addEventListener('drop', async (e) => {
-    const el = Plan.dragging && zoomOn() ? stopEl(e) : null;
+    const el = Plan.dragging ? stopEl(e) : null;
     const key = el ? stopKey(el.dataset.stop, plan.today) : null;
     clearTimeout(rest?.timer);
     rest = null;

@@ -8,7 +8,6 @@ import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { setOutline } from './outliner-kit.mjs';
-import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -26,7 +25,7 @@ const fake = () => {
   };
 };
 
-const browser = classic(await chromium.launch());
+const browser = await chromium.launch();
 let failed = 0;
 async function check(name, fn) {
   try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message.split('\n').slice(0, 6).join('\n     ')}`); }

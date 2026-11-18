@@ -25,7 +25,6 @@ import { TrainNow } from './nowtrain.js';
 import { isTraining } from './training.js';
 import { LightNow } from './nowlight.js';
 import { isLight } from './firstlight.js';
-import { zoomOn } from './zoomstate.js';
 import { pageView, pageTarget, zoomTo, tieMenu, forOf } from './nowpage.js';
 import './now.css';
 
@@ -46,20 +45,6 @@ export async function readNow(today = isoOf()) {
   return { ...blankNow(today), ...s, skipped: Array.isArray(s.skipped) ? s.skipped : [], events: s.events && typeof s.events === 'object' ? s.events : {} };
 }
 
-// The face (Look: "Show the one thing") and the layout (Alt + P on a computer).
-export const FACES = [['alone', 'Alone'], ['next', 'With what is next'], ['line', 'The day as a line']];
-export function nowFace() { try { const f = localStorage.getItem('nowFace'); return FACES.some((x) => x[0] === f) ? f : 'alone'; } catch { return 'alone'; } }
-export function setNowFace(f) { try { localStorage.setItem('nowFace', f); } catch { /* no storage here */ } }
-export function nowSide() { try { return localStorage.getItem('nowSide') === '1'; } catch { return false; } }
-export function setNowSide(on) { try { localStorage.setItem('nowSide', on ? '1' : '0'); } catch { /* no storage here */ } }
-
-// While a draft is open (Look: "While you write a draft"): nothing, a small
-// dot, or the strip. In Focus nothing shows, whatever the choice.
-export const WRITE_STRIP = [['none', 'Nothing'], ['dot', 'A small dot'], ['strip', 'The strip']];
-export function writeStrip() { try { const f = localStorage.getItem('nowWrite'); return WRITE_STRIP.some((x) => x[0] === f) ? f : 'none'; } catch { return 'none'; } }
-export function setWriteStrip(f) { try { localStorage.setItem('nowWrite', f); } catch { /* no storage here */ } }
-// The Look panel's choice rows (shows.js `choice`), read and set by id.
-export const CHOICES = { nowface: [nowFace, setNowFace], nowwrite: [writeStrip, setWriteStrip] };
 // Anything the strip shows has changed: the pointer, a choice, a switch.
 export const nowChanged = () => document.dispatchEvent(new CustomEvent('inkwell:now'));
 
@@ -173,7 +158,7 @@ export class Now {
     const lastOf = (x) => (x.group ? 'A few small things' : x.item.row.text || 'Untitled');
     // On the zoom there is no gate: the next line simply is the one thing (Part 2).
     let auto = false;
-    if (zoomOn() && !cur && cand) {
+    if (!cur && cand) {
       auto = true;
       cur = cand.group ? { smalls: true, items: cand.items.filter((i) => !st.skipped.includes(i.row.id)), item: null, name: '' } : { item: cand.item, name: cand.item.row.text || 'Untitled' };
       if (cur.smalls) { if (!cur.items.length) cur.items = cand.items; cur.item = cur.items[0]; cur.name = cur.item.row.text || 'Untitled'; }
@@ -189,49 +174,7 @@ export class Now {
 
   // ---------- drawing ----------
 
-  draw() {
-    if (zoomOn()) return this.drawPage();
-    const p = this.p;
-    const sheet = p.sheet;
-    const m = (this.m = this.model());
-    const held = p.held(sheet);
-    const typing = this.out && this.out.contains(document.activeElement) ? document.activeElement : null;
-    const numIn = /^now-t(num2?|min)$/.test(document.activeElement?.id || '') ? document.activeElement.id : null;
-    const top = make('header', 'now-top');
-    top.append(p.switchRow('now'));
-    const face = nowFace();
-    const two = hover.matches && nowSide() && !!m.cur && !m.active;
-    if (this.mode === 'heard' && m.cur) this.mode = null;
-    const light = !m.active && this.light.due(m);
-    const mode = m.active ? null : light ? 'light' : this.mode;
-    const box = make('div', `now-view now-${m.active ? 'event' : mode ? 'ends' : m.cur ? face : 'gate'}${two && !mode ? ' now-two' : ''}`);
-    box.setAttribute('role', 'region');
-    box.setAttribute('aria-label', 'Now');
-    if (m.active) box.append(this.eventView(m));
-    else if (mode === 'light') box.append(this.light.view());
-    else if (mode === 'talk') box.append(talkView(this));
-    else if (mode === 'heard') box.append(heardView(this, m));
-    else if (mode === 'close') box.append(closeView(this, m));
-    else if (!m.cur) box.append(...this.gateView(m));
-    else if (two) {
-      const left = make('div', 'now-left');
-      left.append(this.mid(m));
-      if (!this.off('nowout')) left.append(this.outLine());
-      const right = make('div', 'now-right');
-      right.append(this.thread(m, { side: true }));
-      box.append(left, right);
-    } else if (face === 'line') box.append(this.thread(m));
-    else if (face === 'next') box.append(this.mid(m), this.foot(m, { list: true }));
-    else box.append(this.mid(m), this.foot(m, { list: this.listOpen }));
-    if (!m.active && !two && !mode && !this.off('nowout')) box.append(this.outLine());
-    // "Reading done. 13 days in a row." on the screen after First light (Part 8).
-    if (this.light.note && mode !== 'light' && !m.active) { const at = box.querySelector('.now-mid') || box; at.prepend(make('p', 'now-hint now-rnote', this.light.note)); }
-    sheet.replaceChildren(top, box);
-    p.restore(sheet, held);
-    if (typing?.isConnected) typing.focus({ preventScroll: true });
-    if (numIn) sheet.querySelector(`#${numIn}`)?.focus({ preventScroll: true });
-    p.just = null;
-  }
+  draw() { return this.drawPage(); }
 
   // The zoom (Part 2): Now is a page, the one thing or the line being visited.
   drawPage() {
@@ -258,33 +201,6 @@ export class Now {
     p.just = null;
   }
 
-  // At the bottom: one line to get a thought out of your head (and the mic).
-  // It lands on today's page; Now stays. The same box is kept through a
-  // redraw, so a phone's keyboard stays up and nothing typed is lost.
-  outLine() {
-    if (this.out) return this.out;
-    const form = make('form', 'now-out');
-    form.setAttribute('role', 'search');
-    form.setAttribute('aria-label', 'Get it out of your head');
-    const input = make('input');
-    input.type = 'text';
-    input.dataset.thought = '1';
-    input.placeholder = 'Get it out of your head';
-    input.setAttribute('aria-label', 'Get it out of your head: it goes on today’s page, and you stay here');
-    input.enterKeyHint = 'done';
-    input.autocomplete = 'off';
-    const mic = make('button', 'now-mic');
-    mic.type = 'button';
-    mic.dataset.now = 'mic';
-    mic.setAttribute('aria-label', 'Say it instead (Alt + C)');
-    mic.title = 'Say it instead (Alt + C)';
-    mic.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>';
-    form.append(input, mic);
-    form.addEventListener('submit', (e) => { e.preventDefault(); this.thought(input); });
-    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { input.value = ''; input.blur(); } });
-    this.out = form;
-    return form;
-  }
 
   async thought(input) {
     const text = input.value.trim();
@@ -350,8 +266,7 @@ export class Now {
     const them = cur.smalls ? 'They go' : 'It goes';
     one('later', 'Later today', `${them} to the end of today`, '1');
     one('tomorrow', 'Enough for today', `Counts as worked on, and ${cur.smalls ? 'they come' : 'it comes'} back tomorrow`, '2');
-    if (zoomOn()) one('week', 'Any day this week', `Off today: ${cur.smalls ? 'they wait' : 'it waits'} under Any day this week`, '3');
-    else one('another', 'Another day', `Off today: ${cur.smalls ? 'they wait' : 'it waits'} in Plan under Not planned`, '3');
+    one('week', 'Any day this week', `Off today: ${cur.smalls ? 'they wait' : 'it waits'} under Any day this week`, '3');
     box.append(this.btn('keep', 'Keep going with it', 'quiet', 'Esc'));
     return box;
   }
@@ -452,53 +367,6 @@ export class Now {
     return box;
   }
 
-  // The gate: what just happened, then Next with Begin and "Choose another".
-  gateView(m) {
-    const mid = make('div', 'now-mid');
-    const last = this.st.last;
-    if (last?.t) {
-      const said = last.k === 'done' ? (last.left ? `Done. ${last.left} left for later.` : 'Done.')
-        : last.k === 'event' ? (last.happened ? 'Over.' : 'It did not happen.')
-          : { training: 'Off today. Your place in the round stays.', later: 'Set aside for later today.', week: 'Off today. It waits under Any day this week.', tomorrow: 'Enough for today. It comes back tomorrow.', another: 'Off today. It waits in Plan under Not planned.' }[last.where] || '';
-      const was = make('p', `now-was${last.k === 'done' || (last.k === 'event' && last.happened) ? ' struck' : ''}`);
-      was.append(make('span', 'w', last.t), make('span', 's', ` ${said}`));
-      mid.append(was);
-      if (last.note) mid.append(make('p', 'now-hint now-tnote', last.note));
-    }
-    if (m.cand) {
-      const train = !m.cand.group && isTraining(m.cand.item?.row) ? this.train.session()?.name : '';
-      mid.append(make('p', 'now-eyebrow', m.back ? 'You were on' : 'Next'), make('p', 'now-thing sm', train ? `Training · ${train}` : m.candName));
-      const acts = make('div', 'now-acts');
-      const go = this.btn('begin', m.back ? 'Pick it back up' : 'Begin', 'go', 'B');
-      go.dataset.task = m.cand.group ? SMALLS : m.cand.item.row.id;
-      const other = this.btn('more', 'Choose another', 'quiet', 'Space');
-      other.setAttribute('aria-expanded', String(this.listOpen));
-      acts.append(go, other);
-      mid.append(acts);
-    } else {
-      mid.append(make('p', 'now-thing sm', m.dp.done.length ? 'Nothing else is lined up.' : 'Nothing is on today yet.'));
-      const acts = make('div', 'now-acts');
-      if (this.morning(m)) acts.append(this.btn('talkday', 'Talk the day through', 'go', 'T'), this.btn('plan', 'Open Plan', 'quiet'));
-      else acts.append(this.btn('plan', 'Open Plan', 'go'), this.btn('page', 'Today’s page', 'quiet'));
-      mid.append(acts);
-    }
-    // The ends of the day, offered quietly under the gate.
-    const ends = make('div', 'now-endsrow');
-    if (m.cand && this.morning(m)) ends.append(this.btn('talkday', 'Talk the day through', 'link', 'T'));
-    if (this.evening()) ends.append(this.btn('closeday', 'Close the day', 'link', 'C'));
-    else if (this.st.closed) ends.append(make('span', 'now-closed', 'The day is closed.'));
-    if (ends.childElementCount) mid.append(ends);
-    const out = [mid];
-    if (this.listOpen && m.cand) {
-      const foot = make('div', 'now-foot open');
-      foot.append(this.list(m));
-      out.push(foot);
-    } else {
-      const ev = this.evLine(m);
-      if (ev) { const foot = make('div', 'now-foot'); const r = make('div', 'now-footrow'); r.append(make('span'), ev); foot.append(r); out.push(foot); }
-    }
-    return out;
-  }
 
   // A calendar event, from five minutes before it starts.
   eventView(m) {
@@ -526,7 +394,7 @@ export class Now {
     const el = e.target.closest('[data-now]');
     if (!el || this.busy) return false;
     // Today's top (the zoom) offers the two ends of the day too.
-    if (!this.shown && !(zoomOn() && ['talkday', 'closeday'].includes(el.dataset.now))) return false;
+    if (!this.shown && !(['talkday', 'closeday'].includes(el.dataset.now))) return false;
     const act = el.dataset.now;
     this.busy = true;
     if (!/^l/.test(act)) this.light.note = '';
@@ -835,8 +703,8 @@ export class Now {
     const m = this.m || this.model();
     const k = e.key.toLowerCase();
     let go = null;
-    if (zoomOn() && !this.asking && !this.mode) { go = this.pageKey(k, e, m); if (!go) return; }
-    else if (this.asking && ['1', '2', '3'].includes(k)) go = () => this.aside(['later', 'tomorrow', zoomOn() ? 'week' : 'another'][Number(k) - 1]);
+    if (!this.asking && !this.mode) { go = this.pageKey(k, e, m); if (!go) return; }
+    else if (this.asking && ['1', '2', '3'].includes(k)) go = () => this.aside(['later', 'tomorrow', 'week'][Number(k) - 1]);
     else if (this.asking && k === '4' && this.train.active(m.cur)) go = () => this.aside('own');
     else if (this.asking && e.key === 'Escape') go = () => { this.asking = false; this.p.redraw(); };
     else if (m.active) return;

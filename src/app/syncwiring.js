@@ -148,7 +148,6 @@ async function applyRemote(rows) {
   if (view() === 'tags' && tagsPage && rows.some((r) => r.tags?.length || r.id === 'settings-tag-groups')) tagsPage.refresh();
   if (view() === 'desk' && rows.some((r) => r.kind === 'world' || r.kind === 'area' || r.id === DESK_ID)) deskPage?.refresh();
   // Projects come in your Desk order everywhere: the rail follows a drag there.
-  if (rows.some((r) => r.id === DESK_ID || r.kind === 'world')) frame.drawProjects();
   // Where a project sits changed somewhere else (the Desk beside, a talk with Claude).
   if (view() === 'world' && rows.some((r) => r.id === DESK_ID) && !rows.some((r) => r.kind === 'world')) renderWorld();
   if (rows.some((r) => r.kind === 'line' || r.id === PLAN_ID)) { plan?.soon(); looseSoon(); }

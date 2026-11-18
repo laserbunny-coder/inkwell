@@ -7,7 +7,6 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
-import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require('playwright');
@@ -41,7 +40,7 @@ const fake = () => {
   };
 };
 
-const browser = classic(await chromium.launch());
+const browser = await chromium.launch();
 const errors = [];
 let failed = 0;
 async function check(name, fn) {
