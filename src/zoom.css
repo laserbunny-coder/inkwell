@@ -301,3 +301,5 @@ html.zoom .zm-np:hover, html.zoom .zm-np[aria-expanded="true"] { color: var(--in
 .pl-early.quiet .pl-early-tri:hover, .pl-early.quiet .pl-early-n:hover { color: var(--ink); }
 /* While a line is picked, its bar takes the mic's corner. */
 html.zoom.zm-picking .zm-mic { visibility: hidden; }
+/* With the shelf open on a wide screen, the page makes room beside it, so days stay in sight to drop on. */
+@media (min-width: 900px) { html.zoom.zm-shelf-on .plan-home { padding-right: 340px; } }
