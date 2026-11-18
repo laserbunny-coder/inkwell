@@ -5,7 +5,11 @@
 // Calendar show, seen from further away. A month opens its first week; a line
 // opens where it is written.
 import { make } from './dom.js';
-import { dateOf, isoOf, isRepeat, spanOf, weekOf } from './tasks.js';
+import { addDays, dateOf, isoOf, isRepeat, spanOf, weekOf } from './tasks.js';
+import { zoomOn } from './zoomstate.js';
+import { media } from './device.js';
+
+const hover = media('mouse');
 
 const long = (iso, opts) => dateOf(iso).toLocaleDateString('en-US', opts);
 const ym = (iso) => String(iso || '').slice(0, 7);
@@ -18,7 +22,7 @@ export function yearModel(items, today = isoOf()) {
   for (let m = 0; m < 12; m++) {
     const d = new Date(start.getFullYear(), start.getMonth() + m, 1);
     const first = isoOf(d);
-    months.push({ ym: ym(first), first, label: long(first, { month: 'long' }), year: d.getFullYear(), n: 0, dates: [] });
+    months.push({ ym: ym(first), first, label: long(first, { month: 'long' }), year: d.getFullYear(), n: 0, dates: [], loose: [] });
   }
   const byYm = new Map(months.map((m) => [m.ym, m]));
   const later = [];
@@ -34,8 +38,12 @@ export function yearModel(items, today = isoOf()) {
       if (!m) continue;
       m.n += 1;
       if (t.mark) m.dates.push({ iso: t.day, text: i.row.text, hard: t.mark === 'hard', id: i.row.id });
-    } else if (sp && (sp.kind === 'week' || sp.kind === 'month')) {
-      const m = byYm.get(ym(sp.start < today ? today : sp.start));
+    } else if (sp && sp.kind === 'month') {
+      // Sometime in a month: written out in its month (Part 3).
+      const m = byYm.get(ym(!sp.start || sp.start < today ? today : sp.start));
+      if (m) m.loose.push(i);
+    } else if (sp && sp.kind === 'week') {
+      const m = byYm.get(ym(!sp.start || sp.start < today ? today : addDays(sp.start, 3)));
       if (m) m.n += 1;
     } else if (sp?.kind === 'later') later.push(i);
     else loose += 1;
@@ -59,14 +67,17 @@ export function drawYear(plan) {
   for (const m of months) {
     const box = make('section', `yr-month${m.ym === ym(today) ? ' now' : ''}`);
     box.dataset.month = m.ym;
+    box.dataset.drop = `month:${m.ym}`;
     const name = make('button', 'yr-name', m.year !== months[0].year && m.ym.endsWith('-01') ? `${m.label} ${m.year}` : m.label);
     name.type = 'button';
-    name.title = `Open the first week of ${m.label}`;
+    name.title = zoomOn() ? `Into ${m.label}: its four weeks` : `Open the first week of ${m.label}`;
     name.addEventListener('click', () => {
-      const week = m.ym === ym(today) ? null : weekOf(m.first)[0];
-      plan.hooks.go({ view: 'plan', tab: 'week', ...(week ? { week } : {}) });
+      // The month's first whole week (the one it starts in, if it starts on a Monday).
+      const w0 = weekOf(m.first)[0];
+      const week = m.ym === ym(today) ? null : w0 < m.first ? addDays(w0, 7) : w0;
+      plan.hooks.go({ view: 'plan', tab: zoomOn() ? 'ahead' : 'week', ...(week ? { week } : {}) });
     });
-    const n = make('span', 'yr-n', m.n ? `${m.n} planned` : '');
+    const n = make('span', 'yr-n', m.n ? `${m.n} ${m.loose.length || m.dates.length ? 'more ' : ''}planned` : '');
     box.append(name, n);
     for (const d of m.dates.slice(0, 4)) {
       const b = make('button', `yr-date${d.hard ? ' hard' : ''}`);
@@ -77,19 +88,17 @@ export function drawYear(plan) {
       box.append(b);
     }
     if (m.dates.length > 4) box.append(make('span', 'yr-more', `${m.dates.length - 4} more dates`));
+    // Sometime that month: written out, picked and moved like any line.
+    for (const i of m.loose.slice(0, 5)) box.append(lineButton(plan, i, 'yr-line in'));
+    if (m.loose.length > 5) box.append(make('span', 'yr-more', `${m.loose.length - 5} more sometime then`));
     grid.append(box);
   }
 
   const some = make('section', 'yr-later');
   some.append(make('div', 'pl-eyebrow', 'Sometime this year'));
   if (!later.length) some.append(make('p', 'hint', 'Nothing yet. Alt + W on a line, then Later, puts it here.'));
-  for (const i of later) {
-    const b = make('button', 'yr-line', clip(i.row.text));
-    b.type = 'button';
-    b.title = 'Open it where it’s written';
-    b.addEventListener('click', () => plan.openLine(i));
-    some.append(b);
-  }
+  some.dataset.drop = 'year';
+  for (const i of later) some.append(lineButton(plan, i, 'yr-line'));
   const foot = make('div', 'yr-foot');
   if (loose) {
     const b = make('button', 'ghost-btn yr-loose', `Not planned · ${loose}`);
@@ -98,6 +107,19 @@ export function drawYear(plan) {
     b.addEventListener('click', () => plan.hooks.go({ view: 'plan', tab: 'plan' }));
     foot.append(b);
   }
+  if (zoomOn()) foot.replaceChildren();
   sheet.replaceChildren(head, grid, some, foot);
   plan.just = null;
+}
+
+// A line on the Year: opens where it is; dragged, or picked (right-click) and moved.
+function lineButton(plan, i, cls) {
+  const b = make('button', cls, clip(i.row.text));
+  b.type = 'button';
+  b.dataset.task = i.row.id;
+  b.dataset.move = '1';
+  if (hover.matches) b.draggable = true;
+  b.title = 'Open it where it’s written';
+  b.addEventListener('click', () => plan.openLine(i));
+  return b;
 }

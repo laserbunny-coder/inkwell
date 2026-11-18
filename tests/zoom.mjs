@@ -115,8 +115,9 @@ try {
   await check('Month is four weeks; 1 again (or the year) is twelve months with Sometime this year', async () => {
     await p.keyboard.press('1');
     await at(p, 'month');
-    await p.waitForSelector('.ah');
-    assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('.ah')).getPropertyValue('--weeks').trim()), '4');
+    await p.waitForSelector('.mo-weeks');
+    assert.equal(await p.locator('.mo-week').count(), 4, 'four weeks from this one');
+    assert.equal(await p.locator('.mo-week').first().locator('.mo-day').count(), 7, 'a week shows its seven days');
     assert.match(await p.locator('.pl-top h1').first().innerText(), /Four weeks/);
     await p.keyboard.press('1');
     await p.waitForSelector('.yr-month');
@@ -127,15 +128,16 @@ try {
     await sleep(150);
     assert.equal((await place(p)).tab, 'year', 'out from the Year does nothing');
     await p.keyboard.press('Enter');
-    await p.waitForSelector('.ah');
+    await p.waitForSelector('.mo-weeks');
     assert.equal(await p.locator('.zm-stop[data-stop="month"] .zm-word').innerText(), 'Month');
     await p.locator('.ah-year').click();
     await p.waitForSelector('.yr-month');
     assert.equal(await p.locator('.yr-month').count(), 12);
     assert.equal(await p.locator('.yr-later').isVisible(), true);
     await p.locator('.yr-month').nth(2).locator('.yr-name').click();
-    await at(p, 'week');
-    assert.ok((await place(p)).week, 'a month opens its first week');
+    await at(p, 'month');
+    assert.equal((await place(p)).tab, 'ahead', 'a month opens as four weeks');
+    assert.ok((await place(p)).week, 'from its first whole week');
   });
 
   await check('Today has three faces under its date, and comes back on the one used last', async () => {

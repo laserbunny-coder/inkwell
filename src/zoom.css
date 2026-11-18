@@ -3,7 +3,7 @@
    layout" (Look) takes html.zoom away and the rail and the phone's bar are
    back as they were. */
 
-.zm-ruler, .zm-mic, .zm-when, .zm-go, .zm-more { display: none; }
+.zm-ruler, .zm-mic, .zm-when, .zm-go, .zm-more, .zm-np { display: none; }
 
 /* ---------- what the ruler takes the place of ---------- */
 html.zoom.has-rail { --rail-w: 0px; }
@@ -123,7 +123,7 @@ html.zoom body.typing.in-piece.peek-top .topbar, html.zoom.has-rail body.typing.
   /* The top line is always there on the phone: the date, this place's pages, the glass and More. */
   html.zoom .topbar { display: flex !important; transform: none !important; opacity: 1 !important; align-items: center; gap: 6px; padding: 6px 8px 6px 12px; }
   html.zoom .topbar > .zm-when { order: 0; }
-  html.zoom .topbar > :is(.zm-go, .zm-more) { order: 3; }
+  html.zoom .topbar > :is(.zm-np, .zm-go, .zm-more) { order: 3; }
   html.zoom body.kb-up .topbar { opacity: 0 !important; pointer-events: none; }
   html.zoom body:not(.looking) :is(.notebook, .page) { padding-top: calc(var(--topbar-h, 44px) + 18px); }
 }
@@ -215,3 +215,91 @@ button.np-crumb:hover, button.np-crumb:focus-visible { color: var(--ink); backgr
   .np-kind, .np-notes, .now-page .now-choices { margin-left: 34px; }
   .np-door { margin-left: 34px; width: calc(100% - 34px); }
 }
+
+/* ---------- Part 3: the day's two dividers ---------- */
+.pl-part { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px 2px; color: var(--faint); font: 11px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; cursor: grab; user-select: none; }
+.pl-part::after { content: ''; flex: 1; height: 1px; background: var(--line); opacity: .7; }
+.pl-part.dragging { opacity: .4; }
+.pl-part.drop-after { box-shadow: 0 2px 0 var(--accent); }
+.pl-part.drop-before { box-shadow: 0 -2px 0 var(--accent); }
+
+/* ---------- Part 3: picking and moving a line ---------- */
+html.zoom .zm-picked { outline: 1.5px solid var(--accent); outline-offset: 2px; border-radius: 7px; background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.zm-movebar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(60px + env(safe-area-inset-bottom, 0px)); z-index: 61; display: flex; align-items: center; gap: 2px; max-width: calc(100vw - 24px); padding: 5px 6px; background: var(--panel, var(--raise)); border: 1px solid var(--line2, var(--line)); border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); font: 13px var(--ui); color: var(--ink); }
+.zm-mb { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--ink); font: inherit; padding: 7px 10px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.zm-mb:hover:not(:disabled) { background: var(--raise); }
+.zm-mb:disabled { color: var(--faint); cursor: default; }
+.zm-mb kbd { font: 11px var(--ui); color: var(--faint); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }
+.zm-mb-sp { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+html.zoom .zm-ruler .zm-stop.zm-dropon { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink); outline: 1.5px dashed var(--accent); }
+html.zoom .zm-dropon:not(.zm-stop) { outline: 1.5px dashed var(--accent); outline-offset: 2px; border-radius: 8px; }
+
+/* ---------- Part 3: Not planned ---------- */
+html.zoom[data-view="plan"] .zm-np { display: inline-flex; align-items: center; flex: none; height: 30px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: 12.5px var(--ui); cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
+html.zoom .zm-np:hover, html.zoom .zm-np[aria-expanded="true"] { color: var(--ink); background: var(--raise); }
+.zm-shelf { position: fixed; top: calc(var(--topbar-h, 44px) + 8px); right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(60px + env(safe-area-inset-bottom, 0px)); z-index: 55; width: min(320px, calc(100vw - 24px)); display: flex; flex-direction: column; gap: 6px; padding: 14px 12px; background: var(--panel, var(--raise)); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .3); font-family: var(--ui); overflow: hidden; }
+.zm-shelf-h { display: flex; align-items: center; justify-content: space-between; }
+.zm-shelf-h h2 { margin: 0; font: 500 13px var(--ui); color: var(--ink); }
+.zm-shelf-p { margin: 0 0 4px; color: var(--faint); font-size: 12px; line-height: 1.45; }
+.zm-shelf-list { overflow-y: auto; display: flex; flex-direction: column; gap: 1px; min-height: 0; }
+.zm-shelf-row { display: flex; align-items: center; gap: 4px; border-radius: 7px; }
+.zm-shelf-row[draggable="true"] { cursor: grab; }
+.zm-shelf-row:hover { background: var(--raise); }
+.zm-shelf-plus { flex: none; width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--accent); font: 16px/1 var(--ui); cursor: pointer; }
+.zm-shelf-plus:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.zm-shelf-tx { flex: 1; min-width: 0; text-align: left; border: 0; background: transparent; color: var(--ink); font: 14px/1.35 var(--ui); padding: 5px 2px; cursor: pointer; overflow-wrap: anywhere; }
+.zm-shelf-empty { color: var(--faint); font-size: 13px; }
+.zm-shelf.zm-dropon { outline: 1.5px dashed var(--accent); }
+@media (max-width: 720px) {
+  .zm-movebar { left: 8px; right: 8px; transform: none; flex-wrap: wrap; justify-content: center; row-gap: 2px; bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
+  .zm-mb { padding: 9px 9px; }
+  .zm-mb-sp { display: none; }
+  .zm-shelf { left: 8px; right: 8px; width: auto; top: auto; max-height: 55vh; }
+  html.zoom[data-view="plan"] .zm-np { padding: 0 6px; font-size: 12px; }
+}
+
+/* ---------- Part 3: Month, the four weeks ---------- */
+.mo-weeks { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.mo-week { display: grid; grid-template-columns: minmax(130px, 170px) minmax(0, 1fr) minmax(0, 300px); gap: 18px; align-items: start; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.mo-wh { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer; font-family: var(--ui); color: var(--muted); }
+.mo-wh b { font: 500 16px var(--ui); color: var(--ink); }
+.mo-wh span { font-size: 12.5px; color: var(--faint); }
+.mo-week.now .mo-wh b { color: var(--accent); }
+.mo-wh:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.mo-lines { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.mo-line { display: flex; gap: 8px; align-items: baseline; max-width: 100%; border: 0; background: transparent; padding: 3px 6px; margin-left: -6px; border-radius: 6px; text-align: left; cursor: pointer; color: var(--ink); font: 15px/1.35 var(--prose); }
+.mo-line:hover { background: var(--raise); }
+.mo-line[draggable="true"] { cursor: grab; }
+.mo-line .mo-tx { min-width: 0; overflow-wrap: anywhere; }
+.mo-date { flex: none; color: var(--accent); font: 12px var(--ui); font-variant-numeric: tabular-nums; }
+.mo-line.hard .mo-date { font-weight: 600; }
+.mo-none { color: var(--faint); font: 12.5px var(--ui); padding: 3px 0; }
+.mo-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.mo-day { display: flex; flex-direction: column; align-items: center; gap: 5px; min-height: 46px; padding: 5px 2px; border: 0; border-radius: 7px; background: transparent; cursor: pointer; font-family: var(--ui); }
+.mo-day:hover { background: var(--raise); }
+.mo-dn { font: 11px var(--ui); font-style: normal; color: var(--faint); white-space: nowrap; }
+.mo-day.today .mo-dn { color: var(--accent); }
+.mo-day.past { opacity: .5; }
+.mo-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; max-width: 40px; }
+.mo-dots i { width: 6px; height: 6px; border-radius: 50%; border: 1.2px solid var(--muted); }
+.mo-dots i.on { background: var(--muted); }
+.mo-dots em { font: 10px var(--ui); font-style: normal; color: var(--faint); }
+.mo-months { display: flex; flex-direction: column; gap: 4px; margin-top: 22px; }
+.mo-month { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.mo-month .pl-label { margin: 0 0 6px; }
+.yr-month .yr-line.in { display: block; margin-top: 2px; }
+@media (max-width: 720px) {
+  .mo-week { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .mo-days { max-width: 100%; }
+}
+.zm-mb-name { padding: 0 8px; color: var(--muted); font-size: 12.5px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* "N left from earlier days": one quiet line, its fold a plain triangle. */
+.pl-early.quiet { gap: 6px; }
+.pl-early.quiet .pl-early-tri { appearance: none; background: none; border: 0; padding: 4px 2px; cursor: pointer; color: var(--faint); font-size: 11px; width: auto; }
+.pl-early.quiet .pl-early-n { appearance: none; background: none; border: 0; padding: 4px 0; cursor: pointer; color: var(--muted); font: 13.5px var(--ui); }
+.pl-early.quiet .pl-early-tri:hover, .pl-early.quiet .pl-early-n:hover { color: var(--ink); }
+/* While a line is picked, its bar takes the mic's corner. */
+html.zoom.zm-picking .zm-mic { visibility: hidden; }
+/* With the shelf open on a wide screen, the page makes room beside it, so days stay in sight to drop on. */
+@media (min-width: 900px) { html.zoom.zm-shelf-on .plan-home { padding-right: 340px; } }
