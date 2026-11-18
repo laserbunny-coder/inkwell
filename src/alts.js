@@ -278,7 +278,7 @@ export class AltPanel {
     });
     // Tapping or clicking a word that has alternates shows them.
     editor.view.dom.addEventListener('click', (e) => {
-      if (e.target.closest?.('.alt') && !root().classList.contains('focus') && !root().classList.contains('hide-alts')) {
+      if (e.target.closest?.('.alt') && !root().classList.contains('focus')) {
         requestAnimationFrame(() => this.open({ scope: 'word' }));
       }
     });

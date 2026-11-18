@@ -15,7 +15,7 @@
 // is the way through. Only today's chapters are kept on the device.
 
 import { getEntry, putEntries, children } from './db.js';
-import { PLAN_ID, savePlanSettings, isoOf, tickTask, addDays, addTask } from './tasks.js';
+import { PLAN_ID, savePlanSettings, isoOf, tickTask, addDays, addTask, renameTask } from './tasks.js';
 import { trash } from './trash.js';
 import { withDay, withoutDay, cleanDays, trackWords, daysFromHistory } from './readstats.js';
 
@@ -152,16 +152,25 @@ export async function tickBibleHabit(items, today = isoOf()) {
 // done counts as read. One that wasn't read lapses: it never piles up (the
 // Nov 16 rule), and the reading log keeps the days he did read.
 export const isLight = (row) => !!row?.fields?.firstlight && row?.kind === 'line' && !!row.fields?.task;
+// Its name is drawn from the field, not the stored words: lines made before
+// Nov 18 2026 say "First light", and past days keep their words.
+export const LIGHT_NAME = 'Bible reading';
+export const lineName = (row) => (isLight(row) ? LIGHT_NAME : row?.text || 'Untitled');
 export const lightToday = (items, today) => items.find((i) => isLight(i.row) && !i.ghost && !i.occ && (i.task.day === today || (i.row.fields?.done && isoOf(i.task.done_at || 0) === today)));
 
 // → rows written: stale lines gone, today's made (once a day, unless read or set aside already).
 export async function ensureLightLine(items, today = isoOf()) {
   const out = [...(await lapseLight(items, today))];
-  if (lightToday(items, today)) return out;
+  const has = lightToday(items, today);
+  if (has) {
+    // Today's line, still open, from before the new name: it takes the new name.
+    if (!has.row.fields?.done && has.row.text === 'First light') out.push(...(await renameTask(has.row.id, LIGHT_NAME)));
+    return out;
+  }
   const st = await readReading();
   if (st.read === today || st.skip === today || st.made === today) return out;
   const orders = items.filter((i) => i.task.day === today).map((i) => i.task.order || 0);
-  const made = await addTask({ text: 'First light', day: today, order: Math.min(0, ...orders) - 1 });
+  const made = await addTask({ text: LIGHT_NAME, day: today, order: Math.min(0, ...orders) - 1 });
   const line = made.at(-1);
   line.fields = { ...line.fields, firstlight: true };
   line.updated_at = Date.now();

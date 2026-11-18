@@ -69,7 +69,6 @@ span.wp-edit:empty { display: inline-block; min-width: 12ch; }
 
 /* Steps: the project's tasks, drawn by the plan. */
 #wh-steps .pl-list { margin-top: 8px; }
-.hide-projsteps #wh-steps { display: none; }
 .pl-when { border: 0; background: none; padding: 2px 6px; border-radius: var(--r, 6px); color: var(--muted); font: 12px var(--ui); cursor: pointer; white-space: nowrap; }
 .pl-when:hover { color: var(--ink); background: var(--line); }
 .pl-when.late { color: var(--ink); }
@@ -79,21 +78,17 @@ span.wp-edit:empty { display: inline-block; min-width: 12ch; }
 .pl-alldone { align-self: flex-start; margin: 6px 0 0 32px; }
 
 /* Crew and turns. */
-.hide-projcrew :is(#wh-crew, #wh-turns) { display: none; }
 .wp-turn { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 16px; align-items: baseline; padding: 8px 0; font-size: 13.5px; color: var(--soft); line-height: 1.5; }
 a.wp-turn:hover { color: var(--ink); }
 .wp-why { display: block; color: var(--muted); font-size: 12.5px; font-style: italic; margin-top: 2px; }
 .wp-date { font: 11.5px var(--mono); color: var(--muted); white-space: nowrap; }
 .wp-live { font: 500 10px var(--ui); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
-.hide-projrecent #wh-recent-box { display: none; }
-.wp-sheet .wh-next, .wp-sheet .wh-recent { margin-top: 6px; }
+.wp-sheet .wh-next { margin-top: 6px; }
 /* What's waiting in its pages: the page's name, then the thing, on one line. */
 .wp-sheet .wh-next button { flex-direction: row; align-items: baseline; gap: 12px; padding: 7px 8px; margin: 0 -8px; width: calc(100% + 16px); border-radius: var(--r, 6px); }
 .wp-sheet .wh-next button:hover { background: var(--raise); }
 .wp-sheet .wh-next .from { font: 500 10px var(--ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); min-width: 56px; flex: none; }
 .wp-sheet .wh-next .line { font-size: 15.5px; line-height: 1.4; min-width: 0; }
-.wp-sheet .wh-recent li { border-bottom: 0; padding: 5px 0; }
-.wp-sheet .wh-recent .loose-title { font-size: 15.5px; }
 
 @media (max-width: 640px) {
   .wp-two { grid-template-columns: minmax(0, 1fr); gap: 2px; }

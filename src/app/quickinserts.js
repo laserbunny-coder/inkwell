@@ -17,14 +17,14 @@ import { tagIndex, statsOf } from '../tags.js';
 import { whenOpen } from '../when.js';
 import { inPane, BESIDE_PLACES } from '../panes.js';
 import { openClaudeKnows } from '../claudeknows.js';
-import { openTidy, counts as tidyCounts } from '../tidypass.js';
+import { openTidy } from '../tidypass.js';
 import { areas, books, bookType, hasManuscript, kindName, bookOf, newPage, worlds, worldOf } from '../library.js';
 import { isoOf, isoToday } from '../dates.js';
 import { addCommands, mod } from './commandlist.js';
 import { $, alts, blocks, body, editor, gone, inNotebook, insertSection, isScript, isWoven, notes, root, state, statusEl, store, tooBig, view } from '../main.js';
 import { touch } from './scriptbar.js';
 import { currentEditor, notebook } from './notebookview.js';
-import { besideUntil, go, newPageHere, openEntry, paneStep, setBesideUntil } from './routing.js';
+import { go, newPageHere, openEntry, paneStep, setBesideUntil } from './routing.js';
 import { applyRemote, conflicts, sync } from './syncwiring.js';
 import { markScene, newAct, newChapter, sceneDetails, toggleNumbering } from './manuscript.js';
 import { KINDS, addPiece, bookMenu, refreshViews, setKind, setLife, worldMenu } from './tidying.js';
@@ -118,21 +118,8 @@ async function showTidy() {
     canAsk: canAskServer,
     // Claude makes the batch on the server; it comes down with the next sync.
     ask: async () => { const got = await askServer({ mode: 'tidy' }); await sync.run(); return got?.count || 0; },
-    onClose: () => tidyNudge(),
     toast
   });
-}
-// On today's page, a quiet line while Claude has tidy-ups waiting or has changed something since you last looked.
-let nudgeAt = 0;
-async function tidyNudge() {
-  const el = $('.tidy-nudge');
-  if (!el) return;
-  const today = inNotebook() && notebook.isDay && notebook.page?.id === dayId(isoToday());
-  const stamp = ++nudgeAt;
-  const { waiting, changes } = today ? await tidyCounts() : { waiting: 0, changes: 0 };
-  if (stamp !== nudgeAt) return;
-  el.hidden = !(waiting || changes);
-  el.textContent = ['Tidy pass', waiting ? `${waiting} to look at` : '', changes ? `Claude changed ${changes === 1 ? 'a thing' : `${changes} things`}` : ''].filter(Boolean).join(' · ');
 }
 const menuSpot = () => ({ left: Math.max(8, window.innerWidth / 2 - 130), top: 110 });
 
@@ -613,4 +600,4 @@ function wireQuickInserts() {
   window.addEventListener('pagehide', () => { store.close(editor.state.doc); notebook.close(); });
 }
 
-export { boxOpen, closePalette, currentBook, currentBookId, filterPalette, menuSpot, moveLinePicker, openBox, openPalette, sendSelectionPicker, showClaudeKnows, showTidy, tidyNudge, wireQuickInserts };
+export { boxOpen, closePalette, currentBook, currentBookId, filterPalette, menuSpot, moveLinePicker, openBox, openPalette, sendSelectionPicker, showClaudeKnows, showTidy, wireQuickInserts };

@@ -36,7 +36,7 @@
 .hs-hide > .ProseMirror:not(.hs-past) { display: none !important; }
 .hs-past[hidden], .hs-cmp[hidden] { display: none !important; }
 html.hs-open .ProseMirror:not(.hs-past) { caret-color: transparent; }
-html.hs-open .notebook :is(#plan, .evening-card, .loose-foot, .tidy-nudge, .day-review, .backlinks, .past-days, #nb-links, #nb-zoom) { display: none !important; }
+html.hs-open .notebook :is(#plan, .backlinks, #nb-links, #nb-zoom) { display: none !important; }
 html.hs-open .page :is(.notes-layer, .chapter-links) { display: none !important; }
 html.hs-open .hs-hide + .hs-cmp ~ * { display: none; }
 .hs-past { color: var(--soft, var(--ink)); }

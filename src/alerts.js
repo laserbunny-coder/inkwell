@@ -1,25 +1,14 @@
 // Phone alerts: Inkwell buzzes this phone or computer even when it's closed
 // (Web Push; public/sw.js shows them). The server sends to the devices that
-// turned them on here.
-// What to hear about is one switch per kind, kept on the account so every
-// device agrees (alert_prefs):
-//   review  the 9 pm "Your day review"
-//   week    Monday's "Your week"
-//   month   "Your month", early in a new month
-//   needs   a Claude thread putting something on Needs you
-// Turning alerts on signs this device up (push_subs, marked app 'inkwell').
+// turned them on here. Since Nov 18 2026 there is one kind: a Claude thread
+// putting something on Needs you. So the whole choice is on or off for this
+// device. Turning alerts on signs this device up (push_subs, marked app
+// 'inkwell').
 
 import { make } from './menu.js';
 import { mobileOS } from './device.js';
 
 const KEY = 'inkwell-alerts';
-export const KINDS = [
-  { k: 'review', name: 'Day review at 9 pm', hint: 'The nudge to look back over today.' },
-  { k: 'needs', name: 'Needs you', hint: 'When a Claude thread needs a decision, is blocked on you, or has something to try.' },
-  { k: 'week', name: 'Your week, on Mondays', hint: 'Last week summed up, and the things you said you’d do.' },
-  { k: 'month', name: 'Your month', hint: 'Last month summed up, early in a new month.' }
-];
-const DEFAULTS = { review: true, needs: true, week: true, month: true, notes: false };
 
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } };
 const keep = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* full */ } };
@@ -64,11 +53,9 @@ async function test(backend, endpoint) {
   return !!r?.sent;
 }
 
-// The panel: on or off for this device, a test, and the switches.
+// The panel: on or off for this device, and a test.
 export async function openAlerts({ backend, signedIn, toast }) {
   if (!signedIn || !backend?.savePushSub) { toast('Sign in to sync first: alerts reach this device through your account.'); return; }
-  let prefs = { ...DEFAULTS };
-  try { prefs = { ...DEFAULTS, ...((await backend.alertPrefs()) || {}) }; } catch (e) { console.warn(e); }
   const back = make('div', 'ask-backdrop');
   const box = make('div', 'ask al-panel');
   box.setAttribute('role', 'dialog');
@@ -78,26 +65,10 @@ export async function openAlerts({ backend, signedIn, toast }) {
   const msg = make('p', 'al-msg');
   const onBtn = make('button', 'pill primary al-on');
   const testBtn = make('button', 'ghost-btn al-test', 'Send a test');
-  const list = make('div', 'al-kinds');
-  for (const { k, name, hint } of KINDS) {
-    const label = make('label', 'al-kind');
-    const box2 = document.createElement('input');
-    box2.type = 'checkbox';
-    box2.checked = prefs[k] !== false;
-    box2.dataset.kind = k;
-    const words = make('span', 'al-words');
-    words.append(make('b', '', name), make('small', '', hint));
-    label.append(box2, words);
-    list.append(label);
-    box2.addEventListener('change', async () => {
-      prefs = { ...prefs, [k]: box2.checked };
-      try { await backend.saveAlertPrefs(prefs); msg.textContent = ''; } catch { msg.textContent = 'Couldn’t save that. Check your connection.'; box2.checked = !box2.checked; prefs[k] = box2.checked; }
-    });
-  }
   const close = make('button', 'ghost-btn', 'Done');
   const row = make('div', 'ask-actions');
   row.append(testBtn, close);
-  box.append(make('h2', '', 'Phone alerts'), status, onBtn, msg, list, row);
+  box.append(make('h2', '', 'Phone alerts'), status, onBtn, msg, row);
   back.append(box);
   document.body.append(back);
 
@@ -110,8 +81,8 @@ export async function openAlerts({ backend, signedIn, toast }) {
     onBtn.className = on ? 'ghost-btn al-on' : 'pill primary al-on';
     status.textContent = !supported() ? 'This browser can’t show alerts. On your phone, open Inkwell from its home screen icon.'
       : Notification.permission === 'denied' ? 'Notifications are blocked for Inkwell. Allow them in your phone’s settings (Apps, then Inkwell, then Notifications), then come back.'
-        : on ? `Alerts are on for this ${phone() ? 'phone' : 'computer'}.`
-          : 'Get a buzz for the things below, even when Inkwell is closed.';
+        : on ? `Alerts are on for this ${phone() ? 'phone' : 'computer'}: you hear when a Claude thread needs you.`
+          : 'Get a buzz when a Claude thread needs you, even when Inkwell is closed.';
   };
   draw();
   const done = () => back.remove();

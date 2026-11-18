@@ -491,7 +491,7 @@ export class DeskPage {
     else parts.push(make('p', 'hint dk-empty', 'Nothing is on stage. Carry a project here from the wings, or right-click one and pick On stage.'));
 
     { const r = await this.readingBlock(); if (r) parts.push(r); }
-    if (!document.documentElement.classList.contains('hide-training')) { const t = await this.trainingBlock(); if (t) parts.push(t); }
+    { const t = await this.trainingBlock(); if (t) parts.push(t); }
 
     const wings = seats.filter((s) => s.stage === 'wings' && s.world);
     const row = make('section', 'zd-wings');
@@ -761,9 +761,8 @@ export class DeskPage {
   // behind each goal (Part 7), each with its own switch in Look.
   async readingBlock() {
     const root = document.documentElement;
-    const streak = !root.classList.contains('hide-readstreak');
-    const progress = !root.classList.contains('hide-readprogress');
-    if (root.classList.contains('hide-firstlight') || (!streak && !progress)) return null;
+    const streak = true;
+    const progress = true;
     const today = isoOf();
     const st = await readingLog(await loadTasks(), today);
     const sec = make('section', 'dk-sec dk-reading');
@@ -793,8 +792,8 @@ export class DeskPage {
     h.append(make('span', 'dk-label-more', 'four goals, and the handstand'));
     sec.append(h);
     const root = document.documentElement;
-    const streakOn = !root.classList.contains('hide-trainstreak');
-    const chartsOn = !root.classList.contains('hide-traincharts');
+    const streakOn = true;
+    const chartsOn = true;
     const today0 = isoOf();
     const log = streakOn || chartsOn ? await trainingLog() : [];
     if (streakOn) sec.append(streakBlock(log, today0));

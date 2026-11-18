@@ -86,7 +86,7 @@ async function liveWorld(id) {
 async function projectPlace() {
   if (stopOf(lastPlace) === 'project' && state.worldId && (await liveWorld(state.worldId))) return { view: 'world', id: state.worldId };
   const cur = plan?.now?.m?.cur;
-  const row = !cur?.smalls ? cur?.item?.row : null;
+  const row = cur?.item?.row || null;
   if (row) {
     const w = await worldOf(row).catch(() => null);
     if (w && !gone(w)) return { view: 'world', id: w.id };
@@ -311,7 +311,7 @@ function moreMenu() {
   const click = (sel) => () => document.querySelector(sel)?.click();
   const items = [
     ...(writingNow ? [{ label: 'Notes beside the text (Ctrl + 2)', run: click('#notes-toggle') }] : []),
-    ...(hidden().has('panes') ? [] : [{ label: 'Beside: a pane next to this (Ctrl + \\)', run: click('#beside-toggle') }]),
+    { label: 'Beside: a pane next to this (Ctrl + \\)', run: click('#beside-toggle') },
     { label: 'Look: colours, text, what shows (Aa)', run: () => togglePageSettings() },
     'sep',
     { label: 'Every command (Ctrl + K)', run: () => { closeMenu(); document.querySelector('#palette-toggle')?.click(); } }

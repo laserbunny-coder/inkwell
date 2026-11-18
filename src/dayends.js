@@ -16,11 +16,10 @@
 
 import { addLine } from './capture.js';
 import { getEntry, putEntries } from './db.js';
-import { addTask, setTask, taskOf, dayPlan, addDays, isoOf } from './tasks.js';
+import { addTask, setTask, dayPlan, addDays } from './tasks.js';
 import { clockWord } from './calendar.js';
-import { isTraining, addTrainingLine, trainingToday } from './training.js';
+import { addTrainingLine, trainingToday } from './training.js';
 
-export const BIG_MOST = 5;
 const clip = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const isSmallTask = (i) => !!(i?.task?.small || i?.task?.habit);
 
@@ -43,8 +42,7 @@ export function dayBody(words, { items, today, events = [] }) {
 }
 
 // The answer, laid out on today. Every task already on today stays on it (the
-// ones the answer missed go after, in their order). A sixth big thing that is
-// new doesn't become a task: its words go to the page with the thoughts.
+// ones the answer missed go after, in their order). Today holds all of it.
 // → { rows, undo, page: [words for today's page], added, n }
 export async function layOutDay(out, { items, today }) {
   const was = onToday(items, today);
@@ -56,7 +54,6 @@ export async function layOutDay(out, { items, today }) {
   }
   for (const i of was) if (!seen.has(i.row.id)) order.push({ item: i, small: isSmallTask(i), missed: true });
   const page = (Array.isArray(out?.thoughts) ? out.thoughts : []).map((t) => clip(t, 400)).filter(Boolean);
-  let big = 0;
   const rows = [];
   const undo = [];
   let n = 0;
@@ -65,7 +62,6 @@ export async function layOutDay(out, { items, today }) {
     if (o.item) {
       const t = o.item.task;
       const small = o.missed ? !!t.small : o.small;
-      if (!small && !t.habit && !isTraining(o.item.row)) big++;
       n++;
       const before = { day: t.day ?? null, order: t.order ?? 0, small: !!t.small };
       const patch = { day: today, order: n, ...(small !== !!t.small && !t.habit ? { small } : {}) };
@@ -83,8 +79,6 @@ export async function layOutDay(out, { items, today }) {
       if (line) { const r = await setTask(line.id, { order: n }); rows.push(...made.filter((x) => x !== line), r || line); const id = line.id; undo.push(async () => { const x = await getEntry(id); if (!x) return []; const gone = { ...x, deleted: true, updated_at: Date.now() }; await putEntries([gone]); return [gone]; }); }
       continue;
     }
-    if (!o.small && big >= BIG_MOST) { page.push(o.text); continue; }
-    if (!o.small) big++;
     n++;
     const made = await addTask({ text: o.text, day: today, order: n });
     let line = made.find((r) => r.kind === 'line');

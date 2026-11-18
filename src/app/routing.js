@@ -21,9 +21,8 @@ import { beside, comparer, talk } from './revising.js';
 import { loadProduction } from './productionwiring.js';
 import { frame, loadStagePage, pageOfPlace } from './workpages.js';
 import { hstrip } from './historyview.js';
-import { hidden } from './pagesettings.js';
 import { box, writing } from './commands.js';
-import { deskPage, looseFoot, plan, tagsPage } from './talking.js';
+import { deskPage, plan, tagsPage } from './talking.js';
 import { openBeside, panes, planningView, pull, sideNotes, talkThrough } from './beside.js';
 
 // ---------- getting around ----------
@@ -150,9 +149,7 @@ async function go(place) {
     else {
       if (place.line) notebook.focusLine(place.line);
       remember({ view: 'notebook', pageId: notebook.page.id });
-      // Back on a page that stayed open: its count may have been put away
-      // meanwhile, and its plan may have changed in Plan or Calendar.
-      looseFoot();
+      // Back on a page that stayed open: its plan may have changed meanwhile.
       plan?.showDay(notebook.page);
     }
     if ((place.zoom || null) !== notebook.zoom) {

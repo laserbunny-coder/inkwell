@@ -58,6 +58,14 @@
         for (const k of ['nowFace', 'nowSide', 'nowWrite', 'todayPhone', 'calZoom', 'estimatesOff', 'rowDetailsOff']) localStorage.removeItem(k);
         localStorage.setItem('showsCleaned2', '1');
       }
+      // Nov 18 2026: the short panel (eight switches). The ones he kept are simply on;
+      // the features he let go went with their switches. Keep in step with REMOVED.
+      if (!localStorage.getItem('showsCleaned3')) {
+        const gone3 = ['calendar', 'dayparts', 'nowout', 'nowfiled', 'firstlight', 'readstreak', 'readprogress', 'training', 'trainstreak', 'traincharts', 'nowtalk', 'nowclose', 'nowevents', 'nextstep', 'projsteps', 'projcrew', 'panes', 'links', 'alts', 'nowgate', 'smallsgo', 'fivebig', 'review', 'nudge', 'tidy', 'loose', 'deskread', 'projrecent', 'calzoom'];
+        for (let i = hide.length - 1; i >= 0; i--) if (gone3.includes(hide[i])) hide.splice(i, 1);
+        localStorage.setItem('hide', JSON.stringify(hide));
+        localStorage.setItem('showsCleaned3', '1');
+      }
       for (const h of hide) d.classList.add('hide-' + h);
       localStorage.removeItem('focus'); // Focus went with the old layout (Nov 17 2026): typing clears the screen
       if (localStorage.getItem('focusSections') === '1') d.classList.add('focus-sections');
@@ -243,10 +251,6 @@
       </section>
       <section class="wp-part" id="wh-crew" hidden></section>
       <section class="wp-part" id="wh-turns" hidden></section>
-      <section class="wp-part" id="wh-recent-box" hidden>
-        <h2 class="wp-sec">Recently <span class="wp-more">last written in</span></h2>
-        <ul id="wh-recent" class="loose-list wh-recent"></ul>
-      </section>
     </div>
   </main>
 
@@ -281,27 +285,7 @@
       <button type="button" class="links-chip" id="nb-links" hidden></button>
       <nav id="nb-zoom" class="nb-zoom" aria-label="Zoomed in from" hidden></nav>
       <section class="plan" id="plan" aria-label="Plan" hidden></section>
-      <div class="evening-card" role="note" hidden>
-        <span class="ec-text">It’s after 9. Look back over today?</span>
-        <span class="ec-do">
-          <button type="button" class="pill primary ec-close">Close the day</button>
-          <button type="button" class="pill ec-start">Review the day</button>
-          <button type="button" class="ghost-btn ec-skip">Not tonight</button>
-        </span>
-      </div>
       <article id="outline-editor" aria-label="Lines"></article>
-      <div class="loose-foot" id="loose-foot" hidden></div>
-      <button type="button" class="tidy-nudge" hidden></button>
-      <section class="day-review" aria-label="Day review" hidden>
-        <button type="button" class="dr-start" hidden>Review the day</button>
-        <button type="button" class="dr-toggle" aria-expanded="false" hidden><span>Day review</span><span class="dr-left"></span></button>
-        <div class="dr-body" hidden>
-          <div class="dr-summary"></div>
-          <div class="dr-cards"></div>
-          <p class="dr-quiet hint" hidden>Nothing to sort today.</p>
-          <button type="button" class="ghost-btn dr-again" title="Ask Claude to look at the day again (what you’ve decided stays)">Review again</button>
-        </div>
-      </section>
       <section class="backlinks" hidden>
         <div class="panel-label">Linked from</div>
         <ul id="backlinks-list" class="ref-list"></ul>

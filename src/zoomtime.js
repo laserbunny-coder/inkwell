@@ -12,6 +12,7 @@
 import { make } from './dom.js';
 import { media } from './device.js';
 import { addDays, weekOf, isoOf, spanOf, dateOf } from './tasks.js';
+import { lineName } from './firstlight.js';
 
 const hover = media('mouse');
 const ym = (iso) => String(iso || '').slice(0, 7);
@@ -187,7 +188,7 @@ export class Pick {
     const at = timeOf(i, this.plan.today);
     const v = viewOf(this.plan);
     const cur = this.plan.now?.m?.cur;
-    const isCur = !!cur && !cur.smalls && cur.item.row.id === this.id;
+    const isCur = !!cur && cur.item.row.id === this.id;
     return { at, out: outTarget(at), in: inTarget(at, v, isCur), prev: sideTarget(at, -1, this.plan.today), next: sideTarget(at, 1, this.plan.today) };
   }
   async go(which) {
@@ -233,7 +234,7 @@ export class Pick {
       if (title) x.title = title;
       return x;
     };
-    const name = make('span', 'zm-mb-name', clip(i.row.text, small ? 22 : 34));
+    const name = make('span', 'zm-mb-name', clip(lineName(i.row), small ? 22 : 34));
     name.title = away ? 'Picked, and out of sight here' : '';
     if (!away) name.hidden = true;
     this.bar.replaceChildren(

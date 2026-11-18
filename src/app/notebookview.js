@@ -15,9 +15,9 @@ import { renderCrumb, renderRail } from './rail.js';
 import { pageMenu } from './tidying.js';
 import { dayMenu } from './historyview.js';
 import { writing } from './commands.js';
-import { moveLinePicker, sendSelectionPicker, tidyNudge } from './quickinserts.js';
-import { captureHere, dayReview, looseFoot, looseSoon, plan, writeOut } from './talking.js';
-import { besideItem, listSoon, paneMoves, planningView, pull, whenHere } from './beside.js';
+import { moveLinePicker, sendSelectionPicker } from './quickinserts.js';
+import { captureHere, plan, writeOut } from './talking.js';
+import { besideItem, listSoon, planningView, pull, whenHere } from './beside.js';
 import { amountsMenu } from '../trainpage.js';
 
 // ---------- notebook ----------
@@ -184,7 +184,7 @@ function wireNotebook() {
     onOpen: openEntry,
     onStatus: (s) => {
       if (inNotebook()) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved';
-      if (s === 'saved') { listSoon(); if (notebook?.isDay) dayReview?.soon(); plan?.soon(); if (notebook?.looseDay) { notebook.redrawMarks(); looseSoon(); } }
+      if (s === 'saved') { listSoon(); plan?.soon(); }
     },
     onTaskChip: (eid, el) => (el?.dataset.train ? amountsMenu(eid, el, { wrote: (rows) => applyRemote(rows).then(() => notebook.redrawMarks()) }) : plan?.chipMenu(eid, el)),
     onTasks: () => plan?.soon(),
@@ -196,11 +196,8 @@ function wireNotebook() {
     onPlace: (page) => {
       if (!inNotebook()) return;
       remember({ view: 'notebook', pageId: page.id, ...(notebook?.zoom ? { zoom: notebook.zoom } : {}) });
-      dayReview?.show(page);
       plan?.showDay(page);
       pull?.setShown(planningView());
-      looseFoot();
-      tidyNudge();
       $('#nb-more').replaceChildren(menuButton(() => (page.kind === 'page' ? pageMenu(page) : dayMenu()), page.kind === 'page' ? 'More for this page' : 'More for this day'));
       renderCrumb();
     },

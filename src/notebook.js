@@ -2,8 +2,8 @@ import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { AltMark } from './alts.js';
 import { LinkCatch } from './linkcatch.js';
-import { OutlineDoc, LineIds, LineChecks, EntryRef, TagMarks, GatherBadge, mirrorKey, OutlineFold, OutlineKeys, OutlineItem, oneParagraphPerLine, foldKey, OutlineStore, descendants, loadDoc, replaceDoc } from './outline.js';
-import { getEntry, getMany, linkedFrom, byTag, putEntries, children, isTrashed } from './db.js';
+import { OutlineDoc, LineIds, LineChecks, EntryRef, TagMarks, GatherBadge, mirrorKey, OutlineFold, OutlineKeys, OutlineItem, oneParagraphPerLine, foldKey, OutlineStore, loadDoc, replaceDoc } from './outline.js';
+import { getEntry, getMany, linkedFrom, byTag, putEntries, isTrashed } from './db.js';
 import { entry } from './model.js';
 import { catchLink } from './share.js';
 import { moveEntry } from './move.js';
@@ -18,7 +18,6 @@ import { TaskLine, redrawTasks } from './taskline.js';
 import { filedNote } from './thoughts.js';
 import { amountsOf } from './trainpage.js';
 import { checkLineDecos, diffLineDecos } from './linedecos.js';
-import { isLoose, inWindow } from './loosemark.js';
 import { taskOf, chipLabel, setTask, unTask, isoOf } from './tasks.js';
 import { isTouch } from './device.js';
 import { pad } from './dates.js';
@@ -134,7 +133,6 @@ export class Notebook {
           label: (t, done) => chipLabel(t, done),
           onChip: (eid, el) => onTaskChip?.(eid, el),
           onToggle: (eid) => this.toggleTask(eid),
-          loose: (eid) => this.looseDay && isLoose(this.store.cache.get(eid)),
           note: (eid) => { const r = this.store.cache.get(eid); const a = amountsOf(r); return a ? { text: a } : filedNote(r); }
         }),
         LinkCatch.configure({ onCatch: (eid, url) => this.caughtLink(eid, url) })
@@ -204,7 +202,6 @@ export class Notebook {
 
   get isDay() { return this.page?.kind === 'day'; }
   // A day recent enough that its unfiled lines still carry a ring.
-  get looseDay() { return this.isDay && inWindow(this.page.title); }
   // Rings and task labels follow what was just saved.
   redrawMarks() { if (this.page) redrawTasks(this.editor); }
 

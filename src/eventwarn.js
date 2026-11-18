@@ -38,7 +38,7 @@ export class EventWarn {
   // The event due in the next five minutes, or null.
   next(now = Date.now()) {
     const h = this.h;
-    if (h.off?.('calendar') || !h.plan?.hooks.calendar) return null;
+    if (!h.plan?.hooks.calendar) return null;
     const today = isoOf();
     const got = h.plan.hooks.calendar(today, today);
     if (!got.now) { got.fresh?.then((l) => { if (l?.length) this.soon(); }); return null; }

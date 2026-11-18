@@ -127,24 +127,13 @@ function supabaseBackend() {
       if (updates.error) console.warn(updates.error);
       return { needs: needs.data || [], updates: updates.error ? [] : updates.data || [] };
     },
-    // Phone alerts: this device's Web Push sign-up, and the switches (one set
-    // for the account).
+    // Phone alerts: this device's Web Push sign-up.
     async savePushSub(row) {
       const { error } = await sb.from('push_subs').upsert(row);
       if (error) throw error;
     },
     async dropPushSub(endpoint) {
       const { error } = await sb.from('push_subs').delete().eq('endpoint', endpoint);
-      if (error) throw error;
-    },
-    async alertPrefs() {
-      const { data, error } = await sb.from('alert_prefs').select('review,needs,notes,week,month').maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-    async saveAlertPrefs(p) {
-      const { data: auth } = await sb.auth.getSession();
-      const { error } = await sb.from('alert_prefs').upsert({ user_id: auth.session?.user?.id, review: p.review, needs: p.needs, notes: !!p.notes, week: p.week, month: p.month, updated_at: new Date().toISOString() });
       if (error) throw error;
     },
     async doneNeed(id) {

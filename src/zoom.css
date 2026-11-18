@@ -387,7 +387,6 @@ html.zoom .wp-sheet > #wh-next-box { order: 9; }
 html.zoom .wp-sheet > #wh-facts { order: 10; margin-top: 18px; }
 html.zoom .wp-sheet > #wh-crew { order: 11; }
 html.zoom .wp-sheet > #wh-turns { order: 12; }
-html.zoom .wp-sheet > #wh-recent-box { order: 13; }
 html.zoom #wh-stagebar { height: auto; overflow: visible; display: block; margin: 16px 0 24px; max-width: none; }
 html.zoom #wh-stagebar[hidden] { display: none; }
 .zw-stand { display: flex; width: 100%; gap: 3px; border: 0; background: none; padding: 0; cursor: pointer; text-align: left; }

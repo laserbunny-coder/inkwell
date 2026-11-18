@@ -49,8 +49,6 @@ html.has-rail.in-pane .now-top { display: flex; }
 .now-list .pl-ev { padding-block: 8px; }
 .now-group .now-gfold { border: 0; background: none; color: var(--muted); font-size: 12px; width: 22px; height: 22px; display: grid; place-items: center; cursor: pointer; }
 .now-group .now-gn { margin-left: 10px; font: 12px var(--ui); color: var(--faint); }
-.now-smalls { margin: 0 0 6px 30px; padding-left: 10px; border-left: 1px solid var(--line); }
-.now-smalls .pl-words { font-size: 16px; }
 .now-gbegin { display: block; text-align: left; margin: 4px 0 2px -4px; padding-inline: 8px !important; min-height: 34px; font-size: 13.5px !important; }
 
 /* With what is next: the names fade out beneath the one thing. */
@@ -127,9 +125,6 @@ html .pl-task:not(.opened) .pl-meta { min-width: 0; }
 
 /* Where a thought was filed: a quiet note after the line on the page. */
 .thought-note { margin-left: 10px; font: 12px var(--ui); color: var(--faint); white-space: nowrap; user-select: none; }
-html.hide-nowfiled .thought-note { display: none; }
-.loose-foot .loose-keep { color: var(--muted); }
-.loose-foot .loose-keep:hover { color: var(--ink); }
 
 /* The two ends of the day (Part 4): the morning talk, the day as heard, the close. */
 .now-endsrow { display: flex; gap: 4px 14px; justify-content: center; flex-wrap: wrap; margin-top: -4px; }
@@ -194,7 +189,6 @@ a.now-video { text-decoration: none; }
 .dk-goals { display: grid; gap: 2px; max-width: 560px; }
 .dk-goal { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; border-bottom: 1px solid var(--line); font: 14.5px var(--ui); }
 .dk-goal-at { color: var(--muted); text-align: right; }
-html.hide-training .dk-train { display: none !important; }
 
 /* First light (Part 5): today's reading, then one chapter per screen. */
 .now-reading { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font: 20px/1.45 var(--prose); color: var(--ink); text-align: center; }
@@ -248,8 +242,6 @@ html.hide-training .dk-train { display: none !important; }
 .tr-nums table { border-collapse: collapse; margin-top: 6px; }
 .tr-nums td { padding: 3px 18px 3px 0; border-bottom: 1px solid var(--line); }
 .now-tnote { margin-top: 10px; }
-html.hide-trainstreak .tr-streak, html.hide-trainstreak .now-tnote-s { display: none !important; }
-html.hide-traincharts .tr-chart { display: none !important; }
 
 /* Reading streak and progress on the Desk (Part 8): the same quiet streak,
    seven days a week, and a thin meter per track. */
@@ -264,9 +256,6 @@ html.hide-traincharts .tr-chart { display: none !important; }
 .rd-meter { height: 6px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 26%, var(--bg)); margin: 0 0 10px; overflow: hidden; }
 .rd-meter i { display: block; height: 100%; min-width: 6px; background: var(--accent); border-radius: 6px; }
 .now-rnote { text-align: center; margin: 0 auto 14px; }
-html.hide-readstreak .rd-streak, html.hide-readstreak .now-rnote { display: none !important; }
-html.hide-readprogress .rd-tracks { display: none !important; }
-html.hide-firstlight .dk-reading { display: none !important; }
 
 /* A warning before a lesson or meeting (eventwarn.js): quiet, top centre, never amber. */
 .ev-warn { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 60; max-width: min(520px, calc(100vw - 32px)); padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--card, var(--bg)); color: var(--muted); font: 13.5px/1.4 var(--ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; box-shadow: 0 2px 10px rgb(0 0 0 / .12); }

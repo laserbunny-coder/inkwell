@@ -9,14 +9,14 @@ import { PlotGrid, worldPromises } from '../grid.js';
 import { isLife, personalArea } from '../pages.js';
 import { gatherItems } from '../stages.js';
 import { dayWord } from '../tasks.js';
-import { isFinished, areas, bookType, hasManuscript, kindName, areaColor, newArea, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, worlds, worldOf, piecesIn, worldTree, worldStats, usedLabels, SHAPES, shapeOf, nextLevel, newShaped, editedAt, defaultLabel, stageOf, nextLabel, setForNew, typeForSet, stageSetOf, stagesOf, isReady } from '../library.js';
+import { isFinished, areas, bookType, hasManuscript, kindName, areaColor, newArea, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, worlds, worldOf, piecesIn, worldStats, usedLabels, SHAPES, shapeOf, nextLevel, newShaped, editedAt, defaultLabel, stageOf, nextLabel, setForNew, typeForSet, stageSetOf, stagesOf, isReady } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday, isoOf } from '../dates.js';
 import { addCommands } from './commandlist.js';
-import { $, editor, gone, gridTouched, notes, setGridTouched, state, store, view } from '../main.js';
+import { $, editor, gone, notes, setGridTouched, state, store, view } from '../main.js';
 import { go, openBook, openEntry } from './routing.js';
 import { areaPath, dot, renameable, renderCrumb, renderRail, subtree } from './rail.js';
-import { setLife, finishWorld, reopenWorld, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, moveBookToArea, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu } from './tidying.js';
+import { setLife, reopenWorld, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, moveBookToArea, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu } from './tidying.js';
 import { renderBoard, goPage } from './workpages.js';
 import { askServer, canAskServer, deskPage, plan, projectPage } from './talking.js';
 import { seatMap, seatWord } from './seats.js';
@@ -703,18 +703,6 @@ async function renderWorld() {
   }));
   $('#wh-next-box').hidden = !next.length;
 
-  // Recently: the pieces and pages last written in.
-  const { pages } = await worldTree(w.id);
-  const recent = [...s.pieces.map(({ row }) => row), ...pages.map(({ row }) => row)].sort((a, b) => editedAt(b) - editedAt(a)).slice(0, 6);
-  $('#wh-recent').replaceChildren(...recent.map((r) => {
-    const li = make('li');
-    const open = make('button', 'loose-title', r.title || (r.kind === 'page' ? 'Untitled page' : 'Untitled'));
-    open.addEventListener('click', () => (r.kind === 'page' ? go({ view: 'notebook', pageId: r.id }) : go({ view: 'project', id: r.id })));
-    onContextMenu(open, () => (r.kind === 'page' ? pageMenu(r) : bookMenu(r)));
-    li.append(open, make('span', 'when', ago(editedAt(r))));
-    return li;
-  }));
-  $('#wh-recent-box').hidden = !recent.length;
 
   // From the Desk: where it sits, its north star, where it stands, what
   // needs you, the crew and the turns. The next date is the soonest dated

@@ -19,7 +19,7 @@ let touch; // set in wireScriptBar()
 function placeScriptBar() {
   const script = isScript();
   const focus = root.classList.contains('focus');
-  const withAlts = !root.classList.contains('hide-alts') && !focus;
+  const withAlts = !focus;
   // Only while the keyboard is really up (keyboard.js). Focus with no script
   // leaves just the row's end: Focus, and the keyboard down.
   const show = touch.matches && keyboard.up && writing() && editor.isFocused;

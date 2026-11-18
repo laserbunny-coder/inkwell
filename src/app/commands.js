@@ -10,14 +10,13 @@ import { chapterMarkdown, bookMarkdown, download } from '../export.js';
 import { mb } from '../keep.js';
 import { SPACE, spaceUsed, unsentFiles } from '../files.js';
 import { vaultZip } from '../vault.js';
-import { ELEMENTS, toFountain, fromFountain, fromOutline, looksLikeOutline } from '../script.js';
+import { toFountain, fromFountain, fromOutline, looksLikeOutline } from '../script.js';
 import { titleOf } from '../notebook.js';
 import { newScene } from '../woven.js';
 import { showSaveButton } from '../savebutton.js';
 import { toggleLight } from '../frame.js';
 import { addLine } from '../capture.js';
 import { tabFor } from '../plan.js';
-import { fiveAtMost } from '../now.js';
 import { Box } from '../box.js';
 import { describe } from '../commandinfo.js';
 import { SHOWS } from '../shows.js';
@@ -187,8 +186,6 @@ async function boxAddTask(title, choice) {
   const rows = await addTask({ text: title.trim(), day, span: when.span || null, order: plan?.lastOrder?.(day) ?? 0, for: forId || null });
   await applyRemote(rows);
   const line = rows.at(-1);
-  // Five big things at most on today: a sixth waits under Not planned (it says so, with Undo).
-  if (day === isoToday() && plan) { await plan.refresh(); if (await fiveAtMost(plan, line, { off: (n) => hidden().has(n), toast })) return; }
   const said = !day ? choice.label.toLowerCase() : day === isoToday() ? 'today' : dayWord(day, isoToday()) === 'Tomorrow' ? 'tomorrow' : new Date(`${day}T12:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
   toast(`Task added for ${said}: “${title.trim()}”`, { label: 'Undo', run: async () => { const row = await getEntry(line.id); if (row) { const gone = { ...row, deleted: true, updated_at: Date.now() }; await putEntries([gone]); await applyRemote([gone]); } } }, { label: 'Open it', run: () => openEntry(line.id) });
 }
