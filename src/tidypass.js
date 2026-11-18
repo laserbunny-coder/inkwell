@@ -195,9 +195,27 @@ const DO = {
     const row = { ...r, title: undo.title, updated_at: Date.now() };
     await putEntries([row]);
     return [row];
+  },
+  // A step tied to the piece or page it is work on: its page opens there.
+  async tie(it) {
+    const r = await live(it.a, 'The step');
+    await live(it.b, 'The piece');
+    if (!r.fields?.task) throw fail('That line isn’t a task any more.');
+    const row = { ...r, fields: { ...r.fields, task: { ...r.fields.task, for: it.b } }, updated_at: Date.now() };
+    await putEntries([row]);
+    return { rows: [row], undo: { for: r.fields.task.for ?? null } };
+  },
+  async untie(it, undo) {
+    const r = await getEntry(it.a);
+    if (!r || r.fields?.task?.for !== it.b) return [];
+    const task = { ...r.fields.task };
+    if (undo.for) task.for = undo.for; else delete task.for;
+    const row = { ...r, fields: { ...r.fields, task }, updated_at: Date.now() };
+    await putEntries([row]);
+    return [row];
   }
 };
-const UNDO = { merge: 'unmerge', trash_empty: 'untrash_empty', file: 'unfile', drawer: 'undrawer', tags: 'untags', life: 'unlife', area: 'unarea', rename: 'unrename' };
+const UNDO = { merge: 'unmerge', trash_empty: 'untrash_empty', file: 'unfile', drawer: 'undrawer', tags: 'untags', life: 'unlife', area: 'unarea', rename: 'unrename', tie: 'untie' };
 
 async function saveItem(batchId, i, change) {
   const b = await getEntry(batchId);
@@ -322,7 +340,7 @@ const when = (iso) => {
   const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(' ', '');
   return days === 0 ? `Today ${time}` : days === 1 ? `Yesterday ${time}` : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 };
-const DONE = { merge: 'Merged', trash_empty: 'In the Trash', file: 'Filed', drawer: 'In the Drawer', tags: 'Folded in', life: 'A life project now', area: 'Moved', rename: 'Renamed' };
+const DONE = { merge: 'Merged', trash_empty: 'In the Trash', file: 'Filed', drawer: 'In the Drawer', tags: 'Folded in', life: 'A life project now', area: 'Moved', rename: 'Renamed', tie: 'Tied' };
 
 const SEEN = 'tidySeen';
 const seenAt = () => { try { return Number(localStorage.getItem(SEEN)) || 0; } catch { return 0; } };

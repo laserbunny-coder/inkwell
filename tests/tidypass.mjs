@@ -66,6 +66,10 @@ serverWrite([
     item('area', 'wd_x2', 'area-personal', 'Move “Christmas 2026 Planning” to Personal'),
     { ...item('rename', 'wd_x2', null, 'Rename “Christmas 2026 Planning” to “Christmas 2026”', { text: 'Christmas 2026' }), key: 'rename:wd_x2>christmas 2026' },
   ] } } }),
+  // A step from before ties existed, and a suggestion to tie it (Part 5 of the zoom).
+  row({ id: 'steps-wd_ninja', kind: 'page', parent_id: 'wd_ninja', title: 'Steps', sort: 2 }),
+  line('li_step', 'steps-wd_ninja', 'Pick the voice for Kenji', { fields: { done: false, box: true, task: { v: 1, day: null, est: null, done_at: null, actual: null, log: [], run: null, order: 0 } } }),
+  row({ id: 'td_tie1', kind: 'tidy', title: 'Tidy pass', fields: { by: 'claude', tidy: { at, week: null, from: 'chat', items: [item('tie', 'li_step', 'pg_kenji', 'Tie “Pick the voice for Kenji” to “Kenji”')] } } }),
   // Claude's own changes through the connector, already made.
   line('li_done', DAY, 'Order the cabin', { sort: 7168, fields: { done: true, claude: { change: 'cx_1' } } }),
   row({ id: 'cx_1', kind: 'change', title: 'Ticked “Order the cabin”', fields: { by: 'claude', change: { type: 'done', target: 'li_done', title: 'Ticked “Order the cabin”', before: { done: false }, after: { done: true }, at, why: 'You said you booked it' } } }),
@@ -155,7 +159,7 @@ try {
 
   await check('today shows a quiet tidy line, which can be switched off', async () => {
     await a.waitForSelector('.tidy-nudge:not([hidden])');
-    assert.match(await a.locator('.tidy-nudge').innerText(), /tidy pass · 7 to look at · claude changed 7 things/i);
+    assert.match(await a.locator('.tidy-nudge').innerText(), /tidy pass · 8 to look at · claude changed 7 things/i);
     await a.evaluate(() => document.documentElement.classList.add('hide-tidy'));
     assert.equal(await a.locator('.tidy-nudge').isVisible(), false);
     await a.evaluate(() => document.documentElement.classList.remove('hide-tidy'));
@@ -164,8 +168,8 @@ try {
   await check('the pass opens from Ctrl + K and lists each suggestion with why, Yes and No', async () => {
     await command(a, 'Tidy pass');
     await a.waitForSelector('.tp');
-    assert.equal(await a.locator('.tp-card').count(), 7);
-    assert.match(await a.locator('.tp .ck-lead').innerText(), /7 tidy-ups/);
+    assert.equal(await a.locator('.tp-card').count(), 8, 'seven from the weekly pass, one tie from a chat');
+    assert.match(await a.locator('.tp .ck-lead').innerText(), /8 tidy-ups/);
     assert.match(await card(a, 'Fold #ai').innerText(), /Why: Fold/);
     assert.equal(await a.locator('.tp-change').count(), 7);
     // Nothing changed just by looking.
@@ -296,6 +300,16 @@ try {
     assert.match(await a.locator('.toast').last().innerText(), /changed it since/);
     assert.ok(!(await get(a, 'cx_3')).fields.change.undone_at);
     assert.equal((await get(a, 'li_changed')).fields.done, false);
+  });
+
+  await check('a tie: yes ties the step to its piece, Undo unties it', async () => {
+    await yes(a, 'Tie “Pick the voice');
+    assert.equal((await get(a, 'li_step')).fields.task.for, 'pg_kenji');
+    assert.match(await card(a, 'Tie “Pick the voice').innerText(), /Tied/);
+    await card(a, 'Tie “Pick the voice').locator('.tp-undo').click();
+    await sleep(600);
+    assert.equal((await get(a, 'li_step')).fields.task.for, undefined);
+    await yes(a, 'Tie “Pick the voice');
   });
 
   await check('asking for a pass now brings new suggestions in', async () => {

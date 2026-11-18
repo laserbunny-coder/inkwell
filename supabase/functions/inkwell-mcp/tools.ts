@@ -131,7 +131,7 @@ export const INSTRUCTIONS = `Inkwell is this person's own writing app and notebo
 - Keep to the person's voice and don't add more than they asked for.
 - Say what you added and where, in plain words, since the person sees your reply, not the tool calls.
 - Production (AI video): a piece's shots, each with a code that never changes (NB-E01-S03A-04), prompts for its still and its video, how it's generated (model, seconds, first and last frame, the line it's timed to, and a group when several shots are made in one generation), and its tries with a star on the one that worked. The world's kit holds each character's sheet (front, three-quarter, side, back), each location's lighting line and angles, the show rules (frame, frame rate, always and never) and each tool's ID for an element (Higgsfield Soul ID or Element, ComfyUI LoRA, Kling reference). To make shots in another tool (Higgsfield, Kling, ComfyUI…): read them with production, write prompts that use the kit's looks, lighting, rules and tool IDs, and pass the reference picture links along. Bring results back with add_try (the file or link, model, settings, seconds, cost), star the one that worked with star, and keep prompts or generation details current with update_shot. Old prompts are never lost: they stay with the try that used them. Prices (prices, update_prices) feed the cost estimate on the Make tab; when you check prices, update them with the source. Each character and place also has a look wall (looks): every version of its look, with one starred as the pick. Bring new versions home with add_look (by the element's id or name), star one with pick_look only when the person asks, and use the pick's link as the lead reference whenever you generate with that element.
-- Tasks and plans live in Inkwell. A task is an ordinary line with a day (or, with no exact day yet, a loose when: this week, next week, a month, or later), an estimate and a tick, and it lives where it was written: on a project's Steps page, on a daily page, or on the Tasks page for ones added straight to a plan. Today's page gathers every task on that day at its top (the person reorders it there), with Week, Weeks ahead and Pace beside it. list_tasks reads them (by day range, by project, done since a day); add_task adds one (put it in its project when it belongs to one, with notes as lines under it and a link back to where it came from); update_task moves it to another day, sets its estimate, makes it repeat or a habit, a stretch of work (until) or a date to hit (mark, hard when it can't move: never move a hard one); time puts it at a time on its day's Calendar (the hand-arranged day view; length_minutes is how long the block is), and null takes it off; order_day sets a day's order; mark_done ticks it; delete_line and rename_line delete or reword one when the person asks, and a repeating one comes round again on its next day. Each change is recorded as yours with an Undo. Keep a week's estimated hours within the person's free hours (free_hours). Habits have no hours. Only tasks owned by the person (owner me) are on their day; others are planning lines.
+- Tasks and plans live in Inkwell. A task is an ordinary line with a day (or, with no exact day yet, a loose when: this week, next week, a month, or later), an estimate and a tick, and it lives where it was written: on a project's Steps page, on a daily page, or on the Tasks page for ones added straight to a plan. Today's page gathers every task on that day at its top (the person reorders it there), with Week, Weeks ahead and Pace beside it. list_tasks reads them (by day range, by project, done since a day); add_task adds one (put it in its project when it belongs to one, with notes as lines under it and a link back to where it came from; whenever it is work on a piece or a bible page, always set for to that piece or page, without being asked, so its page opens straight onto the work); update_task moves it to another day, sets its estimate, makes it repeat or a habit, a stretch of work (until) or a date to hit (mark, hard when it can't move: never move a hard one); time puts it at a time on its day's Calendar (the hand-arranged day view; length_minutes is how long the block is), and null takes it off; order_day sets a day's order; mark_done ticks it; delete_line and rename_line delete or reword one when the person asks, and a repeating one comes round again on its next day. Each change is recorded as yours with an Undo. Keep a week's estimated hours within the person's free hours (free_hours). Habits have no hours. Only tasks owned by the person (owner me) are on their day; others are planning lines.
 - Needs you: when this chat needs the person (a decision only they can make, work blocked on them, something ready to review or try), raise_needs_you with one short line, the kind, the Claude project's name and this chat's link; raising again from the same link updates it; clear_needs_you once it no longer needs them. It shows in Inkwell's Catch-up and on Today.
 - Setting up his day by talking: first_light reads or sets where each morning Bible reading track is; training reads the sessions and sets the round, the next session, or which session falls on which weekday. The exercises and their amounts are lines on the Training page (pg_training): read it before suggesting changes.
 - Catch-up: each time this chat posts a result to the person, log_update with one plain line of what changed (done, live or working), the Claude project's name, this chat's title and link, plus place (its Inkwell link, ?open=) when the work has one. One line per result, not per step.`;
@@ -398,7 +398,7 @@ export const TOOLS: Record<string, unknown>[] = [
   {
     name: "suggest_tidy",
     title: "Suggest tidy-ups",
-    description: "Suggests tidy-ups for the person to tick yes or no on their tidy pass in the app (nothing changes until they say yes, and every one can be undone). Types: merge (a = world or page to empty, b = the one to keep, same kind), trash_empty (a = an empty world or page), file (a = a line on a daily page, b = a page or piece in the world it links to; it's filed as a mirror and stays on the day too), drawer (a = a line that's a story or film idea with no home), tags (text = \"#from #to\": fold the first tag into the second), life (a = a world that's real life), area (a = a world, b = the area's name, as list_worlds shows it), rename (a = a world, page or piece, text = the new name). Each needs why: one plain sentence they read before deciding.",
+    description: "Suggests tidy-ups for the person to tick yes or no on their tidy pass in the app (nothing changes until they say yes, and every one can be undone). Types: merge (a = world or page to empty, b = the one to keep, same kind), tie (a = an open task, b = the piece or bible page it is work on: for steps added before for existed), trash_empty (a = an empty world or page), file (a = a line on a daily page, b = a page or piece in the world it links to; it's filed as a mirror and stays on the day too), drawer (a = a line that's a story or film idea with no home), tags (text = \"#from #to\": fold the first tag into the second), life (a = a world that's real life), area (a = a world, b = the area's name, as list_worlds shows it), rename (a = a world, page or piece, text = the new name). Each needs why: one plain sentence they read before deciding.",
     inputSchema: {
       type: "object",
       required: ["suggestions"],
@@ -409,7 +409,7 @@ export const TOOLS: Record<string, unknown>[] = [
             type: "object",
             required: ["type", "why"],
             properties: {
-              type: { type: "string", enum: ["merge", "trash_empty", "file", "drawer", "tags", "life", "area", "rename"] },
+              type: { type: "string", enum: ["merge", "trash_empty", "file", "drawer", "tags", "life", "area", "rename", "tie"] },
               a: str("The first thing (an id; for area, the world)."), b: str("The second thing (an id; for area, the area's name)."),
               text: str("For tags: \"#from #to\". For rename: the new name."), why: str("One plain sentence on why."),
             },
@@ -590,7 +590,17 @@ const TASK_FIELDS = {
   owner: str("Whose it is: me (the person, the default), or a name such as Nate. Only the person's are on their day."),
   time: { type: ["string", "null"], description: "Puts it on its day's Calendar at this time, 24-hour HH:MM such as 14:30 (it needs a day); null takes it off the Calendar. The Calendar is arranged by hand: only set a time when the person gives one." },
   length_minutes: { type: ["integer", "string", "null"], description: "How long its block on the Calendar is, in minutes (15 to 1440; 30 if not given)." },
+  for: { type: ["string", "null"], description: "What it's work on: the id of a piece or a bible page (from list_worlds, map or read). Set it whenever the step is work on a piece or page (write, board, revise, cut, research a character…): its page in Inkwell then opens straight onto that piece. null unties it." },
 };
+
+/** A step's for: a piece or a page (not a day, a world or the Tasks page). */
+async function forArg(v: unknown, db: Db): Promise<string | null | undefined> {
+  if (v === undefined) return undefined;
+  if (v === null || v === "" || v === "null") return null;
+  const r = await one(db, v, "for");
+  if (!(r.kind === "project" || (r.kind === "page" && r.id !== TASKS_PAGE && !r.id.startsWith("steps-")))) throw new Bad("for must be a piece or a bible page (ids from list_worlds, map or read).");
+  return r.id;
+}
 TOOLS.push(
   {
     name: "list_tasks",
@@ -2471,7 +2481,7 @@ async function placedTasks(db: Db, shape: Shape, today: string): Promise<Placed[
   }
   return out;
 }
-function taskOut(p: Placed, tz: string | null, on?: string) {
+function taskOutOf(p: Placed, tz: string | null, on?: string) {
   const t = p.task;
   const done = !!p.row.fields?.done;
   return {
@@ -2494,6 +2504,12 @@ async function listTasks(args: Record<string, unknown>, db: Db) {
   const tz = await db.timeZone();
   const now = today(tz);
   const shape = new Shape(await db.outline());
+  // What each step is for, by the piece's or page's name.
+  const taskOut = (p: Placed, _tz: string | null, on?: string) => {
+    const o = taskOutOf(p, tz, on);
+    const f = p.task.for ? shape.byId.get(p.task.for) : undefined;
+    return f && !gone(f) ? { ...o, for: f.title || "Untitled", for_id: f.id } : o;
+  };
   let all = await placedTasks(db, shape, now);
   if (!boolArg(args.everyone, false)) all = all.filter((p) => mine(p.task));
   if (typeof args.world_id === "string" && args.world_id) {
@@ -2583,6 +2599,7 @@ async function addTask(args: Record<string, unknown>, db: Db) {
   const at = timeArg(args.time);
   const len = minutesArg(args.length_minutes, "length_minutes");
   if (typeof at === "number" && !day) throw new Bad("A time on the Calendar needs a day.");
+  let forId = await forArg(args.for, db);
 
   // Where it lives.
   const rows: Entry[] = [];
@@ -2618,6 +2635,8 @@ async function addTask(args: Record<string, unknown>, db: Db) {
     } else if (target.kind === "page" || target.kind === "day" || (target.kind === "project" && typeOf(target) === "lines")) {
       home = target;
       name = shape.where(target) || target.title;
+      // A step written on a piece or a bible page is work on it.
+      if (forId === undefined && target.kind !== "day" && target.id !== TASKS_PAGE && !target.id.startsWith("steps-") && (target.kind === "project" || shape.worldOf(target))) forId = target.id;
     } else throw new Bad(`${JSON.stringify(target.title)} isn't a project, page, daily page or outline piece; tasks go there.`);
   }
   let parentId = home.id;
@@ -2632,7 +2651,7 @@ async function addTask(args: Record<string, unknown>, db: Db) {
   const siblings = rows.some((r) => r.id === parentId) ? [] : (await db.kids([parentId])).filter((r) => r.kind === "line" && !r.deleted);
   const sort = siblings.reduce((m, r) => Math.max(m, r.sort || 0), 0) + GAP;
   const { content, links, text: plain } = inline(text, shape);
-  const task: Task = { ...blank(), day, est: est ?? null, order: await lastOrder(db, shape, day, now), ...(owner ? { owner } : {}), ...(until && !repeat ? { until } : {}), ...(mark && !repeat ? { mark } : {}), ...(repeat ? { repeat, habit: boolArg(args.habit, false) } : {}), ...(typeof at === "number" ? { on: { day: day!, at }, len: len ? Math.max(15, len) : 30 } : {}), ...(loose && !day ? { span: loose } : {}) };
+  const task: Task = { ...blank(), day, est: est ?? null, order: await lastOrder(db, shape, day, now), ...(owner ? { owner } : {}), ...(until && !repeat ? { until } : {}), ...(mark && !repeat ? { mark } : {}), ...(repeat ? { repeat, habit: boolArg(args.habit, false) } : {}), ...(typeof at === "number" ? { on: { day: day!, at }, len: len ? Math.max(15, len) : 30 } : {}), ...(loose && !day ? { span: loose } : {}), ...(forId ? { for: forId } : {}) };
   const line = row("line", { id: newId("li"), parent_id: parentId, sort, text: plain, content, links, tags: tagsIn(plain), fields: { done: false, box: true, task } });
   rows.push(line);
   const notes: unknown[] = Array.isArray(args.notes) ? [...args.notes] : typeof args.notes === "string" && args.notes.trim() ? [args.notes] : [];
@@ -2643,13 +2662,13 @@ async function addTask(args: Record<string, unknown>, db: Db) {
   if (notes.length) rows.push(...lineRows(notes, line.id, 0, shape));
   await db.insert(rows);
   return {
-    added: plain, id: line.id, to: name, day, ...(loose && !day ? { when: spanWord({ ...task }, now) } : {}), ...(est ? { est_minutes: est } : {}), ...(repeat ? { repeats: repeatWord(repeat) } : {}),
+    added: plain, id: line.id, to: name, day, ...(forId ? { for: (shape.byId.get(forId) ?? (await db.get([forId]))[0])?.title || "Untitled" } : {}), ...(loose && !day ? { when: spanWord({ ...task }, now) } : {}), ...(est ? { est_minutes: est } : {}), ...(repeat ? { repeats: repeatWord(repeat) } : {}),
     link: `${APP}?open=${encodeURIComponent(line.id)}`,
   };
 }
 
 /** The task fields a change touched, before and after, so it can be undone. */
-const TASK_KEYS = ["day", "est", "until", "mark", "repeat", "habit", "owner", "actual", "order", "did", "span"] as const;
+const TASK_KEYS = ["day", "est", "until", "mark", "repeat", "habit", "owner", "actual", "order", "did", "span", "for"] as const;
 function pick(t: Partial<Task> | null, keys: string[]) {
   const o: Record<string, unknown> = {};
   for (const k of keys) o[k] = t ? (t as Record<string, unknown>)[k] ?? null : null;
@@ -2724,6 +2743,9 @@ async function updateTask(args: Record<string, unknown>, db: Db) {
     else if (!t.on || (d && t.on.day !== d)) throw new Bad("length_minutes goes with a time: give time too.");
     if (len !== undefined || (at !== undefined && at !== null && !t.len)) patch.len = len ? Math.max(15, len) : 30;
   } else if (patch.day !== undefined && t.on && t.on.day !== patch.day) patch.on = null;
+  const forId = await forArg(args.for, db);
+  let forName = "";
+  if (forId !== undefined) { patch.for = forId; if (forId) forName = (await db.get([forId]))[0]?.title || "Untitled"; }
   const actual = minutesArg(args.actual_minutes, "actual_minutes");
   if (actual !== undefined) {
     if (isRepeat(t) && (t.did ?? []).length && !r.fields?.done) {
@@ -2747,6 +2769,7 @@ async function updateTask(args: Record<string, unknown>, db: Db) {
   if (keys.includes("habit")) bits.push(next.habit ? "a habit" : "not a habit");
   if (keys.includes("on") || keys.includes("len")) bits.push(next.on ? `at ${hhmm(next.on.at)} on the Calendar for ${next.len || 30} min` : "off the Calendar");
   if (keys.includes("actual") || keys.includes("did")) bits.push(`took ${actual} min`);
+  if (keys.includes("for")) bits.push(next.for ? `for “${short(forName, 50)}”` : "not tied to a piece");
   const title = `${was ? "Changed" : "Made a task of"} “${short(r.text, 50)}”${bits.length ? `: ${bits.join(", ")}` : ""}`;
   const id = await record(db, { type: "task", target: r.id, title, before: { task: was ? pick(was, keys) : null, box: r.fields?.box ?? null }, after: { task: pick(next, keys) }, ...(typeof args.why === "string" && args.why.trim() ? { why: short(args.why, 200) } : {}) });
   await changeRow(db, r, { fields: claudeMark({ ...(r.fields ?? {}), box: true, task: next }, id) });
