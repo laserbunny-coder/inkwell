@@ -1,12 +1,9 @@
-import { make } from './dom.js';
 // Getting around: always show where you are, and one tap on it gets you
 // anywhere.
 //
-// On a phone the bottom holds one thing: the writing row while the keyboard
-// is up, else the bar (or, when it's quiet, a tab that brings the bar up):
-// Today, Desk, the mic in the middle, Library and Go. Go opens the one box
-// (box.js) as a sheet: Jump back (the first is Back), this piece's or
-// world's pages, the rooms, Right here and All commands.
+// The ruler at the bottom (zoom.js) goes between the stops. Go opens the one
+// box (box.js): Jump back (the first is Back), this piece's or world's pages,
+// Right here and All commands.
 // On a computer the top bar names the place, with the last place as its first
 // button, and Ctrl + K (or Ctrl + O) opens the same box (Enter flips straight back).
 
@@ -19,14 +16,6 @@ export function placeKey(p) {
   if (!p?.view) return '';
   return [p.view, p.chapterId || p.pageId || p.id || p.area || '', p.page || p.tab || p.tag || ''].join(':');
 }
-
-const ICONS = {
-  today: '<circle cx="12" cy="12" r="3.6"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.7 5.7l1.5 1.5M16.8 16.8l1.5 1.5M5.7 18.3l1.5-1.5M16.8 7.2l1.5-1.5"/>',
-  desk: '<path d="M12 4l8 4-8 4-8-4 8-4zM4 12.5l8 4 8-4M4 16.5l8 4 8-4"/>',
-  library: '<path d="M5.5 4v16M10 4v16M14 6.5l4.5 13"/>',
-  go: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.6-4.6"/>',
-};
-const MIC = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 
 export class Nav {
   // hooks: go(place), goPage(id), tabs() → [{id,label,n}], active() → tab id,
@@ -42,54 +31,10 @@ export class Nav {
   }
 
   build() {
-    // The phone's bar.
-    const bar = make('nav', 'placebar');
-    bar.setAttribute('aria-label', 'Getting around');
-    // One word under one small drawing each, the mic in the middle.
-    const item = (cls, name, word) => {
-      const el = make('button', `pb-item ${cls}`);
-      el.innerHTML = `<svg class="pb-ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
-      el.append(make('span', 'pb-word', word));
-      return el;
-    };
-    // Back lives in the Go sheet (Jump back) and on the phone's own back swipe.
-    this.back = make('button', 'pb-back');
-    this.back.addEventListener('click', () => this.jumpBack());
-    this.today = item('pb-today', 'today', 'Today');
-    this.today.addEventListener('click', () => { this.close(false); this.hooks.goPage('today'); });
-    this.desk = item('pb-desk', 'desk', 'Desk');
-    this.desk.addEventListener('click', () => { this.close(false); this.hooks.goPage('desk'); });
-    this.lib = item('pb-lib', 'library', 'Library');
-    this.lib.addEventListener('click', () => { this.close(false); this.hooks.goPage('library'); });
-    const mic = make('button', 'pb-mic');
-    mic.setAttribute('aria-label', 'Capture by voice');
-    mic.innerHTML = MIC;
-    mic.addEventListener('click', () => this.hooks.capture());
-    this.place = item('pb-place', 'go', 'Go');
-    this.place.addEventListener('click', () => this.toggle());
-    bar.append(this.today, this.desk, mic, this.lib, this.place);
-    // When it's quiet (Focus, or a draft) the bar rests as a small tab; a tap
-    // brings it up until the next touch on the page. It's a button, so it
-    // never brings up the keyboard. In Focus the bar comes with a way out.
-    const tab = make('button', 'pb-tab');
-    tab.setAttribute('aria-label', 'Show the bar');
-    tab.innerHTML = '<span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 14 5-5 5 5"/></svg></span>';
-    tab.addEventListener('click', () => document.body.classList.add('bar-peek'));
-    const chip = make('div', 'pb-focus');
-    chip.append(make('span', '', 'Focus is on'));
-    const leave = make('button', 'pb-leave', 'Leave Focus');
-    leave.addEventListener('click', () => { document.body.classList.remove('bar-peek'); this.hooks.leaveFocus?.(); });
-    chip.append(leave);
-    document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.placebar, .pb-tab, .pb-focus, .palette, .rail, .topbar')) document.body.classList.remove('bar-peek'); });
-    this.tab = tab;
-
-    // The computer's back button, at the start of the top bar.
+    // The computer's back button, at the start of the top bar. (The phone's
+    // bottom bar went with the old layout on Nov 17 2026: the ruler is there now.)
     this.lineBack = document.getElementById('tb-back');
     this.lineBack.addEventListener('click', () => this.jumpBack());
-
-    document.body.append(bar, tab, chip);
-    this.bar = bar;
-    // Whether the keyboard is up is keyboard.js's to say (body.kb-up).
   }
 
   typingIn(el) { return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) && !el.closest('.palette.box'); }
@@ -120,22 +65,10 @@ export class Nav {
 
   draw() {
     const last = this.recent[0];
-    for (const b of [this.back, this.lineBack]) {
-      b.hidden = !last;
-      b.textContent = last ? `‹ ${last.name}` : '';
-      b.title = last ? `Back to ${last.context ? `${last.name} · ${last.context}` : last.name}` : '';
-    }
-    this.place.setAttribute('aria-label', `${this.context ? `${this.name} · ${this.context}` : this.name || 'Inkwell'}. Go somewhere else`);
-    // The room you're in is lit; inside a project neither is.
-    const view = this.current?.view;
-    const room = view === 'notebook' && (!this.current.pageId || this.current.pageId.startsWith('day-')) ? 'today' : view === 'desk' ? 'desk' : ['library', 'drawer', 'tags'].includes(view) ? 'library' : '';
-    for (const [el, id] of [[this.today, 'today'], [this.desk, 'desk'], [this.lib, 'library']]) { if (room === id) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); }
-  }
-
-  // How many things need you, on the phone's Desk button.
-  count(n) {
-    if (n > 0) this.desk.dataset.n = String(n); else delete this.desk.dataset.n;
-    this.desk.setAttribute('aria-label', n > 0 ? `Desk, ${n} waiting on you` : 'Desk');
+    const b = this.lineBack;
+    b.hidden = !last;
+    b.textContent = last ? `‹ ${last.name}` : '';
+    b.title = last ? `Back to ${last.context ? `${last.name} · ${last.context}` : last.name}` : '';
   }
 
   jumpBack() {

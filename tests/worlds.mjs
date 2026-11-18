@@ -4,7 +4,6 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
-import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -69,7 +68,7 @@ put({ id: 'ch_o1', kind: 'chapter', parent_id: 'ac_o', title: 'Chapter 1', sort:
 para('pa_o1', 'ch_o1', 0, 'Words worth keeping.', { trashed: trashedAt, trashedWith: 'pr_old' });
 const before = new Map([...table.values()].map((r) => [r.id, { ...r }]));
 
-const browser = classic(await chromium.launch());
+const browser = await chromium.launch();
 async function device() {
   const ctx = await browser.newContext({ viewport: { width: 1300, height: 850 } });
   await ctx.exposeFunction('__remote', remote);
@@ -149,19 +148,17 @@ try {
     assert.ok(!live().some((r) => r.kind === 'project' && !r.parent_id), 'no book left outside a world');
   });
 
-  await check('the Library shows worlds, and opening one shows its pieces and bible', async () => {
+  await check('the Library shows worlds, and opening one shows its pieces', async () => {
     await laptop.keyboard.press('Control+Shift+O');
     await sleep(500);
-    const titles = await laptop.locator('#lib-books .card-title').allInnerTexts();
+    await laptop.waitForSelector('#lib-zoom:not([hidden]) .zl-name');
+    const titles = await laptop.locator('#lib-zoom .zl-name').allInnerTexts();
     for (const t of ['The Harbour', 'Christmas', 'Pilot']) assert.ok(titles.includes(t), titles.join(' | '));
     assert.ok(!titles.includes('Old draft'));
-    await laptop.locator('.card', { hasText: 'The Harbour' }).first().click();
+    await laptop.locator('#lib-zoom .zl-name', { hasText: 'The Harbour' }).first().click();
     await sleep(500);
     assert.equal(await laptop.evaluate(() => document.documentElement.dataset.view), 'world');
     assert.match(await laptop.locator('#wh-pieces').innerText(), /The Harbour/);
-    const bible = await laptop.locator('#wh-recent').innerText();
-    assert.match(bible, /Research/);
-    assert.match(bible, /Idea/);
   });
 
   const phone = await device();

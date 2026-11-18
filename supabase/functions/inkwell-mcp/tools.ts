@@ -692,7 +692,7 @@ TOOLS.push(
   },
   {
     name: "first_light",
-    title: "The morning Bible reading (First light)",
+    title: "The morning Bible reading",
     description: "The person's morning reading in Inkwell (ESV): four tracks that each go round by themselves, 2 chapters Old Testament (without Psalms, Proverbs and Ecclesiastes), 1 Psalm, 1 Wisdom (Proverbs, then Ecclesiastes), 2 New Testament. A place only moves when they say they read. With no arguments: where each track is, and today's six chapters. To set where they are (only when they tell you), pass any track as the next chapter to read, such as \"2 Kings 4\"; a book alone starts at chapter 1. The app shows the new places at once.",
     inputSchema: {
       type: "object",

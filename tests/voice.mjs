@@ -13,7 +13,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
-import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -80,7 +79,7 @@ const wav = (() => {
 const wavPath = join(dir, 'Walk by the river.wav');
 writeFileSync(wavPath, wav);
 
-const browser = classic(pageFirst(await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] })));
+const browser = pageFirst(await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] }));
 const ctx = await browser.newContext({ permissions: ['microphone', 'clipboard-read', 'clipboard-write'], colorScheme: 'dark', viewport: { width: 1280, height: 860 } });
 await ctx.exposeFunction('__remote', remote);
 await ctx.addInitScript(fake);
@@ -229,25 +228,19 @@ try {
     await page.waitForFunction(() => /Scribe has it too/.test(document.querySelector('.toast')?.textContent || ''));
   });
 
-  await check('the Mic in the top bar starts the same capture, aimed where the caret is', async () => {
+  await check('the mic at the corner starts the same capture, aimed where the caret is', async () => {
     await page.keyboard.press('Control+J');
     await page.waitForFunction(() => document.documentElement.dataset.view !== 'notebook');
     await page.click('#editor .ProseMirror');
     await page.keyboard.press('Control+End');
     await sleep(700);
-    await page.mouse.move(700, 20, { steps: 3 });
-    await page.waitForFunction(() => document.body.classList.contains('show-top'));
-    await sleep(300);
-    await page.locator('#mic-toggle').click();
+    await page.locator('.zm-mic').click();
     await page.waitForSelector('.capture[data-state="recording"]');
-    // Leave the mouse well below the bar, so it tucks away for the next checks.
-    await page.mouse.move(700, 600, { steps: 3 });
     assert.match(await page.locator('.cap-dest').innerText(), /^Into /);
     await page.keyboard.press('Escape');
     await page.waitForSelector('.capture', { state: 'hidden' });
     await page.keyboard.press('Control+J');
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
-    await page.waitForFunction(() => !document.body.classList.contains('show-top'));
     await sleep(700);
   });
 

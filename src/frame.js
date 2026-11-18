@@ -1,18 +1,18 @@
-// The frame: a rail of words down the left for the rooms, one switch at the
-// top centre for the place you're in, and the looks and the motion that go
-// with them.
+// The frame: the top line on a computer, and the looks and the motion that go
+// with them. (The rail of rooms down the left, the switches at the top centre
+// and the phone's bottom bar went with the old layout on Nov 17 2026: the
+// ruler at the bottom, app/zoom.js, goes between the stops now.)
 //
-// The rail and the switch are made of the same buttons the top bar always had
-// (they keep their ids and what they do); this file only moves them into place
-// on a wide screen and puts them back on a narrow one, where the phone's own
-// bar takes over.
+// The top line is made of the same buttons the top bar always had (they keep
+// their ids and what they do); this file only moves them into place on a wide
+// screen and puts them back on a narrow one.
 
 import { setFont, currentFont } from './fonts.js';
 import { media } from './device.js';
 import { make } from './dom.js';
 
 const root = document.documentElement;
-// A rail needs room and a pointer; a touch screen keeps its bottom bar.
+// The computer's top line needs room and a pointer.
 const wide = media('roomy');
 
 const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -85,9 +85,7 @@ const roomOf = (v) => (TIME.includes(v) ? 'today' : v === 'desk' ? 'desk' : LIBR
 // ---------- the frame ----------
 
 export class Frame {
-  // hooks: projects() → [{ id, title, color, current }], openProject(id),
-  // contents() (open the list of chapters), hasContents() → bool, keyLabel(text),
-  // page() → the active page tab id or null
+  // hooks: page() → the active page tab id or null
   constructor(hooks) {
     this.hooks = hooks;
     this.on = false;
@@ -104,73 +102,9 @@ export class Frame {
   }
 
   build() {
-    const k = (text) => this.hooks.keyLabel?.(text) || text;
-    const rail = (this.rail = make('nav', 'rail'));
-    rail.setAttribute('aria-label', 'Rooms');
-    this.brand = make('div', 'rail-brand', 'Inkwell');
-    this.rooms = make('div', 'rail-rooms');
-    this.pill = make('span', 'rail-pill');
-    this.pill.setAttribute('aria-hidden', 'true');
-    this.projLabel = make('div', 'rail-label', 'Projects');
-    this.projects = make('div', 'rail-projects');
-    this.contents = make('button', 'rail-item rail-contents', 'Contents');
-    this.contents.title = k('The chapters and pages of what you’re writing (⌘1 keeps it open)');
-    this.contents.addEventListener('click', () => this.hooks.contents?.());
-    this.contents.hidden = true;
-    this.tools = make('div', 'rail-tools');
-    rail.append(this.brand, this.rooms, this.projLabel, this.projects, this.contents, make('span', 'rail-grow'), this.tools);
-
-    // The switch for the place you're in, at the top centre.
+    // The top line on a computer: where you are on the left, a project's pages
+    // in the middle, the words and sync on the right.
     this.mid = make('div', 'tb-m');
-    this.switch = make('div', 'place-switch');
-    this.switch.setAttribute('role', 'group');
-    this.switch.setAttribute('aria-label', 'Views of the Library');
-    this.shelves = make('button', 'tb-btn', 'Shelves');
-    this.shelves.dataset.cmd = 'library';
-    this.shelves.id = 'shelves-toggle';
-    this.shelves.title = 'Shelves: your areas and worlds';
-    this.swPill = make('span', 'switch-pill');
-    this.swPill.setAttribute('aria-hidden', 'true');
-    // The Desk's two views: what's on stage, and every thread there has been.
-    this.deskSwitch = make('div', 'place-switch desk-switch');
-    this.deskSwitch.setAttribute('role', 'group');
-    this.deskSwitch.setAttribute('aria-label', 'Views of the Desk');
-    this.dkPill = make('span', 'switch-pill');
-    this.dkPill.setAttribute('aria-hidden', 'true');
-    this.onStage = make('button', 'tb-btn', 'On stage');
-    this.onStage.dataset.cmd = 'desk';
-    this.onStage.title = 'On stage: every project, what needs you and who’s working on it';
-    this.history = make('button', 'tb-btn', 'History');
-    this.history.dataset.cmd = 'desk-history';
-    this.history.title = 'History: every Claude thread, newest first';
-    this.deskSwitch.append(this.dkPill, this.onStage, this.history);
-    this.deskSwitch.hidden = true;
-    // Today in four words: Now (the one thing you're on), Page (the day's page
-    // and its plan), Plan (one list from today outward) and Calendar (Day,
-    // Week, Six weeks). Alt + 1, 2, 3, 4.
-    this.todaySwitch = make('div', 'place-switch today-switch');
-    this.todaySwitch.setAttribute('role', 'group');
-    this.todaySwitch.setAttribute('aria-label', 'Views of Today');
-    this.tdPill = make('span', 'switch-pill');
-    this.tdPill.setAttribute('aria-hidden', 'true');
-    this.nowBtn = make('button', 'tb-btn', 'Now');
-    this.nowBtn.dataset.cmd = 'now';
-    this.nowBtn.dataset.key = 'Alt+1';
-    this.nowBtn.title = 'Now: the one thing you’re on (Alt + 1)';
-    this.dayBtn = make('button', 'tb-btn', 'Page');
-    this.dayBtn.dataset.cmd = 'today-page';
-    this.dayBtn.dataset.key = 'Alt+2';
-    this.dayBtn.title = 'Page: today’s page with its plan (Alt + 2)';
-    this.planBtn = make('button', 'tb-btn', 'Plan');
-    this.planBtn.dataset.cmd = 'plan';
-    this.planBtn.dataset.key = 'Alt+3';
-    this.planBtn.title = 'Plan: today, tomorrow, this week, next week, this month, later and not planned, in one list (Alt + 3)';
-    this.calBtn = make('button', 'tb-btn', 'Calendar');
-    this.calBtn.dataset.cmd = 'calendar';
-    this.calBtn.dataset.key = 'Alt+4';
-    this.calBtn.title = 'Calendar: the plan on time, as a day, a week or six weeks (Alt + 4, again for the next zoom)';
-    this.todaySwitch.append(this.tdPill, this.nowBtn, this.dayBtn, this.planBtn, this.calBtn);
-    this.todaySwitch.hidden = true;
     // Page tabs are redrawn each time, so their highlight lives beside them and slides.
     this.tabsPill = make('span', 'tabs-pill');
     this.tabsPill.setAttribute('aria-hidden', 'true');
@@ -193,26 +127,12 @@ export class Frame {
     const $ = (s) => document.querySelector(s);
     const bar = $('.topbar');
     if (want) {
-      this.move($('#view-toggle'), this.rooms);
-      this.move($('#desk-toggle'), this.rooms);
-      this.move($('#library-toggle'), this.rooms);
-      this.rail.prepend(this.pill);
-      const k = (text) => this.hooks.keyLabel?.(text) || text;
-      const tool = (el, label, keys) => { this.move(el, this.tools, label); if (el && keys) el.dataset.keys = k(keys); };
-      tool($('#mic-toggle'), 'Capture', '⌥C');
-      // Go and Everything are one box now: one entry, Ctrl + K (Ctrl + O opens it too).
-      tool($('#palette-toggle'), 'Go', '⌘K');
-      tool($('.tb-view [data-cmd="page"]'), 'Look');
-      this.switch.append(this.swPill, this.shelves);
-      this.move($('#drawer-toggle'), this.switch);
-      this.move($('#tags-toggle'), this.switch);
-      this.mid.append(this.tabsPill, this.switch, this.deskSwitch, this.todaySwitch);
+      this.mid.append(this.tabsPill);
       this.move($('#page-tabs'), this.mid);
       this.move($('#tb-back'), this.left);
       this.move($('#crumb'), this.left);
-      for (const id of ['chapter-links-chip', 'words', 'status', 'versions', 'sync', 'notes-toggle', 'focus-toggle', 'beside-toggle']) this.move(document.getElementById(id), this.right);
+      for (const id of ['chapter-links-chip', 'words', 'status', 'versions', 'sync', 'notes-toggle', 'beside-toggle']) this.move(document.getElementById(id), this.right);
       bar.append(this.left, this.mid, this.right);
-      document.body.prepend(this.rail);
       root.classList.add('has-rail');
     } else {
       // Back where they were, last moved first, so each one's old neighbour is home again.
@@ -223,11 +143,10 @@ export class Frame {
         delete el.dataset.keys;
       }
       this.homes.clear();
-      this.left.remove(); this.mid.remove(); this.right.remove(); this.rail.remove();
+      this.left.remove(); this.mid.remove(); this.right.remove();
       root.classList.remove('has-rail');
     }
     this.here(this.last);
-    this.drawProjects();
   }
 
   // Which way the next place lies from this one, for the way it arrives.
@@ -237,10 +156,7 @@ export class Frame {
     const a = roomOf(from);
     const b = roomOf(to);
     let turn = 'rise';
-    // Day, Week, Weeks ahead and Pace are one room from further and further back.
-    const far = (v, t) => (v === 'plan' ? (t === 'now' ? -1 : t === 'pace' ? 4 : t === 'ahead' ? 3 : t === 'when' ? 1 : 2) : 0);
-    if (a === b && a === 'today' && far(from, this.lastTab) !== far(to, tab)) turn = far(to, tab) > far(from, this.lastTab) ? 'out' : 'in';
-    else if (a === b && a === 'desk') turn = tab === 'history' ? 'fwd' : this.lastTab === 'history' ? 'back' : 'rise';
+    if (a === b && a === 'desk') turn = tab === 'history' ? 'fwd' : this.lastTab === 'history' ? 'back' : 'rise';
     else if (a === b && a === 'library') turn = LIBRARY.indexOf(to) > LIBRARY.indexOf(from) ? 'fwd' : LIBRARY.indexOf(to) < LIBRARY.indexOf(from) ? 'back' : 'rise';
     else if (a === b && a === 'project' && page && this.lastPage && page !== this.lastPage) turn = PAGES.indexOf(page) > PAGES.indexOf(this.lastPage) ? 'fwd' : 'back';
     else if (a !== b && b === 'project') turn = 'in';
@@ -252,39 +168,14 @@ export class Frame {
     else root.classList.remove('turned');
   }
 
-  // Light up where you are, in the rail and on the switch.
+  // Where you are now: the page tab's highlight follows.
   here(place) {
     this.last = place || this.last;
     this.page = this.hooks.page?.() || null;
-    if (!this.on) return;
-    const v = root.dataset.view || 'write';
-    const lib = LIBRARY.includes(v);
-    this.switch.hidden = !lib;
-    if (lib) {
-      const at = { library: this.shelves, drawer: document.getElementById('drawer-toggle'), tags: document.getElementById('tags-toggle') }[v];
-      for (const b of this.switch.querySelectorAll('button')) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
-    }
-    this.deskSwitch.hidden = v !== 'desk';
-    if (v === 'desk') {
-      const at = this.last?.tab === 'history' ? this.history : this.onStage;
-      for (const b of [this.onStage, this.history]) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
-    }
-    const day = v === 'plan' || (v === 'notebook' && !!this.hooks.onDay?.());
-    this.todaySwitch.hidden = !day;
-    if (day) {
-      const tab = this.last?.tab;
-      const at = v === 'plan' ? (tab === 'now' ? this.nowBtn : tab === 'plan' || tab === 'when' || tab === 'day' ? this.planBtn : this.calBtn) : this.dayBtn;
-      for (const b of [this.nowBtn, this.dayBtn, this.planBtn, this.calBtn]) { if (b === at) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
-    }
-    // The Library is one room: its word in the rail stays lit on the Drawer and Tags too.
-    const libBtn = document.getElementById('library-toggle');
-    if (lib) libBtn?.setAttribute('aria-current', 'page');
-    this.contents.hidden = !this.hooks.hasContents?.();
-    this.drawProjects();
-    this.glide();
+    if (this.on) this.glide();
   }
 
-  // How many things need you, beside Desk. Amber means nothing else in the app.
+  // How many things need you (the ruler's Desk stop shows it: app/zoom.js).
   count(n) {
     const b = document.getElementById('desk-toggle');
     if (!b) return;
@@ -292,61 +183,20 @@ export class Frame {
     b.setAttribute('aria-label', n > 0 ? `Desk, ${n} waiting on you` : 'Desk');
   }
 
-  async drawProjects() {
-    if (!this.on) return;
-    const turn = (this.drawing = (this.drawing || 0) + 1);
-    let list = [];
-    try { list = (await this.hooks.projects?.()) || []; } catch { list = []; }
-    if (turn !== this.drawing) return;
-    this.projLabel.hidden = !list.length;
-    const have = new Map([...this.projects.children].map((b) => [b.dataset.id, b]));
-    const next = list.map((p) => {
-      const b = have.get(p.id) || make('button', 'rail-item rail-project');
-      b.dataset.id = p.id;
-      if (!b.firstChild) {
-        b.append(make('span', 'rail-dot'), make('span', 'rail-name'));
-        // Ctrl + click opens it beside, leaving the main view where it is; a right-click offers the same.
-        b.addEventListener('click', (e) => this.hooks.openProject?.(b.dataset.id, { beside: e.ctrlKey || e.metaKey }));
-        b.addEventListener('contextmenu', (e) => { if (!this.hooks.projectMenu) return; e.preventDefault(); this.hooks.projectMenu(b.dataset.id, b, { left: e.clientX, top: e.clientY }); });
-      }
-      b.querySelector('.rail-dot').style.background = p.color || '';
-      b.querySelector('.rail-name').textContent = p.title || 'Untitled';
-      b.title = p.title || 'Untitled';
-      if (p.current) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
-      return b;
-    });
-    this.projects.replaceChildren(...next);
-    this.glide();
-  }
-
-  // The highlight slides to the lit word instead of jumping.
+  // The highlight slides to the lit page tab instead of jumping.
   glide() {
     if (!this.on) return;
     requestAnimationFrame(() => {
-      const put = (pill, box, at) => {
-        if (!at || at.offsetParent === null) { pill.style.opacity = '0'; return; }
-        const a = at.getBoundingClientRect();
-        const b = box.getBoundingClientRect();
-        pill.style.opacity = '1';
-        pill.style.transform = `translate(${a.left - b.left}px, ${a.top - b.top}px)`;
-        pill.style.width = `${a.width}px`;
-        pill.style.height = `${a.height}px`;
-      };
-      const lit = this.rail.querySelector('.rail-rooms [aria-current="page"], .rail-projects [aria-current="page"]');
-      if (!lit) this.pill.style.opacity = '0';
-      else {
-        const a = lit.getBoundingClientRect();
-        const b = this.rail.getBoundingClientRect();
-        this.pill.style.opacity = '1';
-        this.pill.style.transform = `translate(${a.left - b.left}px, ${a.top - b.top + this.rail.scrollTop}px)`;
-        this.pill.style.width = `${a.width}px`;
-        this.pill.style.height = `${a.height}px`;
-      }
-      put(this.swPill, this.switch, this.switch.querySelector('[aria-current="page"]'));
-      put(this.dkPill, this.deskSwitch, this.deskSwitch.querySelector('[aria-current="page"]'));
-      put(this.tdPill, this.todaySwitch, this.todaySwitch.querySelector('[aria-current="page"]'));
+      const pill = this.tabsPill;
       const tabs = document.getElementById('page-tabs');
-      put(this.tabsPill, this.mid, tabs && !tabs.hidden ? tabs.querySelector('.pt-tab.on') : null);
+      const at = tabs && !tabs.hidden ? tabs.querySelector('.pt-tab.on') : null;
+      if (!at || at.offsetParent === null) { pill.style.opacity = '0'; return; }
+      const a = at.getBoundingClientRect();
+      const b = this.mid.getBoundingClientRect();
+      pill.style.opacity = '1';
+      pill.style.transform = `translate(${a.left - b.left}px, ${a.top - b.top}px)`;
+      pill.style.width = `${a.width}px`;
+      pill.style.height = `${a.height}px`;
     });
   }
 }

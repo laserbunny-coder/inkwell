@@ -5,7 +5,6 @@ import { flip, altsHere } from '../alts.js';
 import { addCommands } from './commandlist.js';
 import { $, alts, body, editor, inNotebook, insertSection, isScript, root, setElement } from '../main.js';
 import { caretSoon, currentEditor, placeOutlineBar } from './notebookview.js';
-import { toggleFocus } from './pagesettings.js';
 import { writing } from './commands.js';
 import { captureHere } from './talking.js';
 
@@ -20,7 +19,7 @@ let touch; // set in wireScriptBar()
 function placeScriptBar() {
   const script = isScript();
   const focus = root.classList.contains('focus');
-  const withAlts = !root.classList.contains('hide-alts') && !focus;
+  const withAlts = !focus;
   // Only while the keyboard is really up (keyboard.js). Focus with no script
   // leaves just the row's end: Focus, and the keyboard down.
   const show = touch.matches && keyboard.up && writing() && editor.isFocused;
@@ -29,7 +28,6 @@ function placeScriptBar() {
   if (back) scriptBar.scrollLeft = 0; // a row that comes back starts with the mic in view
   scriptBar.classList.toggle('scripting', script);
   scriptBar.classList.toggle('only-end', focus && !script);
-  scriptBar.querySelector('[data-end="focus"]').setAttribute('aria-pressed', String(focus));
   scriptBar.classList.toggle('no-alts', !withAlts);
   body.classList.toggle('script-bar-on', show);
   if (!show) return;
@@ -89,11 +87,9 @@ function tapBar(bar, selector, run) {
   });
   bar.addEventListener('pointercancel', () => { end(); start = null; });
 }
-// The fixed end of both writing rows: Focus, and the keyboard down.
+// The fixed end of both writing rows: the keyboard down.
 function rowEnd(what) {
-  if (what === 'down') { keyboard.down(); return; }
-  toggleFocus();
-  placeScriptBar(); placeOutlineBar();
+  if (what === 'down') keyboard.down();
 }
 
 // Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.

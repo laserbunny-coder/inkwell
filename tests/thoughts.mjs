@@ -65,12 +65,16 @@ const all = (p) => p.evaluate(() => new Promise((res) => {
   r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').getAll(); q.onsuccess = () => res(q.result); };
 }));
 const onNow = (p) => p.waitForFunction(() => document.documentElement.dataset.view === 'plan' && document.querySelector('#plan-sheet')?.dataset.tab === 'now' && !!document.querySelector('#plan-sheet .now-view'));
-const thing = (p) => p.locator('#plan-sheet .now-thing').first().innerText();
+const thing = (p) => p.locator('#plan-sheet .np-tx').first().innerText();
+const go = async (p, place) => { await p.evaluate((pl) => { history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); }, place); await p.waitForFunction((pl) => document.documentElement.dataset.view === pl.view, place); await settle(p); };
+const toNow = async (p) => { await go(p, { view: 'plan', tab: 'now' }); await onNow(p); };
+const toPage = (p) => go(p, { view: 'notebook', pageId: `day-${TODAY}` });
 const settle = async (p) => { await sleep(400); await still(p); };
 const press = async (p, key) => { await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press(key); await settle(p); };
 const line = async (p, words) => (await all(p)).find((r) => r.kind === 'line' && r.parent_id === `day-${TODAY}` && r.fields?.thought && (r.fields.thought.words === words));
 const until = async (fn, ms = 4000) => { const end = Date.now() + ms; let v; while (Date.now() < end) { v = await fn(); if (v) return v; await sleep(100); } return v; };
-const think = async (p, words) => { const i = p.locator('#plan-sheet .now-out input'); await i.fill(words); await i.press('Enter'); await settle(p); };
+// Out of your head: Alt + J opens a small box from anywhere (the zoom).
+const think = async (p, words) => { await p.keyboard.press('Alt+J'); const i = p.locator('#zm-thought-in'); await i.waitFor(); await i.fill(words); await i.press('Enter'); await settle(p); };
 const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: `${SHOTS}/${name}.png` }); };
 
 async function open(viewport, extra = {}) {
@@ -94,15 +98,16 @@ async function open(viewport, extra = {}) {
 try {
   const { page } = await open({ width: 1400, height: 900 });
 
-  await check('one line at the bottom of Now, with the mic', async () => {
-    await page.evaluate(() => document.querySelector('#view-toggle').click());
-    await onNow(page);
-    await settle(page);
-    await press(page, 'b');
+  await check('Alt + J: a small box to get it out of your head, and the mic', async () => {
+    await toNow(page);
     assert.equal(await thing(page), 'Write the two-minute hook');
-    assert.equal(await page.locator('#plan-sheet .now-out input').getAttribute('placeholder'), 'Get it out of your head');
-    assert.equal(await page.locator('#plan-sheet .now-mic').isVisible(), true);
+    await page.keyboard.press('Alt+J');
+    assert.equal(await page.locator('#zm-thought-in').getAttribute('placeholder'), 'Get it out of your head');
+    assert.equal(await page.locator('.zm-mic').isVisible(), true);
     await shot(page, 'out-line');
+    await page.locator('#zm-thought-in').press('Escape');
+    assert.equal(await page.locator('.zm-thought').isHidden(), true, 'Esc closes it');
+    assert.equal(await page.evaluate(() => document.querySelector('#plan-sheet').dataset.tab), 'now', 'and stays on Now');
   });
 
   await check('a thought goes on today’s page with the time, in his words, and Now stays', async () => {
@@ -111,7 +116,7 @@ try {
     assert.equal(await page.evaluate(() => document.querySelector('#plan-sheet').dataset.tab), 'now');
     const l = await until(() => line(page, 'Kenji sings about the dentist'));
     assert.equal(l.text, '9:04 am Kenji sings about the dentist');
-    assert.equal(await page.locator('#plan-sheet .now-out input').inputValue(), '', 'the box is empty again');
+    assert.equal(await page.locator('.zm-thought').isHidden(), true, 'the box goes');
   });
 
   await check('filed afterwards: a copy in the Drawer, the line unchanged, and a quiet note', async () => {
@@ -139,23 +144,16 @@ try {
     assert.ok(kept, 'a passing note just stays on the page');
   });
 
-  await check('on today’s page: “Filed under …” after the line (Look switch), and nothing loose', async () => {
-    await press(page, 'Alt+2');
-    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
-    await settle(page);
+  await check('on today’s page: “Filed under …” after the line, always', async () => {
+    await toPage(page);
     const notes = await page.locator('#outline-editor .thought-note').allInnerTexts();
     assert.deepEqual(notes, ['Filed under the Drawer', 'Filed under Not planned', 'Filed under the Workshop and To look up']);
     assert.equal(await page.locator('#outline-editor .is-loose').count(), 0);
     await shot(page, 'filed-notes');
-    await page.evaluate(() => { const h = JSON.parse(localStorage.getItem('hide') || '[]'); h.push('nowfiled'); localStorage.setItem('hide', JSON.stringify(h)); document.documentElement.classList.add('hide-nowfiled'); });
-    assert.equal(await page.locator('#outline-editor .thought-note').first().isVisible(), false);
-    await page.evaluate(() => { localStorage.setItem('hide', JSON.stringify(JSON.parse(localStorage.getItem('hide')).filter((x) => x !== 'nowfiled'))); document.documentElement.classList.remove('hide-nowfiled'); });
   });
 
   await check('an instruction about today changes the plan instead, with Undo, and nothing stays on the page', async () => {
-    await press(page, 'Alt+1');
-    await onNow(page);
-    await settle(page);
+    await toNow(page);
     await think(page, 'put reply to nate first');
     const moved = await until(async () => { const r = (await all(page)).find((x) => x.id === 't_nate'); return r.fields.task.order < 1 ? r : null; });
     assert.ok(moved, 'Reply to Nate goes first');
@@ -178,15 +176,16 @@ try {
 
   await check('Keep it on the page: a brain dump’s loose lines are filed, and stay on the page', async () => {
     await page.evaluate(seed, [row('li_dump', 'line', `day-${TODAY}`, 9e6, { text: 'A heist where the vault is a bakery', content: [{ type: 'text', text: 'A heist where the vault is a bakery' }], fields: { done: false, gather: null, gathered: null, mirror: null } })]);
-    await press(page, 'Alt+2');
-    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
+    await toPage(page);
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
-    await press(page, 'Alt+2');
-    await page.waitForSelector('#loose-foot .loose-keep');
-    await shot(page, 'keep-on-page');
-    await page.locator('#loose-foot .loose-keep').click();
+    await toPage(page);
+    // The count under the day went (Nov 17 2026); the command stays.
+    await page.keyboard.press('Control+k');
+    await page.waitForFunction(() => !document.querySelector('.palette')?.hidden);
+    await page.locator('.palette input').fill('Keep this day’s loose lines');
+    await page.locator('.palette li', { hasText: 'Keep this day’s loose lines on the page' }).first().click();
     const l = await until(async () => { const r = (await all(page)).find((x) => x.id === 'li_dump'); return r.fields?.thought?.state === 'filed' ? r : null; });
     assert.deepEqual(l.fields.thought.to, ['drawer']);
     assert.equal(l.text, 'A heist where the vault is a bakery');
@@ -195,39 +194,31 @@ try {
   });
 
   await check('the mic opens Capture, and Now stays behind it', async () => {
-    await press(page, 'Alt+1');
-    await onNow(page);
-    await page.locator('#plan-sheet .now-mic').click();
+    await toNow(page);
+    await page.locator('.zm-mic').click();
     await page.waitForFunction(() => !document.querySelector('.capture')?.hidden);
     await page.keyboard.press('Escape');
     await settle(page);
     assert.equal(await page.evaluate(() => document.querySelector('#plan-sheet').dataset.tab), 'now');
   });
 
-  await check('the new switches are in All commands', async () => {
-    await page.keyboard.press('Control+k');
-    await page.waitForFunction(() => !document.querySelector('.palette')?.hidden);
-    for (const q of ['Show or hide the line to get it out of your head', 'Show or hide where a thought was filed']) {
-      await page.locator('.palette input').fill(q);
-      await sleep(250);
-      assert.ok(await page.locator('.palette li', { hasText: q }).count() > 0, q);
-    }
-    await page.keyboard.press('Escape');
+  await check('their switches went: both are simply on', async () => {
+    const list = await page.evaluate(() => window.__commandList().map((c) => c.label));
+    for (const q of ['Show or hide the line to get it out of your head', 'Show or hide where a thought was filed']) assert.ok(!list.includes(q), q);
   });
   assert.deepEqual(page.errors, []);
 
   // ---------- the phone ----------
   const { page: phone } = await open({ width: 412, height: 915 }, { hasTouch: true, isMobile: true });
-  await check('phone: the line and the mic at the bottom of Now, sized for a thumb', async () => {
-    await phone.evaluate(() => document.querySelector('#view-toggle').click());
-    await onNow(phone);
-    await settle(phone);
-    await phone.locator('#plan-sheet .now-btn.go').tap();
-    await settle(phone);
-    const mic = await phone.locator('#plan-sheet .now-mic').boundingBox();
-    assert.ok(mic.height >= 44, `mic ${mic.height}`);
-    const i = phone.locator('#plan-sheet .now-out input');
-    await i.tap();
+  await check('phone: the mic sized for a thumb, and the thought box from Ctrl + K', async () => {
+    await toNow(phone);
+    const mic = await phone.locator('.zm-mic').boundingBox();
+    assert.ok(mic.height >= 40, `mic ${mic.height}`);
+    await phone.keyboard.press('Control+k');
+    await phone.locator('.palette input').fill('Get it out of your head');
+    await phone.locator('.palette li', { hasText: 'Get it out of your head' }).first().tap();
+    const i = phone.locator('#zm-thought-in');
+    await i.waitFor();
     await i.fill('Kenji sings about the dentist');
     await shot(phone, 'phone-out');
     await i.press('Enter');

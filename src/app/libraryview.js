@@ -13,13 +13,12 @@ import { isFinished, areas, bookType, hasManuscript, kindName, areaColor, newAre
 import { make } from '../dom.js';
 import { isoToday, isoOf } from '../dates.js';
 import { addCommands } from './commandlist.js';
-import { $, editor, gone, gridTouched, notes, setGridTouched, state, store, view } from '../main.js';
+import { $, editor, gone, notes, setGridTouched, state, store, view } from '../main.js';
 import { go, openBook, openEntry } from './routing.js';
 import { areaPath, dot, renameable, renderCrumb, renderRail, subtree } from './rail.js';
-import { setLife, finishWorld, reopenWorld, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, moveBookToArea, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu } from './tidying.js';
-import { renderBoard, goPage } from './workpages.js';
+import { setLife, reopenWorld, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, moveBookToArea, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu } from './tidying.js';
+import { renderBoard } from './workpages.js';
 import { askServer, canAskServer, deskPage, plan, projectPage } from './talking.js';
-import { zoomOn } from '../zoomstate.js';
 import { seatMap, seatWord } from './seats.js';
 let worldDates = []; // the open project's dated things besides its steps (shoot days)
 
@@ -193,7 +192,7 @@ async function renderLibrary() {
 // carried onto a seat (the bar above the ruler) or right-clicked for it.
 async function renderZoomLibrary(allAreas, allBooks) {
   const box = $('#lib-zoom');
-  box.hidden = !zoomOn();
+  box.hidden = false;
   if (box.hidden) { box.replaceChildren(); return; }
   const seats = await seatMap();
   const order = await deskPage.order().catch(() => []);
@@ -440,8 +439,8 @@ async function renderProject() {
   stageSel.onchange = () => setStage(b, stageSel.value);
   // In the zoom: its stage as small dots under its name (click one to set it).
   const dots = $('#ph-dots');
-  dots.hidden = !zoomOn();
-  if (zoomOn()) {
+  dots.hidden = false;
+  {
     const list = stagesOf(b, world);
     const here = list.indexOf(stageOf(b, world));
     dots.replaceChildren(...list.map((st, i) => {
@@ -550,9 +549,12 @@ function stageLine(w, pieces) {
   for (const { row } of pieces) { const st = stageOf(row, w); n.set(st, (n.get(st) || 0) + 1); }
   const b = make('button', 'zw-stand');
   b.type = 'button';
-  b.title = 'Where the pieces stand. Click for the stage board (Alt + 5)';
+  const open = localStorage.getItem('piecesAs') === 'board';
+  b.title = open ? 'Where the pieces stand. Click to fold the stage board away' : 'Where the pieces stand. Click for the stage board';
+  b.setAttribute('aria-expanded', String(open));
   for (const [st, k] of n) { const seg = make('span', `zw-sg${k ? ' has' : ''}`); seg.append(make('i'), make('b', '', k ? `${st} ${k}` : st)); b.append(seg); }
-  b.addEventListener('click', () => goPage('make'));
+  // The stage board opens under it, right here (Make has no board).
+  b.addEventListener('click', () => { localStorage.setItem('piecesAs', open ? 'list' : 'board'); renderWorld(); });
   bar.replaceChildren(b);
   bar.hidden = false;
 }
@@ -621,7 +623,7 @@ async function renderWorld() {
   const shape = shapeOf(w, s.pieces.filter((p) => p.depth === 0).length);
   $('#wh-kind').textContent = shape.id === 'one' ? '' : shape.name;
   // In the zoom, "Life project" beside the name is the switch (it was buried in ⋯ > Shape).
-  if (life && zoomOn()) {
+  if (life) {
     const b = make('button', 'wp-lifeword', 'Life project');
     b.type = 'button';
     b.title = 'A life project: steps, notes and pages. Click to make it a story world';
@@ -649,11 +651,11 @@ async function renderWorld() {
   $('#wh-stagebar').hidden = true;
   const status = $('#wh-status');
   const canBoard = !life && s.pieces.length > 0;
-  // In the zoom: one thin line of how many pieces are at each stage (into the
-  // stage board on Make), and the pieces as a list under it.
-  const thin = zoomOn() && canBoard;
+  // In the zoom: one thin line of how many pieces are at each stage, and the
+  // pieces as a list under it; the line opens the stage board in its place.
+  const thin = canBoard;
   if (thin) stageLine(w, s.pieces);
-  const asList = !canBoard || thin || localStorage.getItem('piecesAs') === 'list';
+  const asList = !canBoard || localStorage.getItem('piecesAs') !== 'board';
   status.hidden = asList;
   if (canBoard) renderBoard(w, s.pieces);
   $('#wh-workflow').onclick = () => openStages(w);
@@ -704,23 +706,14 @@ async function renderWorld() {
   }));
   $('#wh-next-box').hidden = !next.length;
 
-  // Recently: the pieces and pages last written in.
-  const { pages } = await worldTree(w.id);
-  const recent = [...s.pieces.map(({ row }) => row), ...pages.map(({ row }) => row)].sort((a, b) => editedAt(b) - editedAt(a)).slice(0, 6);
-  $('#wh-recent').replaceChildren(...recent.map((r) => {
-    const li = make('li');
-    const open = make('button', 'loose-title', r.title || (r.kind === 'page' ? 'Untitled page' : 'Untitled'));
-    open.addEventListener('click', () => (r.kind === 'page' ? go({ view: 'notebook', pageId: r.id }) : go({ view: 'project', id: r.id })));
-    onContextMenu(open, () => (r.kind === 'page' ? pageMenu(r) : bookMenu(r)));
-    li.append(open, make('span', 'when', ago(editedAt(r))));
-    return li;
-  }));
-  $('#wh-recent-box').hidden = !recent.length;
 
   // From the Desk: where it sits, its north star, where it stands, what
   // needs you, the crew and the turns. The next date is the soonest dated
   // step or shoot day.
   worldDates = dates;
+  // What was touched last, for the project's where-line ("Recently" itself went).
+  const { pages } = await worldTree(w.id);
+  const recent = [...s.pieces.map(({ row }) => row), ...pages.map(({ row }) => row)].sort((a, b) => editedAt(b) - editedAt(a)).slice(0, 1);
   const lately = recent[0] && editedAt(recent[0]) ? { title: recent[0].title || 'Untitled', at: editedAt(recent[0]), run: () => (recent[0].kind === 'page' ? go({ view: 'notebook', pageId: recent[0].id }) : go({ view: 'project', id: recent[0].id })) } : null;
   // The same clock the Desk seats it by, so the two never disagree.
   await projectPage?.show(w, { color, edited: editedAt(w), last: lately, date: nextDate(w.id) });

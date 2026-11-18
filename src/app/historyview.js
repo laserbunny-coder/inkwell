@@ -227,8 +227,6 @@ addCommands(() => [
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).
 function wireHistory() {
-  $('.edge-left').addEventListener('mouseenter', () => { if (hovers()) body.classList.add('show-outline'); });
-  $('.edge-left').addEventListener('click', () => body.classList.add('show-outline'));
   $('.outline').addEventListener('mouseleave', () => body.classList.remove('show-outline'));
   document.addEventListener('mousemove', (e) => {
     mouseY = e.clientY;

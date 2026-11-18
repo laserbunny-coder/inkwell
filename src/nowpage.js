@@ -16,7 +16,7 @@ import { make } from './dom.js';
 import { media } from './device.js';
 import { popMenu } from './menu.js';
 import { isTraining } from './training.js';
-import { isLight } from './firstlight.js';
+import { isLight, lineName } from './firstlight.js';
 
 const hover = media('mouse');
 
@@ -44,7 +44,7 @@ export function forOf(i) {
 export function pageTarget(now, m) {
   const id = now.p.lineId;
   const vis = id ? (now.p.items || []).find((i) => i.row.id === id && !i.ghost && !i.occ) : null;
-  if (vis && !(m.cur && !m.cur.smalls && m.cur.item.row.id === id)) return { item: vis, visit: true };
+  if (vis && !(m.cur && m.cur.item.row.id === id)) return { item: vis, visit: true };
   if (m.cur) return { item: m.cur.item, visit: false };
   return null;
 }
@@ -80,10 +80,9 @@ export function pageView(now, m) {
     c.title = 'Out to the project';
     page.append(c);
   } else {
-    const at = light ? 'Every day · First light' : train ? 'Every day but Sunday' : i.root?.kind === 'day' ? (i.task.day === p.today ? 'Today’s page' : 'A day page') : i.root?.title || 'Tasks';
+    const at = light ? 'Every day' : train ? 'Every day but Sunday' : i.root?.kind === 'day' ? (i.task.day === p.today ? 'Today’s page' : 'A day page') : i.root?.title || 'Tasks';
     page.append(make('div', 'np-crumb', at));
   }
-  if (cur?.smalls) page.append(make('p', 'np-eye', `Small things · ${cur.items.length} left`));
 
   const hero = make('div', 'np-hero');
   const tick = make('button', `np-tick${done ? ' on' : ''}`);
@@ -91,7 +90,7 @@ export function pageView(now, m) {
   tick.dataset.now = 'np-done';
   tick.setAttribute('aria-label', done ? 'Not done' : 'Done');
   if (hover.matches) tick.title = done ? 'Not done (D)' : 'Done (D)';
-  const tx = make('h1', `np-tx${done ? ' isdone' : ''}`, i.row.text || 'Untitled');
+  const tx = make('h1', `np-tx${done ? ' isdone' : ''}`, lineName(i.row));
   tx.dataset.task = i.row.id;
   hero.append(tick, tx);
   page.append(hero);
@@ -102,10 +101,11 @@ export function pageView(now, m) {
     k.append(now.light.view({ bare: true }));
     page.append(k);
   } else if (train && cur && now.train.active(cur)) {
+    // (The session draws its own Not now choices.)
     const k = make('div', 'np-kind');
     k.append(now.train.view(cur));
     page.append(k);
-  } else if (!light && !train && !cur?.smalls) page.append(doorBox(now, i));
+  } else if (!light && !train) page.append(doorBox(now, i));
 
   // Its notes, and one more.
   const notes = make('div', 'np-notes');
@@ -113,7 +113,7 @@ export function pageView(now, m) {
   if (!light && !train) notes.append(noteForm(now, i.row.id));
   if (notes.childElementCount) page.append(notes);
 
-  if (now.asking && cur) page.append(now.choices(cur));
+  if (now.asking && cur && !(train && now.train.active(cur))) page.append(now.choices(cur));
 
   const foot = make('div', 'np-foot');
   if (t.visit) {
@@ -121,7 +121,7 @@ export function pageView(now, m) {
     foot.append(make('span', 'np-at', onToday(i, p.today) ? 'On today' : whenSaid(p, i)));
     foot.append(make('span', 'np-sp'));
     if (m.cur) {
-      const b = now.btn('np-home', `Back to: ${m.cur.smalls ? 'the small things' : clip(m.cur.name, 40)}`, 'np-f');
+      const b = now.btn('np-home', `Back to: ${clip(m.cur.name, 40)}`, 'np-f');
       if (hover.matches) b.title = 'Back to the one thing (4)';
       foot.append(b);
     }
@@ -129,10 +129,9 @@ export function pageView(now, m) {
     if (!now.asking) {
       const nn = now.btn('notnow', 'Not now', 'np-f', 'N');
       foot.append(nn);
-      if (cur.smalls) foot.append(now.btn('skip', 'Skip this one', 'np-f', 'S'));
     }
     foot.append(make('span', 'np-sp'));
-    const ev = m.upcoming && !now.off('calendar') ? m.upcoming : null;
+    const ev = m.upcoming || null;
     const more = now.btn('np-today', `${m.more ? `${m.more} more today` : 'Nothing else today'}${ev ? ` · ${evWord(ev)}` : ''}`, 'np-f');
     if (hover.matches) more.title = 'The rest of today (Esc)';
     foot.append(more);

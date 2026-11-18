@@ -106,7 +106,7 @@ export class PaneHost {
     window.visualViewport?.addEventListener('resize', () => this.fitSheet());
     window.visualViewport?.addEventListener('scroll', () => this.fitSheet());
     // The bar at the bottom comes and goes (it hides while you type).
-    const bar = document.querySelector('.placebar');
+    const bar = document.querySelector('.zm-ruler') || document.querySelector('.placebar');
     if (bar && window.ResizeObserver) new ResizeObserver(() => this.fitSheet()).observe(bar);
     // Clicking back into the main window makes it the one you're in.
     window.addEventListener('focus', () => this.focused(''));
@@ -506,7 +506,10 @@ export class PaneHost {
     const vv = window.visualViewport;
     const keyboard = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
     // Above the phone's bar at the bottom (it never moves), or above the keyboard.
-    const bar = document.querySelector('.placebar');
+    const bar = document.querySelector('.zm-ruler') || document.querySelector('.placebar');
+    // The ruler is drawn after the panes start, and steps away while typing:
+    // follow it as it comes and goes.
+    if (bar && bar !== this.watchedBar && window.ResizeObserver) { this.watchedBar = bar; new ResizeObserver(() => this.fitSheet()).observe(bar); }
     const under = keyboard || (bar?.getBoundingClientRect().height || 0);
     this.sheetEl.style.bottom = `${under}px`;
     this.sheetEl.classList.toggle('full', this.sheetFull || keyboard > 0);

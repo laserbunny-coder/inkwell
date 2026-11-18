@@ -40,7 +40,7 @@ const open = async (ctx) => {
 };
 
 try {
-  const ctx = await browser.newContext({ zoom: true, colorScheme: 'dark', viewport: { width: 1280, height: 800 } });
+  const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1280, height: 800 } });
   const p = await open(ctx);
 
   await check('the zoom is on by default: the ruler at the bottom, no rail, Now in the middle', async () => {
@@ -221,33 +221,24 @@ try {
     assert.equal(await p.locator('.zm-stop[data-stop="desk"].need').count(), 0);
   });
 
-  await check('More holds Focus, Look and every command', async () => {
+  await check('More holds Look and every command (Focus went with the old layout)', async () => {
     await p.locator('.zm-more').click();
     const items = await p.locator('.pop-menu .pop-item').allInnerTexts();
-    assert.ok(items.some((t) => /^Focus/.test(t)) && items.some((t) => /^Look/.test(t)) && items.some((t) => /command/.test(t)), items.join(' | '));
+    assert.ok(!items.some((t) => /^Focus/.test(t)) && items.some((t) => /^Look/.test(t)) && items.some((t) => /command/.test(t)), items.join(' | '));
     await p.keyboard.press('Escape');
   });
 
-  await check('Classic layout brings back the rail and Today’s switch, and stays on this device', async () => {
-    await p.evaluate(() => document.activeElement?.blur());
-    await p.keyboard.press('Control+K');
-    await p.keyboard.type('classic layout');
-    await sleep(300);
-    await p.keyboard.press('Enter');
-    await p.waitForFunction(() => !document.documentElement.classList.contains('zoom'));
-    assert.equal(await p.locator('.rail').isVisible(), true);
-    assert.equal(await p.locator('.zm-ruler').isVisible(), false);
-    await p.reload();
-    await p.waitForFunction(() => document.documentElement.dataset.started === '1');
-    assert.equal(await p.evaluate(() => document.documentElement.classList.contains('zoom')), false);
-    await p.evaluate(() => document.querySelector('#classic-layout').click());
-    await p.waitForFunction(() => document.documentElement.classList.contains('zoom'));
-    assert.equal(await p.locator('.zm-ruler').isVisible(), true);
+  await check('The old layout is gone for good: no Classic switch, no rail, no Focus', async () => {
+    assert.equal(await p.locator('#classic-layout').count(), 0);
+    assert.equal(await p.locator('.rail, .placebar').count(), 0);
+    assert.equal(await p.locator('#focus-toggle').count(), 0);
+    const labels = await p.evaluate(() => window.__commandList().map((c) => c.label));
+    assert.ok(!labels.some((l) => /^Classic layout|^Focus: just the text/.test(l)), labels.filter((l) => /Classic|Focus/.test(l)).join(' | '));
   });
   await ctx.close();
 
   // ---------- the phone ----------
-  const pctx = await browser.newContext({ zoom: true, ...devices['Pixel 7'], colorScheme: 'dark' });
+  const pctx = await browser.newContext({ ...devices['Pixel 7'], colorScheme: 'dark' });
   const ph = await open(pctx);
   await check('phone: the ruler takes the bottom bar’s place; seven equal columns, Now in the middle; the top line has the glass', async () => {
     assert.equal(await ph.locator('.placebar').isVisible(), false);

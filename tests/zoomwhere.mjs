@@ -70,7 +70,7 @@ async function check(name, fn) {
   try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message}`); if (process.env.STACK) console.log(e.stack); }
 }
 async function open(opts) {
-  const ctx = await browser.newContext({ zoom: true, colorScheme: 'dark', timezoneId: 'America/Los_Angeles', ...opts });
+  const ctx = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', ...opts });
   await ctx.addInitScript(([nb, t1, t2]) => {
     window.__desk = {
       desk: async () => ({

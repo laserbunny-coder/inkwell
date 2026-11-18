@@ -62,7 +62,7 @@ async function run(p, label) {
 const listText = (p) => p.evaluate(() => [...document.querySelectorAll('#plan-sheet .pl-list [data-task]')].filter((el) => !el.parentElement.closest('[data-task]')).map((el) => (el.dataset.part ? `[${el.dataset.part}]` : el.querySelector('.pl-words')?.textContent || el.textContent).trim()));
 
 try {
-  const ctx = await browser.newContext({ zoom: true, colorScheme: 'dark', viewport: { width: 1280, height: 800 } });
+  const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1280, height: 800 } });
   const p = await open(ctx);
   await p.keyboard.press('Control+Shift+O');
   await p.waitForFunction(() => document.documentElement.dataset.view === 'library');
@@ -88,12 +88,9 @@ try {
     assert.ok(rows.slice(0, a).some((r) => /Pay the rent/.test(r)), 'Pay the rent stays in the morning');
   });
 
-  await check('a Look switch hides the dividers', async () => {
-    await run(p, 'Show or hide the afternoon and evening dividers');
-    await blur(p);
-    await p.waitForFunction(() => !document.querySelector('#plan-sheet .pl-part'));
-    await run(p, 'Show or hide the afternoon and evening dividers');
-    await blur(p);
+  await check('the dividers are always there: no switch for them any more', async () => {
+    const list = await p.evaluate(() => window.__commandList().map((c) => c.label));
+    assert.ok(!list.includes('Show or hide the afternoon and evening dividers'));
     await p.waitForSelector('#plan-sheet .pl-part');
   });
 
@@ -236,7 +233,7 @@ try {
   await ctx.close();
 
   // The phone: a hold picks a line, and its bar moves it; nothing scrolls sideways.
-  const pctx = await browser.newContext({ ...devices['Pixel 7'], zoom: true, colorScheme: 'dark' });
+  const pctx = await browser.newContext({ ...devices['Pixel 7'], colorScheme: 'dark' });
   const ph = await open(pctx);
   await add(ph, 'Pay the rent');
   await add(ph, 'Board scene 3');

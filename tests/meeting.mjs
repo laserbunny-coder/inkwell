@@ -9,7 +9,6 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
-import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -86,7 +85,7 @@ const command = async (p, name) => {
   await sleep(500);
 };
 
-const browser = classic(await chromium.launch());
+const browser = await chromium.launch();
 const ctx = await browser.newContext();
 await ctx.exposeFunction('__server', claude);
 await ctx.exposeFunction('__toDaybook', (t) => { sent.push(t); return true; });

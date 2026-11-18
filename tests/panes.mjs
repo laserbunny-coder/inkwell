@@ -7,7 +7,6 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
-import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require('playwright');
@@ -41,7 +40,7 @@ const fake = () => {
   };
 };
 
-const browser = classic(await chromium.launch());
+const browser = await chromium.launch();
 const errors = [];
 let failed = 0;
 async function check(name, fn) {
@@ -209,17 +208,10 @@ try {
     assert.match(await p.locator('#crumb').innerText(), new RegExp(firstTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   });
 
-  await check('Aa → Panes off closes them, and middle-click no longer opens one', async () => {
-    await p.evaluate(() => { const c = document.querySelector('[data-show="panes"]'); c.checked = false; c.dispatchEvent(new Event('change')); });
+  // Panes are always on now (Nov 17 2026): close them with their ×.
+  await check('each pane closes with its ×', async () => {
+    while (await p.locator('.pane-close').count()) { await p.locator('.pane-close').first().click(); await sleep(300); }
     assert.equal(await p.locator('.pane').count(), 0);
-    await toToday(p);
-    const li = p.locator('#outline-editor li').first();
-    await li.hover();
-    const g = await li.locator(':scope > .line-gutter .bullet').boundingBox();
-    await p.mouse.click(g.x + g.width / 2, g.y + g.height / 2, { button: 'middle' });
-    await sleep(800);
-    assert.equal(await p.locator('.pane').count(), 0);
-    await p.evaluate(() => { const c = document.querySelector('[data-show="panes"]'); c.checked = true; c.dispatchEvent(new Event('change')); });
   });
 
   await check('a middle-click on a result in Ctrl + K opens it beside (Shift + Enter there adds a line to today)', async () => {
@@ -264,13 +256,13 @@ try {
     assert.equal(await ph.evaluate(() => document.documentElement.classList.contains('sheet-peek')), true);
     assert.equal(await ph.evaluate(() => document.documentElement.classList.contains('has-panes')), false, 'no columns on a phone');
     await ph.waitForFunction(() => document.querySelector('.ps-title')?.textContent.startsWith('Kenji'));
-    // The sheet keeps clear of the bar at the bottom (it settles a frame after the bar shows).
+    // The sheet keeps clear of the ruler at the bottom (it settles a frame after the bar shows).
     const clear = () => ph.waitForFunction(() => {
       const s = document.querySelector('.pane-sheet').getBoundingClientRect();
-      const b = document.querySelector('.placebar').getBoundingClientRect();
+      const b = document.querySelector('.zm-ruler').getBoundingClientRect();
       return s.bottom <= (b.height ? b.top : innerHeight) + 1;
     }, null, { timeout: 2000 }).then(() => true, () => false);
-    assert.ok(await clear(), 'the sheet sits above the bottom bar');
+    assert.ok(await clear(), 'the sheet sits above the ruler');
     await ph.evaluate(() => document.activeElement?.blur());
     await sleep(300);
     assert.ok(await clear(), 'still above the bar once it shows again');

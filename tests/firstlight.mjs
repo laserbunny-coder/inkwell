@@ -91,8 +91,9 @@ try {
   await check('before anything else: today’s reading, six chapters from the four tracks', async () => {
     await toNow(page);
     assert.equal(await light(page), 1);
-    assert.equal(await sheet(page).locator('.now-light .now-eyebrow').innerText(), 'FIRST LIGHT');
-    assert.equal(await sheet(page).locator('.now-light .now-thing').innerText(), 'Today’s reading');
+    // Now is a page: Bible reading is its daily line, the reading under its heading.
+    assert.equal(await sheet(page).locator('.np-tx').first().innerText(), 'Bible reading');
+    assert.equal(await sheet(page).locator('.np-crumb').innerText(), 'Every day');
     assert.deepEqual(await refs(page), ['Genesis 1', 'Genesis 2', 'Psalm 1', 'Proverbs 1', 'Matthew 1', 'Matthew 2']);
   });
 
@@ -165,11 +166,14 @@ try {
     await sheet(page).locator('[data-now="lsetok"]').click();
     await settle(page);
     assert.deepEqual(await refs(page), ['2 Kings 4', '2 Kings 5', 'Psalm 2', 'Ecclesiastes 12', 'Revelation 22', 'Matthew 1']);
+    const r1 = await reading(page);
     await press(page, 'i');
-    await page.evaluate(() => { window.__plan.now.light.open(); window.__plan.redraw(); });
-    await settle(page);
-    assert.deepEqual(await refs(page), ['2 Kings 6', '2 Kings 7', 'Psalm 3', 'Proverbs 1', 'Matthew 2', 'Matthew 3']);
-    await press(page, 'Escape');
+    // Read: the line is done, so the places are read from the log.
+    const r2 = await reading(page);
+    assert.equal(r2.ot, r1.ot + 2, 'two Old Testament chapters on');
+    assert.equal(r2.ps, r1.ps + 1, 'one psalm on');
+    assert.ok(r2.wi < r1.wi, 'Ecclesiastes 12 goes round to Proverbs');
+    assert.ok(r2.nt < r1.nt, 'Revelation 22 goes round to Matthew');
   });
 
   await check('the Desk: reading streak, seven days a week, and where you are in each track', async () => {
@@ -204,26 +208,14 @@ try {
     assert.deepEqual(words, ['2 Kings 6', 'Psalm 3 of 150', 'Proverbs 1 · second time through', 'Matthew 2 · second time through']);
     assert.deepEqual(await page.locator('.rd-track .rd-t').allInnerTexts(), ['Old Testament', 'Psalms', 'Wisdom', 'New Testament']);
     assert.equal(await page.locator('.rd-meter').first().getAttribute('aria-label'), 'Old Testament: chapter 319 of 736');
-    // Above Training, when Training shows.
-    // Each switch hides its part; both off, the block is gone.
-    await page.evaluate(() => document.documentElement.classList.add('hide-readprogress'));
+    // Always there now (Nov 17 2026): no switches for the streak or the tracks.
+    await page.evaluate(() => document.documentElement.classList.add('hide-readprogress', 'hide-readstreak'));
     await desk();
-    assert.equal(await page.locator('.rd-track').count(), 0);
-    assert.equal(await page.locator('.rd-grid').count(), 1);
-    await page.evaluate(() => document.documentElement.classList.add('hide-readstreak'));
-    await page.evaluate(() => { history.pushState({ view: 'today' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'today' } })); });
-    await page.evaluate(() => { history.pushState({ view: 'desk' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'desk' } })); });
-    await settle(page); await sleep(600);
-    assert.equal(await page.locator('.dk-reading').count(), 0);
+    assert.equal(await page.locator('.rd-track').count(), 4);
     await page.evaluate(() => document.documentElement.classList.remove('hide-readprogress', 'hide-readstreak'));
     await toNow(page);
   });
 
-  await check('with the switch off, nothing before the day', async () => {
-    await page.evaluate(() => { const h = JSON.parse(localStorage.getItem('hide') || '[]'); h.push('firstlight'); localStorage.setItem('hide', JSON.stringify(h)); });
-    await dayIs(page, '2026-11-19');
-    assert.equal(await light(page), 0);
-  });
   assert.deepEqual(page.errors, []);
 
   // ---------- with the key ----------
@@ -236,7 +228,7 @@ try {
     await shot(k, 'light-list');
     await press(k, 'r');
     await k.waitForSelector('.now-scripture .sc-p');
-    assert.equal(await sheet(k).locator('.now-light .now-eyebrow').innerText(), 'FIRST LIGHT · 1 OF 6');
+    assert.equal(await sheet(k).locator('.now-light .now-eyebrow').innerText(), 'BIBLE READING · 1 OF 6');
     assert.equal(await sheet(k).locator('.now-light .now-thing').innerText(), 'Genesis 1');
     assert.equal(await sheet(k).locator('.sc-h').first().innerText(), 'The Creation of the World');
     assert.equal(await sheet(k).locator('.sc-v').first().innerText(), '1');

@@ -25,7 +25,7 @@ jobs:
     # Pinned: ubuntu-latest became 26.04 in Nov 2026, which Playwright 1.56 can't install Chromium on.
     runs-on: ubuntu-24.04
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         share: [1, 2, 3]
     steps:

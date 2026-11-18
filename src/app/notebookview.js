@@ -15,8 +15,8 @@ import { renderCrumb, renderRail } from './rail.js';
 import { pageMenu } from './tidying.js';
 import { dayMenu } from './historyview.js';
 import { writing } from './commands.js';
-import { moveLinePicker, sendSelectionPicker, tidyNudge } from './quickinserts.js';
-import { captureHere, dayReview, looseFoot, looseSoon, plan, writeOut } from './talking.js';
+import { moveLinePicker, sendSelectionPicker } from './quickinserts.js';
+import { captureHere, plan, writeOut } from './talking.js';
 import { besideItem, listSoon, paneMoves, planningView, pull, whenHere } from './beside.js';
 import { amountsMenu } from '../trainpage.js';
 
@@ -35,7 +35,6 @@ function placeOutlineBar() {
   outlineBar.hidden = !show;
   if (back) outlineBar.scrollLeft = 0; // a row that comes back starts with the mic in view
   body.classList.toggle('outline-bar-on', show);
-  outlineBar.querySelector('[data-end="focus"]').setAttribute('aria-pressed', String(root.classList.contains('focus')));
   if (!show) return;
   const vv = window.visualViewport;
   outlineBar.style.bottom = `${Math.max(0, vv ? window.innerHeight - (vv.offsetTop + vv.height) : 0)}px`;
@@ -167,7 +166,6 @@ addCommands(() => [
   { group: 'write', label: 'Fold or unfold this line', keys: `${mod}↑ ${mod}↓`, run: () => notebook.toggleFold(), when: inNotebook },
   { group: 'write', label: 'Link to a page…', keys: '[[', run: () => openPicker(currentEditor()), when: () => writing() || inNotebook() },
   { group: 'view', label: 'Typewriter mode: the line you’re on stays put', words: ['scroll', 'center', 'middle'], run: () => toggleTypewriter() },
-  { group: 'view', label: 'Show or hide earlier days (under the day page)', keys: '', run: () => notebook.togglePastDays(), when: () => inNotebook() && notebook.isDay },
   { group: 'write', label: 'Bring back gathered lines I deleted', keys: '', run: () => notebook.regather(), when: () => inNotebook() && !!notebook.gatherLine() },
   { group: 'write', label: 'Stop gathering on this line', keys: '', run: () => notebook.stopGather(), when: () => inNotebook() && !!notebook.gatherLine() },
   { group: 'write', label: 'Task: put this line on a day’s plan (again: a plain line)', keys: `${mod}⇧↵`, words: ['todo', 'to-do', 'plan', 'schedule', 'today'], run: () => notebook.toggleTask(), when: inNotebook },
@@ -186,7 +184,7 @@ function wireNotebook() {
     onOpen: openEntry,
     onStatus: (s) => {
       if (inNotebook()) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved';
-      if (s === 'saved') { listSoon(); if (notebook?.isDay) dayReview?.soon(); plan?.soon(); if (notebook?.looseDay) { notebook.redrawMarks(); looseSoon(); } }
+      if (s === 'saved') { listSoon(); plan?.soon(); }
     },
     onTaskChip: (eid, el) => (el?.dataset.train ? amountsMenu(eid, el, { wrote: (rows) => applyRemote(rows).then(() => notebook.redrawMarks()) }) : plan?.chipMenu(eid, el)),
     onTasks: () => plan?.soon(),
@@ -198,11 +196,8 @@ function wireNotebook() {
     onPlace: (page) => {
       if (!inNotebook()) return;
       remember({ view: 'notebook', pageId: page.id, ...(notebook?.zoom ? { zoom: notebook.zoom } : {}) });
-      dayReview?.show(page);
       plan?.showDay(page);
       pull?.setShown(planningView());
-      looseFoot();
-      tidyNudge();
       $('#nb-more').replaceChildren(menuButton(() => (page.kind === 'page' ? pageMenu(page) : dayMenu()), page.kind === 'page' ? 'More for this page' : 'More for this day'));
       renderCrumb();
     },

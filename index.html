@@ -26,8 +26,9 @@
       const mo = localStorage.getItem('motion');
       if (mo) d.dataset.motion = mo;
       if (matchMedia('(min-width: 701px) and (hover: hover)').matches && window.parent === window) d.classList.add('has-rail');
-      // The zoom (Nov 2026): one ruler at the bottom, unless this device asked for the Classic layout.
-      if (localStorage.getItem('layout') !== 'classic' && window.parent === window) d.classList.add('zoom');
+      // The zoom (Nov 2026): one ruler at the bottom. The Classic layout went for good on Nov 17.
+      if (window.parent === window) d.classList.add('zoom');
+      localStorage.removeItem('layout');
       const f = localStorage.getItem('font'), fh = localStorage.getItem('fontHref');
       if (f) d.dataset.font = f;
       if (f && fh) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.id = 'font-' + f; l.href = fh; document.head.appendChild(l); }
@@ -38,10 +39,6 @@
       // Outlines start without bullets (once per device; the Aa panel brings them back).
       if (!localStorage.getItem('bulletsOff')) { hide.push('bullets'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('bulletsOff', '1'); }
       if (!localStorage.getItem('linkPicsOff')) { hide.push('linkpics'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('linkPicsOff', '1'); }
-      // Time estimates start off (Nov 2026): the plan is the order you'll do things in.
-      if (!localStorage.getItem('estimatesOff')) { hide.push('estimates'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('estimatesOff', '1'); }
-      // Plan rows start plain (Nov 15 2026): the tick and the words; the rest in the row's ▸ and ⋯.
-      if (!localStorage.getItem('rowDetailsOff')) { hide.push('rowdetails'); localStorage.setItem('hide', JSON.stringify(hide)); localStorage.setItem('rowDetailsOff', '1'); }
       // Nov 2026: the Show tab's clean-up. Switches that went for good are simply on
       // again (bullets stays off); keep this list the same as REMOVED in src/shows.js.
       if (!localStorage.getItem('showsCleaned')) {
@@ -53,8 +50,24 @@
         localStorage.setItem('hide', JSON.stringify(hide));
         localStorage.setItem('showsCleaned', '1');
       }
+      // Nov 17 2026: the old layout went (zoom Part 6), and its switches with it.
+      if (!localStorage.getItem('showsCleaned2')) {
+        const gone2 = ['classic', 'nowface', 'nowwhere', 'nowstrip', 'nowwrite', 'rowdetails', 'estimates', 'quietdrafts', 'deskcount', 'pagetabs', 'planside'];
+        for (let i = hide.length - 1; i >= 0; i--) if (gone2.includes(hide[i])) hide.splice(i, 1);
+        localStorage.setItem('hide', JSON.stringify(hide));
+        for (const k of ['nowFace', 'nowSide', 'nowWrite', 'todayPhone', 'calZoom', 'estimatesOff', 'rowDetailsOff']) localStorage.removeItem(k);
+        localStorage.setItem('showsCleaned2', '1');
+      }
+      // Nov 18 2026: the short panel (eight switches). The ones he kept are simply on;
+      // the features he let go went with their switches. Keep in step with REMOVED.
+      if (!localStorage.getItem('showsCleaned3')) {
+        const gone3 = ['calendar', 'dayparts', 'nowout', 'nowfiled', 'firstlight', 'readstreak', 'readprogress', 'training', 'trainstreak', 'traincharts', 'nowtalk', 'nowclose', 'nowevents', 'nextstep', 'projsteps', 'projcrew', 'panes', 'links', 'alts', 'nowgate', 'smallsgo', 'fivebig', 'review', 'nudge', 'tidy', 'loose', 'deskread', 'projrecent', 'calzoom'];
+        for (let i = hide.length - 1; i >= 0; i--) if (gone3.includes(hide[i])) hide.splice(i, 1);
+        localStorage.setItem('hide', JSON.stringify(hide));
+        localStorage.setItem('showsCleaned3', '1');
+      }
       for (const h of hide) d.classList.add('hide-' + h);
-      if (localStorage.getItem('focus') === '1') d.classList.add('focus');
+      localStorage.removeItem('focus'); // Focus went with the old layout (Nov 17 2026): typing clears the screen
       if (localStorage.getItem('focusSections') === '1') d.classList.add('focus-sections');
       if (localStorage.getItem('typewriter') === '1') d.classList.add('typewriter');
       if (w) d.style.setProperty('--page-width', w + 'px');
@@ -64,7 +77,6 @@
   </script>
 </head>
 <body>
-  <div class="edge edge-left" aria-hidden="true"></div>
   <div class="edge edge-top" aria-hidden="true"></div>
 
   <header class="topbar">
@@ -93,7 +105,6 @@
         </span>
         <span class="tb-group tb-view">
           <button type="button" class="tb-btn" data-cmd="notes" id="notes-toggle" title="Notes beside the text (⌘2)">Notes</button>
-          <button type="button" class="tb-btn" data-cmd="focus" id="focus-toggle" title="Focus: just the text (⌘.)">Focus</button>
           <button type="button" class="tb-btn" data-cmd="beside" id="beside-toggle" aria-pressed="false" title="Beside: today’s plan, notes or another page next to this one (⌘\)">Beside</button>
           <button type="button" class="tb-btn" data-cmd="page" aria-label="Page width and text size" title="Page width, text size, what to show">Aa</button>
         </span>
@@ -240,10 +251,6 @@
       </section>
       <section class="wp-part" id="wh-crew" hidden></section>
       <section class="wp-part" id="wh-turns" hidden></section>
-      <section class="wp-part" id="wh-recent-box" hidden>
-        <h2 class="wp-sec">Recently <span class="wp-more">last written in</span></h2>
-        <ul id="wh-recent" class="loose-list wh-recent"></ul>
-      </section>
     </div>
   </main>
 
@@ -278,35 +285,11 @@
       <button type="button" class="links-chip" id="nb-links" hidden></button>
       <nav id="nb-zoom" class="nb-zoom" aria-label="Zoomed in from" hidden></nav>
       <section class="plan" id="plan" aria-label="Plan" hidden></section>
-      <div class="evening-card" role="note" hidden>
-        <span class="ec-text">It’s after 9. Look back over today?</span>
-        <span class="ec-do">
-          <button type="button" class="pill primary ec-close">Close the day</button>
-          <button type="button" class="pill ec-start">Review the day</button>
-          <button type="button" class="ghost-btn ec-skip">Not tonight</button>
-        </span>
-      </div>
       <article id="outline-editor" aria-label="Lines"></article>
-      <div class="loose-foot" id="loose-foot" hidden></div>
-      <button type="button" class="tidy-nudge" hidden></button>
-      <section class="day-review" aria-label="Day review" hidden>
-        <button type="button" class="dr-start" hidden>Review the day</button>
-        <button type="button" class="dr-toggle" aria-expanded="false" hidden><span>Day review</span><span class="dr-left"></span></button>
-        <div class="dr-body" hidden>
-          <div class="dr-summary"></div>
-          <div class="dr-cards"></div>
-          <p class="dr-quiet hint" hidden>Nothing to sort today.</p>
-          <button type="button" class="ghost-btn dr-again" title="Ask Claude to look at the day again (what you’ve decided stays)">Review again</button>
-        </div>
-      </section>
       <section class="backlinks" hidden>
         <div class="panel-label">Linked from</div>
         <ul id="backlinks-list" class="ref-list"></ul>
       </section>
-      <div class="past-days" hidden>
-        <button type="button" class="past-toggle" aria-expanded="false" title="Show earlier days"><span>Earlier days</span></button>
-        <div class="past-list"></div>
-      </div>
     </div>
   </main>
 
@@ -437,7 +420,6 @@
     <span class="bar-gap ins-gap" aria-hidden="true"></span>
     <button type="button" data-ins="1" aria-label="Insert (time, date, link…)">+</button>
     <span class="bar-end">
-      <button type="button" data-end="focus" aria-label="Focus" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></svg></button>
       <button type="button" data-end="down" aria-label="Put the keyboard away"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
     </span>
   </div>
@@ -462,7 +444,6 @@
     <button type="button" data-do="zoom" aria-label="Zoom in">Zoom</button>
     <button type="button" data-do="insert" aria-label="Insert (time, date, link…)">+</button>
     <span class="bar-end">
-      <button type="button" data-end="focus" aria-label="Focus" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></svg></button>
       <button type="button" data-end="down" aria-label="Put the keyboard away"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
     </span>
   </div>

@@ -77,12 +77,15 @@ const all = (p) => p.evaluate(() => new Promise((res) => {
 }));
 const byId = async (p, id) => (await all(p)).find((r) => r.id === id);
 const onNow = (p) => p.waitForFunction(() => document.documentElement.dataset.view === 'plan' && document.querySelector('#plan-sheet')?.dataset.tab === 'now' && !!document.querySelector('#plan-sheet .now-view'));
-const thing = (p) => p.locator('#plan-sheet .now-thing').first().innerText();
+const thing = (p) => p.locator('#plan-sheet .np-tx').first().innerText();
 const settle = async (p) => { await sleep(400); await still(p); };
 const press = async (p, key) => { await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press(key); await settle(p); };
 const until = async (fn, ms = 4000) => { const end = Date.now() + ms; let v; while (Date.now() < end) { v = await fn(); if (v) return v; await sleep(100); } return v; };
 const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: `${SHOTS}/${name}.png` }); };
 const sheet = (p) => p.locator('#plan-sheet');
+const go = async (p, place) => { await p.evaluate((pl) => { history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); }, place); await p.waitForFunction((pl) => document.documentElement.dataset.view === pl.view && (!pl.tab || document.querySelector('#plan-sheet')?.dataset.tab === pl.tab), place); await settle(p); };
+// The two ends of the day are offered at the top of Today's list.
+const toToday = (p) => go(p, { view: 'plan', tab: 'day' });
 
 async function open(viewport, extra = {}) {
   const ctx = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', viewport, rowDetails: false, todayNow: true, ...extra });
@@ -109,14 +112,14 @@ async function open(viewport, extra = {}) {
 try {
   const { page } = await open({ width: 1400, height: 900 });
 
-  await check('morning: Now offers “Talk the day through” when nothing is laid out', async () => {
-    await page.evaluate(() => document.querySelector('#view-toggle').click());
-    await onNow(page);
-    await settle(page);
+  await check('morning: Today offers “Talk the day through” when nothing is laid out', async () => {
+    await toToday(page);
     assert.equal(await sheet(page).locator('[data-now="talkday"]').count(), 1);
     assert.equal(await sheet(page).locator('[data-now="closeday"]').count(), 0, 'no close of the day in the morning');
     await shot(page, 'morning-gate');
-    await press(page, 't');
+    await sheet(page).locator('[data-now="talkday"]').click();
+    await onNow(page);
+    await settle(page);
     assert.equal(await sheet(page).locator('.now-q').innerText(), 'What is in front of you today?');
     assert.equal(await sheet(page).locator('.now-talk .now-mic').isVisible(), true, 'and the mic');
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'now-talk-box');
@@ -134,23 +137,23 @@ try {
     assert.equal(body.events[0].title, 'Private lesson');
   });
 
-  await check('the day as heard: one list in his order, small things together, and how many went to the page', async () => {
+  await check('the day as heard: one list in his order, and how many went to the page', async () => {
     assert.match(await sheet(page).locator('.now-heard .now-eyebrow').innerText(), /the day as i heard it/i);
-    assert.match(await sheet(page).locator('.now-heard').innerText(), /2 more things went to today’s page, to be filed/);
+    assert.match(await sheet(page).locator('.now-heard').innerText(), /One more thing went to today’s page, to be filed/);
     const words = await sheet(page).locator('.now-heard-list .pl-words').allInnerTexts();
-    assert.deepEqual(words.slice(0, 3), ['A few small things', 'Storyboard scene three', 'Write the two-minute hook']);
+    assert.deepEqual(words.slice(0, 2), ['Storyboard scene three', 'Write the two-minute hook']);
     assert.ok(words.includes('Send the invoice'), 'the carried task is in the same list');
-    assert.ok(!words.includes('Write the newsletter'), 'a sixth big thing is not on today');
+    assert.ok(words.includes('Write the newsletter'), 'today holds as many as he says (no five at most)');
     const rows = await all(page);
     const t = (text) => rows.find((r) => r.text === text && r.fields?.task && !r.deleted);
     assert.equal(t('Email the venue').fields.task.small, true);
     assert.equal(t('Storyboard scene three').fields.task.day, TODAY);
     assert.equal((await byId(page, 't_nate')).fields.task.small, true);
     assert.equal((await byId(page, 't_old')).fields.task.day, TODAY);
-    // The thought and the sixth big thing are on today's page, filed as a brain dump.
+    // The thought is on today's page, filed as a brain dump.
     const lines = rows.filter((r) => r.parent_id === `day-${TODAY}` && r.fields?.thought);
-    assert.deepEqual(lines.map((r) => r.fields.thought.words).sort(), ['A gag about a ninja scared of cats', 'Write the newsletter']);
-    await until(() => page.asked.filter((b) => b.mode === 'thought').length === 2);
+    assert.deepEqual(lines.map((r) => r.fields.thought.words).sort(), ['A gag about a ninja scared of cats']);
+    await until(() => page.asked.filter((b) => b.mode === 'thought').length === 1);
     assert.ok(page.asked.filter((b) => b.mode === 'thought').every((b) => b.dump === true));
     assert.match(await page.locator('.toast').last().innerText(), /Here is the day as I heard it/);
     await shot(page, 'morning-heard');
@@ -165,19 +168,22 @@ try {
     assert.equal((await byId(page, 't_hook')).fields.task.order, 1);
     assert.equal(!!(await byId(page, 't_nate')).fields.task.small, false);
     assert.equal(await sheet(page).locator('.now-heard').count(), 0);
+    await toToday(page);
     assert.equal(await sheet(page).locator('[data-now="talkday"]').count(), 1, 'offered again');
   });
 
   await check('Begin starts the first, and the morning talk isn’t offered again today', async () => {
-    await press(page, 't');
+    await sheet(page).locator('[data-now="talkday"]').click();
+    await onNow(page);
     await sheet(page).locator('#now-talk-box').fill(SAID);
     await sheet(page).locator('[data-now="talk-send"]').click();
     await until(() => sheet(page).locator('.now-heard').count());
     await settle(page);
     await press(page, 'b');
-    assert.equal(await thing(page), 'Reply to Nate');
+    assert.equal(await thing(page), 'Storyboard scene three');
     await press(page, 'd');
     await press(page, 'd');
+    await toToday(page);
     assert.equal(await sheet(page).locator('[data-now="talkday"]').count(), 0);
   });
 
@@ -195,26 +201,24 @@ try {
     assert.equal(await sheet(page).locator('.now-talk').count(), 0);
   });
 
-  await check('evening: from 5 pm the gate offers “Close the day”', async () => {
-    // One thing worked on (Enough for today), then the clock passes five.
-    await press(page, 'b');
-    await press(page, 'n');
-    await press(page, '2');
+  await check('evening: from 5 pm Today offers “Close the day”', async () => {
     await page.clock.setSystemTime(new Date(at('17:30')));
+    await toToday(page);
     await page.evaluate(() => window.__plan.redraw());
     await settle(page);
     assert.equal(await sheet(page).locator('[data-now="closeday"]').count(), 1);
     await shot(page, 'evening-gate');
-    await press(page, 'c');
+    await sheet(page).locator('[data-now="closeday"]').click();
+    await onNow(page);
+    await settle(page);
     assert.equal(await sheet(page).locator('.now-close-h').innerText(), 'Here is what you did');
   });
 
-  await check('here is what you did: done, worked on, and the event that happened, nothing counted', async () => {
+  await check('here is what you did: done, and the event that happened, nothing counted', async () => {
     const did = await sheet(page).locator('.now-did li').allInnerTexts();
-    assert.ok(did.includes('Reply to Nate'), did.join(' | '));
-    assert.ok(did.includes('Email the venue'));
-    assert.ok(did.some((t) => /^Worked on: /.test(t)), 'worked on');
-    assert.ok(did.includes('1 pm · Private lesson'), 'the event');
+    assert.ok(did.includes('Storyboard scene three'), did.join(' | '));
+    assert.equal(did.filter((t) => !/ · /.test(t)).length, 2, `two done: ${did.join(' | ')}`);
+    assert.ok(did.includes('1 pm · Private lesson'), `the event: ${did.join(' | ')}`);
     assert.doesNotMatch(await sheet(page).locator('.now-close').innerText(), /overdue|not done|left undone/i);
     const qs = await sheet(page).locator('.now-closeform .now-q').allInnerTexts();
     assert.deepEqual(qs, ['Where did you feel most alive and in step today?', 'Where did you feel drained or out of step?', 'What is first tomorrow?']);
@@ -242,23 +246,16 @@ try {
     assert.ok(first.fields.task.order < (await byId(page, 't_tmrw')).fields.task.order, 'on top of tomorrow');
     assert.match(await page.locator('.toast').last().innerText(), /The day is closed/);
     assert.equal(await sheet(page).locator('[data-now="closeday"]').count(), 0);
-    assert.match(await sheet(page).locator('.now-closed').innerText(), /The day is closed/);
+    await toToday(page);
+    assert.equal(await sheet(page).locator('[data-now="closeday"]').count(), 0, 'not offered once closed');
   });
 
-  await check('the 9 pm card: “Close the day” beside the review, gone once the day is closed', async () => {
-    await page.clock.setSystemTime(new Date(at('21:10')));
-    await press(page, 'Alt+2');
-    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
-    await settle(page);
-    await page.waitForSelector('.evening-card:not([hidden])');
-    assert.equal(await page.locator('.evening-card .ec-close').isVisible(), false, 'already closed today');
-    assert.equal(await page.locator('.evening-card .ec-start').isVisible(), true, 'the review is still there');
-  });
-
-  await check('the new commands and switches are in All commands', async () => {
+  await check('the commands are in All commands; their switches went (always on)', async () => {
+    const list = await page.evaluate(() => window.__commandList().map((c) => c.label));
+    for (const q of ['Show or hide the morning talk on Now', 'Show or hide the close of the day']) assert.ok(!list.includes(q), q);
     await page.keyboard.press('Control+k');
     await page.waitForFunction(() => !document.querySelector('.palette')?.hidden);
-    for (const q of ['Talk the day through', 'Close the day', 'Show or hide the morning talk on Now', 'Show or hide the close of the day']) {
+    for (const q of ['Talk the day through', 'Close the day']) {
       await page.locator('.palette input').fill(q);
       await sleep(250);
       assert.ok(await page.locator('.palette li', { hasText: q }).count() > 0, q);
@@ -270,10 +267,9 @@ try {
   // ---------- the phone, in the evening, before closing ----------
   const { page: phone } = await open({ width: 412, height: 915 }, { hasTouch: true, isMobile: true });
   await check('phone: the morning talk fits, with a thumb-sized mic', async () => {
-    await phone.evaluate(() => document.querySelector('#view-toggle').click());
-    await onNow(phone);
-    await settle(phone);
+    await toToday(phone);
     await sheet(phone).locator('[data-now="talkday"]').first().tap();
+    await onNow(phone);
     await settle(phone);
     const box = await sheet(phone).locator('#now-talk-box').boundingBox();
     assert.ok(box.width > 300 && box.x + box.width <= 412, `box ${box.x} ${box.width}`);
@@ -288,31 +284,20 @@ try {
     assert.equal(await phone.evaluate(() => document.scrollingElement.scrollWidth <= 412), true, 'no sideways scroll');
   });
 
-  await check('phone: the 9 pm card opens the close of the day on Now', async () => {
+  await check('phone: in the evening Today offers Close the day, and it opens on Now', async () => {
+    // An old device that hid both gets them back: they are always on now.
+    await phone.evaluate(() => { localStorage.setItem('hide', JSON.stringify(['nowtalk', 'nowclose'])); });
     await phone.clock.setSystemTime(new Date(at('21:10')));
-    await phone.evaluate(() => window.__plan.redraw());
-    await press(phone, 'Alt+2');
-    await phone.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
-    await settle(phone);
-    await phone.waitForSelector('.evening-card .ec-close:not([hidden])');
-    await shot(phone, 'phone-card');
-    await phone.locator('.evening-card .ec-close').tap();
+    await phone.reload();
+    await phone.waitForFunction(() => document.documentElement.dataset.started === '1');
+    await toToday(phone);
+    await sheet(phone).locator('[data-now="closeday"]').first().tap();
     await onNow(phone);
     await settle(phone);
     assert.equal(await sheet(phone).locator('.now-close-h').innerText(), 'Here is what you did');
     const save = await sheet(phone).locator('[data-now="close-save"]').boundingBox();
     assert.ok(save.height >= 44, `button ${save.height}`);
     await shot(phone, 'phone-close');
-  });
-
-  await check('Look switches: with both off, neither is offered', async () => {
-    await phone.evaluate(() => { localStorage.setItem('hide', JSON.stringify(['nowtalk', 'nowclose'])); });
-    await phone.reload();
-    await phone.waitForFunction(() => document.documentElement.dataset.started === '1');
-    await phone.evaluate(async () => { await window.__plan.now.save({ laid: false, closed: false }); window.__plan.redraw(); });
-    await onNow(phone).catch(async () => { await phone.evaluate(() => document.querySelector('#view-toggle').click()); await onNow(phone); });
-    await settle(phone);
-    assert.equal(await sheet(phone).locator('[data-now="talkday"], [data-now="closeday"]').count(), 0);
   });
   assert.deepEqual(phone.errors, []);
 } catch (e) {

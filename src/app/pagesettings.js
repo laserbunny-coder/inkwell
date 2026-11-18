@@ -5,8 +5,8 @@ import { StatsPanel, record as recordProgress } from '../stats.js';
 import { toast } from '../menu.js';
 import { outline } from '../model.js';
 import { resetLinkPics } from '../filenode.js';
-import { SHOWS, SHOW_GROUPS, groupFor } from '../shows.js';
-import { CHOICES, nowChanged } from '../now.js';
+import { SHOWS } from '../shows.js';
+import { nowChanged } from '../now.js';
 import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from '../fonts.js';
 import { inPane } from '../panes.js';
 import { make } from '../dom.js';
@@ -16,7 +16,7 @@ import { placeScriptBar, touch } from './scriptbar.js';
 import { currentEditor, notebook, placeOutlineBar, toggleTypewriter } from './notebookview.js';
 import { go } from './routing.js';
 import { wovenPick } from './manuscript.js';
-import { box, roomTags, writing } from './commands.js';
+import { box, writing } from './commands.js';
 import { deskPage, plan } from './talking.js';
 import { panes, syncBeside } from './beside.js';
 
@@ -69,64 +69,20 @@ function lookPanel(panel) {
   for (const el of [panel.querySelector('.woven-pick'), $('#page-width').closest('label'), $('#text-size').closest('label'), panel.querySelector('.font-pick')]) panes.text.append(el);
   panes.show.append(show);
   panel.prepend(tabs, panes.look, panes.text, panes.show);
-  // Show: one folding group each, its switches made from shows.js.
-  const touchOnly = touch.matches;
-  for (const g of SHOW_GROUPS) {
-    const rows = SHOWS.filter((r) => r.group === g.id && (!r.phone || touchOnly));
-    const box = make('div', 'ps-group');
-    box.dataset.group = g.id;
-    const head = make('button', 'ps-ghead');
-    head.type = 'button';
-    head.setAttribute('aria-expanded', 'false');
-    head.append(make('span', '', g.label), make('span', 'ps-gcount'));
-    head.addEventListener('click', () => box.classList.toggle('open') ? head.setAttribute('aria-expanded', 'true') : head.setAttribute('aria-expanded', 'false'));
-    const body = make('div', 'ps-gbody');
-    let chipRow = null;
-    for (const r of rows) {
-      if (r.chip) {
-        if (!chipRow) { chipRow = make('div', 'ps-chips'); chipRow.append(make('span', '', 'On a project’s page:')); body.append(chipRow); }
-        const c = make('button', 'ps-chip', r.chip);
-        c.type = 'button';
-        c.dataset.show = r.id;
-        c.addEventListener('click', () => setShown(r.id, hidden().has(r.id)));
-        chipRow.append(c);
-        continue;
-      }
-      // A choice of a few (how Now looks): one row of buttons, kept on this device.
-      if (r.choice) {
-        const row = make('div', `ps-choice${r.under ? ' sub' : ''}`);
-        row.append(make('span', 'ps-choice-l', r.label));
-        const seg = make('div', 'ps-seg');
-        seg.setAttribute('role', 'radiogroup');
-        seg.setAttribute('aria-label', r.label);
-        for (const [v, l] of r.choice) {
-          const b = make('button', '', l);
-          b.type = 'button';
-          b.dataset.choice = r.id;
-          b.dataset.v = v;
-          b.setAttribute('role', 'radio');
-          b.addEventListener('click', () => { setChoice(r.id, v); });
-          seg.append(b);
-        }
-        row.append(seg);
-        body.append(row);
-        continue;
-      }
-      const label = make('label', `switch${r.under ? ' sub' : ''}`);
-      const input = make('input');
-      input.type = 'checkbox';
-      if (r.id === 'typewriter') input.id = 'typewriter-mode';
-      else if (r.id === 'manypanes') input.id = 'many-panes';
-      else if (r.id === 'classic') input.id = 'classic-layout';
-      else input.dataset.show = r.id;
-      label.append(input, ` ${r.label}`);
-      if (r.keys) { const k = make('span', 'keys', keyLabel(r.keys)); label.append(' ', k); }
-      body.append(label);
-    }
-    head.querySelector('.ps-gcount').textContent = String(rows.filter((r) => !r.chip).length + (chipRow ? 1 : 0));
-    box.append(head, body);
-    show.append(box);
+  // Show: the short panel, eight switches in one list (shows.js).
+  const list = make('div', 'ps-list');
+  for (const r of SHOWS) {
+    const label = make('label', 'switch');
+    const input = make('input');
+    input.type = 'checkbox';
+    if (r.id === 'typewriter') input.id = 'typewriter-mode';
+    else if (r.id === 'manypanes') input.id = 'many-panes';
+    else input.dataset.show = r.id;
+    label.append(input, ` ${r.label}`);
+    if (r.keys) { const k = make('span', 'keys', keyLabel(r.keys)); label.append(' ', k); }
+    list.append(label);
   }
+  show.append(list);
 }
 function lookTab(id) {
   const panel = $('.page-settings');
@@ -142,9 +98,6 @@ function togglePageSettings(tab = 'look') {
   loadPreviews();
   showFonts();
   wovenPick();
-  // Show opens on the group for where you are; the others are folded.
-  const here = groupFor(roomTags()[0]);
-  panel.querySelectorAll('.ps-group').forEach((g) => { const on = g.dataset.group === here; g.classList.toggle('open', on); g.querySelector('.ps-ghead').setAttribute('aria-expanded', String(on)); });
   lookTab(tab);
   panel.hidden = false;
   if (!touch.matches) panel.querySelector('.ps-tab[aria-selected="true"]')?.focus();
@@ -159,10 +112,8 @@ function setShown(name, on) {
   root.classList.toggle(`hide-${name}`, !on);
   if (name === 'claude' || name === 'comments') notes.render();
   if (name === 'linkpics') resetLinkPics();
-  if (name === 'panes') { if (!on) panes?.closeAll(); panes?.layout(); }
   if (name === 'closedtag' && deskPage?.showing() && deskPage.now) deskPage.render({ now: deskPage.now, failed: false });
-  if (['estimates', 'woven', 'planview', 'foldearlier', 'areahours', 'aheadhours', 'donetasks', 'dayparts', 'nowgate', 'smallsgo', 'rowdetails', 'nowwhere'].includes(name)) { if (plan) { plan.peekDone = false; plan.just = null; plan.took = null; } plan?.refresh(); }
-  if (name === 'nextstep') deskPage?.refresh();
+  if (name === 'donetasks') { if (plan) { plan.peekDone = false; plan.just = null; plan.took = null; } plan?.refresh(); }
   if (name.startsWith('now')) nowChanged();
   syncSwitches();
 }
@@ -199,32 +150,17 @@ function toggleSections() {
   if (root.classList.contains('focus')) toggleFocusSections(!showing); else setShown('sections', !showing);
   if (writing() && isScript()) toast(showing ? 'Section titles hidden' : 'Section titles showing');
 }
-// The phone's bar rests as a tab in Focus, and in a draft (a chapter or a
-// script) unless "Quiet drafts" is off. The computer's rail never covers the
-// text, so there only Focus counts (the tab in the corner, frame.css).
+// The bar rests as a tab while reading a script through (Focus underneath).
 function syncQuiet() {
-  const draft = (root.dataset.view || 'write') === 'write';
-  const quiet = root.classList.contains('focus') || (touch.matches && draft && !hidden().has('quietdrafts'));
+  const quiet = root.classList.contains('focus');
   body.classList.toggle('bar-quiet', quiet);
   if (!quiet) body.classList.remove('bar-peek');
 }
-// A choice row (shows.js `choice`): how Now looks, and what a draft shows.
-const choiceOf = (id) => CHOICES[id]?.[0]() ?? null;
-function setChoice(id, v) {
-  if (!CHOICES[id]) return;
-  CHOICES[id][1](v);
-  plan?.redraw();
-  nowChanged();
-  syncSwitches();
-}
 function syncSwitches() {
   const h = hidden();
-  document.querySelectorAll('[data-choice]').forEach((b) => b.setAttribute('aria-checked', String(choiceOf(b.dataset.choice) === b.dataset.v)));
   document.querySelectorAll('[data-show]').forEach((c) => { c.checked = !h.has(c.dataset.show); });
   $('#many-panes').checked = localStorage.getItem('manyPanes') === '1';
-  $('#focus-toggle').setAttribute('aria-pressed', String(root.classList.contains('focus')));
   document.querySelectorAll('.ps-show .switch input').forEach((c) => c.closest('.switch').classList.toggle('on', c.checked));
-  document.querySelectorAll('.ps-chip[data-show]').forEach((b) => b.setAttribute('aria-pressed', String(!hidden().has(b.dataset.show))));
 }
 
 // Next or previous chapter in the book, or day on a daily page.
@@ -279,9 +215,6 @@ addCommands(() => [
   { group: 'go', label: 'Next chapter (or day)', keys: `${mod}⌥↓`, run: () => step(1), when: () => writing() || inNotebook() },
   { group: 'go', label: 'Previous chapter (or day)', keys: `${mod}⌥↑`, run: () => step(-1), when: () => writing() || inNotebook() },
   { group: 'view', label: 'Read it through: just the script pages', keys: 'Esc to stop', run: toggleReading, when: () => writing() && isScript() },
-  { group: 'view', label: 'Focus: just the text (on / off)', keys: `${mod}.`, run: toggleFocus },
-  { group: 'view', label: 'Show or hide "Linked from"', keys: '', run: () => setShown('links', hidden().has('links')) },
-  { group: 'view', label: 'Show or hide alternate marks', keys: '', run: () => setShown('alts', hidden().has('alts')) },
   { group: 'plan', label: 'Hide done tasks (or show them again, where they were)', keys: '', run: () => { const show = hidden().has('donetasks'); setShown('donetasks', show); toast(show ? 'Done tasks show again, where they were' : 'Done tasks are out of sight (tap “N done” to see them)'); } },
   { group: 'view', label: 'Show or hide pictures on shared links', keys: '', run: () => setShown('linkpics', hidden().has('linkpics')) },
   { group: 'view', label: 'Progress: words and pages over time (stats)', keys: `${mod}⇧P`, run: () => progressPanel.open() },

@@ -3,8 +3,7 @@
 import type { Sub } from "../_shared/webpush.ts";
 
 export type Note = { id: string; user_id: string; author: string | null; title: string | null; body: string | null; link: string | null; kind: string | null; project: string | null; resolved_at: string | null };
-export type Prefs = { review: boolean; needs: boolean; notes: boolean; week: boolean; month: boolean };
-export const DEFAULTS: Prefs = { review: true, needs: true, notes: false, week: true, month: true };
+export type Kind = "needs" | "review" | "week" | "month" | "notes";
 const KIND = { decision: "a decision", blocked: "blocked on you", review: "ready to review" } as Record<string, string>;
 export const APP = "https://laserbunny-coder.github.io/daybook/";
 export const INKWELL = "https://laserbunny-coder.github.io/inkwell/";
@@ -18,8 +17,8 @@ export function targets(subs: SubRow[]): { app: App; subs: Sub[] } {
   return { app: ink.length ? "inkwell" : "daybook", subs: list.map(({ endpoint, p256dh, auth }) => ({ endpoint, p256dh, auth })) };
 }
 
-/** Which switch a note falls under. */
-export function kindOf(n: Pick<Note, "kind" | "author" | "title">): keyof Prefs {
+/** What kind of note it is. */
+export function kindOf(n: Pick<Note, "kind" | "author" | "title">): Kind {
   if (n.kind) return "needs";
   const inkwell = (n.author ?? "") === "Inkwell", title = n.title ?? "";
   if (inkwell && title === "Your day review") return "review";
@@ -27,6 +26,9 @@ export function kindOf(n: Pick<Note, "kind" | "author" | "title">): keyof Prefs 
   if (inkwell && title.startsWith("Your month")) return "month";
   return "notes";
 }
+
+/** Only Needs you buzzes a phone (Nov 18 2026): the rest are still written, quietly. */
+export const buzzes = (k: Kind) => k === "needs";
 
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s);
 
@@ -37,8 +39,7 @@ export function message(n: Note, app: App = "daybook") {
     // Inkwell's own links open in Inkwell; the Needs you link is the Claude thread.
     const m = message(n, "daybook");
     const url = k === "needs" ? n.link || INKWELL + "?desk" : k === "notes" ? INKWELL + "?desk" : n.link || INKWELL;
-    return { ...m, url, ...(k === "week" ? { body: "Last week summed up, and the things you said you'd do." } : {}),
-      ...(k === "review" ? { body: "Take a few minutes to look back over today." } : {}) };
+    return { ...m, url, ...(k === "week" ? { body: "Last week summed up, and the things you said you'd do." } : {}) };
   }
   if (k === "needs") {
     return {
@@ -46,9 +47,6 @@ export function message(n: Note, app: App = "daybook") {
       body: `${n.project ? n.project + " · " : ""}${KIND[n.kind!] ?? "needs you"}`,
       tag: "needs-" + n.id, url: n.link || APP + "?needs", ttl: 24 * 3600,
     };
-  }
-  if (k === "review") {
-    return { title: "Your day review", body: "Take a few minutes to look back over today in Inkwell.", tag: "review", url: n.link || APP, ttl: 3 * 3600 };
   }
   if (k === "week") {
     return { title: clip(n.title || "Your week", 80), body: "Last week in Inkwell, and the things you said you'd do. Tap + to make any a task.", tag: "week", url: APP + "?notes", ttl: 24 * 3600 };

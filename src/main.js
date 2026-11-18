@@ -60,7 +60,6 @@ import { tidyShareBlanks, keepShare } from './share.js';
 import './inbox.js';
 import './lists.js';
 import './meeting.js';
-import { getReview } from './review.js';
 import './tags.js';
 import './desk.js';
 import './projectpage.js';
@@ -81,7 +80,6 @@ import './sidenotes.js';
 import './talk.js';
 import './hstrip.js';
 import './hstrip.css';
-import './ahead.js';
 import './calendar.js';
 import './claudenotes.js';
 import './claudeknows.js';
@@ -92,7 +90,7 @@ import './dom.js';
 import { isoToday } from './dates.js';
 import { wireScriptBar } from './app/scriptbar.js';
 import { notebook, wireNotebook } from './app/notebookview.js';
-import { go, historyMode, lastChapterAnywhere, openEntry, phoneAway, setHistoryMode, wireRouting } from './app/routing.js';
+import { go, lastChapterAnywhere, openEntry, phoneAway, setHistoryMode, wireRouting } from './app/routing.js';
 import { applyRemote, conflicts, migrateOnce, seedIfEmpty, seedNow, sync, wireSync } from './app/syncwiring.js';
 import { biblePlaces, connectScribe, numbering, refreshWords, scenePop, wireManuscript } from './app/manuscript.js';
 import { scheduleScenes, wireRail } from './app/rail.js';
@@ -106,8 +104,8 @@ import { wireHistory } from './app/historyview.js';
 import { wirePageSettings } from './app/pagesettings.js';
 import { wireCommands } from './app/commands.js';
 import { sendSelectionPicker, showClaudeKnows, showTidy, wireQuickInserts } from './app/quickinserts.js';
-import { asking, landShares, openAsked, openCapture, setAsking, showCapture, wireTalking } from './app/talking.js';
-import { besideItem, paneMoves, panes, reviewAsked, reviewing, setReviewing, wireBeside } from './app/beside.js';
+import { landShares, openAsked, openCapture, setAsking, showCapture, wireTalking } from './app/talking.js';
+import { besideItem, paneMoves, panes, wireBeside } from './app/beside.js';
 import { wireZoom } from './app/zoom.js';
 import { wireSeats } from './app/seats.js';
 
@@ -343,18 +341,13 @@ async function start() {
     const sp = new URL(params.targetURL).searchParams;
     if (sp.get('capture')) openCapture();
     if (sp.get('save')) keepShare({ url: sp.get('save'), title: sp.get('title') || '' }).then(landShares).catch((e) => console.error(e));
-    if (/^\d{4}-\d{2}-\d{2}$/.test(sp.get('review') || '')) { setReviewing(sp.get('review')); reviewAsked(); }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(sp.get('review') || '')) go({ view: 'notebook', pageId: dayId(sp.get('review')) });
   });
   // The Save to Inkwell bookmark on a computer: the page it was clicked on.
   if (asked.get('save')) await keepShare({ url: asked.get('save'), title: asked.get('title') || '' }).catch((e) => console.error(e));
   if (asked.has('capture') || asked.has('save') || asked.has('share') || asked.has('open') || asked.has('review') || asked.has('connect') || asked.has('tidy') || asked.has('summaries')) history.replaceState(history.state, '', location.pathname);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(asked.get('review') || '')) {
-    setReviewing(asked.get('review'));
-    // Signed in, wait for this device to catch up first (the review may
-    // already have been made on another one); otherwise go now.
-    const signedIn = !window.__claude && await sync.backend?.user?.().catch(() => null);
-    if (signedIn) { await go({ view: 'notebook', pageId: dayId(reviewing) }); if (await getReview(reviewing)) await reviewAsked(); } else await reviewAsked();
-  }
+  // An old 9 pm alert links to ?review=<date>: that day's page.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(asked.get('review') || '')) await go({ view: 'notebook', pageId: dayId(asked.get('review')) });
   if (asked.get('capture')) openCapture();
   // The Monday alert links to ?tidy=<Monday>: the pass opens, and fills in as this device catches up.
   if (asked.has('tidy')) showTidy().catch((e) => console.error(e));

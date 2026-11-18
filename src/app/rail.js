@@ -5,8 +5,6 @@ import { putEntries, getEntry, topTags } from '../db.js';
 import { onContextMenu } from '../menu.js';
 import { outline } from '../model.js';
 import { titleOf, dayId } from '../notebook.js';
-import { tabFor, ZOOMS } from '../plan.js';
-import { zoomOn } from '../zoomstate.js';
 import { inPane, PANE_ID, host as paneHost } from '../panes.js';
 import { areas, books, hasManuscript, areaColor, pagesIn, loosePages, bookOf, worlds, worldOf, worldTree } from '../library.js';
 import { make } from '../dom.js';
@@ -286,18 +284,12 @@ async function drawCrumb() {
     parts.push(link(PAGE_NAMES[state.stage.page] || '', () => {}, 'here'));
   } else if (view() === 'drawer') {
     parts.push(lib, link('Drawer', () => {}, 'here'));
-  } else if (view() === 'plan' && zoomOn()) {
-    // On the zoom the ruler says which stop this is; the crumb only names Plan's own list and Pace.
-    const tab = tabFor(lastPlace?.tab);
-    if (tab === 'plan' || tab === 'pace') parts.push(link(tab === 'plan' ? 'Plan' : 'Pace', () => {}, 'here'));
   } else if (view() === 'plan') {
-    if (lastPlace?.tab === 'day') parts.push(link('Today', () => {}, 'here'));
-    else {
-      const tab = tabFor(lastPlace?.tab);
-      parts.push(link('Today', () => go({ view: 'notebook', pageId: dayId(isoToday()) }), ''));
-      if (tab === 'now') parts.push(link('Now', () => {}, 'here'));
-      else if (tab === 'plan') parts.push(link('Plan', () => {}, 'here'));
-      else parts.push(link('Calendar', () => plan.goTab('cal'), ''), link(ZOOMS.find((z) => z[0] === tab)?.[1] || 'Week', () => {}, 'here'));
+    // The ruler says which stop this is: no crumb. A pane has no ruler, so
+    // its head names the stop.
+    if (inPane) {
+      const NAMES = { now: 'Now', day: 'Today', week: 'Week', calday: 'Today by the hour', month: 'Month', year: 'Year' };
+      parts.push(link(NAMES[lastPlace?.tab] || 'Today', () => {}, 'here'));
     }
   } else if (view() === 'sidenotes') {
     parts.push(link(sideNotes.title || 'No draft open', () => {}, 'here'));
@@ -357,7 +349,7 @@ async function drawCrumb() {
   }
   else nav.here(lastPlace, names);
   frame.here(lastPlace);
-  nowStrip?.moved(lastPlace);
+  nowStrip?.soon();
 }
 
 // Runs once at start-up, from main.js, in the place this code had there

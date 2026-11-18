@@ -5,7 +5,6 @@ import { closeMenu } from '../menu.js';
 import { outline, entry } from '../model.js';
 import { rootOf, dayId } from '../notebook.js';
 import { tabFor } from '../plan.js';
-import { zoomOn } from '../zoomstate.js';
 import { closeWhen } from '../when.js';
 import { draftHolding } from '../drafts.js';
 import { inPane } from '../panes.js';
@@ -22,9 +21,8 @@ import { beside, comparer, talk } from './revising.js';
 import { loadProduction } from './productionwiring.js';
 import { frame, loadStagePage, pageOfPlace } from './workpages.js';
 import { hstrip } from './historyview.js';
-import { hidden } from './pagesettings.js';
 import { box, writing } from './commands.js';
-import { deskPage, looseFoot, plan, tagsPage } from './talking.js';
+import { deskPage, plan, tagsPage } from './talking.js';
 import { openBeside, panes, planningView, pull, sideNotes, talkThrough } from './beside.js';
 
 // ---------- getting around ----------
@@ -108,7 +106,7 @@ async function go(place) {
   // Today's plan on its own, and the notes of the draft next door, only live
   // beside something: in the main window they'd be the day's page.
   // On the zoom, Today's list is a place of its own (the List face of Today).
-  if (!inPane && ((place.view === 'plan' && place.tab === 'day' && !zoomOn()) || place.view === 'sidenotes' || place.view === 'talk')) place = { view: 'notebook', pageId: dayId(isoToday()) };
+  if (!inPane && ((place.view === 'plan' && place.tab === 'day' && false) || place.view === 'sidenotes' || place.view === 'talk')) place = { view: 'notebook', pageId: dayId(isoToday()) };
   const from = view();
   // Switch at once so the next keystroke lands in the right place; saving catches up.
   if (from === 'write' && place.view !== 'write') store.close(editor.state.doc);
@@ -151,9 +149,7 @@ async function go(place) {
     else {
       if (place.line) notebook.focusLine(place.line);
       remember({ view: 'notebook', pageId: notebook.page.id });
-      // Back on a page that stayed open: its count may have been put away
-      // meanwhile, and its plan may have changed in Plan or Calendar.
-      looseFoot();
+      // Back on a page that stayed open: its plan may have changed meanwhile.
       plan?.showDay(notebook.page);
     }
     if ((place.zoom || null) !== notebook.zoom) {
@@ -299,8 +295,6 @@ addCommands(() => [
   { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
   { group: 'go', label: 'Calendar: day (today’s hours)', keys: '', words: ['calendar', 'day', 'hours', 'time', 'schedule'], run: () => go({ view: 'plan', tab: 'calday' }) },
   { group: 'go', label: 'Calendar: week (seven days, and what’s for any day this week)', keys: '', words: ['calendar', 'week', 'plan', 'tasks', 'schedule', 'tray', 'any day'], run: () => go({ view: 'plan', tab: 'week' }) },
-  { group: 'go', label: 'Calendar: six weeks (a lane for each project)', keys: '', words: ['calendar', 'weeks ahead', 'ahead', 'six weeks', 'roadmap', 'weeks', 'months', 'dates', 'deadline', 'milestone', 'schedule', 'timeline', 'stretch'], run: () => go({ view: 'plan', tab: 'ahead' }) },
-  { group: 'go', label: 'Calendar: pace (what you planned against what it really took)', keys: '', words: ['calendar', 'pace', 'plan', 'tasks', 'time', 'estimate', 'looking back', 'hours'], run: () => go({ view: 'plan', tab: 'pace' }), when: () => !hidden().has('estimates') },
   { group: 'go', label: 'Desk: every project, what needs you and who’s working on it', keys: `${mod}⇧U`, words: ['claude', 'threads', 'needs you', 'calls', 'catch-up', 'catchup', 'updates', 'projects', 'stage'], run: () => go({ view: 'desk' }) },
   { group: 'go', label: 'History: every Claude thread, newest first', keys: '', words: ['threads', 'closed', 'finished', 'desk', 'search threads'], run: () => go({ view: 'desk', tab: 'history' }) },
   { group: 'go', label: 'Today’s page', keys: `${mod}J`, run: () => go({ view: 'notebook', pageId: dayId(isoToday()) }) },

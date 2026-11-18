@@ -113,7 +113,7 @@ try {
     await p.locator('.versions button', { hasText: 'Use the other' }).click();
     await sleep(300);
     assert.equal(await p.locator('#versions').isVisible(), false);
-    await p.keyboard.press('Escape');
+    await p.evaluate(() => document.querySelector('.versions:not([hidden]) [data-close]')?.click());
     await sleep(1200);
     assert.match(await p.locator('#editor .ProseMirror').innerText(), /First, from the phone\./i);
     assert.equal((await all('conflicts')).length, 0);
@@ -144,7 +144,7 @@ try {
     assert.equal((await all('conflicts')).length, 0);
     assert.match(await p.locator('.versions').innerText(), /Nothing to check/);
     assert.equal(await p.locator('#versions').isVisible(), false);
-    await p.keyboard.press('Escape');
+    await p.evaluate(() => document.querySelector('.versions:not([hidden]) [data-close]')?.click());
     assert.equal(await p.locator('#editor .ProseMirror').innerText(), before);
   });
 

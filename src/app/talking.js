@@ -5,7 +5,6 @@ import { popMenu, ask, askText, showCopy, toast } from '../menu.js';
 import { noteTypes, entry, newId, tagsIn, outline } from '../model.js';
 import { GAP } from '../order.js';
 import { ensureLightLine } from '../firstlight.js';
-import { zoomOn } from '../zoomstate.js';
 import { MAX_BYTES } from '../files.js';
 import { titleOf, dayId } from '../notebook.js';
 import { taskHint } from '../pages.js';
@@ -13,44 +12,40 @@ import { CaptureScreen, writeOutPending, writeOutAgain, requeueBlank } from '../
 import { onVoiceChip, switchVoice, voiceText, voiceInfo, knownModes, fetchModes, placeDraft, placeVoice, placeScribeWaiting, RAW } from '../voice.js';
 import { takeShares, snapshotPending } from '../share.js';
 import { meetingPending, addMeetingFile, meetingFromLine, audioOn, renameSpeaker, speakersOn, mine, sendMeetingToAcro } from '../meeting.js';
-import { DayReview } from '../review.js';
 import { TagsPage } from '../tags.js';
 import { DeskPage } from '../desk.js';
 import { ProjectPage } from '../projectpage.js';
-import { Plan, tabFor, isCal } from '../plan.js';
+import { Plan, tabFor } from '../plan.js';
 import { Through } from '../through.js';
 import { looseOn } from '../loose.js';
 import { addTask, stepsHome, loadTasks, dayPlan } from '../tasks.js';
-import { readNow, nowSide, setNowSide } from '../now.js';
-import { NowStrip } from '../nowstrip.js';
+import { readNow } from '../now.js';
+import { EventWarn } from '../eventwarn.js';
 import { writeThought, fileThought, waitingThoughts } from '../thoughts.js';
 import { dayBody, layOutDay, writeClose } from '../dayends.js';
 import { ensureTrainingLine, seedTraining, TRAINING_PAGE } from '../training.js';
 import { autoOn } from '../auto.js';
 import { inPane, host as paneHost } from '../panes.js';
-import { aheadSource } from '../ahead.js';
 import { events as calendarEvents } from '../calendar.js';
 import { bookType, bookOf, kindName } from '../library.js';
 import { isoToday } from '../dates.js';
 import { addCommands } from './commandlist.js';
-import { $, editor, inNotebook, root, state, store, view } from '../main.js';
-import { touch } from './scriptbar.js';
+import { $, editor, inNotebook, state, store, view } from '../main.js';
 import { currentEditor, notebook } from './notebookview.js';
 import { go, historyMode, lastPlace, openBook, openEntry, placeOf, setHistoryMode } from './routing.js';
-import { applyRemote, caretAfter, setCaretAfter, sync } from './syncwiring.js';
+import { applyRemote, setCaretAfter, sync } from './syncwiring.js';
 import { nextDate, renderWorld } from './libraryview.js';
-import { frame, nav } from './workpages.js';
+import { frame } from './workpages.js';
 import { hidden, setShown } from './pagesettings.js';
 import { writing } from './commands.js';
-import { closePalette, menuSpot, showTidy } from './quickinserts.js';
+import { closePalette, menuSpot } from './quickinserts.js';
 import { openBeside, openEntryBeside, openInMain, openTalk, pull, pullFromProject } from './beside.js';
 let tagsPage = null; // the Tags page (set up with capture, below)
 let deskPage = null; // the Desk: every project, what needs you (below)
 let plan = null; // the plan: tasks by day, on a day's page and as Week and Pace (below)
-let nowStrip = null; // the strip that travels: the one thing, away from Today (below)
+let nowStrip = null; // the warning before a lesson or meeting (eventwarn.js, below)
 let projectPage = null; // what a project's page borrows from the Desk (below)
 let through = null; // Go through: loose lines and the Desk's calls, one at a time (below)
-let dayReview = null; // the day review under a day page (set up with capture, below)
 
 // ---------- capture: talk, and it lands on today's page ----------
 
@@ -131,7 +126,6 @@ async function keepOnPage(day) {
   toast(lines.length === 1 ? 'Filing it…' : `Filing ${lines.length} lines…`);
   for (const r of lines) fileSoon(r.id, { dump: true });
   await filing;
-  looseSoon();
   toast(lines.length === 1 ? 'Filed. It stays on the page too' : `Filed ${lines.length} lines. They stay on the page too`);
 }
 
@@ -416,43 +410,6 @@ function callsChanged() {
   else if (view() === 'desk') deskPage.load({ quiet: true });
   else deskPage.peek();
 }
-// Under a recent day's lines: how many are still loose, and the way in.
-let looseTimer = 0;
-function looseSoon() { clearTimeout(looseTimer); looseTimer = setTimeout(looseFoot, 250); }
-async function looseFoot() {
-  const foot = $('#loose-foot');
-  if (!foot) return;
-  const page = inNotebook() && notebook.looseDay ? notebook.page : null;
-  const n = page ? (await looseOn(page.title)).length : 0;
-  // The page changed while counting: the newer count wins.
-  if ((inNotebook() && notebook.looseDay ? notebook.page.id : null) !== (page?.id || null)) return looseFoot();
-  foot.hidden = !n;
-  if (!n) { foot.replaceChildren(); return; }
-  if (foot.dataset.n === String(n) && foot.firstChild) return;
-  foot.dataset.n = String(n);
-  const b = document.createElement('button');
-  b.type = 'button';
-  b.textContent = n === 1 ? 'Go through it' : 'Go through them';
-  b.title = 'One at a time: a task, a project, the Drawer, or just a note for the day';
-  b.addEventListener('click', () => through.open('loose'));
-  const words = document.createElement('span');
-  words.textContent = n === 1 ? '1 loose line' : `${n} loose lines`;
-  // Or file them all at once, as a brain dump: they stay on the page too.
-  const keep = document.createElement('button');
-  keep.type = 'button';
-  keep.className = 'loose-keep';
-  keep.textContent = 'Keep it on the page';
-  keep.title = 'Claude files each line where it belongs (the Drawer, Not planned, the Workshop, To look up); the lines stay here as you wrote them';
-  keep.addEventListener('click', () => keepOnPage(page.title));
-  foot.replaceChildren(document.createElement('i'), words, b, ...(hidden().has('nowout') ? [] : [keep]));
-}
-// Today's views, for Alt + 1 to 4: Now, Page, Plan, Calendar.
-function todayKey(n) {
-  if (n === 1) return go({ view: 'plan', tab: 'now' });
-  if (n === 2) return touch.matches ? plan.goTab('page') : go({ view: 'notebook', pageId: dayId(isoToday()) });
-  if (n === 3) return touch.matches ? plan.goTab('plan') : go({ view: 'plan', tab: 'plan' });
-  return view() === 'plan' && isCal(tabFor(lastPlace?.tab)) ? plan.stepZoom() : plan.goTab('cal');
-}
 // Where Today opens: on Now when something is current or today has open
 // tasks; otherwise on today's page, as before.
 async function todayOpensOnNow() {
@@ -470,49 +427,22 @@ function inToday() {
   if (view() === 'plan') return true;
   return inNotebook() && !!notebook.page && notebook.isDay && !notebook.zoom;
 }
-// The plan beside today's page (on a wide enough computer) or on top of it in
-// one column, as on a phone. Kept on this device.
-const planLayout = () => (hidden().has('planside') ? 'top' : 'side');
-function flipPlan() {
-  // On Now: the one thing on the left and the day as a line on the right, or one column.
-  if (view() === 'plan' && tabFor(lastPlace?.tab) === 'now') {
-    const on = !nowSide();
-    setNowSide(on);
-    plan.redraw();
-    toast(on ? 'The day sits beside the one thing (Alt + P: one column)' : 'One column (Alt + P puts the day beside)');
-    return;
-  }
-  const was = planLayout();
-  const y = document.scrollingElement?.scrollTop || 0;
-  setShown('planside', was !== 'side');
-  plan.redraw();
-  if (document.scrollingElement) document.scrollingElement.scrollTop = y;
-  if (view() === 'notebook' && notebook.isDay) toast(was === 'side' ? 'The plan is on top of the page (Alt + P puts it beside)' : 'The plan is beside the page (Alt + P puts it on top)');
-}
-
 // Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
 addCommands(() => [
-  { group: 'go', label: 'Now: the one thing you’re on', keys: 'Alt+1', words: ['now', 'one thing', 'focus', 'current', 'today', 'next'], run: () => todayKey(1) },
-  { group: 'go', label: 'Today: today’s page with its plan', keys: 'Alt+2', words: ['today', 'plan', 'day', 'tasks', 'page'], run: () => todayKey(2) },
   { group: 'go', label: 'Bring earlier days to today (every task left from before, onto today)', keys: 'Alt+Shift+T', words: ['carried', 'earlier', 'overdue', 'late', 'move', 'today', 'left over'], run: () => plan.bringToday() },
-  { group: 'go', label: 'Plan: today, tomorrow, this week, next week, this month, later, not planned', keys: 'Alt+2', words: ['what’s when', 'whats when', 'when', 'planning', 'schedule', 'later', 'month', 'next week', 'loose', 'not planned', 'outline'], run: () => todayKey(3) },
   { group: 'new', label: 'Capture an idea by voice (it lands where you are)', keys: '⌥C', words: ['dictate', 'voice', 'walk', 'speak', 'talk', 'draft'], run: () => captureHere() },
   { group: 'new', label: 'Capture from a recording file…', words: ['audio', 'voice memo', 'upload', 'draft'], run: () => fromRecordingFile() },
   { group: 'write', label: 'Your voice modes (shared with Scribe)…', words: ['journal', 'scene', 'idea', 'email', 'mode'], run: () => openModes() },
   { group: 'plan', label: 'Now: Done with the one thing', keys: 'D', words: ['done', 'finished', 'tick', 'check', 'now', 'one thing'], run: () => plan.now.done(), when: onNow },
   { group: 'plan', label: 'Now: Not now (later today, enough for today, another day)', keys: 'N', words: ['not now', 'later', 'tomorrow', 'set aside', 'postpone', 'another day', 'worked on'], run: () => { plan.now.asking = true; plan.redraw(); }, when: () => onNow() && !!plan.now.model().cur },
-  { group: 'plan', label: 'Now: Begin the next thing', keys: 'B', words: ['begin', 'start', 'next', 'go', 'now', 'gate'], run: () => { const m = plan.now.model(); if (m.cand) plan.now.begin(m.cand.group ? 'smalls' : m.cand.item.row.id); }, when: () => onNow() && !plan.now.model().cur },
-  { group: 'go', label: 'Training: the sessions and their exercises', words: ['training', 'workout', 'exercise', 'sessions', 'calisthenics', 'parkour', 'handstand', 'front lever', 'vertical'], run: async () => { await seedTraining(); openEntry(TRAINING_PAGE); }, when: () => !hidden().has('training') },
-  { group: 'plan', label: 'Today’s reading (First light)', words: ['bible', 'reading', 'esv', 'scripture', 'first light', 'chapters', 'psalm', 'devotion', 'morning'], run: async () => { plan.now.light.open(); await go({ view: 'plan', tab: 'now' }); plan.redraw(); }, when: () => !!plan && !hidden().has('firstlight') },
-  { group: 'plan', label: 'Talk the day through (what is in front of you today)', words: ['morning', 'talk', 'day', 'lay out', 'plan the day', 'say', 'brain dump', 'start', 'now'], run: async () => { await go({ view: 'plan', tab: 'now' }); plan.now.openTalk(); }, when: () => !!plan && !hidden().has('nowtalk') },
-  { group: 'plan', label: 'Close the day (what you did, two questions, first thing tomorrow)', words: ['evening', 'close', 'end', 'day', 'reflect', 'journal', 'done', 'tomorrow', 'shutdown', 'wrap up'], run: () => closeDayFromCard(), when: () => !!plan && !hidden().has('nowclose') },
-  { group: 'plan', label: 'Now: what is next today (show or hide the list)', keys: 'Space', words: ['next', 'list', 'more today', 'choose another', 'queue', 'what is next'], run: () => { plan.now.listOpen = !plan.now.listOpen; plan.redraw(); }, when: onNow },
-  { group: 'plan', label: 'Now: the day beside the one thing, or one column', keys: 'Alt+P', words: ['side by side', 'column', 'beside', 'layout', 'flip', 'now'], run: () => flipPlan(), when: () => onNow() && !touch.matches },
-  { group: 'view', label: 'Plan beside the page, or on top in one column', keys: 'Alt+P', words: ['plan', 'side', 'column', 'top', 'layout', 'flip'], run: () => flipPlan(), when: () => !touch.matches },
+  { group: 'go', label: 'Training: the sessions and their exercises', words: ['training', 'workout', 'exercise', 'sessions', 'calisthenics', 'parkour', 'handstand', 'front lever', 'vertical'], run: async () => { await seedTraining(); openEntry(TRAINING_PAGE); } },
+  { group: 'plan', label: 'Today’s Bible reading', words: ['bible', 'reading', 'esv', 'scripture', 'first light', 'chapters', 'psalm', 'devotion', 'morning'], run: async () => { plan.now.light.open(); await go({ view: 'plan', tab: 'now' }); plan.redraw(); }, when: () => !!plan },
+  { group: 'plan', label: 'Talk the day through (what is in front of you today)', words: ['morning', 'talk', 'day', 'lay out', 'plan the day', 'say', 'brain dump', 'start', 'now'], run: async () => { await go({ view: 'plan', tab: 'now' }); plan.now.openTalk(); }, when: () => !!plan },
+  { group: 'plan', label: 'Close the day (what you did, two questions, first thing tomorrow)', words: ['evening', 'close', 'end', 'day', 'reflect', 'journal', 'done', 'tomorrow', 'shutdown', 'wrap up'], run: () => closeDayFromCard(), when: () => !!plan },
   { group: 'go', label: 'Go through loose lines: the last week’s unfiled lines, one at a time', words: ['sort', 'file', 'loose', 'triage', 'review', 'inbox', 'tidy'], run: () => through.open('loose') },
+  { group: 'go', label: 'Keep this day’s loose lines on the page (Claude files each one)', words: ['brain dump', 'file', 'loose', 'keep', 'sort', 'inbox'], run: () => keepOnPage(notebook.page.title), when: () => inNotebook() && notebook.isDay && canAskServer() },
   { group: 'go', label: 'Go through the tasks left from earlier days: keep, not today, or delete', words: ['carried', 'overdue', 'old tasks', 'pile', 'triage', 'clear'], run: () => through.open('carried') },
   { group: 'go', label: 'Go through what needs you: the Desk’s calls, one at a time', words: ['calls', 'needs you', 'decide', 'desk', 'triage', 'waiting'], run: () => through.open('calls') },
-  { group: 'tidy', label: 'Review the day with Claude (what to plan, what to keep thinking about)', keys: '', run: () => dayReview.run(), when: () => inNotebook() && notebook.isDay },
   { group: 'new', label: 'Make meeting notes from a recording (summary, decisions, tasks, who said what)…', keys: '', run: () => setTimeout(makeMeeting, 120) },
   { group: 'tidy', label: 'Send this meeting to Acro HQ (summary and tasks, for you and Nate)', keys: '', run: () => setTimeout(meetingToAcro, 120), when: () => inNotebook() && !!notebook.page?.fields?.meeting && canAskServer() },
   { group: 'tidy', label: 'Fix a speaker’s name in this meeting…', keys: '', run: () => setTimeout(fixSpeaker, 120), when: () => inNotebook() && !!notebook.page?.fields?.meeting },
@@ -582,22 +512,6 @@ function wireTalking() {
     ]);
   });
   if (!inPane) window.addEventListener('online', () => writeOut());
-  // The day review: Claude sums up a day's page and sorts what's on it, and you
-  // decide each thing (a task, keep thinking, split, let go).
-  dayReview = new DayReview($('.day-review'), {
-    card: $('.evening-card'),
-    closed: () => !!plan?.now?.st?.closed || hidden().has('nowclose'),
-    closeDay: () => closeDayFromCard(),
-    ask: askServer,
-    canAsk: canAskServer,
-    base: () => location.origin + location.pathname,
-    onRows: (rows) => applyRemote(rows),
-    onOpen: (id) => openEntry(id),
-    toast
-  });
-  // The day closed on Now: the 9 pm card stops offering it.
-  document.addEventListener('inkwell:now', () => dayReview?.renderCard());
-  $('.tidy-nudge').addEventListener('click', () => showTidy());
   // The Tags page: every tag, grouped, merged and gone through one by one.
   tagsPage = new TagsPage({
     sheet: $('#tags-sheet'),
@@ -624,9 +538,9 @@ function wireTalking() {
     go: (place) => go(place),
     base: () => location.origin + location.pathname,
     changed: (rows) => applyRemote(rows),
-    onCount: (n) => { frame.count(n); nav.count(n); document.dispatchEvent(new CustomEvent('inkwell:needs', { detail: n })); },
+    onCount: (n) => { frame.count(n); document.dispatchEvent(new CustomEvent('inkwell:needs', { detail: n })); },
     // The Desk's order changed (a drag, or what's on stage): the rail follows.
-    ordered: () => frame.drawProjects(),
+    ordered: () => {},
     // "Add one" under "No next step yet": the project's Steps page, the caret on a new step.
     addStep: async (id) => {
       const world = await getEntry(id);
@@ -641,7 +555,7 @@ function wireTalking() {
     // A call answered from a project's own page: that page looks again.
     acted: () => { projectPage?.stale(); if (view() === 'world') renderWorld(); },
     // ✦ Talk it through, from the Desk's head (not from inside a pane, and not with Beside off).
-    talk: () => (inPane || !paneHost() || root.classList.contains('hide-panes') ? null : () => openTalk()),
+    talk: () => (inPane || !paneHost() ? null : () => openTalk()),
     toast
   });
   if (!inPane) window.__callsChanged = callsChanged;
@@ -665,7 +579,7 @@ function wireTalking() {
     calls: { list: () => deskPage.waiting(), done: (id) => deskPage.callDone(id), later: (id) => deskPage.callLater(id) },
     // Tasks left on today from earlier days: keep, take off the day, or delete.
     carried: { list: () => plan.carriedList(), answer: (it, how) => plan.carriedAnswer(it, how) },
-    onClose: () => { looseFoot(); plan?.soon(); }
+    onClose: () => { plan?.soon(); }
   });
   // The plan: tasks gathered by day (plan.js). On a day's page it sits on top;
   // Week and Pace are their own page.
@@ -679,7 +593,7 @@ function wireTalking() {
       changed: (rows) => applyRemote(rows),
       // Beside, a task's place opens in the main window and the plan stays.
       openEntry: (id) => (inPane && view() === 'plan' ? openInMain(id) : openEntry(id)),
-      beside: (id) => (inPane || root.classList.contains('hide-panes') || !paneHost() ? null : () => openEntryBeside(id)),
+      beside: (id) => (inPane || !paneHost() ? null : () => openEntryBeside(id)),
       // A click on a task zooms into it, as an outliner does: the task becomes
       // the page, its lines under it (the cursor on `line`, if given), and Back
       // (Alt + Left) comes out to the plan. Ctrl + click and the menu open it beside.
@@ -687,7 +601,7 @@ function wireTalking() {
         const at = await placeOf(id);
         if (!at) return;
         const place = at.view === 'notebook' && at.line ? { view: 'notebook', pageId: at.pageId, zoom: at.line, ...(line ? { line } : {}) } : at;
-        if (beside && !inPane && !root.classList.contains('hide-panes') && paneHost()) return openBeside(place);
+        if (beside && !inPane && paneHost()) return openBeside(place);
         if (inPane && view() === 'plan') return paneHost()?.hooks.goMain(place);
         return go(place);
       },
@@ -696,13 +610,10 @@ function wireTalking() {
       off: (name) => hidden().has(name),
       show: (name, on) => setShown(name, on),
       // Beside or on top: only where there's room for beside (a computer, 1100 px and wider).
-      layout: () => (inPane || touch.matches || !matchMedia('(min-width: 1100px)').matches ? null : planLayout()),
-      flip: () => flipPlan(),
       // A project's steps were drawn again: its next date may have moved.
       steps: () => { if (view() === 'world' && state.worldId) projectPage?.setDate(nextDate(state.worldId)); },
       // Weeks ahead: the lanes as the Desk seats them, and shoot days.
-      ahead: () => aheadSource((since) => { const b = deskBackend(); return b ? b.desk(since) : null; }),
-      talk: () => (inPane || !paneHost() || root.classList.contains('hide-panes') ? null : () => openTalk()),
+      talk: () => (inPane || !paneHost() ? null : () => openTalk()),
       // Google Calendar, read-only, through the server's calendar function.
       calendar: (from, to) => calendarEvents((a, b) => (window.__calendar ? window.__calendar(a, b) : sync.user && sync.invoke ? sync.invoke('calendar', { timeMin: a, timeMax: b }) : null), from, to),
       // Pull from a project: its lines open next to the plan, to drag in.
@@ -719,9 +630,9 @@ function wireTalking() {
       // Not in automated test runs unless asked for (src/auto.js).
       daily: async (items, today) => {
         if (inPane) return [];
-        const rows = hidden().has('training') || !autoOn('training') ? [] : await ensureTrainingLine(items, today);
+        const rows = !autoOn('training') ? [] : await ensureTrainingLine(items, today);
         // First light is a line of the day on the zoom (Part 2).
-        if (zoomOn() && !hidden().has('firstlight') && autoOn('firstlight')) rows.push(...(await ensureLightLine(items, today)));
+        if (autoOn('firstlight')) rows.push(...(await ensureLightLine(items, today)));
         return rows;
       },
       // The zoom's line page (Part 2): the door into a step's piece, the pieces
@@ -735,12 +646,12 @@ function wireTalking() {
     }
   });
   window.__plan = plan;
-  // Away from Today, the one thing travels in a thin strip (not in a pane).
-  if (!inPane) window.__nowStrip = nowStrip = new NowStrip({ plan, view, inToday, go: (place) => go(place), off: (name) => hidden().has(name) });
+  // Five minutes before a calendar event, a quiet line at the top (not in a pane).
+  if (!inPane) window.__nowStrip = nowStrip = new EventWarn({ plan, off: (name) => hidden().has(name) });
   if (inNotebook() && notebook.page) plan.showDay(notebook.page);
 }
 
-export { nowStrip, openToday, todayOpensOnNow, askServer, asking, blankOnce, canAskServer, capture, captureHere, dayReview, deskBackend, deskPage, flipPlan, inToday, landShares, looseFoot, looseSoon, openAsked, openCapture, plan, projectPage, scribeKept, setAsking, showCapture, tagsPage, todayKey, wireTalking, writeOut };
+export { nowStrip, openToday, todayOpensOnNow, askServer, asking, blankOnce, canAskServer, capture, captureHere,  deskBackend, deskPage, inToday, landShares, openAsked, openCapture, plan, projectPage, scribeKept, setAsking, showCapture, tagsPage, wireTalking, writeOut };
 
 // ---------- the zoom's line page (Part 2) ----------
 

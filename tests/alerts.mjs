@@ -1,12 +1,11 @@
 // Phone alerts come from Inkwell: the command list opens Phone alerts, the
-// switches are the account's (shared with Daybook), turning alerts on signs
+// one buzz left is Needs you (Nov 17 2026), turning alerts on signs
 // this device up as Inkwell's, and an alert for Needs you opens the Desk.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
-import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -48,7 +47,7 @@ const fake = () => {
   };
 };
 
-const browser = classic(await chromium.launch());
+const browser = await chromium.launch();
 try {
   const ctx = await browser.newContext({ viewport: { width: 1300, height: 900 }, colorScheme: 'dark' });
   await ctx.exposeFunction('__call', (name, arg) => { calls.push([name, arg]); return null; });
@@ -70,22 +69,13 @@ try {
     Object.defineProperty(window, 'Notification', { configurable: true, value: { permission: 'granted', requestPermission: async () => 'granted' } });
   });
 
-  await check('Ctrl + K, “Phone alerts” opens the panel with the account’s switches', async () => {
+  await check('Ctrl + K, “Phone alerts” opens the panel: on or off here, and Send a test; nothing else', async () => {
     await pick(page, 'Phone alerts');
     await page.waitForSelector('.al-panel');
     assert.equal(await page.locator('.al-panel h2').innerText(), 'Phone alerts');
-    const kinds = await page.locator('.al-kind b').allInnerTexts();
-    assert.deepEqual(kinds, ['Day review at 9 pm', 'Needs you', 'Your week, on Mondays', 'Your month']);
-    assert.equal(await page.locator('.al-kind input[data-kind="week"]').isChecked(), false, 'as the account has it');
-    assert.equal(await page.locator('.al-kind input[data-kind="review"]').isChecked(), true);
-  });
-
-  await check('a switch is saved for the whole account', async () => {
-    await page.locator('.al-kind input[data-kind="week"]').check();
-    await sleep(300);
-    const saved = calls.filter(([n]) => n === 'saveAlertPrefs').at(-1)?.[1];
-    assert.equal(saved.week, true);
-    assert.equal(saved.needs, true);
+    // One buzz is left (Nov 17 2026): when a Claude thread needs you.
+    assert.equal(await page.locator('.al-kind').count(), 0, 'no list of kinds');
+    assert.equal(await page.locator('.al-test').count(), 1);
   });
 
   await check('turning alerts on asks permission and signs this device up as Inkwell’s', async () => {
@@ -96,7 +86,7 @@ try {
     assert.equal(sub.endpoint, 'https://push.example/abc');
     const test = calls.filter(([n, a]) => n === 'invoke' && a.body.action === 'test').at(-1)?.[1];
     assert.equal(test.body.app, 'inkwell');
-    assert.match(await page.locator('.al-status').innerText(), /Alerts are on for this computer\.$/);
+    assert.match(await page.locator('.al-status').innerText(), /^Alerts are on for this computer: you hear when a Claude thread needs you\.$/);
     assert.equal(await page.locator('.al-on').innerText(), 'Turn off here');
     await page.screenshot({ path: process.env.SHOTS ? `${process.env.SHOTS}/alerts-panel.png` : '/dev/null' }).catch(() => {});
   });

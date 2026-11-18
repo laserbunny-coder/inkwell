@@ -84,9 +84,18 @@ const card = (p) => p.evaluate(() => ({
 // The next card is up once the one that left is gone and nothing is moving.
 const cardIs = async (p, start) => { await p.waitForFunction((s) => (document.querySelector('.thru-big')?.textContent || '').startsWith(s), start); await still(p); };
 const closed = (p) => p.waitForFunction(() => !document.querySelector('.thru'));
-const rings = (p) => p.locator('#outline-editor li.is-loose').count();
-const foot = (p) => p.evaluate(() => { const f = document.querySelector('#loose-foot'); return f.hidden ? '' : f.innerText.replace(/\s+/g, ' ').trim(); });
-const footIs = (p, text) => p.waitForFunction((t) => { const f = document.querySelector('#loose-foot'); return (f.hidden ? '' : f.innerText.replace(/\s+/g, ' ').trim()) === t; }, text);
+// The way in is the command (the count under the day went on Nov 17 2026).
+// The editor saves a typed line a moment after typing stops, and again as it
+// loses focus; let both land before reading the loose lines.
+const goThrough = async (p) => {
+  await p.evaluate(() => document.activeElement?.blur?.());
+  await sleep(1500);
+  await p.keyboard.press('Control+k');
+  await p.locator('#palette-input').fill('go through loose');
+  await p.waitForFunction(() => /Go through loose lines/.test(document.querySelector('#palette-list li')?.textContent || ''));
+  await p.locator('#palette-list li', { hasText: 'Go through loose lines' }).first().click();
+  await p.waitForSelector('.thru');
+};
 
 async function seed(p) {
   await p.evaluate(() => document.querySelector('#library-toggle').click());
@@ -131,19 +140,14 @@ try {
   const page = await open({ width: 1440, height: 900 });
   await seed(page);
 
-  await check('loose lines carry a ring, and the day says how many', async () => {
-    await page.waitForFunction(() => document.querySelectorAll('#outline-editor li.is-loose').length === 4);
-    await footIs(page, '4 loose lines Go through them Keep it on the page');
-    const ringed = await page.locator('#outline-editor li.is-loose > p').allInnerTexts();
-    assert.deepEqual(ringed.map((t) => t.split(' ')[0]), ['Call', 'Kenji', 'What', 'Rain']);
-    // A tagged line and a line indented under another are not loose.
-    assert.equal(await page.locator('#outline-editor li.is-loose', { hasText: 'Mika’s theme' }).count(), 0);
-    if (SHOTS) await page.screenshot({ path: `${SHOTS}/through-rings.png` });
+  await check('a day’s unfiled lines carry no ring and no count any more (Nov 17 2026)', async () => {
+    await sleep(500);
+    assert.equal(await page.locator('#outline-editor li.is-loose').count(), 0);
+    assert.equal(await page.locator('#loose-foot:visible').count(), 0);
   });
 
   await check('Go through opens on the first one, with the likeliest answer lit', async () => {
-    await page.locator('#loose-foot button:not(.loose-keep)').click();
-    await page.waitForSelector('.thru');
+    await goThrough(page);
     await still(page);
     const c = await card(page);
     assert.equal(c.count, 'Loose lines · 1 of 5');
@@ -216,10 +220,8 @@ try {
     assert.equal(l7.fields.task.v, 1);
   });
 
-  await check('at the end it says what’s left; the ring and the count follow', async () => {
+  await check('at the end it says what’s left', async () => {
     await page.waitForFunction(() => /1 left for next time/.test(document.querySelector('.toast')?.textContent || ''));
-    await footIs(page, '1 loose line Go through it Keep it on the page');
-    await page.waitForFunction(() => document.querySelectorAll('#outline-editor li.is-loose').length === 1);
     // What was filed shows on the page itself: a label on the task, the link, the tag.
     assert.match(await page.locator('#outline-editor li', { hasText: 'Call Dana' }).locator('.task-chip').innerText(), /Today/);
   });
@@ -246,8 +248,6 @@ try {
     const l4 = await lineNamed(page, 'Rain all morning');
     assert.equal(l4.fields.sorted.how, 'keep');
     assert.equal(l4.text, 'Rain all morning');
-    await footIs(page, '');
-    assert.equal(await rings(page), 0);
   });
 
   await check('with nothing loose, it says so and doesn’t open', async () => {
@@ -259,56 +259,29 @@ try {
     assert.equal(await page.locator('.thru').count(), 0);
   });
 
-  await check('a line typed just now is loose once it’s saved; Esc stops and leaves it so; a tag files it', async () => {
+  await check('a line typed just now is loose once it’s saved; Esc stops and leaves it so', async () => {
     await page.locator('#outline-editor').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.press('Enter');
     await page.keyboard.type('Fresh thought about the harbor');
-    await footIs(page, '1 loose line Go through it Keep it on the page');
-    await page.waitForFunction(() => document.querySelectorAll('#outline-editor li.is-loose').length === 1);
-    await page.locator('#loose-foot button:not(.loose-keep)').click();
-    await page.waitForSelector('.thru');
+    await page.waitForFunction(() => new Promise((res) => { const r = indexedDB.open('writing'); r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').getAll(); q.onsuccess = () => res(q.result.some((x) => x.text === 'Fresh thought about the harbor')); }; }));
+    await goThrough(page);
     await cardIs(page, 'Fresh thought');
     await page.keyboard.press('Escape');
     await closed(page);
     assert.equal((await lineNamed(page, 'Fresh thought')).fields.sorted, undefined);
-    assert.equal(await rings(page), 1);
     // Typing goes to the page again, not to a card that's gone.
     await page.locator('#outline-editor li', { hasText: 'Fresh thought' }).locator('p').click();
     await page.keyboard.press('End');
     await page.keyboard.type(' #harbor');
-    await footIs(page, '');
-    await page.waitForFunction(() => document.querySelectorAll('#outline-editor li.is-loose').length === 0);
-  });
-
-  await check('the Look switch puts the rings and the count away', async () => {
-    await page.locator('#outline-editor').click();
-    await page.keyboard.press('Control+End');
-    await page.keyboard.press('Enter');
-    await page.keyboard.type('One more loose thing');
-    await footIs(page, '1 loose line Go through it Keep it on the page');
-    await page.evaluate(() => { const c = document.querySelector('[data-show="loose"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); });
-    assert.ok(await page.locator('#loose-foot').isHidden());
-    const ring = () => page.locator('#outline-editor li.is-loose > .line-gutter .bullet').evaluate((b) => getComputedStyle(b, '::after').boxShadow);
-    assert.equal(await ring(), 'none');
-    await page.evaluate(() => { const c = document.querySelector('[data-show="loose"]'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); });
-    assert.ok(await page.locator('#loose-foot').isVisible());
-    assert.notEqual(await ring(), 'none');
-  });
-
-  await check('older days carry no rings and no count', async () => {
-    await page.evaluate(() => { history.pushState({ view: 'notebook', pageId: 'day-2026-10-30' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'notebook', pageId: 'day-2026-10-30' } })); });
-    await page.waitForFunction(() => /October 30/.test(document.querySelector('#nb-title')?.textContent || ''));
-    await sleep(500);
-    assert.equal(await rings(page), 0);
-    assert.equal(await foot(page), '');
-    await today(page);
+    await page.waitForFunction(() => /#harbor/.test([...document.querySelectorAll('#outline-editor li')].find((l) => /Fresh thought/.test(l.textContent))?.textContent || ''));
   });
 
   await check('the Desk’s calls: “Go through them” walks decisions first, then things to do, then things to try', async () => {
-    await page.keyboard.press('Control+Shift+U');
-    await page.waitForSelector('.desk-home .dk-chair', { state: 'visible' });
-    await page.locator('.dk-calls .dk-through').click();
+    // The Desk's calls are folded under one line; it unfolds.
+    await page.evaluate(() => { localStorage.setItem('deskCrewOpen', '1'); history.pushState({ view: 'desk' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'desk' } })); });
+    await page.waitForSelector('.zd-crew-in .zd-thru', { state: 'visible' });
+    await page.locator('.zd-crew-in .zd-thru').click();
     await page.waitForSelector('.thru');
     await still(page);
     const c = await card(page);
@@ -343,15 +316,19 @@ try {
   });
 
   await check('the Desk follows: one call left, so no “Go through them”', async () => {
-    await page.waitForFunction(() => /1 call waiting/.test(document.querySelector('.dk-calls')?.textContent || ''));
-    assert.equal(await page.locator('.dk-calls .dk-through').count(), 0);
-    assert.equal(await page.locator('#desk-toggle').getAttribute('data-n'), '1');
+    await page.waitForFunction(() => /1 needs you/.test(document.querySelector('.zd-crewline')?.textContent || ''));
+    assert.equal(await page.locator('.zd-thru').count(), 0);
+    assert.equal(await page.locator('.zm-ruler [data-stop="desk"]').getAttribute('aria-label'), 'Desk, 1 waiting on you');
   });
 
   await check('every look draws the card; motion off shows it at once; no page errors', async () => {
     await today(page);
-    await page.locator('#loose-foot button:not(.loose-keep)').click();
-    await page.waitForSelector('.thru');
+    await page.locator('#outline-editor').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('One more loose thing');
+    await sleep(1200);
+    await goThrough(page);
     for (const look of ['midnight', 'lamplight', 'graphite', 'typewriter', 'paper']) {
       await page.evaluate((l) => { document.documentElement.dataset.look = l; }, look);
       const box = await page.locator('.thru').boundingBox();
@@ -371,9 +348,7 @@ try {
   await seed(phone);
 
   await check('phone: the card comes up from the bottom, answers are tapped, nothing spills', async () => {
-    await footIs(phone, '4 loose lines Go through them Keep it on the page');
-    await phone.locator('#loose-foot button:not(.loose-keep)').tap();
-    await phone.waitForSelector('.thru');
+    await goThrough(phone);
     await still(phone);
     const box = await phone.locator('.thru').boundingBox();
     assert.ok(Math.abs(box.y + box.height - 820) < 2, 'the sheet sits on the bottom edge');
@@ -386,7 +361,6 @@ try {
     assert.equal((await lineNamed(phone, 'Call Dana')).fields.task.day, '2026-11-09');
     await phone.locator('.thru-stop').tap();
     await closed(phone);
-    await footIs(phone, '3 loose lines Go through them Keep it on the page');
     assert.deepEqual(phone.errors, []);
   });
 } finally {

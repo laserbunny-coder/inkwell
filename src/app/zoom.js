@@ -25,7 +25,6 @@ import { getEntry } from '../db.js';
 import { worldOf, worldStats, pagesIn } from '../library.js';
 import { isoToday, isoOf } from '../dates.js';
 import { inPane } from '../panes.js';
-import { zoomOn, classicLayout, setClassicLayout } from '../zoomstate.js';
 import { todayFace, facePlace, faceTo } from '../plan.js';
 import { addDays, weekOf } from '../tasks.js';
 import { addCommands } from './commandlist.js';
@@ -87,7 +86,7 @@ async function liveWorld(id) {
 async function projectPlace() {
   if (stopOf(lastPlace) === 'project' && state.worldId && (await liveWorld(state.worldId))) return { view: 'world', id: state.worldId };
   const cur = plan?.now?.m?.cur;
-  const row = !cur?.smalls ? cur?.item?.row : null;
+  const row = cur?.item?.row || null;
   if (row) {
     const w = await worldOf(row).catch(() => null);
     if (w && !gone(w)) return { view: 'world', id: w.id };
@@ -140,6 +139,9 @@ export async function zoomGo(place, way = 'rise') {
     });
     const end = () => { if (turn === moving) delete root.dataset.zt; };
     t.finished.then(end, end);
+    // A quick second step skips this one: that's fine, not an error.
+    t.ready.catch(() => {});
+    t.updateCallbackDone.catch(() => {});
   } catch {
     delete root.dataset.zt;
     return go(place);
@@ -312,8 +314,7 @@ function moreMenu() {
   const click = (sel) => () => document.querySelector(sel)?.click();
   const items = [
     ...(writingNow ? [{ label: 'Notes beside the text (Ctrl + 2)', run: click('#notes-toggle') }] : []),
-    ...(hidden().has('panes') ? [] : [{ label: 'Beside: a pane next to this (Ctrl + \\)', run: click('#beside-toggle') }]),
-    { label: 'Focus: just the text (Ctrl + .)', run: click('#focus-toggle') },
+    { label: 'Beside: a pane next to this (Ctrl + \\)', run: click('#beside-toggle') },
     { label: 'Look: colours, text, what shows (Aa)', run: () => togglePageSettings() },
     'sep',
     { label: 'Every command (Ctrl + K)', run: () => { closeMenu(); document.querySelector('#palette-toggle')?.click(); } }
@@ -420,7 +421,7 @@ function keyFirst(e) {
 }
 
 function key(e) {
-  if (!zoomOn() || e.isComposing) return;
+  if (e.isComposing) return;
   const m = e.ctrlKey || e.metaKey;
   const t = e.target;
   // Esc in text: out of the text, and everything that faded comes back.
@@ -458,8 +459,9 @@ function gestures() {
   const gap = (ts) => Math.hypot(ts[0].clientX - ts[1].clientX, ts[0].clientY - ts[1].clientY);
   const holding = () => ['pl-touchdrag', 'line-holding', 'pl-calm', 'pull-dropping', 'dk-dragging'].some((c) => root.classList.contains(c) || body.classList.contains(c));
   document.addEventListener('touchstart', (e) => {
-    if (!zoomOn() || !touch.matches) return;
-    if (e.touches.length === 2) { pinch = { d: gap(e.touches), done: false }; swipe = null; return; }
+    if (!touch.matches) return;
+    // The hours of Today keep their own pinch (it zooms the hours, not the ruler).
+    if (e.touches.length === 2) { pinch = e.target.closest?.('.dc-grid') ? null : { d: gap(e.touches), done: false }; swipe = null; return; }
     if (e.touches.length !== 1) { swipe = null; return; }
     pinch = null;
     const el = e.target;
@@ -492,39 +494,20 @@ function gestures() {
 // everything. (A plain mouse move no longer does, on the zoom.)
 function edges() {
   document.addEventListener('mousemove', (e) => {
-    if (!zoomOn() || !body.classList.contains('typing') || e.sourceCapabilities?.firesTouchEvents) return;
+    if (!body.classList.contains('typing') || e.sourceCapabilities?.firesTouchEvents) return;
     const near = e.clientY > window.innerHeight - 56 ? 'bottom' : e.clientY < 56 ? 'top' : '';
     body.classList.toggle('peek-bottom', near === 'bottom');
     body.classList.toggle('peek-top', near === 'top');
   });
 }
 
-// ---------- the Classic layout switch ----------
-
-function setLayout(classic) {
-  setClassicLayout(classic);
-  sync();
-}
-function sync() {
-  const on = zoomOn();
-  const input = document.getElementById('classic-layout');
-  if (input) input.checked = !on;
-  frame?.glide?.();
-  place();
-  light(lastPlace);
-  count(needs);
-  plan?.redraw?.();
-  if (plan?.day) plan.phoneShow(!!plan.day && touch.matches);
-}
-
 addCommands(() => [
-  { group: 'go', label: 'Now, from anywhere', keys: 'Alt+`', words: ['now', 'one thing', 'ruler', 'zoom', 'current'], run: () => toStop('now'), when: zoomOn },
-  { group: 'go', label: 'Month: the next four weeks', keys: '1', words: ['month', 'four weeks', 'weeks', 'ahead', 'zoom', 'ruler'], run: () => (onYear() ? toYear(false) : toStop('month')), when: zoomOn },
-  { group: 'go', label: 'Year: twelve months from now', keys: '1 twice', words: ['year', 'months', 'zoom', 'ruler', 'sometime this year', 'later'], run: () => toYear(true), when: zoomOn },
-  { group: 'new', label: 'Get it out of your head: a thought, filed', keys: 'Alt+J', words: ['thought', 'capture', 'out of your head', 'note', 'idea', 'inbox', 'jot'], run: () => thoughtBox(), when: zoomOn },
-  { group: 'go', label: 'Zoom out one step', keys: 'Esc', words: ['zoom', 'out', 'step out', 'further', 'ruler', 'back'], run: () => zoomOut(), when: zoomOn },
-  { group: 'go', label: 'Zoom in one step', keys: 'Enter', words: ['zoom', 'in', 'step in', 'closer', 'ruler'], run: () => zoomIn(), when: zoomOn },
-  { group: 'view', label: 'Classic layout: the rail, the phone’s bottom bar and Today’s switch (on / off)', keys: '', words: ['classic', 'old', 'rail', 'bottom bar', 'layout', 'ruler', 'zoom', 'safety', 'back to how it was'], run: () => setLayout(zoomOn()) }
+  { group: 'go', label: 'Now, from anywhere', keys: 'Alt+`', words: ['now', 'one thing', 'ruler', 'zoom', 'current'], run: () => toStop('now'), when: () => !inPane },
+  { group: 'go', label: 'Month: the next four weeks', keys: '1', words: ['month', 'four weeks', 'weeks', 'ahead', 'zoom', 'ruler'], run: () => (onYear() ? toYear(false) : toStop('month')), when: () => !inPane },
+  { group: 'go', label: 'Year: twelve months from now', keys: '1 twice', words: ['year', 'months', 'zoom', 'ruler', 'sometime this year', 'later'], run: () => toYear(true), when: () => !inPane },
+  { group: 'new', label: 'Get it out of your head: a thought, filed', keys: 'Alt+J', words: ['thought', 'capture', 'out of your head', 'note', 'idea', 'inbox', 'jot'], run: () => thoughtBox(), when: () => !inPane },
+  { group: 'go', label: 'Zoom out one step', keys: 'Esc', words: ['zoom', 'out', 'step out', 'further', 'ruler', 'back'], run: () => zoomOut(), when: () => !inPane },
+  { group: 'go', label: 'Zoom in one step', keys: 'Enter', words: ['zoom', 'in', 'step in', 'closer', 'ruler'], run: () => zoomIn(), when: () => !inPane }
 ]);
 
 // Runs once at start-up, from main.js.
@@ -539,7 +522,6 @@ export function wireZoom() {
   roomy.addEventListener('change', () => setTimeout(place, 0));
   document.addEventListener('inkwell:place', (e) => light(e.detail));
   document.addEventListener('inkwell:needs', (e) => count(e.detail || 0));
-  document.addEventListener('inkwell:layout', sync);
   // Places inside the stops ask for the zoom's motion (nowpage.js zoomTo).
   document.addEventListener('inkwell:zoomto', (e) => {
     const d = e.detail || {};
@@ -553,14 +535,12 @@ export function wireZoom() {
   // Ctrl + scroll over the ruler steps out and in (elsewhere it stays the browser's zoom).
   let wheelAt = 0;
   ruler.addEventListener('wheel', (e) => {
-    if (!zoomOn() || !e.ctrlKey || Math.abs(e.deltaY) < 1) return;
+    if (!e.ctrlKey || Math.abs(e.deltaY) < 1) return;
     e.preventDefault();
     if (Date.now() - wheelAt < 350) return;
     wheelAt = Date.now();
     if (e.deltaY > 0) zoomOut(); else zoomIn();
   }, { passive: false });
-  if (!classicLayout() && !root.classList.contains('zoom')) root.classList.add('zoom');
+  if (!root.classList.contains('zoom')) root.classList.add('zoom');
   light(lastPlace);
-  const input = document.getElementById('classic-layout');
-  if (input) { input.checked = classicLayout(); input.addEventListener('change', () => setLayout(input.checked)); }
 }

@@ -121,37 +121,40 @@ try {
 
   // ---------- the strip ----------
 
-  await check('a world’s overview: its sentence, where its pieces are, what’s next and what was written lately', async () => {
+  await check('a world’s overview: its sentence, where its pieces are, and what’s next', async () => {
     await go(page, { view: 'world', id: 'wd_nb' });
     await page.waitForSelector('#wh-next li button');
     assert.equal(await page.locator('#wh-logline').innerText(), 'A family bakery raises a troupe of hopeless ninjas.');
-    // The status board sits on the overview, worded as what is happening.
-    await page.waitForSelector('#wh-board .sb-card');
-    const cols = await page.locator('#wh-board .sb-col').evaluateAll((els) => els.filter((c) => c.querySelector('.sb-card')).map((c) => `${c.dataset.stage} ${c.querySelectorAll('.sb-card').length}`));
-    assert.deepEqual(cols, ['Writing 1', 'Posted 1']);
-    assert.ok(await page.locator('#wh-stagebar').isHidden());
+    // The overview has one thin line of where the pieces stand.
+    const stand = await page.locator('#wh-stagebar .zw-sg.has').allInnerTexts();
+    assert.deepEqual(stand, ['Writing 1', 'Posted 1']);
     const next = await page.locator('#wh-next').innerText();
     assert.match(next, /Gather\s*3 things in to file/i);
     assert.match(next, /Shoot day Sat, Jan 16 · Reel 2: Breakfast/);
     assert.match(next, /Board Reel 2: Breakfast/);
-    assert.match(await page.locator('#wh-recent').innerText(), /Reel 1: The Audition/);
     assert.ok(await page.locator('#wh-board-toggle').count() === 0);
   });
 
   await check('one button moves a piece on to its next status, on the board and on the piece; Undo takes it back', async () => {
+    // The line opens the stage board in place, worded as what is happening.
+    await page.locator('#wh-stagebar .zw-stand').click();
+    await page.waitForSelector('#wh-pieces', { state: 'hidden' }); // the board takes the list’s place
+    await page.waitForSelector('.stage-board:visible .sb-card');
+    const cols = await page.locator('.stage-board:visible .sb-col').evaluateAll((els) => els.filter((c) => c.querySelector('.sb-card')).map((c) => `${c.dataset.stage} ${c.querySelectorAll('.sb-card').length}`));
+    assert.deepEqual(cols, ['Writing 1', 'Posted 1']);
     // The way on shows when you point at a piece.
-    await page.locator('#wh-board .sb-card[data-id="pr_reel2"]').hover();
-    await page.waitForSelector('#wh-board .sb-card[data-id="pr_reel2"] .sb-next');
-    assert.match(await page.locator('.sb-card[data-id="pr_reel2"] .sb-next').innerText(), /^Start boarding/);
+    await page.locator('.stage-board:visible .sb-card[data-id="pr_reel2"]').hover();
+    await page.waitForSelector('.stage-board:visible .sb-card[data-id="pr_reel2"] .sb-next');
+    assert.match(await page.locator('.stage-board:visible .sb-card[data-id="pr_reel2"] .sb-next').innerText(), /^Start boarding/);
     // The last status has nowhere to go.
-    assert.equal(await page.locator('.sb-card[data-id="pr_reel1"] .sb-next').count(), 0);
+    assert.equal(await page.locator('.stage-board:visible .sb-card[data-id="pr_reel1"] .sb-next').count(), 0);
     await shot(page, 'status-board');
-    await page.locator('.sb-card[data-id="pr_reel2"] .sb-next').click();
-    await page.waitForSelector('.sb-col[data-stage="Boarding"] .sb-card[data-id="pr_reel2"]');
+    await page.locator('.stage-board:visible .sb-card[data-id="pr_reel2"] .sb-next').click();
+    await page.waitForSelector('.stage-board:visible .sb-col[data-stage="Boarding"] .sb-card[data-id="pr_reel2"]');
     assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Boarding');
     assert.match(await page.locator('.toast').innerText(), /Reel 2: Breakfast: Boarding/);
     await page.locator('.toast button', { hasText: 'Undo' }).click();
-    await page.waitForSelector('.sb-col[data-stage="Writing"] .sb-card[data-id="pr_reel2"]');
+    await page.waitForSelector('.stage-board:visible .sb-col[data-stage="Writing"] .sb-card[data-id="pr_reel2"]');
     assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Written');
     await go(page, { view: 'project', id: 'pr_reel2' });
     await page.waitForSelector('html[data-view="project"] #ph-next:not([hidden])');
@@ -164,7 +167,10 @@ try {
     await page.locator('.toast button', { hasText: 'Undo' }).click();
     await page.waitForFunction(() => document.querySelector('#ph-stage').value === 'Writing');
     await go(page, { view: 'world', id: 'wd_nb' });
-    await page.waitForSelector('#wh-board .sb-card');
+    await page.waitForSelector('.stage-board:visible .sb-card');
+    // The line folds it away again.
+    await page.locator('#wh-stagebar .zw-stand').click();
+    await page.waitForSelector('#wh-pieces li');
   });
 
   await check('the tabs sit at the top centre: Overview, then Gather to Deliver, with the pill on the one you are in', async () => {
@@ -404,27 +410,13 @@ try {
     assert.equal((await get(page, 'pr_reel2')).fields.draft, 2);
   });
 
-  await check('writing: the bar and the rail stay where they are, and both are gone in focus', async () => {
+  await check('writing: the bar and the tabs stay where they are', async () => {
     assert.equal(await viewOf(page), 'write');
     await page.mouse.move(700, 500);
     await sleep(400);
     assert.ok(await shown(page), 'the bar stays while writing');
-    assert.ok(await page.locator('.rail').isVisible());
     assert.ok(await page.locator('#page-tabs').isVisible());
     assert.deepEqual(await tabs(page), ['overview', 'gather', 'shape', 'write*', 'revise', 'make', 'deliver']);
-    await page.keyboard.press('Control+.');
-    await sleep(500);
-    assert.ok(!(await page.locator('.rail').isVisible()), 'no rail in focus');
-    assert.ok(!(await page.locator('#crumb').isVisible()), 'no bar in focus');
-    // The text takes the whole width: nothing is left over where the rail was.
-    assert.equal(await page.evaluate(() => getComputedStyle(document.body).marginLeft), '0px');
-    await page.keyboard.down('Alt');
-    await sleep(600);
-    assert.ok(await page.locator('#page-tabs').isHidden(), 'no tabs in focus');
-    await page.keyboard.up('Alt');
-    await page.keyboard.press('Control+.');
-    await sleep(500);
-    assert.ok(await page.locator('.rail').isVisible(), 'the rail is back');
   });
 
   // ---------- the desk ----------
@@ -453,9 +445,6 @@ try {
     await page.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Kenji');
     assert.ok(await page.locator('#nb-today').isHidden());
     assert.ok(await page.locator('.nb-date').isHidden());
-    assert.equal(await page.locator('.rail-top').count(), 0);
-    // The rail never changes: the two rooms on top.
-    assert.deepEqual(await page.locator('.rail-rooms button').allInnerTexts(), ['Today', 'Desk', 'Library']);
     await page.waitForSelector('#page-tabs .pt-tab');
     assert.deepEqual((await tabs(page))[0], 'overview');
   });

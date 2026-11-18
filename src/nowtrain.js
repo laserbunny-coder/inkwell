@@ -23,7 +23,7 @@ export class TrainNow {
 
   reset() { this.cur = null; this.cur2 = null; this.sets = null; this.min = null; this.ask = null; this.askv = null; this.askq = []; this.pending = null; }
   get p() { return this.now.p; }
-  active(cur) { return !!cur && !cur.smalls && isTraining(cur.item?.row); }
+  active(cur) { return !!cur && isTraining(cur.item?.row); }
   async load() { this.tr = await readTraining(); }
 
   // Where he is in today's session: { i, res }.
@@ -275,11 +275,10 @@ export class TrainNow {
     await this.p.wrote(got.rows);
     await this.load();
     const t = own ? 'Training on your own' : `Training: ${s?.name || ''}`;
-    // At most one quiet line under "Done.": a best yet and the streak, each by its switch.
-    const off = (id) => document.documentElement.classList.contains(`hide-${id}`);
-    const note = got.entry ? gateLine(this.tr?.state.log || [], got.entry, this.p.today, { charts: !off('traincharts'), streak: !off('trainstreak'), steps: ladderSteps(this.tr) }) : '';
+    // A best yet and the streak ride on the toast (the pause after Done went on Nov 17 2026).
+    const note = got.entry ? gateLine(this.tr?.state.log || [], got.entry, this.p.today, { charts: true, streak: true, steps: ladderSteps(this.tr) }) : '';
     await this.now.after({ k: 'done', t, ...(note ? { note } : {}) });
-    this.p.hooks.toast?.(`${t}, on today’s page`, { label: 'Show', run: () => this.p.hooks.go?.({ view: 'notebook', pageId: `day-${this.p.today}`, line: got.line.id }) });
+    this.p.hooks.toast?.(`${t}, on today’s page.${note ? ` ${note}` : ''}`, { label: 'Show', run: () => this.p.hooks.go?.({ view: 'notebook', pageId: `day-${this.p.today}`, line: got.line.id }) });
   }
 
   // Not now, for training: later keeps his place inside the session;

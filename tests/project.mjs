@@ -237,6 +237,9 @@ try {
 
   await check('Pieces by where they stand: words under one hairline, the last column lit, a piece opens', async () => {
     assert.match(await page.locator('#wh-pieces-box .wp-sec').innerText(), /^pieces\s+7 pieces · 142 words · 3 pages/i);
+    // The thin line of where they stand opens the board in the list's place.
+    await page.locator('#wh-stagebar .zw-stand').click();
+    await page.waitForSelector('#wh-board .sb-card', { state: 'visible' });
     const cols = await page.locator('#wh-board .sb-col').evaluateAll((els) => els.map((c) => `${c.dataset.stage} ${c.querySelectorAll('.sb-card').length}`));
     assert.deepEqual(cols, ['New idea 2', 'Writing 2', 'Boarding 1', 'Generating 1', 'Editing 0', 'Posted 1']);
     const card = page.locator('#wh-board .sb-card[data-id="pr_reel2"]');
@@ -251,16 +254,15 @@ try {
     assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Generating');
   });
 
-  await check('As a list shows how the pieces nest, and it’s remembered; By status brings the columns back', async () => {
-    await page.locator('#wh-as').click();
+  await check('the line again shows how the pieces nest, and it’s remembered; once more brings the columns back', async () => {
+    await page.locator('#wh-stagebar .zw-stand').click();
     await page.waitForSelector('#wh-pieces li', { state: 'visible' });
     assert.ok(await page.locator('#wh-status').isHidden());
-    assert.equal(await page.locator('#wh-as').innerText(), 'By status');
     assert.equal(await page.locator('#wh-pieces li').count(), 7);
     await world(page, 'wd_camp');
     await world(page);
     assert.ok(await page.locator('#wh-pieces li').first().isVisible(), 'still a list after coming back');
-    await page.locator('#wh-as').click();
+    await page.locator('#wh-stagebar .zw-stand').click();
     await page.waitForSelector('#wh-board .sb-card', { state: 'visible' });
     assert.ok(await page.locator('#wh-pieces').isHidden());
   });
@@ -268,11 +270,10 @@ try {
   await check('Steps: the project’s own tasks, dated ones first, with where one is written when it isn’t the Steps page', async () => {
     assert.match(await page.locator('#wh-steps .wp-sec').innerText(), /^steps\s+1 of 4 done$/i);
     assert.deepEqual(await steps(page), ['Star the stills for shot 3', 'Board Reel 2', 'Write Kenji’s second verse', 'Pick the bakery’s colours']);
-    assert.equal(await step(page, 'Star the stills').locator('.pl-place').innerText(), 'Shot list');
-    assert.equal(await step(page, 'Board Reel 2').locator('.pl-place').count(), 0);
-    assert.equal(await step(page, 'Star the stills').locator('.pl-when').innerText(), 'Tomorrow');
-    assert.equal(await step(page, 'Board Reel 2').locator('.pl-when').innerText(), 'Thu');
-    assert.equal(await step(page, 'Board Reel 2').locator('.pl-est').innerText(), '1 h 30 min');
+    // Plain rows: where it's written and its day are said in its ⋯.
+    const said = async (text) => { await step(page, text).locator('.pl-more').click(); await page.waitForSelector('.pop-menu'); const t = await page.locator('.pop-menu').innerText(); await page.locator('.pop-menu .pop-item').first().press('Escape'); await page.waitForSelector('.pop-menu', { state: 'detached' }); return t; };
+    assert.match(await said('Star the stills'), /· Tomorrow/i);
+    assert.match(await said('Board Reel 2'), /· Thu/i);
     assert.ok(await step(page, 'Pick the bakery').evaluate((el) => el.classList.contains('done')));
     assert.ok(!(await steps(page)).includes('Order the storage drive'), 'a task from elsewhere stays out');
   });
@@ -292,9 +293,8 @@ try {
     assert.equal((await steps(page)).indexOf('Record the bakery jingle'), 4, 'after the dated ones (the done one keeps its place among them) and the older undated one');
   });
 
-  await check('a step’s day moves from its label, and the next date follows; ticking it counts', async () => {
-    await step(page, 'Record the bakery jingle').hover();
-    await step(page, 'Record the bakery jingle').locator('.pl-when').click();
+  await check('a step’s day moves from its ⋯, and the next date follows; ticking it counts', async () => {
+    await step(page, 'Record the bakery jingle').locator('.pl-more').click();
     await pick(page, 'Today');
     await page.waitForFunction(() => document.querySelector('#wh-steps .pl-task .pl-words')?.innerText === 'Record the bakery jingle');
     assert.equal((await all(page)).find((r) => r.text === 'Record the bakery jingle').fields.task.day, '2026-11-09');
@@ -306,7 +306,8 @@ try {
   });
 
   await check('a step opens where it’s written, and today’s plan has the same task', async () => {
-    await step(page, 'Star the stills').locator('.pl-place').click();
+    await step(page, 'Star the stills').locator('.pl-more').click();
+    await pick(page, 'Open it where it’s written');
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
     await page.waitForFunction(() => /Shot list/.test(document.querySelector('#nb-title')?.innerText || ''));
     await world(page);
@@ -333,9 +334,11 @@ try {
   });
 
   await check('where it sits: Backstage from the page puts it backstage on the Desk and asks when it comes back', async () => {
+    // The seat word opens the seat bar above the ruler.
     await page.locator('#wh-seat').click();
-    assert.deepEqual((await page.locator('.pop-menu .pop-item').allInnerTexts()).map((t) => t.trim()), ['On stage', 'In the wings', 'Backstage']);
-    await pick(page, 'Backstage');
+    await page.waitForSelector('.zm-seatbar:not([hidden])');
+    assert.deepEqual(await page.locator('.zm-seatbar .zm-sb[data-seat]').allInnerTexts(), ['On stage', 'In the wings', 'Backstage', 'Finished']);
+    await page.locator('.zm-seatbar [data-seat="back"]').click();
     await page.waitForFunction(() => /backstage/i.test(document.querySelector('#wh-seat')?.innerText || ''));
     assert.deepEqual(Object.keys(await facts(page)), ['North star', 'Now', 'Next date', 'Backstage']);
     const back = page.locator('#wh-facts [data-field="back"]');
@@ -347,8 +350,8 @@ try {
     assert.equal((await get(page, 'wd_nb')).fields.back, 'After the December 14 tests');
     assert.equal((await get(page, 'settings-desk')).fields.stage['w:wd_nb'], 'back');
     await page.locator('#wh-seat').click();
-    assert.ok((await page.locator('.pop-menu .pop-item').allInnerTexts()).some((t) => /Let Inkwell decide/.test(t)));
-    await pick(page, 'Let Inkwell decide');
+    await page.waitForSelector('.zm-seatbar:not([hidden])');
+    await page.locator('.zm-seatbar [data-seat="on"]').click();
     await page.waitForFunction(() => /on stage/i.test(document.querySelector('#wh-seat')?.innerText || ''));
     assert.ok(!('Backstage' in (await facts(page))));
   });
@@ -383,19 +386,14 @@ try {
     assert.equal(await page.locator('#wh-steps input[data-add]').getAttribute('placeholder'), 'Book the campsite for Friday night');
   });
 
-  await check('each part can be switched off under Look', async () => {
-    const flip = (name, on) => page.evaluate(([n, v]) => { const c = document.querySelector(`[data-show="${n}"]`); c.checked = v; c.dispatchEvent(new Event('change', { bubbles: true })); }, [name, on]);
-    await flip('projsteps', false);
-    assert.ok(await page.locator('#wh-steps').isHidden());
+  await check('steps, crew and turns are always there; “Recently” went (Nov 17 2026)', async () => {
+    await page.evaluate(() => document.documentElement.classList.add('hide-projsteps', 'hide-projcrew'));
     await world(page);
-    await flip('projcrew', false);
-    assert.ok(await page.locator('#wh-crew').isHidden());
-    assert.ok(await page.locator('#wh-turns').isHidden());
-    await flip('projrecent', false);
-    assert.ok(await page.locator('#wh-recent-box').isHidden());
-    for (const n of ['projsteps', 'projcrew', 'projrecent']) await flip(n, true);
     assert.ok(await page.locator('#wh-steps').isVisible());
     assert.ok(await page.locator('#wh-turns').isVisible());
+    assert.equal(await page.locator('#wh-recent-box').count(), 0);
+    assert.equal(await page.locator('[data-show="projsteps"], [data-show="projcrew"], [data-show="projrecent"]').count(), 0);
+    await page.evaluate(() => document.documentElement.classList.remove('hide-projsteps', 'hide-projcrew'));
   });
 
   await check('every look draws it without spilling, and nothing went wrong', async () => {
@@ -440,7 +438,6 @@ try {
     const wide = await phone.evaluate(() => document.documentElement.scrollWidth);
     assert.ok(wide <= 391, `page is ${wide} wide`);
     assert.ok(await phone.locator('#wh-steps .pl-task').first().isVisible());
-    assert.ok(await phone.locator('#wh-steps .pl-when').first().isVisible(), 'the day shows without hovering');
     await shot(phone, 'project-phone');
     await phone.evaluate(() => document.querySelector('#wh-steps').scrollIntoView({ block: 'start' }));
     await shot(phone, 'project-phone-steps');

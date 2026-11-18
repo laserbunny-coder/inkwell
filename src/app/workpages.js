@@ -17,7 +17,7 @@ import { areas, bookType, kindName, areaColor, bookOf, worldOf, editedAt, stageO
 import { make } from '../dom.js';
 import { isoToday } from '../dates.js';
 import { addCommands, mod } from './commandlist.js';
-import { $, body, editor, gone, inNotebook, notes, root, state, store, view } from '../main.js';
+import { $, body, editor, gone, inNotebook, notes, state, store, view } from '../main.js';
 import { touch } from './scriptbar.js';
 import { currentEditor, notebook } from './notebookview.js';
 import { go, openBook, openEntry, remember } from './routing.js';
@@ -26,11 +26,10 @@ import { renderRail } from './rail.js';
 import { addPiece, bookMenu, openStages, setStage } from './tidying.js';
 import { accountName, askClaudeNotes, newDraft, newDraftFrom, toggleFreshEyes, toggleTalk } from './revising.js';
 import { printLater } from './sharing.js';
-import { hidden, lookPanel, setShown, toggleFocus, togglePageSettings } from './pagesettings.js';
+import { hidden, lookPanel, setShown, togglePageSettings } from './pagesettings.js';
 import { writing } from './commands.js';
 import { boxOpen, closePalette, filterPalette, openBox, openPalette } from './quickinserts.js';
 import { askServer, canAskServer, captureHere, deskPage, plan } from './talking.js';
-import { openProjectBeside, planningView } from './beside.js';
 
 // ---------- the pages: Gather, Shape, Write, Revise, Make, Deliver ----------
 
@@ -136,11 +135,10 @@ async function goPage(id) {
   if (id === 'library') return go({ view: 'library', area: null });
   if (id === 'tags') return go({ view: 'tags' });
   if (id === 'week') return go({ view: 'plan', tab: 'week' });
-  if (id === 'when' || id === 'plan') return go({ view: 'plan', tab: 'plan' });
+  if (id === 'when' || id === 'plan') return go({ view: 'plan', tab: 'day' });
   if (id === 'calendar') return plan.goTab('cal');
   if (id === 'calday') return go({ view: 'plan', tab: 'calday' });
   if (id === 'ahead') return go({ view: 'plan', tab: 'ahead' });
-  if (id === 'pace') return go({ view: 'plan', tab: 'pace' });
   if (id === 'desk') return go({ view: 'desk' });
   if (id === 'desk-history') return go({ view: 'desk', tab: 'history' });
   if (id === 'catchup') return goCatchup();
@@ -330,26 +328,12 @@ function wireWorkPages() {
     search: (text) => { openPalette('go'); const input = $('#palette-input'); input.value = text; filterPalette(); },
     capture: () => captureHere({ start: true }),
     menu: () => openPalette(),
-    leaveFocus: () => { if (root.classList.contains('focus')) toggleFocus(); },
     look: () => { if ($('.page-settings').hidden) togglePageSettings(); $('.page-settings').scrollTop = 0; },
-    outline: () => body.classList.add('show-outline'),
     isTouch: () => touch.matches,
     keyLabel,
     refocus: () => { if (!touch.matches && (writing() || inNotebook())) currentEditor().commands.focus(); }
   });
-  frame = new Frame({
-    keyLabel,
-    projects: railProjects,
-    openProject: (id, { beside = false } = {}) => (beside ? openProjectBeside(id) : go({ view: 'world', id })),
-    projectMenu: (id, anchor, at) => popMenu(anchor, [
-      { label: 'Open', run: () => go({ view: 'world', id }) },
-      { label: planningView() ? 'Open beside the plan (Ctrl + click)' : 'Open beside (Ctrl + click)', run: () => openProjectBeside(id) }
-    ], at),
-    contents: () => body.classList.toggle('pin-outline'),
-    hasContents: () => writing() && !!state.project,
-    page: () => strip.ctx?.active || null,
-    onDay: () => inNotebook() && !!notebook.page && notebook.page.kind === 'day'
-  });
+  frame = new Frame({ page: () => strip.ctx?.active || null });
   lookPicker($('.page-settings'));
   lookPanel($('.page-settings'));
   // A phone has no keys, so the menu button says what it is.

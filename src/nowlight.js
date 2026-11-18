@@ -11,7 +11,6 @@ import { autoOn } from './auto.js';
 import { TRACKS, posOf, placeOf, readReading, saveReading, todays, advanced, readYesterday, missedYesterday, esvLink, keyState, kept, chapter, tickBibleHabit } from './firstlight.js';
 import { readStreak, doneLine } from './readstats.js';
 import { tickLight, lightToday, dropLine } from './firstlight.js';
-import { zoomOn } from './zoomstate.js';
 
 export class LightNow {
   constructor(now) {
@@ -27,14 +26,11 @@ export class LightNow {
   async load() { this.st = await readReading(); }
 
   // Showing now? Before anything else, once a day, unless something is begun.
-  due(m) {
-    if (!this.st || this.now.off('firstlight') || !autoOn('firstlight')) return false;
-    if (this.forced) return true;
-    // On the zoom First light is a line of the day, opened like any line (Part 2).
-    if (zoomOn()) return false;
-    if (m.cur || this.now.mode) return false;
-    const today = this.p.today;
-    return this.st.read !== today && this.st.skip !== today;
+  due() {
+    if (!this.st || !autoOn('firstlight')) return false;
+    // On the zoom First light is a line of the day, opened like any line (Part 2):
+    // it only takes over Now when asked for from the commands.
+    return this.forced;
   }
 
   noKey() { return keyState(this.p.today) !== false; }
@@ -59,7 +55,7 @@ export class LightNow {
     if (this.rd >= 0) return this.readView(mid, refs);
     this.probe(refs);
     const nokey = this.noKey();
-    if (!bare) mid.append(make('p', 'now-eyebrow', 'First light'), make('h1', 'now-thing sm', 'Today’s reading'));
+    if (!bare) mid.append(make('p', 'now-eyebrow', 'Bible reading'), make('h1', 'now-thing sm', 'Today’s reading'));
     const list = make('ul', 'now-reading');
     for (const r of refs) {
       const li = make('li');
@@ -94,7 +90,7 @@ export class LightNow {
     const ref = refs[this.rd];
     const last = this.rd >= refs.length - 1;
     mid.classList.add('reading');
-    mid.append(make('p', 'now-eyebrow', `First light · ${this.rd + 1} of ${refs.length}`), make('h1', 'now-thing sm', ref));
+    mid.append(make('p', 'now-eyebrow', `Bible reading · ${this.rd + 1} of ${refs.length}`), make('h1', 'now-thing sm', ref));
     const got = this.got[ref] || kept(ref, this.p.today);
     const body = make('article', 'now-scripture');
     body.setAttribute('aria-label', ref);
@@ -135,7 +131,7 @@ export class LightNow {
   }
 
   setView(mid) {
-    mid.append(make('p', 'now-eyebrow', 'First light'), make('h1', 'now-thing sm', 'Where are you in each?'));
+    mid.append(make('p', 'now-eyebrow', 'Bible reading'), make('h1', 'now-thing sm', 'Where are you in each?'));
     const form = make('form', 'now-tracks');
     for (const t of TRACKS) {
       const [b, ch] = posOf(t.books, this.st[t.k] || 0);
@@ -191,7 +187,7 @@ export class LightNow {
     await saveReading(this.st);
     // One quiet line on the next screen (Part 8), with the streak switch on.
     const root = document.documentElement;
-    this.note = root.classList.contains('hide-readstreak') ? '' : doneLine(readStreak(this.st.days, today));
+    this.note = doneLine(readStreak(this.st.days, today));
     const habit = await tickBibleHabit(this.p.items, today);
     if (habit) await this.p.wrote(habit.rows);
     const line = await tickLight(this.p.items || [], today, true);

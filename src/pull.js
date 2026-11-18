@@ -32,7 +32,7 @@ export class Pull {
     this.openKids = new Set(read('pullKids', []));
     this.build();
     phone.addEventListener('change', () => this.layout());
-    const bar = document.querySelector('.placebar');
+    const bar = document.querySelector('.zm-ruler') || document.querySelector('.placebar');
     if (bar && window.ResizeObserver) new ResizeObserver(() => { if (this.isOpen) this.layout(); }).observe(bar);
     window.addEventListener('resize', () => this.layout());
   }
@@ -120,7 +120,7 @@ export class Pull {
     root.classList.toggle('pulling', on && !small);
     root.classList.toggle('pulling-phone', on && small);
     // On a phone it sits just above the bar at the bottom.
-    const bar = document.querySelector('.placebar');
+    const bar = document.querySelector('.zm-ruler') || document.querySelector('.placebar');
     const bh = small && bar && bar.offsetParent !== null ? bar.getBoundingClientRect().height : 0;
     root.style.setProperty('--bar-h', `${Math.round(bh)}px`);
     const h = Math.max(0.25, Math.min(0.75, read('pullH', 0.46)));

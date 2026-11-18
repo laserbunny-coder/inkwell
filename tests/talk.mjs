@@ -315,7 +315,7 @@ try {
   });
 
   await check('a project goes backstage with when it comes back, and a call is set aside; the Desk shows both at once', async () => {
-    await page.waitForFunction(() => document.querySelector('#desk-toggle')?.getAttribute('data-n') === '3');
+    await page.waitForFunction(() => document.querySelector('.zm-ruler [data-stop=\"desk\"]')?.getAttribute('aria-label') === 'Desk, 3 waiting on you');
     await f.locator('.tt-go').click();
     await f.waitForSelector('.tt-move.applied');
     assert.equal((await get(page, 'settings-desk')).fields.stage['w:wd_scribe'], 'back');
@@ -324,12 +324,15 @@ try {
     assert.equal(s.fields.turns[0].text, 'Put Scribe backstage until the tests end');
     assert.equal(s.fields.turns[0].why, 'What can go backstage for now?');
     assert.ok(st.calls.some(([op, id, until]) => op === 'later' && id === 'n2' && /^2026-11-10T15:00/.test(until)), 'back at 7 tomorrow morning');
-    await page.waitForFunction(() => !!document.querySelector('.dk-back .dk-row[data-key="w:wd_scribe"]'));
-    await page.waitForFunction(() => document.querySelector('#desk-toggle')?.getAttribute('data-n') === '2');
+    // Backstage: off the Desk's stage and wings (the Library shows where it sits).
+    await page.waitForFunction(() => ![...document.querySelectorAll('.zd-proj .zd-name, .zd-wings .zd-chip')].some((x) => /Scribe/.test(x.textContent)));
+    await page.waitForFunction(() => document.querySelector('.zm-ruler [data-stop=\"desk\"]')?.getAttribute('aria-label') === 'Desk, 2 waiting on you');
+    // The set-aside call is under the Desk's calls line.
+    if (!(await page.locator('.zd-crew-in').count())) await page.locator('.zd-crewline').click();
     await page.waitForFunction(() => /1 set aside until tomorrow morning/.test(document.querySelector('.dk-later')?.innerText || ''));
     // Undo brings the call back too.
     await f.locator('.toast button', { hasText: 'Undo' }).click();
-    await page.waitForFunction(() => document.querySelector('#desk-toggle')?.getAttribute('data-n') === '3');
+    await page.waitForFunction(() => document.querySelector('.zm-ruler [data-stop=\"desk\"]')?.getAttribute('aria-label') === 'Desk, 3 waiting on you');
     assert.ok(st.calls.some(([op, id, until]) => op === 'later' && id === 'n2' && until === null));
     // The Desk's settings weren't there before, so Undo takes the row away again.
     const d = await get(page, 'settings-desk');
@@ -368,16 +371,6 @@ try {
     await page.keyboard.press('Enter');
     f = await pane(page);
     assert.equal(await f.locator('.tt-head h1').innerText(), 'Everything on stage');
-  });
-
-  await check('with Beside switched off under Look there’s no button, and Alt + T says why', async () => {
-    await page.evaluate(() => { const c = document.querySelector('[data-show="panes"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); });
-    assert.ok(await page.locator('.dk-talk').isHidden());
-    await page.locator('body').click({ position: { x: 300, y: 500 } });
-    await page.keyboard.press('Alt+t');
-    await page.waitForFunction(() => /Beside is switched off/.test(document.querySelector('.toast')?.textContent || ''));
-    await page.evaluate(() => { const c = document.querySelector('[data-show="panes"]'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); });
-    assert.deepEqual(page.errors, []);
   });
 
   await check('before the server knows how, it says so plainly; when Claude can’t be reached, Try again asks again', async () => {

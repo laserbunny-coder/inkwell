@@ -7,7 +7,7 @@
 // click an empty spot to write a new task there. A phone holds a moment before
 // dragging a block, so the page still scrolls; the handle moves at once.
 // What has no time yet waits in the Unscheduled sheet, to tap or drag in.
-// Pinch (or Ctrl + scroll, or − Fit +) zooms the hours; the zoom is kept on
+// Pinch (or Ctrl + scroll) zooms the hours; the zoom is kept on
 // this device.
 
 import { setTask, addTask, span, minutesOf } from './tasks.js';
@@ -28,7 +28,8 @@ const Y = (min, less = 0) => `calc(var(--px, 1) * ${min}px${less ? ` - ${less}px
 const phoneish = isCompact;
 // The phone's bar at the bottom: the sheet sits on it, and drags scroll above it.
 const barH = () => {
-  const bar = document.querySelector('.placebar');
+  // The ruler at the bottom (the phone bar before the zoom).
+  const bar = document.querySelector('.zm-ruler') || document.querySelector('.placebar');
   const r = bar?.getBoundingClientRect();
   // (It's fixed to the screen, so it has no offsetParent: look at where it is.)
   return phoneish() && r && r.height && r.top < innerHeight && getComputedStyle(bar).visibility !== 'hidden' ? Math.max(0, Math.round(innerHeight - r.top)) : 0;
@@ -87,24 +88,14 @@ export function drawCalendar(plan, day, tasks, events) {
   box.dataset.day = day;
   const small = phoneish();
   if (!off.length) plan.calSheetOpen = false;
-  // The bar: Unscheduled (what has no time yet), and the zoom.
+  // The bar: Unscheduled (what has no time yet).
   const bar = make('div', 'dc-bar');
   const un = make('button', 'dc-unsched', `Unscheduled · ${off.length}`);
   un.hidden = !off.length;
   un.setAttribute('aria-expanded', String(!!plan.calSheetOpen));
   un.title = 'Tasks for today with no time yet: tap one, or drag it onto a time';
   un.addEventListener('click', (e) => { e.stopPropagation(); plan.calSheetOpen = !plan.calSheetOpen; plan.redraw(); });
-  const zoom = make('span', 'dc-zoom');
-  zoom.setAttribute('role', 'group');
-  zoom.setAttribute('aria-label', 'Zoom the hours');
-  for (const [k, label, title] of [['out', '−', 'Zoom out: more of the day (Ctrl + scroll, or pinch)'], ['fit', 'Fit day', 'The whole day on the screen'], ['in', '+', 'Zoom in: more room for each hour (Ctrl + scroll, or pinch)']]) {
-    const b = make('button', `dc-z dc-z-${k}`, label);
-    b.dataset.zoom = k;
-    b.title = title;
-    b.setAttribute('aria-label', title);
-    zoom.append(b);
-  }
-  bar.append(un, zoom);
+  bar.append(un);
   // The sheet: one line each, tap for the next free half hour, or drag onto a time.
   const sheet = make('div', 'dc-sheet');
   sheet.hidden = !plan.calSheetOpen;
@@ -229,10 +220,6 @@ function setZoom(grid, z, box = grid.parentElement) {
     el.classList.toggle('tiny', h < 20);
   }
   grid.classList.toggle('dc-tight', px < 0.55);
-  const fit = box?.querySelector('.dc-z-fit');
-  if (fit) fit.setAttribute('aria-pressed', String(z === 'fit'));
-  box?.querySelector('.dc-z-out')?.toggleAttribute('disabled', px <= ZMIN + 0.001);
-  box?.querySelector('.dc-z-in')?.toggleAttribute('disabled', px >= ZMAX - 0.001);
   return px;
 }
 // What scrolls the calendar: the nearest scrolling box, else the page.
@@ -269,14 +256,6 @@ function wire(plan, box, grid, day, ctx) {
       if (!i) return;
       const len = lenOf(i);
       return save(i.row.id, { on: { day, at: nextFree(plan, day, ctx, len) }, len });
-    }
-    const z = e.target.closest('.dc-z');
-    if (z) {
-      const now = pxOf(grid);
-      plan.dcZoom = z.dataset.zoom === 'fit' ? 'fit' : clampZ(z.dataset.zoom === 'in' ? now * 1.25 : now / 1.25);
-      keepZoom(plan.dcZoom);
-      setZoom(grid, plan.dcZoom, box);
-      return;
     }
     if (e.target === grid || e.target.classList.contains('dc-hour')) write(Math.max(from, Math.min(to - SNAP, Math.floor(at(e.clientY) / SNAP) * SNAP)));
   });

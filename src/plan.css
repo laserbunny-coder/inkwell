@@ -80,7 +80,6 @@ html.has-rail .pl-switch { display: none; }
 .pl-took span { margin-right: 4px; }
 .pl-took button { border: 1px solid var(--line2); background: none; color: var(--soft); font: 12px var(--ui); padding: 4px 10px; border-radius: 99px; cursor: pointer; }
 .pl-took button:hover, .pl-took button.on { border-color: var(--accent); color: var(--ink); }
-.hide-estimates .pl-took { display: none; }
 .pl-task.dragging { opacity: .35; }
 .pl-task.pl-armed, .pw-task.pl-armed { background: var(--tint); transition: background .15s; }
 .pl-touchdrag, .pl-touchdrag body { overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
@@ -241,8 +240,6 @@ button.pl-meter-v:hover { color: var(--ink); background: var(--raise); }
 .ah-add input::placeholder { color: var(--faint); }
 .ah-talk { color: var(--muted); }
 .ah-talk:hover { color: var(--ink); }
-html.hide-panes .ah-talk { display: none; }
-.hide-estimates :is(.ah-hrs, .ah-h .pl-track, .ah-note) { display: none; }
 /* A date that can't move, on a project's steps. */
 .pl-when.hard { color: var(--signal); }
 @media (--narrow) {
@@ -292,8 +289,6 @@ html.hide-panes .ah-talk { display: none; }
 .pw-ev { font-size: 11.5px; gap: 5px; padding: 1px 6px; flex-wrap: wrap; }
 .pw-ev .ev-t { min-width: 0; }
 .pw-ev .ev-w { flex-basis: 100%; padding-left: 11px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.hide-calendar :is(.pl-cal, .pw-ev) { display: none; }
-.hide-estimates .pl-left { display: none; }
 @media (max-width: 760px) { .pw-ev { flex-wrap: nowrap; font-size: 13px; } .pw-ev .ev-w { flex-basis: auto; padding-left: 0; } .pl-ev { font-size: 14px; } }
 
 /* ---------- area hours, under the week ---------- */
@@ -307,7 +302,6 @@ html.hide-panes .ah-talk { display: none; }
 .pa-row .pl-track.bare { visibility: hidden; }
 .pa-row .pl-track i.met { background: var(--good, var(--accent)); }
 .pa-more { align-self: flex-start; margin-top: 2px; }
-.hide-estimates .pw-areas { display: none; }
 /* Acro HQ: whose a task is, and its card on the board */
 .pl-owner { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; line-height: 18px; }
 .pl-hq { font-size: 11px; letter-spacing: .04em; color: var(--muted); text-decoration: none; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; line-height: 17px; }
@@ -326,12 +320,6 @@ html.hide-panes .ah-talk { display: none; }
 .dc-unsched { border: 1px solid var(--line2); background: none; color: var(--muted); font: 13px var(--ui); padding: 4px 12px; border-radius: 99px; cursor: pointer; }
 .dc-unsched:hover, .dc-unsched:focus-visible, .dc-unsched[aria-expanded="true"] { color: var(--ink); border-color: var(--accent); outline: none; }
 .dc-unsched[hidden] { display: none; }
-.dc-zoom { margin-left: auto; display: inline-flex; gap: 2px; }
-.dc-z { border: 0; background: none; color: var(--faint); font: 13px var(--ui); padding: 4px 8px; border-radius: 6px; cursor: pointer; min-width: 28px; }
-.dc-z:hover:not([disabled]), .dc-z:focus-visible { color: var(--ink); background: var(--tint); outline: none; }
-.dc-z[aria-pressed="true"] { color: var(--ink); }
-.dc-z[disabled] { opacity: .35; cursor: default; }
-:root.hide-calzoom .dc-zoom { display: none; }
 /* Unscheduled: under the bar on a computer; a sheet from the bottom on a phone. */
 .dc-sheet { position: absolute; z-index: 6; top: 40px; left: 0; width: min(360px, 100%); max-height: min(60vh, 520px); display: flex; flex-direction: column; background: var(--panel, var(--bg)); border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / .28); padding: 6px 12px 12px; box-sizing: border-box; transition: transform .18s ease, opacity .18s ease; }
 .dc-sheet[hidden] { display: none; }
@@ -351,7 +339,6 @@ html.hide-panes .ah-talk { display: none; }
   .dc-sh-grab { display: block; width: 36px; height: 4px; border-radius: 4px; background: var(--line2); margin: 4px auto 6px; }
   .dc-chip { padding: 11px 10px; font-size: 15px; }
   .dc-sheet.dc-sheet-low { transform: translateY(40%); opacity: 0; }
-  .dc-z { min-width: 36px; padding: 6px 8px; }
 }
 .dc-grid { position: relative; cursor: cell; touch-action: pan-y; }
 .dc-grid.dc-tight .dc-hour span { font-size: 10px; top: -7px; }
@@ -586,7 +573,7 @@ html.focus .notebook.plan-side > #plan, .notebook.plan-side.zoomed > #plan { dis
   .notebook.tp-on .nb-head { margin-bottom: 12px; }
   .notebook.tp-on #nb-title { font-family: var(--title, var(--prose)); font-weight: var(--title-w, 500); font-size: 26px; white-space: nowrap; }
   /* Plan: the plan alone. Page: the page alone, full height. */
-  .notebook.tp-on[data-tp="plan"]:not(.zoomed) .nb-sheet > :is(#outline-editor, .loose-foot, .tidy-nudge, .day-review, .backlinks, .past-days, .evening-card, #nb-links) { display: none !important; }
+  .notebook.tp-on[data-tp="plan"]:not(.zoomed) .nb-sheet > :is(#outline-editor, .backlinks, #nb-links) { display: none !important; }
   .notebook.tp-on[data-tp="plan"] .plan { border-bottom: 0; }
   .notebook.tp-on[data-tp="page"] .plan { display: none; }
   .notebook.zoomed .tp-switch { display: none; }
@@ -610,7 +597,6 @@ html.focus .notebook.plan-side > #plan, .notebook.plan-side.zoomed > #plan { dis
   .pl-early { gap: 4px 6px; }
   .pl-early-b { padding: 6px 8px; }
 }
-.hide-estimates [data-cmd="pace"] { display: none !important; }
 @media (--narrow) {
   .pl-task:not(.one-row) .pl-acts { grid-row: 1 / span 2; align-self: center; }
 }

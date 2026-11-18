@@ -5,10 +5,8 @@ import { ask, toast } from '../menu.js';
 import { entry } from '../model.js';
 import { dropLineAt, setLineDragOut } from '../outline.js';
 import { moveEntries } from '../move.js';
-import { dayId } from '../notebook.js';
 import { SAVE_CHANNEL } from '../inbox.js';
 import { LISTS, listOf, setList, fillList } from '../lists.js';
-import { getReview } from '../review.js';
 import { tabFor } from '../plan.js';
 import { Pull } from '../pull.js';
 import { loadTasks } from '../tasks.js';
@@ -21,12 +19,12 @@ import { addCommands, mod } from './commandlist.js';
 import { $, blocks, editor, gone, inNotebook, notes, root, state, store, view } from '../main.js';
 import { touch } from './scriptbar.js';
 import { currentEditor, notebook } from './notebookview.js';
-import { besideUntil, go, lastPlace, paneStep, placeOf, setBesideUntil } from './routing.js';
+import { go, lastPlace, paneStep, placeOf, setBesideUntil } from './routing.js';
 import { applyRemote, sync } from './syncwiring.js';
 import { renderCrumb } from './rail.js';
 import { projectOrder, railProjects } from './workpages.js';
 import { writing } from './commands.js';
-import { askServer, canAskServer, dayReview, deskBackend, deskPage, landShares, plan } from './talking.js';
+import { askServer, canAskServer, deskBackend, deskPage, landShares, plan } from './talking.js';
 let pull = null; // a project's lines next to the plan, to drag in (pull.js, below)
 
 // ---------- pulling lines in from a project, beside a planning view ----------
@@ -45,7 +43,7 @@ async function pullFromProject(id = null) {
 // (to drag from), in a pane beside anything else.
 async function openProjectBeside(id) {
   if (planningView()) return pullFromProject(id);
-  if (!root.classList.contains('hide-panes') && paneHost()) return openBeside({ view: 'world', id });
+  if (paneHost()) return openBeside({ view: 'world', id });
   return pullFromProject(id);
 }
 // The lines a When is for, in the outline: the ones the selection touches.
@@ -89,21 +87,6 @@ async function connectCalendar() {
 // The number beside Desk keeps up without the Desk being open.
 let deskPeeked = 0;
 const peekDesk = () => { if (inPane || document.hidden || Date.now() - deskPeeked < 120000) return; deskPeeked = Date.now(); deskPage.peek(); };
-// The 9 pm alert links to ?review=<date>: open that day and its
-// review, or ask Claude for one once this device has caught up.
-let reviewing = null;
-function setReviewing(value) { return (reviewing = value); }
-async function reviewAsked() {
-  if (!reviewing) return;
-  const iso = reviewing;
-  if (!inNotebook() || notebook.page?.id !== dayId(iso)) await go({ view: 'notebook', pageId: dayId(iso) });
-  if (await getReview(iso)) { reviewing = null; await dayReview.reveal(); return; }
-  if (!canAskServer()) return;
-  reviewing = null;
-  await dayReview.run(iso);
-  dayReview.box.scrollIntoView({ block: 'start', behavior: 'smooth' });
-}
-
 // Watch and read lists: once typing pauses, Claude links the titles you've
 // moved on from (never the line you're on).
 let listTimer;
@@ -191,7 +174,7 @@ async function openEntryBeside(id) { await openBeside(await placeOf(id)); }
 
 // "Open beside" in a handle menu (Peek beside on a phone).
 function besideItem(place) {
-  if (root.classList.contains('hide-panes') || !paneHost()) return null;
+  if (!paneHost()) return null;
   return touch.matches
     ? { label: 'Peek beside', run: () => openBeside(place()) }
     : { label: 'Open beside', keys: 'Middle-click', run: () => openBeside(place()) };
@@ -253,7 +236,7 @@ function paneKeys(e, m) {
 // a line's or paragraph's six dots, a [[link]], a #tag, a card in the Library
 // or a world, a chapter in the outline, a part of the path, a row or chip in the box.
 const BESIDE = 'a[data-ref], .line-gutter, .block-handle, .tag[data-tag], [data-id], .tree-chapter, .crumb-part, #palette-list > li:not(.box-chips), #palette-list .box-chip, .past-list [data-line]';
-const besideTarget = (e) => (e.button === 1 && !root.classList.contains('hide-panes') && paneHost() ? e.target.closest?.(BESIDE) : null);
+const besideTarget = (e) => (e.button === 1 && paneHost() ? e.target.closest?.(BESIDE) : null);
 async function middleBeside(el) {
   if (el.matches('a[data-ref]')) return openEntryBeside(el.getAttribute('data-ref'));
   if (el.matches('.line-gutter')) {
@@ -382,10 +365,10 @@ addCommands(() => [
   { group: 'write', label: 'When: plan this line (today, this week, next week, later…)', keys: 'Alt+W', words: ['when', 'schedule', 'plan', 'day', 'week', 'month', 'later', 'task'], run: () => setTimeout(() => whenHere(), 60) },
   { group: 'go', label: 'From a project: open one next to the plan, to drag its steps in', keys: '', words: ['pull', 'project', 'beside', 'plan', 'drag', 'split', 'steps'], run: () => pullFromProject() },
   { group: 'sync', label: 'Google Calendar: show your events on Today and the week…', keys: '', words: ['calendar', 'google', 'connect', 'events'], run: () => connectCalendar() },
-  { group: 'view', label: 'Beside: today’s plan next to this page (again: put it away)', keys: `${mod}\\`, words: ['pane', 'side by side', 'split', 'beside', 'plan', 'tasks', 'today'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => toggleBesidePane() },
-  { group: 'view', label: 'Talk it through with Claude, beside where you are', keys: '⌥T', words: ['claude', 'talk', 'think', 'plan', 'week', 'moves', 'ask', 'beside', 'overwhelmed', 'too much'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => openTalk() },
-  { group: 'view', label: 'In the Beside pane: this draft’s notes, listed next to it', words: ['pane', 'side by side', 'beside', 'notes', 'margin', 'comments'], when: () => !inPane && !!panes && writing() && !root.classList.contains('hide-panes'), run: () => openBeside(BESIDE_PLACES.notes) },
-  { group: 'view', label: 'Open where you are in a pane beside (middle-click opens anything beside)', words: ['pane', 'side by side', 'split', 'beside', 'two', 'compare'], when: () => !!paneHost() && !root.classList.contains('hide-panes'), run: () => openBeside(lastPlace) },
+  { group: 'view', label: 'Beside: today’s plan next to this page (again: put it away)', keys: `${mod}\\`, words: ['pane', 'side by side', 'split', 'beside', 'plan', 'tasks', 'today'], when: () => !!paneHost(), run: () => toggleBesidePane() },
+  { group: 'view', label: 'Talk it through with Claude, beside where you are', keys: '⌥T', words: ['claude', 'talk', 'think', 'plan', 'week', 'moves', 'ask', 'beside', 'overwhelmed', 'too much'], when: () => !!paneHost(), run: () => openTalk() },
+  { group: 'view', label: 'In the Beside pane: this draft’s notes, listed next to it', words: ['pane', 'side by side', 'beside', 'notes', 'margin', 'comments'], when: () => !inPane && !!panes && writing(), run: () => openBeside(BESIDE_PLACES.notes) },
+  { group: 'view', label: 'Open where you are in a pane beside (middle-click opens anything beside)', words: ['pane', 'side by side', 'split', 'beside', 'two', 'compare'], when: () => !!paneHost(), run: () => openBeside(lastPlace) },
   { group: 'view', label: 'Show the panes beside', words: ['pane', 'peek', 'side by side'], when: () => !!panes?.count && panes.sheet && !panes.sheetOpen, run: () => panes.showSheet() },
   { group: 'view', label: 'Close all the panes beside', words: ['pane', 'side by side', 'close'], when: () => !!panes?.count, run: () => panes.closeAll() },
   ...Object.entries(LISTS).map(([list, name]) => ({ group: 'page', label: `Make this page a ${name.toLowerCase()} (Claude links each title)`, keys: '', run: () => makeList(list), when: () => inNotebook() && notebook.page?.kind === 'page' && listOf(notebook.page) !== list })),
@@ -453,7 +436,7 @@ function wireBeside() {
     mainPlace: () => lastPlace,
     goMain: (place) => go(place),
     focusMain: () => { window.focus(); try { currentEditor().commands.focus(); } catch { /* nothing to type in */ } },
-    isOff: () => root.classList.contains('hide-panes'),
+    isOff: () => false,
     many: () => localStorage.getItem('manyPanes') === '1',
     focus: () => root.classList.contains('focus'),
     changed: () => syncBeside(),
@@ -508,4 +491,4 @@ function wireBeside() {
   });
 }
 
-export { besideItem, listSoon, openBeside, openEntryBeside, openInMain, openProjectBeside, openTalk, paneKeys, paneMoves, panes, planningView, pull, pullFromProject, reviewAsked, reviewing, setReviewing, sideNotes, syncBeside, talkThrough, toggleBesidePane, whenHere, wireBeside };
+export { besideItem, listSoon, openBeside, openEntryBeside, openInMain, openProjectBeside, openTalk, paneKeys, paneMoves, panes, planningView, pull, pullFromProject, sideNotes, syncBeside, talkThrough, toggleBesidePane, whenHere, wireBeside };

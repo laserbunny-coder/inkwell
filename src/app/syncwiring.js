@@ -30,10 +30,9 @@ import { renderCrumb, renderRail, scheduleScenes } from './rail.js';
 import { leaveChapter, refreshViews } from './tidying.js';
 import { grid, renderLibrary, renderProject, renderWorld } from './libraryview.js';
 import { production } from './productionwiring.js';
-import { frame, stagePage, todayPanel } from './workpages.js';
-import { tidyNudge } from './quickinserts.js';
-import { blankOnce, dayReview, deskPage, looseSoon, openAsked, plan, scribeKept, tagsPage, writeOut } from './talking.js';
-import { reviewAsked, sideNotes } from './beside.js';
+import { stagePage, todayPanel } from './workpages.js';
+import { blankOnce, deskPage, openAsked, plan, scribeKept, tagsPage, writeOut } from './talking.js';
+import { sideNotes } from './beside.js';
 
 // ---------- sync between devices ----------
 
@@ -144,14 +143,13 @@ async function migrateWorlds() {
 
 async function applyRemote(rows) {
   searchChanged(rows);
-  if (rows.some((r) => r.kind === 'tidy' || r.kind === 'change')) { redrawTidy(); tidyNudge(); }
+  if (rows.some((r) => r.kind === 'tidy' || r.kind === 'change')) redrawTidy();
   if (view() === 'tags' && tagsPage && rows.some((r) => r.tags?.length || r.id === 'settings-tag-groups')) tagsPage.refresh();
   if (view() === 'desk' && rows.some((r) => r.kind === 'world' || r.kind === 'area' || r.id === DESK_ID)) deskPage?.refresh();
   // Projects come in your Desk order everywhere: the rail follows a drag there.
-  if (rows.some((r) => r.id === DESK_ID || r.kind === 'world')) frame.drawProjects();
   // Where a project sits changed somewhere else (the Desk beside, a talk with Claude).
   if (view() === 'world' && rows.some((r) => r.id === DESK_ID) && !rows.some((r) => r.kind === 'world')) renderWorld();
-  if (rows.some((r) => r.kind === 'line' || r.id === PLAN_ID)) { plan?.soon(); looseSoon(); }
+  if (rows.some((r) => r.kind === 'line' || r.id === PLAN_ID)) plan?.soon();
   if (rows.some((r) => r.kind === 'settings')) await notes.reloadTypes();
   if (rows.some((r) => r.kind === 'workflow')) setOwnWorkflows(await byKind('workflow'));
   if (state.chapterId && rows.some((r) => r.links?.includes(state.chapterId))) renderChapterLinks();
@@ -195,7 +193,6 @@ async function applyRemote(rows) {
   if (stagePage?.isOpen && rows.some((r) => ['line', 'page', 'project', 'world', 'event', 'tie', 'shootday', 'note', 'share', 'file', 'breakdown'].includes(r.kind))) stagePage.refresh();
   if (todayPanel.isOpen && rows.some((r) => r.kind === 'line' || r.kind === 'day')) todayPanel.refresh();
   await notebook.applyRemote(rows);
-  if (inNotebook() && notebook.isDay && rows.some((r) => r.kind === 'review' || r.parent_id === notebook.page.id || r.parent_id === 'pg_mulling')) dayReview?.refresh();
 }
 
 let caretAfter = null;
@@ -231,7 +228,7 @@ addCommands(() => [
   { group: 'sync', label: 'Sync now', keys: '', run: () => sync.soon(0), when: () => !!sync.user },
   { group: 'sync', label: 'Sign in to sync between devices', keys: '', run: () => sync.signIn(), when: () => sync.available && !sync.user },
   { group: 'sync', label: 'Sign out of sync', keys: '', run: () => sync.signOut(), when: () => !!sync.user },
-  { group: 'sync', label: 'Phone alerts (day review, Needs you, your week and month)…', keys: '', run: () => openAlerts({ backend: sync.backend, signedIn: !!sync.user, toast }) },
+  { group: 'sync', label: 'Phone alerts…', keys: '', run: () => openAlerts({ backend: sync.backend, signedIn: !!sync.user, toast }) },
   { group: 'sync', label: 'Two versions to check', urgent: true, keys: '', run: () => conflicts.open(), when: () => !$('#versions').hidden }
 ]);
 
@@ -247,7 +244,7 @@ function wireSync() {
       syncEl.dataset.state = s;
       delete syncEl.dataset.stale;
       document.body.dataset.sync = s;
-      if (s === 'synced') { seedIfEmpty(); conflicts.count(); checkSpace().catch(() => {}); blankOnce().then(writeOut); scribeKept(); openAsked(); reviewAsked(); }
+      if (s === 'synced') { seedIfEmpty(); conflicts.count(); checkSpace().catch(() => {}); blankOnce().then(writeOut); scribeKept(); openAsked(); }
       if (s !== 'syncing') checkUnsent().catch(() => {});
     },
     // What came from the cloud goes to the panes too.

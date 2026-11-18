@@ -209,18 +209,6 @@ try {
     await p.waitForFunction(() => document.querySelectorAll('.wv-line').length === 2);
   });
 
-  await check('Focus keeps just the faint line; the titles come back with Ctrl + Shift + .', async () => {
-    await clickOn('He sets');
-    await p.keyboard.press('Control+.');
-    await p.waitForFunction(() => document.documentElement.classList.contains('focus'));
-    assert.equal(await p.locator('.wv-line').nth(1).locator('.wv-dot').isVisible(), false);
-    assert.equal(await p.locator('.wv-line').nth(1).locator('.wv-title').evaluate((x) => getComputedStyle(x).visibility), 'hidden');
-    await p.keyboard.press('Control+Shift+.');
-    await p.waitForFunction(() => getComputedStyle(document.querySelectorAll('.wv-line')[1].querySelector('.wv-title')).visibility === 'visible');
-    await p.keyboard.press('Control+Shift+.');
-    await p.keyboard.press('Control+.');
-    await p.waitForFunction(() => !document.documentElement.classList.contains('focus'));
-  });
 
   await check('a look per script: Kung fu titles in red brush lettering', async () => {
     await p.keyboard.press('Control+K');

@@ -7,7 +7,6 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 import { thin, compare, words } from '../src/history.js';
-import { classic } from './classic.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -38,7 +37,7 @@ const fake = () => {
     subscribe() {}, unsubscribe() {}
   };
 };
-const browser = classic(pageFirst(await chromium.launch()));
+const browser = pageFirst(await chromium.launch());
 async function device(viewport = { width: 1300, height: 850 }) {
   const ctx = await browser.newContext({ viewport, hasTouch: viewport.width < 700 });
   await ctx.exposeFunction('__remote', remote);
@@ -55,13 +54,18 @@ const syncNow = (p) => p.evaluate(() => window.__sync.run());
 const text = (p) => p.locator('#editor .ProseMirror').innerText();
 // The list of versions (and what was deleted) is reached from the strip's own ⋯.
 const openHistory = async (p) => {
-  if (await p.locator('.history').isVisible()) await p.keyboard.press('Escape');
-  await p.keyboard.press('Control+Shift+H');
+  // Close by its own button: an Esc that lands outside text zooms out.
+  if (await p.locator('.history').isVisible()) await p.locator('.history [data-cmd="history-list"]').click();
+  if (!(await p.locator('.hstrip').isVisible())) await p.keyboard.press('Control+Shift+H');
   await p.waitForSelector('.hstrip');
   await p.locator('.hstrip .hs-more').click();
   await p.locator('.pop-menu .pop-item', { hasText: 'Every version as a list' }).click();
   await p.waitForSelector('.history', { state: 'visible' }); await sleep(400); };
-const closeHistory = async (p) => { await p.keyboard.press('Escape'); await sleep(200); };
+const closeHistory = async (p) => {
+  if (await p.locator('.history').isVisible()) await p.locator('.history [data-cmd="history-list"]').click();
+  if (await p.locator('.hstrip .hs-done').isVisible()) await p.locator('.hstrip .hs-done').click();
+  await sleep(200);
+};
 // Type a paragraph at the very end of the chapter.
 const setText = (p, paras) => p.evaluate((ps) => {
   const ed = window.__editor;

@@ -289,7 +289,7 @@ async function worldMenu(world) {
     { label: 'Rename…', run: () => rename(w) },
     { label: 'New piece…', run: () => addPiece(w.id) },
     { label: 'What Claude knows about this world…', run: () => showClaudeKnows(w) },
-    ...(!inPane && paneHost() && !root.classList.contains('hide-panes') && view() === 'world' && state.worldId === w.id ? [{ label: 'Talk it through with Claude', keys: '⌥T', run: () => openTalk() }] : []),
+    ...(!inPane && paneHost() && view() === 'world' && state.worldId === w.id ? [{ label: 'Talk it through with Claude', keys: '⌥T', run: () => openTalk() }] : []),
     { label: 'New page in its bible', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(w.id); } },
     { label: 'Move to area', sub: (await areaOptions(all)).map(([id, label]) => ({ label: label.trim(), current: w.area_id === id, run: () => moveBookToArea(w, id) })) },
     ...(!isLife(w) ? [{ label: 'Workflow…', run: () => openStages(w) }] : []),
