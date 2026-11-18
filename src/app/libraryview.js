@@ -257,7 +257,10 @@ async function renderZoomLibrary(allAreas, allBooks) {
     }
     grid.append(sec);
   }
-  grid.append(addAreaChip(null));
+  const plusArea = addAreaChip(null);
+  plusArea.className = 'zl-add zl-newarea';
+  plusArea.textContent = '+ area';
+  grid.append(plusArea);
   parts.push(grid);
 
   const done = allBooks.filter(isFinished).sort((a, b) => b.fields.finished - a.fields.finished);
