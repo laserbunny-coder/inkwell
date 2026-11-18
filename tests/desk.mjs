@@ -61,7 +61,7 @@ const asked = [];
 
 const browser = withoutSync(await chromium.launch());
 async function open(viewport, extra = {}) {
-  const ctx = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', viewport, ...extra });
+  const ctx = await browser.newContext({ colorScheme: 'dark', reducedMotion: 'reduce', timezoneId: 'America/Los_Angeles', viewport, ...extra });
   await ctx.exposeFunction('__db', (op, a, b) => {
     calls.push([op, a, b]);
     if (op === 'desk') return { needs: db.needs.filter((n) => !n.resolved_at).map((n) => ({ ...n })), updates: db.updates.filter((u) => u.created_at >= a).map((u) => ({ ...u })) };

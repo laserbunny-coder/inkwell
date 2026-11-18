@@ -26,7 +26,7 @@ const PX = 1; // pixels a minute
 
 const browser = withoutSync(await chromium.launch());
 async function open(viewport, extra = {}) {
-  const ctx = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', viewport, estimates: false, ...extra });
+  const ctx = await browser.newContext({ colorScheme: 'dark', reducedMotion: 'reduce', timezoneId: 'America/Los_Angeles', viewport, estimates: false, ...extra });
   await ctx.addInitScript((events) => { window.__calendar = async () => ({ connected: true, events }); }, EVENTS);
   const page = await ctx.newPage();
   page.ctx = ctx;

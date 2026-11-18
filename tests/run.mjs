@@ -17,7 +17,9 @@ await sleep(1500);
 const URL = `http://localhost:${PORT}/`;
 
 const browser = withoutSync(await chromium.launch());
-const ctx = await browser.newContext();
+// Reduced motion: the zoom's slides between places are not what this file checks,
+// and on a slow machine a click can land mid-slide.
+const ctx = await browser.newContext({ reducedMotion: 'reduce' });
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
@@ -633,8 +635,7 @@ try {
     if (!(await p.locator('.notebook').isVisible())) await p.keyboard.press('Control+J');
     await p.waitForSelector('.notebook', { state: 'visible' });
     await p.waitForFunction(() => document.querySelector('#nb-kind').textContent === 'Today');
-    if (!(await p.locator('#outline-editor li', { hasText: 'Call the harbourmaster' }).count())) console.log('NOHARB', await p.evaluate(() => [document.querySelector('#nb-title')?.textContent, document.querySelector('#nb-kind')?.textContent, JSON.stringify(history.state), document.querySelector('#outline-editor')?.innerText.slice(0, 300)]));
-    const top = p.locator('#outline-editor li', { hasText: 'Call the harbourmaster' }).first();
+    const top = p.locator('#outline-editor li:visible', { hasText: 'Call the harbourmaster' }).first();
     // Bullets are off by default: the dot only shows under the pointer.
     assert.equal(await top.locator(':scope > .line-gutter .bullet').evaluate((b) => getComputedStyle(b, '::after').opacity), '0');
     const storm = p.locator('#outline-editor li p', { hasText: 'Ask about the 1912 storm' });
@@ -664,7 +665,7 @@ try {
   });
 
   await check('a notebook line shows six dots on hover; a right-click opens its menu', async () => {
-    const top = p.locator('#outline-editor li', { hasText: 'Call the harbourmaster' }).first();
+    const top = p.locator('#outline-editor li:visible', { hasText: 'Call the harbourmaster' }).first();
     await top.locator(':scope > p').hover({ position: { x: 12, y: 10 } });
     await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li')].find((li) => li.querySelector(':scope > p')?.textContent.startsWith('Call the harbourmaster'))?.querySelector(':scope > .line-gutter .grip') && getComputedStyle([...document.querySelectorAll('#outline-editor li')].find((li) => li.querySelector(':scope > p')?.textContent.startsWith('Call the harbourmaster')).querySelector(':scope > .line-gutter .grip')).opacity === '1');
     await top.locator(':scope > .line-gutter .bullet').click({ button: 'right' });
