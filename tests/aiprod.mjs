@@ -6,12 +6,12 @@
 // Resolve hand-off (an EDL of the starred takes), and tries Claude brings
 // back through the connector arriving on every device.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { readFile } from 'node:fs/promises';
 import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 import { estimate, spent, runsOf, toEdl, timecode, cutEvents, priceOf, priceList, toolIdsOf, SEED_PRICES, money } from '../src/production.js';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -82,8 +82,7 @@ checkNow('the rough cut: starred takes, a shared take split by its shots, stills
 // ---------- in the app ----------
 
 const PORT = 4251;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 const SHOTS = process.env.SHOTS || '';
 
 const table = new Map();

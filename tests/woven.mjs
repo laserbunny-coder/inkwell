@@ -2,11 +2,11 @@
 // Guessing headings from the words, the Enter and Tab flow, the scene card,
 // titles, slash marks, Classic and back, looks, and Prepare for shoot.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { withoutSync } from './nosync.mjs';
 import { parseSlug, buildSlug, guessScene, placeList, missing } from '../src/woven.js';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 let chromium;
@@ -54,8 +54,7 @@ await check('a scene heading is guessed from the first words, the bible and the 
 // ---------- in the app ----------
 
 const PORT = 4193;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 const URL = `http://localhost:${PORT}/`;
 const browser = withoutSync(await chromium.launch());
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: 'dark' });

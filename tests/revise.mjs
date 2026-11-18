@@ -5,12 +5,12 @@
 // reader's page. window.__claude stands in for the server, a fake backend for
 // Supabase, and window.__shareBackend for the share function.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 import { alignBlocks, pairChapters, likeness, runsOf, changeCount } from '../src/drafts.js';
 import { hashOf, newToken, linkFor } from '../src/sharelink.js';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -57,8 +57,7 @@ checkNow('a share link: an unguessable token, a read.html address, a fingerprint
 // ---------- in the app ----------
 
 const PORT = 4199;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 const SHOTS = process.env.SHOTS || '';
 
 const table = new Map();

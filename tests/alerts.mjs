@@ -2,17 +2,16 @@
 // one buzz left is Needs you (Nov 17 2026), turning alerts on signs
 // this device up as Inkwell's, and an alert for Needs you opens the Desk.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 
 const PORT = 4275;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort', ...(process.env.DIST ? ['--outDir', process.env.DIST] : [])], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 const URL = `http://localhost:${PORT}/`;
 
 const pick = async (p, name) => {

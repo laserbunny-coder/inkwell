@@ -4,18 +4,16 @@
 // much time is left before the day ends, less what's still on the calendar.
 // Under the week, each area's hours worked against the hours it should get.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { withoutSync } from './nosync.mjs';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require('playwright');
 
 const PORT = 4272;
-const DIST = process.env.DIST;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort', ...(DIST ? ['--outDir', DIST] : [])], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 const URL = `http://localhost:${PORT}/`;
 const SHOTS = process.env.SHOTS;
 const NOW = '2026-11-09T14:04:00-08:00'; // a Monday, 2:04 pm

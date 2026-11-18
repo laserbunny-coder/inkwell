@@ -1,19 +1,18 @@
 // Checks for the data underneath: ordering, link names after a rename, the
 // "two versions" screen, the whole-vault backup, and forgetting old deletions.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { withoutSync } from './nosync.mjs';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 let chromium;
 try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require(`${process.execPath.replace(/bin\/node$/, '')}lib/node_modules/playwright`)); }
 
 const PORT = 4181;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 
 const browser = withoutSync(await chromium.launch());
 const ctx = await browser.newContext({ acceptDownloads: true });
