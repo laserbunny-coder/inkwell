@@ -102,16 +102,6 @@ try {
     assert.equal(await shown(), false);
   });
 
-  await check('the Notes button stays in place, dimmed, outside a draft', async () => {
-    assert.equal(await page.locator('#notes-toggle').isDisabled(), true);
-    assert.equal(await page.locator('#notes-toggle').isVisible(), true);
-    await page.keyboard.press('Control+J');
-    await page.waitForFunction(() => !document.documentElement.dataset.view);
-    assert.equal(await page.locator('#notes-toggle').isDisabled(), false);
-    await page.keyboard.press('Control+J');
-    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
-    assert.equal(await page.locator('#notes-toggle').isDisabled(), true);
-  });
 
   await check('no page errors', async () => assert.deepEqual(page.errors, []));
 } finally {

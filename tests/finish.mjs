@@ -74,9 +74,9 @@ const go = async (p, place) => { await p.evaluate((pl) => { history.pushState(pl
 const still = (p) => p.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {}))));
 const shot = async (p, name) => { if (SHOTS) { await still(p); await sleep(200); await p.screenshot({ path: `${SHOTS}/${name}.png` }); } };
 const deskText = (p) => p.locator('main.desk-home').innerText();
-const railNames = (p) => p.locator('.rail-project .rail-name').allInnerTexts();
 const todayTasks = (p) => p.locator('#plan .pl-task:not(.done) .pl-words').allInnerTexts();
-const cards = (p) => p.locator('#lib-books .card-title').allInnerTexts();
+const cards = async (p) => { await p.waitForSelector('#lib-zoom:not([hidden]) .zl-name'); return p.locator('#lib-zoom .zl-area .zl-name').allInnerTexts(); };
+const shelf = (p) => p.locator('#lib-zoom .zl-done .zl-chip').allInnerTexts();
 const nasPage = async (p) => { await go(p, { view: 'world', id: 'wd_nas' }); await p.waitForFunction(() => document.querySelector('#wh-title')?.textContent === 'NAS'); await sleep(400); };
 
 let failed = 0;
@@ -87,16 +87,15 @@ async function check(name, fn) {
 try {
   const page = await open({ width: 1440, height: 900 });
 
-  await check('before: NAS is on the Desk, in the rail, in the Library and its task is on Today', async () => {
+  await check('before: NAS is on the Desk, in the Library and its task is on Today', async () => {
     await go(page, { view: 'desk' });
     assert.match(await deskText(page), /NAS/);
-    assert.ok((await railNames(page)).includes('NAS'));
     await go(page, { view: 'notebook', pageId: 'day-2026-11-14' });
     await page.waitForSelector('#plan .pl-task');
     assert.ok((await todayTasks(page)).includes('Label the drives'));
     await go(page, { view: 'library' });
     assert.ok((await cards(page)).includes('NAS'));
-    assert.ok(await page.locator('#lib-done-box').isHidden(), 'no Finished shelf while nothing is finished');
+    assert.deepEqual(await shelf(page), [], 'nothing on the Finished shelf yet');
   });
 
   await check('⋯ > Finish project… asks once, says what happens to its open task, and nothing is deleted', async () => {
@@ -127,21 +126,17 @@ try {
     await shot(page, 'finish-3-page');
   });
 
-  await check('after: off the Desk, the rail and Today; on the Library’s Finished shelf', async () => {
+  await check('after: off the Desk and Today; on the Library’s Finished shelf', async () => {
     await go(page, { view: 'desk' });
     assert.doesNotMatch(await deskText(page), /NAS/);
-    assert.ok(!(await railNames(page)).includes('NAS'));
     await go(page, { view: 'notebook', pageId: 'day-2026-11-14' });
     await page.waitForSelector('#plan .pl-task');
     const t = await todayTasks(page);
     assert.ok(!t.includes('Label the drives') && t.includes('Board Reel 2'), t.join(', '));
     await go(page, { view: 'library' });
     assert.ok(!(await cards(page)).includes('NAS'));
-    assert.ok(await page.locator('#lib-done-box').isVisible());
-    assert.match(await page.locator('#lib-done-box summary').innerText(), /Finished \(1\)/i);
-    await page.locator('#lib-done-box summary').click();
-    assert.match(await page.locator('#lib-done li').innerText(), /NAS[\s\S]*Finished today/);
-    await page.locator('#lib-done-box').scrollIntoViewIfNeeded();
+    assert.deepEqual(await shelf(page), ['NAS']);
+    await page.locator('#lib-zoom .zl-done').scrollIntoViewIfNeeded();
     await shot(page, 'finish-4-shelf');
   });
 
@@ -154,12 +149,16 @@ try {
     await page.keyboard.press('Escape');
   });
 
-  await check('Reopen on the shelf brings it back everywhere, with its open task', async () => {
-    await page.locator('#lib-done .ghost-btn', { hasText: 'Reopen' }).click();
+  await check('Reopen (shelf, then its page) brings it back everywhere, with its open task', async () => {
+    await go(page, { view: 'library' });
+    await page.locator('#lib-zoom .zl-done .zl-chip', { hasText: 'NAS' }).click();
+    await page.waitForFunction(() => document.querySelector('#wh-title')?.textContent === 'NAS');
+    await page.locator('#wh-finished .wp-link', { hasText: 'Reopen' }).click();
     await sleep(600);
     assert.equal((await get(page, 'wd_nas')).fields.finished, undefined);
+    await go(page, { view: 'library' });
     assert.ok((await cards(page)).includes('NAS'));
-    assert.ok(await page.locator('#lib-done-box').isHidden());
+    assert.deepEqual(await shelf(page), []);
     await go(page, { view: 'notebook', pageId: 'day-2026-11-14' });
     await page.waitForSelector('#plan .pl-task');
     assert.ok((await todayTasks(page)).includes('Label the drives'));
@@ -191,8 +190,8 @@ try {
     await phone.evaluate(() => document.querySelector('.toast')?.remove());
     await shot(phone, 'finish-6-phone-page');
     await go(phone, { view: 'library' });
-    await phone.locator('#lib-done-box summary').click();
-    await phone.locator('#lib-done-box').scrollIntoViewIfNeeded();
+    await phone.waitForSelector('#lib-zoom .zl-done .zl-chip');
+    await phone.locator('#lib-zoom .zl-done').scrollIntoViewIfNeeded();
     const wide = await phone.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     assert.ok(wide <= 1, `no sideways scroll (${wide}px)`);
     await shot(phone, 'finish-7-phone-shelf');

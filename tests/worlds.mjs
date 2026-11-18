@@ -151,10 +151,11 @@ try {
   await check('the Library shows worlds, and opening one shows its pieces and bible', async () => {
     await laptop.keyboard.press('Control+Shift+O');
     await sleep(500);
-    const titles = await laptop.locator('#lib-books .card-title').allInnerTexts();
+    await laptop.waitForSelector('#lib-zoom:not([hidden]) .zl-name');
+    const titles = await laptop.locator('#lib-zoom .zl-name').allInnerTexts();
     for (const t of ['The Harbour', 'Christmas', 'Pilot']) assert.ok(titles.includes(t), titles.join(' | '));
     assert.ok(!titles.includes('Old draft'));
-    await laptop.locator('.card', { hasText: 'The Harbour' }).first().click();
+    await laptop.locator('#lib-zoom .zl-name', { hasText: 'The Harbour' }).first().click();
     await sleep(500);
     assert.equal(await laptop.evaluate(() => document.documentElement.dataset.view), 'world');
     assert.match(await laptop.locator('#wh-pieces').innerText(), /The Harbour/);
