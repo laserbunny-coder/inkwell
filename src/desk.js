@@ -383,7 +383,10 @@ export class DeskPage {
     this.sheet.dataset.tab = this.tab;
     // Something is being dragged: draw again once it's let go.
     if (this.dragging) { this.redraw = true; return; }
-    const parts = this.tab === 'history' ? this.historyParts({ now, failed }) : await this.stageParts({ now, failed });
+    const tab = this.tab;
+    const parts = tab === 'history' ? this.historyParts({ now, failed }) : await this.stageParts({ now, failed });
+    // Switched to the other tab while the stage was being drawn: that tab draws itself.
+    if (tab !== this.tab) return;
     // Someone is writing a north star: don't pull the page out from under them.
     if (this.sheet.querySelector('.dk-star:focus')) return;
     if (this.dragging) { this.redraw = true; return; }
