@@ -85,11 +85,15 @@ const card = (p) => p.evaluate(() => ({
 const cardIs = async (p, start) => { await p.waitForFunction((s) => (document.querySelector('.thru-big')?.textContent || '').startsWith(s), start); await still(p); };
 const closed = (p) => p.waitForFunction(() => !document.querySelector('.thru'));
 // The way in is the command (the count under the day went on Nov 17 2026).
+// The editor saves a typed line a moment after typing stops, and again as it
+// loses focus; let both land before reading the loose lines.
 const goThrough = async (p) => {
+  await p.evaluate(() => document.activeElement?.blur?.());
+  await sleep(1500);
   await p.keyboard.press('Control+k');
   await p.locator('#palette-input').fill('go through loose');
-  await sleep(300);
-  await p.keyboard.press('Enter');
+  await p.waitForFunction(() => /Go through loose lines/.test(document.querySelector('#palette-list li')?.textContent || ''));
+  await p.locator('#palette-list li', { hasText: 'Go through loose lines' }).first().click();
   await p.waitForSelector('.thru');
 };
 
