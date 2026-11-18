@@ -65,7 +65,6 @@ html.zoom .zm-mic {
 html.zoom body:is(.typing, .kb-up, .script-bar-on, .outline-bar-on, .go-on) .zm-mic, html.zoom.focus .zm-mic { opacity: 0; pointer-events: none; }
 
 /* On Now its own line to get things out of your head has its mic: one is enough. */
-html.zoom[data-view="plan"]:has(#plan-sheet[data-tab="now"]) .zm-mic { display: none; }
 
 /* ---------- Today's faces: the list, the page, the hours ---------- */
 .ah-year { border: 0; background: transparent; color: var(--muted); font: inherit; letter-spacing: inherit; text-transform: inherit; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line2); text-underline-offset: 3px; }
@@ -154,4 +153,65 @@ html[data-zt="rise"]::view-transition-old(root) { animation-name: zt-fade-out; }
 @keyframes zt-fade-out { to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   html[data-zt]::view-transition-old(root), html[data-zt]::view-transition-new(root) { animation: none; }
+}
+
+/* ---------- Now as a page (Part 2) ---------- */
+.now-view.now-page { max-width: 680px; min-height: calc(100dvh - 170px); }
+.np { display: flex; flex-direction: column; gap: 12px; padding-top: clamp(24px, 8vh, 72px); flex: 1; }
+.np-crumb { align-self: flex-start; border: 0; background: transparent; color: var(--muted); font: 13px var(--ui); padding: 4px 8px; margin-left: 28px; border-radius: 6px; }
+button.np-crumb { cursor: pointer; }
+button.np-crumb:hover, button.np-crumb:focus-visible { color: var(--ink); background: var(--raise); }
+.np-eye { margin: 0 0 0 36px; font: 12px var(--ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.np-hero { display: flex; align-items: flex-start; gap: 14px; }
+.np-tick { flex: none; width: 22px; height: 22px; margin-top: 11px; border-radius: 50%; border: 1.5px solid var(--faint); background: transparent; padding: 0; position: relative; cursor: pointer; }
+.np-tick::before { content: ''; position: absolute; inset: -10px; }
+.np-tick:hover, .np-tick:focus-visible { border-color: var(--accent); }
+.np-tick.on { background: var(--faint); border-color: var(--faint); }
+.np-tx { font: 400 clamp(28px, 4.4vw, 38px)/1.18 var(--prose); color: var(--ink); margin: 0; text-wrap: balance; overflow-wrap: anywhere; min-width: 0; }
+.np-tx.isdone { color: var(--muted); }
+.np-tx.quiet { color: var(--muted); font-size: 26px; margin-left: 36px; }
+.np-kind { margin-left: 36px; }
+.np-kind .now-mid { align-items: flex-start; text-align: left; padding: 4px 0 8px; justify-content: flex-start; flex: none; }
+.np-kind .now-reading { text-align: left; }
+.np-kind .now-acts, .np-kind .now-endsrow { justify-content: flex-start; }
+.np-doorbox:empty { display: none; }
+.np-door { margin: 0 0 4px 36px; display: flex; flex-direction: column; gap: 6px; text-align: left; border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 12px 16px; color: var(--ink); cursor: pointer; font: inherit; width: calc(100% - 36px); }
+.np-door:hover, .np-door:focus-visible { border-color: var(--accent); }
+.np-door-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font: 13px var(--ui); }
+.np-door-h b { font-weight: 500; color: var(--ink); }
+.np-door-h em { font-style: normal; color: var(--faint); font-size: 12px; white-space: nowrap; }
+.np-door-tx { font: 16px/1.5 var(--prose); color: var(--muted); display: flex; flex-direction: column; overflow-wrap: anywhere; }
+.np-door-tx .h { font: 12px var(--ui); letter-spacing: .06em; text-transform: uppercase; }
+.np-door-go { align-self: flex-end; font: 12.5px var(--ui); color: var(--accent); display: flex; gap: 8px; align-items: center; }
+.np-door-go kbd { font: 11px var(--ui); color: var(--faint); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+.np-tie { margin: -4px 0 0 30px; align-self: flex-start; border: 0; background: transparent; color: var(--faint); font: 12.5px var(--ui); padding: 4px 8px; border-radius: 6px; cursor: pointer; }
+.np-tie:hover, .np-tie:focus-visible { color: var(--ink); background: var(--raise); }
+.np-notes { margin-left: 36px; display: flex; flex-direction: column; gap: 2px; }
+.np-notes .pl-kids { margin: 0; }
+.np-notein { border: 0; background: transparent; padding: 6px 8px; margin-left: -8px; color: var(--ink); font: 15px var(--ui); outline: none; width: 100%; border-radius: 6px; }
+.np-notein::placeholder { color: var(--faint); }
+.np-notein:focus { background: var(--raise); }
+.now-page .now-choices { margin-left: 36px; width: auto; max-width: min(420px, calc(100% - 36px)); box-sizing: border-box; align-self: flex-start; }
+.now-page .now-choice { min-width: 0; box-sizing: border-box; }
+.np-foot { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; margin-top: auto; padding: 18px 0 8px; }
+.np-sp { flex: 1; }
+.np-at { color: var(--faint); font: 13px var(--ui); padding: 0 6px; }
+.now-btn.np-f { border: 0; background: transparent; color: var(--muted); font: 13.5px var(--ui); padding: 9px 10px; border-radius: 8px; min-height: 0; }
+.now-btn.np-f:hover, .now-btn.np-f:focus-visible { color: var(--ink); background: var(--raise); }
+.now-btn.np-f.strong { color: var(--accent); }
+.zm-ends { display: flex; gap: 4px; margin-top: 6px; margin-left: -12px; }
+/* The Now dot is hollow while a line is visited. */
+.zm-stop.home.away .zm-word::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--accent); }
+
+/* The thought box (Alt + J). */
+.zm-thought { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(70px + env(safe-area-inset-bottom, 0px)); z-index: 60; width: min(560px, calc(100vw - 32px)); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 8px; box-shadow: 0 12px 40px rgba(0, 0, 0, .28); display: flex; flex-direction: column; gap: 4px; font-family: var(--ui); }
+.zm-thought[hidden] { display: none; }
+.zm-thought input { border: 0; background: transparent; color: var(--ink); font: 16px var(--ui); outline: none; padding: 6px 4px; }
+.zm-thought input::placeholder { color: var(--faint); }
+.zm-thought small { color: var(--faint); font-size: 11.5px; padding: 0 4px; }
+@media (--narrow), (--touch) {
+  .np { padding-top: 18px; }
+  .np-crumb, .np-tx.quiet { margin-left: 26px; }
+  .np-kind, .np-notes, .now-page .now-choices { margin-left: 34px; }
+  .np-door { margin-left: 34px; width: calc(100% - 34px); }
 }

@@ -10,6 +10,8 @@ import { make } from './dom.js';
 import { autoOn } from './auto.js';
 import { TRACKS, posOf, placeOf, readReading, saveReading, todays, advanced, readYesterday, missedYesterday, esvLink, keyState, kept, chapter, tickBibleHabit } from './firstlight.js';
 import { readStreak, doneLine } from './readstats.js';
+import { tickLight, lightToday, dropLine } from './firstlight.js';
+import { zoomOn } from './zoomstate.js';
 
 export class LightNow {
   constructor(now) {
@@ -28,6 +30,8 @@ export class LightNow {
   due(m) {
     if (!this.st || this.now.off('firstlight') || !autoOn('firstlight')) return false;
     if (this.forced) return true;
+    // On the zoom First light is a line of the day, opened like any line (Part 2).
+    if (zoomOn()) return false;
     if (m.cur || this.now.mode) return false;
     const today = this.p.today;
     return this.st.read !== today && this.st.skip !== today;
@@ -47,14 +51,15 @@ export class LightNow {
     });
   }
 
-  view() {
-    const mid = make('div', 'now-mid now-ends now-light');
+  // bare: inside First light's own page (the zoom), under its heading.
+  view({ bare = false } = {}) {
+    const mid = make('div', `now-mid now-ends now-light${bare ? ' bare' : ''}`);
     const refs = todays(this.st);
     if (this.setting) return this.setView(mid);
     if (this.rd >= 0) return this.readView(mid, refs);
     this.probe(refs);
     const nokey = this.noKey();
-    mid.append(make('p', 'now-eyebrow', 'First light'), make('h1', 'now-thing sm', 'Today’s reading'));
+    if (!bare) mid.append(make('p', 'now-eyebrow', 'First light'), make('h1', 'now-thing sm', 'Today’s reading'));
     const list = make('ul', 'now-reading');
     for (const r of refs) {
       const li = make('li');
@@ -189,6 +194,8 @@ export class LightNow {
     this.note = root.classList.contains('hide-readstreak') ? '' : doneLine(readStreak(this.st.days, today));
     const habit = await tickBibleHabit(this.p.items, today);
     if (habit) await this.p.wrote(habit.rows);
+    const line = await tickLight(this.p.items || [], today, true);
+    if (line.length) await this.p.wrote(line);
     this.leave();
     this.p.hooks.toast?.('Read. Tomorrow’s chapters are next', {
       label: 'Undo',
@@ -197,7 +204,8 @@ export class LightNow {
         this.note = '';
         await saveReading(was);
         if (habit) { const { tickTask } = await import('./tasks.js'); await this.p.wrote(await tickTask(habit.id, false)); }
-        this.p.redraw();
+        if (line.length) await this.p.wrote(await tickLight(this.p.items || [], today, false));
+        await this.p.refresh();
       }
     });
     await this.p.refresh();
@@ -215,6 +223,9 @@ export class LightNow {
   async skip() {
     this.st = { ...this.st, skip: this.p.today };
     await saveReading(this.st);
+    // Its line for today goes too: a reading set aside never piles up.
+    const line = lightToday(this.p.items || [], this.p.today);
+    if (line && !line.row.fields?.done) await this.p.wrote(await dropLine(line.row.id));
     this.leave();
     this.p.redraw();
   }

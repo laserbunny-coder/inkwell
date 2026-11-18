@@ -181,7 +181,10 @@ async function boxAddTask(title, choice) {
   if (!title.trim()) return;
   const when = choice?.when || { day: isoToday() };
   const day = when.day || null;
-  const rows = await addTask({ text: title.trim(), day, span: when.span || null, order: plan?.lastOrder?.(day) ?? 0 });
+  // Added from inside a piece (or one of its pages): the step is for it (the zoom, Part 2).
+  const v = view();
+  const forId = v === 'write' ? state.project?.id : v === 'project' ? state.bookId : inNotebook() && notebook?.page && !notebook.isDay && notebook.page.kind !== 'world' ? notebook.page.id : null;
+  const rows = await addTask({ text: title.trim(), day, span: when.span || null, order: plan?.lastOrder?.(day) ?? 0, for: forId || null });
   await applyRemote(rows);
   const line = rows.at(-1);
   // Five big things at most on today: a sixth waits under Not planned (it says so, with Undo).

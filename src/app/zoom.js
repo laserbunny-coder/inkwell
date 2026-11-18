@@ -157,7 +157,8 @@ export async function toStop(id) {
   // Month again: the Year, and again back to the four weeks.
   if (id === 'month' && from === 'month') return toYear(!onYear());
   // The Project stop again from inside a piece: out to the project's own page.
-  if (id === from && id !== 'project') return;
+  // Now again while a line is open: back to the one thing.
+  if (id === from && id !== 'project' && !(id === 'now' && lastPlace?.line)) return;
   const place = await placeOfStop(id);
   if (id === 'today') faceTo(todayFace());
   if (JSON.stringify(place) === JSON.stringify(lastPlace)) return;
@@ -296,6 +297,11 @@ function light(place) {
   for (const b of ruler.querySelectorAll('.zm-stop')) {
     if (b.dataset.stop === lit) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   }
+  // Visiting a line (not the one thing): the Now dot is hollow (Part 2).
+  const home = ruler.querySelector('[data-stop="now"]');
+  const away = lit === 'now' && !!place?.line;
+  home?.classList.toggle('away', away);
+  if (home) home.title = away ? 'Back to the one thing (4)' : `${STOPS[NOW].title} (${NOW + 1})`;
   body.classList.toggle('in-piece', !!place && (!place.view || place.view === 'write' || (place.view === 'notebook' && !!place.pageId && !String(place.pageId).startsWith('day-'))));
 }
 
@@ -306,6 +312,44 @@ function count(n) {
   b.classList.toggle('need', n > 0);
   b.setAttribute('aria-label', n > 0 ? `Desk, ${n} waiting on you` : 'Desk');
 }
+
+// ---------- the thought box (Alt + J) ----------
+
+// Nothing sits on Now for it: one key from anywhere opens a small box, the
+// thought is filed as before (thoughts.js), and he stays where he was.
+let tbox = null;
+function thoughtBox() {
+  if (!tbox) {
+    tbox = make('form', 'zm-thought');
+    tbox.setAttribute('role', 'dialog');
+    tbox.setAttribute('aria-label', 'Get it out of your head');
+    const input = make('input');
+    input.type = 'text';
+    input.id = 'zm-thought-in';
+    input.placeholder = 'Get it out of your head';
+    input.autocomplete = 'off';
+    input.enterKeyHint = 'done';
+    input.setAttribute('aria-label', 'Get it out of your head: it is filed, and you stay here');
+    const hint = make('small', '', 'Enter files it · Esc closes');
+    tbox.append(input, hint);
+    tbox.hidden = true;
+    tbox.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      closeThought();
+      await plan?.hooks?.thought?.(text);
+    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeThought(); } });
+    input.addEventListener('blur', () => setTimeout(() => { if (!input.value.trim()) closeThought(); }, 150));
+    document.body.append(tbox);
+  }
+  tbox.hidden = false;
+  body.classList.add('thought-on');
+  tbox.querySelector('input').focus();
+}
+function closeThought() { if (tbox) tbox.hidden = true; body.classList.remove('thought-on'); }
 
 // ---------- keys ----------
 
@@ -330,6 +374,8 @@ function key(e) {
     if (t.isContentEditable) { t.blur(); body.classList.remove('typing', 'peek-top', 'peek-bottom'); e.preventDefault(); }
     return;
   }
+  // Alt + J: the thought box, from anywhere, in text too.
+  if (e.altKey && !m && !e.shiftKey && e.code === 'KeyJ') { e.preventDefault(); thoughtBox(); return; }
   // Alt + ` (the key left of 1): Now, from anywhere, in text too.
   if (e.altKey && !m && !e.shiftKey && e.code === 'Backquote') { e.preventDefault(); toStop('now'); return; }
   if (e.defaultPrevented) return;
@@ -420,6 +466,7 @@ addCommands(() => [
   { group: 'go', label: 'Now, from anywhere', keys: 'Alt+`', words: ['now', 'one thing', 'ruler', 'zoom', 'current'], run: () => toStop('now'), when: zoomOn },
   { group: 'go', label: 'Month: the next four weeks', keys: '1', words: ['month', 'four weeks', 'weeks', 'ahead', 'zoom', 'ruler'], run: () => (onYear() ? toYear(false) : toStop('month')), when: zoomOn },
   { group: 'go', label: 'Year: twelve months from now', keys: '1 twice', words: ['year', 'months', 'zoom', 'ruler', 'sometime this year', 'later'], run: () => toYear(true), when: zoomOn },
+  { group: 'new', label: 'Get it out of your head: a thought, filed', keys: 'Alt+J', words: ['thought', 'capture', 'out of your head', 'note', 'idea', 'inbox', 'jot'], run: () => thoughtBox(), when: zoomOn },
   { group: 'go', label: 'Zoom out one step', keys: 'Esc', words: ['zoom', 'out', 'step out', 'further', 'ruler', 'back'], run: () => zoomOut(), when: zoomOn },
   { group: 'go', label: 'Zoom in one step', keys: 'Enter', words: ['zoom', 'in', 'step in', 'closer', 'ruler'], run: () => zoomIn(), when: zoomOn },
   { group: 'view', label: 'Classic layout: the rail, the phone’s bottom bar and Today’s switch (on / off)', keys: '', words: ['classic', 'old', 'rail', 'bottom bar', 'layout', 'ruler', 'zoom', 'safety', 'back to how it was'], run: () => setLayout(zoomOn()) }
@@ -438,6 +485,12 @@ export function wireZoom() {
   document.addEventListener('inkwell:place', (e) => light(e.detail));
   document.addEventListener('inkwell:needs', (e) => count(e.detail || 0));
   document.addEventListener('inkwell:layout', sync);
+  // Places inside the stops ask for the zoom's motion (nowpage.js zoomTo).
+  document.addEventListener('inkwell:zoomto', (e) => {
+    const d = e.detail || {};
+    if (d.stop) toStop(d.stop);
+    else if (d.place) zoomGo(d.place, d.way || 'rise');
+  });
   window.addEventListener('keydown', keyFirst, true);
   window.addEventListener('keydown', key);
   gestures();

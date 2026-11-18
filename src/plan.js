@@ -24,6 +24,9 @@ import { make } from './dom.js';
 import { Now, SMALLS, isSmall } from './now.js';
 import { zoomOn } from './zoomstate.js';
 import { drawYear } from './year.js';
+import { isLight } from './firstlight.js';
+import { zoomTo } from './nowpage.js';
+import { inPane } from './panes.js';
 
 const ICON = {
   play: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4 2.5v11l9-5.500z" fill="currentColor"/></svg>',
@@ -152,6 +155,8 @@ export class Plan {
     this.tab = tabFor(place.tab);
     if (isCal(this.tab)) this.calZoom = this.tab;
     this.week = place.week || null;
+    // The zoom (Part 2): a line opened on the Now stop without moving it.
+    this.lineId = this.tab === 'now' ? place.line || null : null;
     this.aheadAdd = null;
     this.aheadHeld = false;
     this.sheet.dataset.tab = this.tab;
@@ -332,6 +337,12 @@ export class Plan {
     const head = make('header', 'pl-top zm-today-top');
     const left = make('div');
     left.append(make('div', 'pl-eyebrow', long(this.today, { weekday: 'long', month: 'long', day: 'numeric' })), make('h1', '', 'Today'));
+    // The two ends of the day live here now (and in Ctrl + K).
+    const ends = make('div', 'zm-ends');
+    const n = this.now;
+    if (n.morning({ dp: dayPlan(this.items || [], this.today, this.today) })) ends.append(n.btn('talkday', 'Talk the day through', 'link', 'T'));
+    if (n.evening()) ends.append(n.btn('closeday', 'Close the day', 'link', 'C'));
+    if (ends.childElementCount) left.append(ends);
     head.append(left, this.facesRow('day'));
     return head;
   }
@@ -1823,6 +1834,8 @@ export class Plan {
     if (act === 'tick') return this.tick(i, !i.row.fields?.done);
     if (act === 'timer') return this.timerFor(i);
     if (act === 'est') return i.row.fields?.done ? this.askTook(i) : popMenu(el, this.estItems(i));
+    // The zoom: a line in the week opens (its menu is a right-click or a hold away).
+    if (act === 'more' && zoomOn() && !inPane && el.classList.contains('pw-task') && !i.ghost && !e.ctrlKey && !e.metaKey) return this.open(i);
     if (act === 'more') return this.menu(i, el);
     if (act === 'open') return this.hooks.openEntry(i.row.id);
     if (act === 'fold') { this.fold(i.row.id, !this.unfolded(i.row.id)); return this.redraw(); }
@@ -1847,7 +1860,24 @@ export class Plan {
   open(i) {
     clearTimeout(this.opening);
     this.left(i.row.id);
+    if (zoomOn() && !inPane) return this.openLine(i);
     return (this.hooks.openTask || this.hooks.openEntry)(i.row.id);
+  }
+
+  // The zoom (Part 2): whatever he clicks opens on the Now stop. A line on
+  // today becomes the one thing; any other only opens, and nothing moves.
+  async openLine(iOrId) {
+    if (!this.items) await this.refresh();
+    const i = typeof iOrId === 'string' ? (this.items || []).find((x) => x.row.id === iOrId && !x.ghost && !x.occ) : iOrId;
+    if (!i) return typeof iOrId === 'string' ? this.hooks.openEntry(iOrId) : null;
+    const today = this.today;
+    const onToday = !i.row.fields?.done && !!i.task.day && i.task.day <= today && !i.ghost;
+    if (onToday) {
+      await this.now.load();
+      await this.now.begin(i.row.id);
+      return zoomTo({ place: { view: 'plan', tab: 'now' }, way: 'in' });
+    }
+    return zoomTo({ place: { view: 'plan', tab: 'now', line: i.row.id }, way: 'in' });
   }
 
   // ---------- Go through what's left from earlier days ----------
@@ -2091,6 +2121,8 @@ export class Plan {
   }
 
   async tick(i, done) {
+    // First light ticked anywhere counts as read: the places move on.
+    if (done && isLight(i.row) && i.task.day === this.today) { await this.now.light.load(); return this.now.light.read(); }
     const row = await tickTask(i.row.id, done, Date.now(), i.occ || null);
     const id = i.row.id;
     this.just = done ? id : null;
