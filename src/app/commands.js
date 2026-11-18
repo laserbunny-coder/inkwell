@@ -10,7 +10,7 @@ import { chapterMarkdown, bookMarkdown, download } from '../export.js';
 import { mb } from '../keep.js';
 import { SPACE, spaceUsed, unsentFiles } from '../files.js';
 import { vaultZip } from '../vault.js';
-import { toFountain, fromFountain, fromOutline, looksLikeOutline } from '../script.js';
+import { ELEMENTS, toFountain, fromFountain, fromOutline, looksLikeOutline } from '../script.js';
 import { titleOf } from '../notebook.js';
 import { newScene } from '../woven.js';
 import { showSaveButton } from '../savebutton.js';
