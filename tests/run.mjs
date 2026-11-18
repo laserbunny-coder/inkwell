@@ -274,31 +274,29 @@ try {
     assert.equal(await p.locator('.notebook').isVisible(), false);
   });
 
-  await check('library: nested areas, a new book, and moving between books', async () => {
+  await check('library: a new area, a new book, and moving between books', async () => {
     await p.keyboard.press('Control+K');
     await p.keyboard.type('Library');
     await p.keyboard.press('Enter');
-    await p.waitForSelector('#lib-books .card:not(.card-new)');
-    assert.match(await p.locator('#lib-books').innerText(), /Untitled novel/);
-    await p.locator('#lib-areas .chip', { hasText: 'Writing' }).click();
-    await sleep(300);
-    await p.locator('#lib-areas .chip-row').nth(1).locator('.chip.add').click();
+    // The zoom's Library: areas with their projects, and + area at the end.
+    await p.waitForSelector('#lib-zoom .zl-name');
+    assert.match(await p.locator('#lib-zoom').innerText(), /Untitled novel/);
+    await p.locator('#lib-zoom .zl-newarea').click();
     await p.keyboard.type('Novels');
     await p.keyboard.press('Enter');
-    await sleep(500);
-    assert.equal(await p.locator('#lib-areas .chip.on').count(), 2, 'Writing and Novels both picked');
-    await p.locator('.card-new').click();
-    await p.keyboard.type('Winter Harbour');
+    await p.waitForFunction(() => [...document.querySelectorAll('#lib-zoom .zl-area .zl-h')].some((h) => h.textContent === 'Novels'));
+    await p.locator('#lib-zoom .zl-area', { has: p.locator('.zl-h', { hasText: /^Novels$/ }) }).locator('.zl-add').click();
+    await p.waitForSelector('#lib-new', { state: 'visible' });
+    await p.fill('#lib-new-title', 'Winter Harbour');
     await p.keyboard.press('Enter');
     await p.waitForSelector('.notebook', { state: 'visible' });
     await sleep(400);
     assert.equal(await p.locator('#nb-title').innerText(), 'Idea');
-    assert.match(await p.locator('#crumb').innerText(), /Library\s*›\s*Writing\s*›\s*Novels\s*›\s*Winter Harbour\s*›\s*Idea/);
+    assert.match(await p.locator('#crumb').innerText(), /Library\s*›\s*Novels\s*›\s*Winter Harbour\s*›\s*Idea/);
     const rows = await all();
     const novels = rows.find((e) => e.kind === 'area' && e.title === 'Novels');
     const book = rows.find((e) => e.kind === 'project' && e.title === 'Winter Harbour');
     const world = rows.find((e) => e.kind === 'world' && e.title === 'Winter Harbour');
-    assert.equal(novels.parent_id, 'area-writing');
     assert.equal(world.area_id, novels.id);
     assert.equal(book.parent_id, world.id, 'the book is the first piece in its world');
     assert.ok(rows.some((e) => e.kind === 'page' && e.title === 'Idea' && e.parent_id === world.id), 'the Idea page is in the world’s bible');
@@ -334,41 +332,7 @@ try {
     assert.match(await text2(), /Snow on the harbour wall\./);
   });
 
-  await check('earlier days stay closed behind the line under today, open on a click, and are remembered', async () => {
-    await p.evaluate(() => new Promise((res) => {
-      const d = new Date(); d.setDate(d.getDate() - 1);
-      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const r = indexedDB.open('writing');
-      r.onsuccess = () => {
-        const tx = r.result.transaction('entries', 'readwrite');
-        const st = tx.objectStore('entries');
-        const base = { tags: [], links: [], fields: {}, type: null, area_id: null, deleted: false, created_at: 1, updated_at: 1 };
-        st.put({ ...base, id: `day-${iso}`, kind: 'day', parent_id: null, sort: 0, title: iso, text: '', content: null });
-        st.put({ ...base, id: 'li_yesterday', kind: 'line', parent_id: `day-${iso}`, sort: 1, title: '', text: 'Yesterday’s thought', content: [{ type: 'text', text: 'Yesterday’s thought' }] });
-        tx.oncomplete = res;
-      };
-    }));
-    await p.keyboard.press('Control+J');
-    await p.waitForSelector('.past-toggle[title*="earlier days"]', { state: 'visible' });
-    assert.equal(await p.locator('.past-day').count(), 0, 'closed by default');
-    await p.locator('.past-toggle[title*="earlier days"]').click();
-    await p.waitForSelector('.past-day', { state: 'visible' });
-    assert.match(await p.locator('.past-list').innerText(), /Yesterday’s thought/);
-    assert.equal(await p.evaluate(() => localStorage.getItem('pastDays')), 'open');
-    await p.locator('.past-toggle[title*="earlier days"]').click();
-    await sleep(200);
-    assert.equal(await p.locator('.past-day').count(), 0, 'closed again');
-    assert.equal(await p.evaluate(() => localStorage.getItem('pastDays')), null);
-    await p.locator('.past-toggle[title*="earlier days"]').click();
-    await p.waitForSelector('.past-day', { state: 'visible' });
-    await p.locator('.past-list p', { hasText: 'Yesterday’s thought' }).click();
-    await sleep(500);
-    assert.equal(await p.locator('#nb-kind').innerText(), 'DAILY PAGE');
-    assert.match(await outlineText(), /Yesterday’s thought/);
-  });
-
   await check('Back and Forward step through where you have been', async () => {
-    await p.keyboard.press('Control+J');
     await p.waitForSelector('.page', { state: 'visible' });
     await sleep(300);
     await p.keyboard.press('Control+J');
@@ -638,12 +602,9 @@ try {
     await p.keyboard.press('Enter');
     await p.waitForFunction(() => document.documentElement.classList.contains('hide-links'), null, { timeout: 3000 });
     assert.equal(await p.locator('.notebook .backlinks').isVisible(), false);
-    await p.keyboard.press('Control+.');
-    assert.equal(await p.evaluate(() => document.documentElement.classList.contains('focus')), true);
-    await p.keyboard.press('Control+.');
   });
 
-  await check('shortcuts: Library, a day back, the shortcuts sheet and the Focus button', async () => {
+  await check('shortcuts: Library, a day back and the shortcuts sheet', async () => {
     await p.keyboard.press('Control+Shift+O');
     await p.waitForSelector('main.library', { state: 'visible' });
     await p.keyboard.press('Control+J');
@@ -660,7 +621,6 @@ try {
     const sheet = await p.locator('.shortcuts').innerText();
     assert.ok(!/[⌘⌥⇧]/.test(sheet), sheet);
     assert.ok(sheet.includes('Ctrl+J') && sheet.includes('Ctrl+Shift+O') && sheet.includes('Alt+N'), sheet);
-    assert.equal(await p.locator('#focus-toggle').getAttribute('title'), 'Focus: just the text (Ctrl+.)');
     await p.keyboard.press('Escape');
     assert.equal(await p.locator('.shortcuts').isVisible(), false);
     // The box finds the same list by name.
@@ -673,10 +633,6 @@ try {
     assert.equal(await p.locator('.palette').isVisible(), false);
     await p.keyboard.press('Escape');
     assert.equal(await p.locator('.shortcuts').isVisible(), false);
-    await p.evaluate(() => document.querySelector('#focus-toggle').click());
-    assert.equal(await p.evaluate(() => document.documentElement.classList.contains('focus')), true);
-    await p.evaluate(() => document.querySelector('#focus-toggle').click());
-    assert.equal(await p.evaluate(() => document.documentElement.classList.contains('focus')), false);
     await p.keyboard.press('Control+J');
   });
 
@@ -868,7 +824,7 @@ try {
     await ph.waitForSelector('#editor p[data-el="character"]');
     // The mic first, then the script buttons, the alternates, and + (the insert menu) last.
     const row = await ph.locator('.script-bar:not(.outline-bar) button').evaluateAll((bs) => bs.filter((b) => b.offsetParent).map((b) => (b.dataset.ins ? 'insert' : b.dataset.talk ? 'talk' : b.dataset.end || b.dataset.alt || b.dataset.el)));
-    assert.deepEqual(row, ['talk', 'scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'section', 'word', 'ask', 'para', 'prev', 'next', 'insert', 'focus', 'down']);
+    assert.deepEqual(row, ['talk', 'scene', 'action', 'character', 'paren', 'dialogue', 'transition', 'section', 'word', 'ask', 'para', 'prev', 'next', 'insert', 'down']);
 
     // Outlines get their own row: indent, outdent, move, tag.
     await ph.keyboard.press('Control+J');
@@ -1103,10 +1059,16 @@ try {
   });
 
   await check('a manuscript paragraph gathers too, and a mirror edit reaches the open chapter', async () => {
-    await p.keyboard.press('Escape');
-    if (!(await p.locator('#editor .ProseMirror').isVisible())) await p.keyboard.press('Control+J');
-    await p.waitForSelector('#editor .ProseMirror', { state: 'visible' });
-    await sleep(400);
+    // Esc outside text zooms out now, so open the chapter by name.
+    const chapter = async () => {
+      await p.keyboard.press('Control+O');
+      await p.keyboard.type('Chapter 1 · Winter');
+      await sleep(400);
+      await p.keyboard.press('Enter');
+      await p.waitForSelector('#editor .ProseMirror', { state: 'visible' });
+      await sleep(400);
+    };
+    await chapter();
     await p.evaluate(() => window.__editor.commands.focus('end'));
     await p.keyboard.press('Enter');
     await p.keyboard.type('A ship in a bottle for Dad. #gift');
@@ -1127,9 +1089,7 @@ try {
     await sleep(80);
     await p.keyboard.type('glass ');
     await sleep(900);
-    await p.keyboard.press('Control+J');
-    await p.waitForSelector('#editor .ProseMirror', { state: 'visible' });
-    await sleep(400);
+    await chapter();
     assert.match(await p.locator('#editor .ProseMirror').innerText(), /A glass ship in a bottle for Dad\. #gift/);
     const para = (await p.evaluate(() => new Promise((res) => {
       const r = indexedDB.open('writing');

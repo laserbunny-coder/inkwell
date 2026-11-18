@@ -263,13 +263,13 @@ try {
     assert.equal(await ph.evaluate(() => document.documentElement.classList.contains('sheet-peek')), true);
     assert.equal(await ph.evaluate(() => document.documentElement.classList.contains('has-panes')), false, 'no columns on a phone');
     await ph.waitForFunction(() => document.querySelector('.ps-title')?.textContent.startsWith('Kenji'));
-    // The sheet keeps clear of the bar at the bottom (it settles a frame after the bar shows).
+    // The sheet keeps clear of the ruler at the bottom (it settles a frame after the bar shows).
     const clear = () => ph.waitForFunction(() => {
       const s = document.querySelector('.pane-sheet').getBoundingClientRect();
-      const b = document.querySelector('.placebar').getBoundingClientRect();
+      const b = document.querySelector('.zm-ruler').getBoundingClientRect();
       return s.bottom <= (b.height ? b.top : innerHeight) + 1;
     }, null, { timeout: 2000 }).then(() => true, () => false);
-    assert.ok(await clear(), 'the sheet sits above the bottom bar');
+    assert.ok(await clear(), 'the sheet sits above the ruler');
     await ph.evaluate(() => document.activeElement?.blur());
     await sleep(300);
     assert.ok(await clear(), 'still above the bar once it shows again');

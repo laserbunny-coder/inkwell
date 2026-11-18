@@ -18,16 +18,13 @@ const SHOTS = process.env.SHOTS;
 const NOW = '2026-11-09T14:04:00-08:00'; // a Monday
 
 // The switch is lit at the very end of a move: wait for it rather than read it at once.
-const TAB = { Day: 'calday', Week: 'week', 'Six weeks': 'ahead', Pace: 'pace' };
-const ZOOM = '#plan-sheet .pl-zoom [aria-pressed="true"]';
+const TAB = { Today: 'day', Day: 'calday', Week: 'week', Month: 'ahead' };
 // Calendar, then a zoom (Week, Pace…), the way a click gets there.
-const zoomTo = async (p, label, tap = false) => {
-  const cal = p.locator(tap ? '.tp-switch .pl-switch button, #plan-sheet .pl-switch button' : '.today-switch button[data-cmd="calendar"]', { hasText: 'Calendar' }).first();
-  if (await p.evaluate(() => document.documentElement.dataset.view !== 'plan' || !document.querySelector('#plan-sheet .pl-zoom'))) { if (tap) await cal.tap(); else await cal.click(); }
-  await p.waitForSelector('#plan-sheet .pl-zoom');
-  const b = p.locator(`#plan-sheet .pl-zoom button[data-tab="${TAB[label]}"]`);
-  if (tap) await b.tap(); else await b.click();
-  await p.waitForFunction(([z, l]) => document.querySelector(z)?.innerText.trim() === l, [ZOOM, label]);
+// A stop on the ruler (the zoom): Week is { view: 'plan', tab: 'week' }.
+const zoomTo = async (p, label) => {
+  const pl = { view: 'plan', tab: TAB[label] };
+  await p.evaluate((x) => { history.pushState(x, ''); dispatchEvent(new PopStateEvent('popstate', { state: x })); }, pl);
+  await p.waitForFunction((x) => document.documentElement.dataset.view === 'plan' && document.querySelector('#plan-sheet')?.dataset.tab === x.tab, pl);
 };
 const lit = (p, sel, text) => p.waitForFunction(([s, t]) => document.querySelector(s)?.innerText.trim() === t, [sel, text]);
 
@@ -67,9 +64,10 @@ const words = (p, root = '#plan') => p.locator(`${root} .pl-task .pl-words`).all
 // Only the ones still to do (a done one stays at its place among them).
 const todo = (p, root = '#plan') => p.locator(`${root} .pl-task:not(.done) .pl-words`).allInnerTexts();
 const row = (p, text) => p.locator('#plan .pl-task', { hasText: text });
+// Today's page (the day's Page face).
 const today = async (p) => {
-  await p.evaluate(() => document.querySelector('#view-toggle').click());
-  await p.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
+  await p.evaluate(() => { const d = new Date(); const day = `day-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; history.pushState({ view: 'notebook', pageId: day }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'notebook', pageId: day } })); });
+  await p.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && /^day-/.test(history.state?.pageId || ''));
   await still(p);
   await sleep(300);
 };
@@ -89,17 +87,13 @@ try {
   const page = await open({ width: 1440, height: 900 });
   await today(page);
 
-  await check('a day’s page has its plan on top, and the top-centre switch is Today, Plan, Calendar', async () => {
+  await check('a day’s page has its plan on top', async () => {
     assert.ok(await page.locator('#plan').isVisible());
     assert.equal(await page.locator('#plan .pl-label').innerText(), 'PLAN');
     assert.equal(await page.locator('#plan input[data-add]').getAttribute('placeholder'), 'Add a task');
-    assert.deepEqual(await page.locator('.today-switch button').allInnerTexts(), ['Now', 'Page', 'Plan', 'Calendar']);
-    await lit(page, '.today-switch [aria-current="page"]', 'Page');
-    assert.ok(await page.locator('.place-switch:not(.desk-switch):not(.today-switch)').isHidden(), 'the Library’s switch is away');
-    assert.ok(await page.locator('#plan .pl-switch').isHidden(), 'with the rail, no second switch in the page');
   });
 
-  await check('a task typed into the plan lands on today, and a time at the end is how long it takes', async () => {
+  await check('a task typed into the plan lands on today, on the Tasks page', async () => {
     // The very same box stays (a phone keyboard closes if the focused box is swapped for a new one).
     await page.evaluate(() => { document.querySelector('#plan input[data-add]').__kept = true; });
     assert.equal(await page.locator('#plan input[data-add]').getAttribute('enterkeyhint'), 'enter', 'a phone keyboard shows Enter, not Done');
@@ -108,77 +102,31 @@ try {
     await add(page, 'Order the storage drive');
     assert.equal(await page.evaluate(() => document.activeElement?.__kept === true), true, 'the same box, still with the caret');
     assert.deepEqual(await words(page), ['Call Dana about the storyboards', 'Board Reel 2', 'Order the storage drive']);
-    assert.equal(await page.locator('#plan .pl-sum').innerText(), '2 h to do');
-    assert.equal(await row(page, 'Call Dana').locator('.pl-est').innerText(), '30 min');
-    assert.equal(await row(page, 'Board Reel 2').locator('.pl-est').innerText(), '1 h 30 min');
     assert.ok(await row(page, 'Call Dana').evaluate((el) => el.classList.contains('next')), 'the first one is what’s next');
     const t = await taskNamed(page, 'Call Dana about the storyboards');
     assert.equal(t.kind, 'line');
     assert.equal(t.parent_id, 'page-tasks', 'it lives on the Tasks page');
     assert.equal(t.fields.task.day, '2026-11-09');
-    assert.equal(t.fields.task.est, 30);
     assert.equal(t.fields.box, true);
     const home = (await all(page)).find((r) => r.id === 'page-tasks');
     assert.equal(home.title, 'Tasks');
     assert.equal(await page.evaluate(() => document.activeElement?.dataset.add), '2026-11-09', 'the caret stays in the box for the next one');
   });
 
-  await check('how long: a click on the time offers lengths, and the total follows', async () => {
-    await row(page, 'Order the storage drive').hover();
-    await row(page, 'Order the storage drive').locator('.pl-est').click();
-    await pick(page, '15 min');
-    assert.equal(await row(page, 'Order the storage drive').locator('.pl-est').innerText(), '15 min');
-    assert.equal(await page.locator('#plan .pl-sum').innerText(), '2 h 15 min to do');
-    assert.equal((await taskNamed(page, 'Order the storage drive')).fields.task.est, 15);
-  });
-
-  await check('the timer: one at a time, counting on the page; ticking asks how long it took with the timed answer lit', async () => {
-    await row(page, 'Board Reel 2').hover();
-    await row(page, 'Board Reel 2').locator('.pl-play').click();
-    await sleep(300);
-    await row(page, 'Call Dana').hover();
-    await row(page, 'Call Dana').locator('.pl-play').click();
-    await sleep(300);
-    assert.equal(await page.locator('#plan .pl-task.timing').count(), 1, 'starting one stops the other');
-    assert.ok(await row(page, 'Call Dana').evaluate((el) => el.classList.contains('timing')));
-    await page.clock.setFixedTime(new Date('2026-11-09T14:16:00-08:00'));
-    await sleep(1300);
-    assert.equal(await row(page, 'Call Dana').locator('.pl-est').innerText(), '12:00');
+  await check('ticking a task just ticks it; unticking brings it back', async () => {
     await row(page, 'Call Dana').locator('.pl-check').click();
-    await sleep(400);
-    const took = page.locator('#plan .pl-took');
-    assert.ok(await took.isVisible());
-    assert.equal(await took.locator('button.on').innerText(), '12 min timed');
-    assert.ok((await took.locator('button').allInnerTexts()).includes('30 min as planned'));
-    await took.locator('button.on').click();
     await sleep(350);
-    assert.equal(await page.locator('#plan .pl-took').count(), 0);
-    const done = row(page, 'Call Dana');
-    assert.ok(await done.evaluate((el) => el.classList.contains('done')));
-    assert.equal(await done.locator('.pl-est').innerText(), '30 min → 12 min');
-    assert.equal(await page.locator('#plan .pl-sum').innerText(), '1 h 45 min to do · 12 min done');
-    const t = await taskNamed(page, 'Call Dana about the storyboards');
-    assert.equal(t.fields.done, true);
-    assert.equal(t.fields.task.actual, 12);
-    assert.equal(t.fields.task.run, null);
-    assert.equal(t.fields.task.log.length, 1);
-    assert.ok(t.fields.task.done_at > 0);
+    assert.equal(await page.locator('#plan .pl-took').count(), 0, 'no “how long did it take?”');
+    assert.ok((await taskNamed(page, 'Call Dana about the storyboards')).fields.task.done_at > 0);
     assert.deepEqual(await words(page), ['Call Dana about the storyboards', 'Board Reel 2', 'Order the storage drive'], 'done stays where it was');
-  });
-
-  await check('unticking brings it back, with nothing kept of the answer', async () => {
     await row(page, 'Call Dana').locator('.pl-check').click();
     await sleep(350);
     const t = await taskNamed(page, 'Call Dana about the storyboards');
     assert.equal(t.fields.done, false);
     assert.equal(t.fields.task.done_at, null);
-    assert.equal(t.fields.task.actual, null);
     assert.ok(!(await row(page, 'Call Dana').evaluate((el) => el.classList.contains('done'))));
     await row(page, 'Call Dana').locator('.pl-check').click();
     await sleep(350);
-    await page.locator('#plan .pl-took button', { hasText: 'as planned' }).click();
-    await sleep(350);
-    assert.equal((await taskNamed(page, 'Call Dana about the storyboards')).fields.task.actual, 30);
   });
 
   await check('Ctrl + Shift + Enter makes any line a task where it’s written, with a quiet label after its words', async () => {
@@ -227,12 +175,6 @@ try {
     assert.equal(await li.locator('.task-chip').innerText(), 'Tomorrow');
     assert.ok(!(await words(page)).includes('Email the storyboard notes to Dana'));
     assert.equal((await taskNamed(page, 'Email the storyboard notes to Dana')).fields.task.day, '2026-11-10');
-    await li.locator('.task-chip').click();
-    await sleep(300);
-    await pick(page, 'Takes');
-    await pick(page, '45 min');
-    await sleep(300);
-    assert.equal(await li.locator('.task-chip').innerText(), 'Tomorrow · 45 min');
   });
 
   await check('a double-click on a task’s words changes them in place', async () => {
@@ -244,7 +186,7 @@ try {
     assert.ok((await words(page)).includes('Order the 8 TB storage drive'));
     const t = await taskNamed(page, 'Order the 8 TB storage drive');
     assert.deepEqual(t.content, [{ type: 'text', text: 'Order the 8 TB storage drive' }]);
-    assert.equal(t.fields.task.est, 15, 'the rest of the task is as it was');
+    assert.equal(t.fields.task.day, '2026-11-09', 'the rest of the task is as it was');
     await sleep(400);
     assert.equal(await page.locator('.pane').count(), 0, 'a double-click doesn’t open it as well');
   });
@@ -272,13 +214,13 @@ try {
     assert.equal((await taskNamed(page, 'Board Reel 2')).fields.task.order < (await taskNamed(page, 'Order the 8 TB storage drive')).fields.task.order, true, 'the order is saved');
   });
 
-  await check('a click on a task zooms into it, Alt + Left zooms back out to the plan, Ctrl + click opens it beside', async () => {
+  await check('a click on a task opens it on its own page (Now), Alt + Left comes back to the day, Ctrl + click opens it beside', async () => {
     await row(page, 'Order the 8 TB').locator('.pl-words').click();
-    await page.waitForFunction(() => /Order the 8 TB/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''));
-    assert.equal(await viewOf(page), 'notebook');
+    await page.waitForFunction(() => /Order the 8 TB/.test(document.querySelector('#plan-sheet .np-tx')?.textContent || ''));
+    assert.equal(await viewOf(page), 'plan');
     assert.equal(await page.locator('.pane-frame').count(), 0, 'nothing opened beside');
     await page.keyboard.press('Alt+ArrowLeft');
-    await page.waitForFunction(() => !document.querySelector('#outline-editor li.zoom-root') && document.querySelectorAll('#plan .pl-task').length >= 2);
+    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && document.querySelectorAll('#plan .pl-task').length >= 2);
     await row(page, 'Order the 8 TB').locator('.pl-words').click({ modifiers: ['Control'] });
     await page.waitForFunction(() => {
       const d = [...document.querySelectorAll('.pane-frame')].at(-1)?.contentDocument;
@@ -309,27 +251,21 @@ try {
     await page.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Tasks');
     await sleep(400);
     assert.ok(await page.locator('#plan').isHidden());
-    assert.ok(await page.locator('.today-switch').isHidden());
     const li = page.locator('#outline-editor li', { hasText: 'Board Reel 2' });
-    assert.equal(await li.locator('.task-chip').innerText(), 'Today · 1 h 30 min');
+    assert.equal(await li.locator('.task-chip').innerText(), 'Today');
     await today(page);
     assert.ok(await page.locator('#plan').isVisible());
   });
 
-  await check('Week: seven days from Monday, today’s tasks under today, hours against the hours you have', async () => {
+  await check('Week: seven days from Monday, today’s tasks under today', async () => {
     await zoomTo(page, 'Week');
     await still(page);
     await sleep(300);
-    await lit(page, '.today-switch [aria-current="page"]', 'Calendar');
-    assert.equal(await page.locator('#view-toggle').getAttribute('aria-current'), 'page', 'Today stays lit in the rail');
     assert.equal(await page.locator('#plan-sheet h1').innerText(), 'November 9 to 15');
     assert.equal(await page.locator('#plan-sheet .pl-eyebrow').innerText(), 'THIS WEEK');
     assert.equal(await page.locator('.pw-day').count(), 7);
     assert.deepEqual(await page.locator('.pw-day.today .pw-t').allInnerTexts(), ['Order the 8 TB storage drive', 'Board Reel 2', 'Call Dana about the storyboards']);
     assert.deepEqual(await page.locator('.pw-day[data-day="2026-11-10"] .pw-t').allInnerTexts(), ['Email the storyboard notes to Dana']);
-    // 15 + 90 open and 30 real on Monday, 45 on Tuesday: 3 hours.
-    assert.equal(await page.locator('#plan-sheet .pl-meter-v').innerText(), '3 h of 45 h');
-    assert.equal(await page.locator('#tb-back').isVisible(), true);
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/plan-week.png` });
   });
 
@@ -342,15 +278,16 @@ try {
     await sleep(500);
     assert.deepEqual(await page.locator('.pw-tray .pw-t').allInnerTexts(), ['Order the 8 TB storage drive']);
     assert.equal((await taskNamed(page, 'Order the 8 TB storage drive')).fields.task.day, null);
-    assert.equal(await page.locator('#plan-sheet .pl-meter-v').innerText(), '2.8 h of 45 h', 'the tray isn’t on the week’s hours');
   });
 
-  await check('Week: add straight to a day or to the tray; a click on a task opens its menu', async () => {
-    await add(page, 'Film the tumbling class 2h', '.pw-day[data-day="2026-11-13"] input[data-add]');
+  await check('Week: add straight to a day or to the tray; Alt + W moves a task', async () => {
+    await add(page, 'Film the tumbling class', '.pw-day[data-day="2026-11-13"] input[data-add]');
     assert.deepEqual(await page.locator('.pw-day[data-day="2026-11-13"] .pw-t').allInnerTexts(), ['Film the tumbling class']);
     await add(page, 'Headlamp for Arrow', '.pw-tray input[data-add]');
     assert.deepEqual(await page.locator('.pw-tray .pw-t').allInnerTexts(), ['Order the 8 TB storage drive', 'Headlamp for Arrow']);
-    await page.locator('.pw-task', { hasText: 'Headlamp for Arrow' }).click();
+    // In the zoom a click opens the task and a right-click picks it; Alt + W asks when.
+    await page.locator('.pw-task', { hasText: 'Headlamp for Arrow' }).focus();
+    await page.keyboard.press('Alt+w');
     await sleep(250);
     await pick(page, 'Today');
     await sleep(300);
@@ -366,65 +303,27 @@ try {
     await sleep(500);
     assert.equal(await page.locator('#plan-sheet h1').innerText(), 'November 9 to 15');
     await page.locator('.pw-day[data-day="2026-11-11"] .pw-h').click();
-    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
+    // The zoom goes in to that day's list.
+    await page.waitForFunction(() => document.querySelector('#plan-sheet')?.dataset.tab === 'day' && history.state?.day === '2026-11-11');
     await still(page);
     await sleep(400);
-    assert.match(await page.locator('#nb-title').innerText(), /Wednesday, November 11/);
-    assert.deepEqual(await words(page), ['Board Reel 2']);
-    assert.equal(await row(page, 'Board Reel 2').evaluate((el) => el.classList.contains('next')), false, '“next” is only for today');
-  });
-
-  await check('free hours: a click on the hours changes what a week is weighed against', async () => {
-    await zoomTo(page, 'Week');
-    await sleep(400);
-    await page.locator('#plan-sheet .pl-meter-v').click();
-    await page.locator('.ask-input').fill('30');
-    await page.locator('.ask .pill.primary').click();
-    await sleep(400);
-    assert.match(await page.locator('#plan-sheet .pl-meter-v').innerText(), /of 30 h$/);
-    const s = (await all(page)).find((r) => r.id === 'settings-plan');
-    assert.equal(s.fields.free, 30);
-  });
-
-  await check('Pace: what was ticked off, planned against real, and where the time went', async () => {
-    await zoomTo(page, 'Pace');
-    await still(page);
-    await sleep(400);
-    assert.equal(await page.locator('#plan-sheet h1').innerText(), 'Pace');
-    const rows = page.locator('.pc-row:not(.pc-head)');
-    assert.equal(await rows.count(), 1);
-    assert.deepEqual(await rows.first().locator('.pc-n').allInnerTexts(), ['30 min', '30 min']);
-    assert.match(await page.locator('.pl-read').innerText(), /You planned 30 min and it took 30 min\. Your guesses were close\./);
-    assert.match(await page.locator('.pc-groups').first().innerText(), /No project/);
-    if (SHOTS) await page.screenshot({ path: `${SHOTS}/plan-pace.png` });
-  });
-
-  await check('Go and Ctrl + K know Calendar’s week and pace; Back leads back', async () => {
-    await page.keyboard.press('Control+k');
-    await page.locator('#palette-input').fill('calendar week');
-    await sleep(300);
-    assert.match(await page.locator('#palette-list li').first().innerText(), /Calendar: week/);
-    await page.keyboard.press('Enter');
-    await sleep(500);
-    assert.equal(await viewOf(page), 'plan');
-    await lit(page, ZOOM, 'Week');
-    await page.goBack();
-    await sleep(500);
-    await lit(page, ZOOM, 'Pace');
+    assert.match(await page.locator('#plan-sheet h1').innerText(), /Wednesday|November 11/);
+    assert.deepEqual(await words(page, '#plan-sheet'), ['Board Reel 2']);
+    assert.equal(await page.locator('#plan-sheet .pl-task', { hasText: 'Board Reel 2' }).evaluate((el) => el.classList.contains('next')), false, '“next” is only for today');
   });
 
   await check('the next morning, what’s still open waits at the top of today’s plan, marked with its day', async () => {
     await page.clock.setFixedTime(new Date('2026-11-10T08:30:00-08:00'));
     await today(page);
-    await page.evaluate(() => document.querySelector('[data-cmd="today"]').click());
     await sleep(600);
     assert.match(await page.locator('#nb-title').innerText(), /Tuesday, November 10/);
     const list = await words(page);
-    assert.deepEqual(list, ['Headlamp for Arrow', 'Email the storyboard notes to Dana']);
-    assert.ok(await row(page, 'Headlamp for Arrow').evaluate((el) => el.classList.contains('carried')));
-    assert.equal(await row(page, 'Headlamp for Arrow').locator('.pl-from').innerText(), 'from Mon, Nov 9');
-    assert.equal(await row(page, 'Email the storyboard notes').locator('.pl-place').innerText(), 'Nov 9', 'a task written on another day says where');
-    assert.ok(await row(page, 'Headlamp for Arrow').evaluate((el) => el.classList.contains('next')));
+    // What's left from yesterday waits on one quiet line on top; a click on ▸ shows it.
+    assert.deepEqual(list, ['Email the storyboard notes to Dana']);
+    assert.match(await page.locator('#plan .pl-early-n').innerText(), /^1 left from earlier days/);
+    await page.locator('#plan .pl-early-tri').click();
+    await page.waitForFunction(() => [...document.querySelectorAll('#plan .pl-task.carried .pl-words')].some((w) => w.textContent === 'Headlamp for Arrow'));
+    await page.locator('#plan .pl-early-tri').click();
     // Yesterday's page still shows what was done that day.
     await page.locator('#nb-prev').click();
     await sleep(600);
@@ -459,31 +358,6 @@ try {
     assert.ok(!(await words(page)).includes('Water the ferns'));
   });
 
-  await check('“How long did it take?” goes with Time estimates; Focus leaves only the words', async () => {
-    assert.ok(await page.locator('#plan').isVisible());
-    await page.locator('#outline-editor').click();
-    await page.keyboard.press('Control+End');
-    await page.keyboard.press('Enter');
-    await page.keyboard.type('Stretch');
-    await page.keyboard.press('Control+Shift+Enter');
-    await sleep(500);
-    const chip = page.locator('#outline-editor li', { hasText: 'Stretch' }).locator('.task-chip');
-    assert.ok(await chip.isVisible());
-    // With Time estimates off, ticking just ticks.
-    await page.evaluate(() => { const c = document.querySelector('[data-show="estimates"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); });
-    await row(page, 'Stretch').locator('.pl-check').click();
-    await sleep(400);
-    assert.equal(await page.locator('#plan .pl-took').count(), 0);
-    await page.evaluate(() => { const c = document.querySelector('[data-show="estimates"]'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); });
-    await page.keyboard.press('Control+.');
-    await sleep(300);
-    assert.ok(await page.locator('#plan').isHidden());
-    assert.ok(await chip.isHidden());
-    await page.keyboard.press('Control+.');
-    await sleep(300);
-    assert.ok(await page.locator('#plan').isVisible());
-  });
-
   await check('a task inside a project says which, and opens there', async () => {
     await page.evaluate(() => document.querySelector('#library-toggle').click());
     await page.waitForFunction(() => document.documentElement.dataset.view === 'library');
@@ -515,8 +389,10 @@ try {
     assert.equal(await page.locator('#outline-editor .task-chip').innerText(), 'Today');
     await today(page);
     const r = row(page, 'Pick Kenji’s second verse');
-    assert.equal(await r.locator('.pl-place').innerText(), 'The Ninja Bunch');
-    await r.locator('.pl-place').click();
+    await r.locator('.pl-more').click();
+    await page.waitForSelector('.pop-menu');
+    assert.match(await page.locator('.pop-menu').innerText(), /In The Ninja Bunch/i);
+    await pick(page, 'Open it where it’s written');
     await page.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Reel 3 notes');
     await today(page);
   });
@@ -535,7 +411,7 @@ try {
   // ---------- a narrow window ----------
   const mid = await open({ width: 1000, height: 800 });
   await today(mid);
-  await add(mid, 'Board Reel 2 1h');
+  await add(mid, 'Board Reel 2');
   await check('1000 px: the week folds to four columns without spilling', async () => {
     await zoomTo(mid, 'Week');
     await still(mid);
@@ -550,45 +426,35 @@ try {
   const phone = await open({ width: 412, height: 915 }, { hasTouch: true, isMobile: true, todayPage: false });
   await today(phone);
   await phone.waitForFunction(() => { document.activeElement?.blur(); return !document.body.classList.contains('kb-up'); });
-  await check('phone: the plan sits on top of today, with Page, Plan, Calendar above it', async () => {
-    assert.ok(await phone.locator('#plan').isVisible());
-    assert.deepEqual(await phone.locator('.tp-switch .pl-switch button').allInnerTexts(), ['Now', 'Page', 'Plan', 'Calendar']);
-    await add(phone, 'Call Dana 30m');
-    await add(phone, 'Order the storage drive');
-    assert.deepEqual(await words(phone), ['Call Dana', 'Order the storage drive']);
-    assert.ok(await row(phone, 'Call Dana').locator('.pl-play').isVisible(), 'no hover on a phone, so the timer and ⋯ show');
-    assert.ok(await row(phone, 'Call Dana').locator('.pl-more').isVisible());
+  await check('phone: Today’s list takes tasks, and ⋯ shows without hovering', async () => {
+    await zoomTo(phone, 'Today');
+    await add(phone, 'Call Dana', '#plan-sheet input[data-add]');
+    await add(phone, 'Order the storage drive', '#plan-sheet input[data-add]');
+    assert.deepEqual(await words(phone, '#plan-sheet'), ['Call Dana', 'Order the storage drive']);
+    assert.ok(await phone.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('.pl-more').isVisible());
     const w = await phone.evaluate(() => [document.documentElement.scrollWidth, innerWidth]);
     assert.ok(w[0] <= w[1], `no sideways scroll (${w[0]} in ${w[1]})`);
     if (SHOTS) await phone.screenshot({ path: `${SHOTS}/plan-phone-day.png` });
   });
-  await check('phone: tick, answer how long, and move a task with the ⋯ menu', async () => {
-    await row(phone, 'Call Dana').locator('.pl-check').tap();
+  await check('phone: tick, and move a task with the ⋯ menu', async () => {
+    await phone.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('.pl-check').tap();
     await sleep(400);
-    await phone.locator('#plan .pl-took button', { hasText: 'as planned' }).tap();
-    await sleep(400);
-    assert.equal((await taskNamed(phone, 'Call Dana')).fields.task.actual, 30);
-    await row(phone, 'Order the storage drive').locator('.pl-more').tap();
+    assert.equal((await taskNamed(phone, 'Call Dana')).fields.done, true);
+    await phone.locator('#plan-sheet .pl-task', { hasText: 'Order the storage drive' }).locator('.pl-more').tap();
     await sleep(300);
     await pick(phone, 'Tomorrow');
     await sleep(400);
     assert.equal((await taskNamed(phone, 'Order the storage drive')).fields.task.day, '2026-11-10');
   });
   await check('phone: Week is a row a day on one screen, and nothing spills', async () => {
-    await zoomTo(phone, 'Week', true);
+    await zoomTo(phone, 'Week');
     await still(phone);
     await sleep(300);
-    assert.equal(await phone.locator('#plan-sheet .pl-switch [aria-current="page"]').innerText(), 'Calendar');
     assert.equal(await phone.locator('.pw-rows .pw-day').count(), 7);
     assert.equal(await phone.locator('.pw-day[data-day="2026-11-10"] .pw-rt').innerText(), 'Order the storage drive');
     const w = await phone.evaluate(() => [document.documentElement.scrollWidth, innerWidth]);
     assert.ok(w[0] <= w[1], `no sideways scroll (${w[0]} in ${w[1]})`);
     if (SHOTS) await phone.screenshot({ path: `${SHOTS}/plan-phone-week.png` });
-    await zoomTo(phone, 'Pace', true);
-    await sleep(500);
-    assert.equal(await phone.locator('#plan-sheet h1').innerText(), 'Pace');
-    await phone.locator('#plan-sheet .pl-switch button', { hasText: 'Plan' }).tap();
-    await phone.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
     assert.deepEqual(phone.errors, []);
   });
   await phone.context().close();

@@ -139,6 +139,9 @@ export async function zoomGo(place, way = 'rise') {
     });
     const end = () => { if (turn === moving) delete root.dataset.zt; };
     t.finished.then(end, end);
+    // A quick second step skips this one: that's fine, not an error.
+    t.ready.catch(() => {});
+    t.updateCallbackDone.catch(() => {});
   } catch {
     delete root.dataset.zt;
     return go(place);
