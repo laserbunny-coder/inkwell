@@ -9,7 +9,7 @@ export function classic(browser) {
   browser.newContext = async (opts = {}) => {
     const { zoom = false, ...rest } = opts;
     const ctx = await open(rest);
-    if (!zoom) await ctx.addInitScript(() => { try { if (!localStorage.getItem('layout')) localStorage.setItem('layout', 'classic'); } catch { /* no storage here */ } });
+    if (!zoom && !process.env.ALLZOOM) await ctx.addInitScript(() => { try { if (!localStorage.getItem('layout')) localStorage.setItem('layout', 'classic'); } catch { /* no storage here */ } });
     return ctx;
   };
   return browser;
