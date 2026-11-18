@@ -80,8 +80,9 @@ export function dayWord(iso, today = isoOf()) {
 }
 // The quiet label after a task's words where it's written.
 export function chipLabel(task, done = false, today = isoOf()) {
-  if (done) return task.actual ? `Done · ${span(task.actual)}` : 'Done';
-  return [isStretch(task) ? stretchWord(task) : spanOf(task) ? looseWord(task, today) : `${isRepeat(task) ? '↻ ' : ''}${dayWord(dueDay(task, today), today)}`, task.est && !task.habit ? span(task.est) : null, task.run ? 'timing' : null].filter(Boolean).join(' · ');
+  // Order only, never how long (time estimates went on Nov 17 2026).
+  if (done) return 'Done';
+  return [isStretch(task) ? stretchWord(task) : spanOf(task) ? looseWord(task, today) : `${isRepeat(task) ? '↻ ' : ''}${dayWord(dueDay(task, today), today)}`, task.run ? 'timing' : null].filter(Boolean).join(' · ');
 }
 
 const blank = () => ({ v: 1, day: null, est: null, done_at: null, actual: null, log: [], run: null, order: 0, span: null });

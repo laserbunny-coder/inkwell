@@ -1481,7 +1481,6 @@ export class Plan {
     if (act === 'week-prev' || act === 'week-next') return this.hooks.go({ view: 'plan', tab: 'week', week: addDays(weekOf(this.week || this.today)[0], act === 'week-prev' ? -7 : 7) });
     if (act === 'week-now') return this.hooks.go({ view: 'plan', tab: 'week' });
     if (act === 'open-day') return this.intoDay(el.closest('[data-day]').dataset.day);
-    if (act === 'open-day') return this.hooks.go({ view: 'notebook', pageId: `day-${el.closest('[data-day]').dataset.day}` });
     if (act === 'day-prev') return this.dayStep(-1);
     if (act === 'day-next') return this.dayStep(1);
     if (act === 'day-today') return zoomTo({ stop: 'today' });
