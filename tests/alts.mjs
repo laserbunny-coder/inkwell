@@ -1,18 +1,17 @@
 // Alternates in a real browser: word versions and paragraph versions are added,
 // flipped in place, saved, and stay out of exports.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { withoutSync } from './nosync.mjs';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 let chromium;
 try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require(`${process.execPath.replace(/bin\/node$/, '')}lib/node_modules/playwright`)); }
 
 const PORT = 4183;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 
 const browser = withoutSync(await chromium.launch());
 const page = await (await browser.newContext({ reducedMotion: 'reduce' })).newPage();

@@ -9,17 +9,16 @@
 // says so beside its name, and that is the switch. A piece shows its stage
 // as dots; Shift + Left and Right step to the next piece or project.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { withoutSync } from './nosync.mjs';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require('playwright');
 
 const PORT = 4237;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 const URL = `http://localhost:${PORT}/`;
 
 const NOW = '2026-11-17T10:00:00-08:00';

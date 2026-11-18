@@ -5,11 +5,11 @@
 // each place when there's no script), healing a row that lost a picture,
 // keys, and a phone with no sideways scroll.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 import { lookOf, starPatch, asidePatch, standIn, nextPick, elementForName, lostLooks } from '../src/production.js';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -61,8 +61,7 @@ checkNow('healing: a look its row lost goes back; a reference taken off by hand 
 // ---------- in the app ----------
 
 const PORT = 4263;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 const SHOTS = process.env.SHOTS || '';
 
 const table = new Map();

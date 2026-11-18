@@ -3,18 +3,16 @@
 // shelf with everything still in it; reopening brings it all back. On a
 // computer and on a phone.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { withoutSync } from './nosync.mjs';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 
 const PORT = 4291;
-const DIST = process.env.DIST;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort', ...(DIST ? ['--outDir', DIST] : [])], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 const URL = `http://localhost:${PORT}/`;
 const SHOTS = process.env.SHOTS;
 

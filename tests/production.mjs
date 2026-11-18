@@ -6,12 +6,12 @@
 // and the shot list and subtitles out to Resolve. window.__claude stands in
 // for the server.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { readFile } from 'node:fs/promises';
 import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 import { shotCode, shotNumber, shotForName, findElements, sceneElements, withRenders, withPrompts, shotStage, toSrt, speechesIn, toCsv, guessType, pad } from '../src/production.js';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -87,8 +87,7 @@ checkNow('a bible page is guessed from the page it sits in', () => {
 // ---------- in the app ----------
 
 const PORT = 4197;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 const SHOTS = process.env.SHOTS || '';
 
 const table = new Map();

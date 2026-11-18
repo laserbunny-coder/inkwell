@@ -7,17 +7,16 @@
 // small bar), dragged onto a day, a week or a ruler stop, and every move says
 // so with Undo. Not planned is a shelf on the top line.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { withoutSync } from './nosync.mjs';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require('playwright');
 
 const PORT = 4236;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 const URL = `http://localhost:${PORT}/`;
 const browser = withoutSync(await chromium.launch());
 const errors = [];

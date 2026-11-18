@@ -2,17 +2,16 @@
 // other lines stay notes, any line can have a box of its own, and ticking is
 // the same as Done (Ctrl+Enter). Saved and synced to another device.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 
 const PORT = 4247;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 const URL = `http://localhost:${PORT}/`;
 
 // The cloud, shared by both devices.

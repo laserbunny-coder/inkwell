@@ -3,18 +3,17 @@
 // (with Undo), going back to a version (with Undo), outline lines with their
 // children, the phone width, and that looking writes nothing.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 import { withBlockBack } from '../src/history.js';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 
 const PORT = 4193;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 const URL = `http://localhost:${PORT}/`;
 
 // Signed in to a stand-in for the cloud (as in history.mjs), so the app opens

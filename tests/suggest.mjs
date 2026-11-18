@@ -2,17 +2,16 @@
 // then projects and pieces, @ lists the characters and places of the project
 // he is in. Up / Down, Enter or Tab, Esc; on a phone one row above the keyboard.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { withoutSync } from './nosync.mjs';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require('playwright');
 
 const PORT = 4296;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 const URL = `http://localhost:${PORT}/`;
 
 const pad = (n) => String(n).padStart(2, '0');

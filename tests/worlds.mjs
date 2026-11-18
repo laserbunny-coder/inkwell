@@ -1,16 +1,15 @@
 // Books from before worlds, brought up to date on two devices without losing
 // anything; who wrote what; and scene numbers once a script is numbered.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 
 const PORT = 4189;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 
 const table = new Map();
 let clock = Date.parse('2026-10-20T00:00:00Z');

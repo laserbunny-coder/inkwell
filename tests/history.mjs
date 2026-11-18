@@ -2,18 +2,17 @@
 // back deleted paragraphs and lines, going back to a version (undoably),
 // versions reaching the other device, and old versions thinning out.
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { pageFirst } from './pagefirst.mjs';
 import assert from 'node:assert/strict';
 import { thin, compare, words } from '../src/history.js';
+import { serve } from './kit.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 
 const PORT = 4189;
-const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
-await sleep(1500);
+const server = await serve(PORT);
 const URL = `http://localhost:${PORT}/`;
 
 const table = new Map();
