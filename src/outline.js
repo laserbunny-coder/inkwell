@@ -179,7 +179,7 @@ export const LineIds = Extension.create({
   }
 });
 
-// A link to another entry, shown as a chip. Typing [[ opens the picker.
+// A link to another entry, shown as a chip. Typing [[ lists pages as you go (suggest.js).
 export const EntryRef = Node.create({
   name: 'entryRef',
   group: 'inline',
@@ -202,15 +202,6 @@ export const EntryRef = Node.create({
     return ['a', mergeAttributes(HTMLAttributes, { 'data-ref': node.attrs.id, class: 'ref', role: 'link' }), node.attrs.title || 'Untitled'];
   },
   renderText({ node }) { return `[[${node.attrs.title}]]`; },
-  addInputRules() {
-    return [new InputRule({
-      find: /\[\[$/,
-      handler: ({ range, chain }) => {
-        chain().deleteRange(range).run();
-        this.options.onPick(this.editor);
-      }
-    })];
-  },
   addProseMirrorPlugins() {
     const open = this.options.onOpen;
     return [new Plugin({

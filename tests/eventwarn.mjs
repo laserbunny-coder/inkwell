@@ -155,7 +155,10 @@ try {
     await nudge(phone);
     const w = await warnNow(phone, true);
     assert.equal(w?.text, 'Private lesson · 3:00 pm');
-    assert.ok(w.top < 60, `at the top (${w.top})`);
+    assert.ok(w.top < 80, `at the top (${w.top})`);
+    // Just under the top line, never over the date (Nov 18 2026).
+    const line = await phone.evaluate(() => [...document.querySelectorAll('.topbar, .zm-top')].map((e) => e.getBoundingClientRect()).find((r) => r.height > 0)?.bottom || 0);
+    assert.ok(w.top >= line - 1, `under the top line (${w.top} < ${line})`);
     await shot(phone, 'warn-phone');
     await phone.locator('.ev-warn').tap();
     assert.equal(await warnNow(phone, false), null);

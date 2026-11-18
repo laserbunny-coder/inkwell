@@ -11,6 +11,7 @@ import { moveEntries } from '../move.js';
 import { insertFiles } from '../filenode.js';
 import { titleOf, dayId } from '../notebook.js';
 import { setSlashItems } from '../slash.js';
+import { setSuggestWorld } from '../suggest.js';
 import { newScene } from '../woven.js';
 import { openPicker } from '../picker.js';
 import { tagIndex, statsOf } from '../tags.js';
@@ -429,6 +430,13 @@ addCommands(() => [
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).
 function wireQuickInserts() {
+  // @ lists the people and places of the project he is in.
+  setSuggestWorld(async () => {
+    if (writing() && state.project) return worldOf(state.project);
+    if (inNotebook() && notebook.page && !notebook.isDay) return worldOf(notebook.page);
+    if (state.worldId && view() === 'world') return currentWorld();
+    return null;
+  });
   setSlashItems((ed) => {
     const outline = ed === notebook.editor;
     const inScript = !outline && isScript();
@@ -443,7 +451,7 @@ function wireQuickInserts() {
       { id: 'tomorrow', label: 'Tomorrow', hint: shortDay(dayFrom(1)), words: ['date'], run: (e) => insertDay(e, 1) },
       { id: 'yesterday', label: 'Yesterday', hint: shortDay(dayFrom(-1)), words: ['date'], run: (e) => insertDay(e, -1) },
       { id: 'link', label: 'Link to a page', keys: '[[', words: ['page'], run: (e) => openPicker(e) },
-      { id: 'tag', label: 'Tag', keys: '#', run: (e) => e.chain().focus().insertContent('#').run() },
+      { id: 'tag', label: 'Tag', keys: '#', hint: 'your tags show as you type', run: (e) => e.chain().focus().insertContent('#').run() },
       !outline && { id: 'note', label: 'Note on this paragraph', keys: '⌘⇧N', words: ['comment'], run: () => notes.add() },
       { id: 'talk', label: 'Talk', hint: 'say it; Claude writes it up here', keys: '⌥C', words: ['voice', 'dictate', 'speak', 'record', 'capture'], run: () => setTimeout(() => captureHere({ start: true }), 60) },
       { id: 'picture', label: 'Picture or file', words: ['image', 'photo', 'file', 'attach'], run: () => setTimeout(pickFiles, 120) },

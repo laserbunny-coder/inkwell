@@ -415,7 +415,7 @@ const busy = () => !!document.querySelector('.pop-menu, .ask-backdrop, dialog[op
 // Whether anything an Esc in text closes first was open as the key went down
 // (the editor marks every key it sees as handled, so that can't tell us).
 let escCloses = false;
-const POPS = '.slash:not([hidden]), .picker:not([hidden]), .alt-panel:not([hidden]), .tag-results:not([hidden]), .notebook.zoomed, .woven-pick:not([hidden])';
+const POPS = '.slash:not([hidden]), .suggest:not([hidden]), .picker:not([hidden]), .alt-panel:not([hidden]), .tag-results:not([hidden]), .notebook.zoomed, .woven-pick:not([hidden])';
 function keyFirst(e) {
   if (e.key === 'Escape') escCloses = busy() || !!document.querySelector(POPS);
 }
@@ -426,7 +426,7 @@ function key(e) {
   const t = e.target;
   // Esc in text: out of the text, and everything that faded comes back.
   if (e.key === 'Escape' && !m && !e.altKey && inText(t)) {
-    if (escCloses || t.closest?.('.palette, .pop-menu, .ask, .page-settings, .slash, .picker')) return;
+    if (escCloses || t.closest?.('.palette, .pop-menu, .ask, .page-settings, .slash, .picker, .suggest')) return;
     if (t.isContentEditable) { t.blur(); body.classList.remove('typing', 'peek-top', 'peek-bottom'); e.preventDefault(); }
     return;
   }

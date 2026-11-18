@@ -72,13 +72,10 @@ try {
     // the page has loaded in, and typing then would be replaced by it.
     await p.waitForFunction(() => document.querySelector('#nb-kind')?.textContent === 'Today');
     await p.waitForSelector('#outline-editor .ProseMirror-focused');
-    await p.keyboard.type('See [[');
-    await p.waitForSelector('.picker', { state: 'visible' });
-    // On a slow machine the picker can show a moment before its box has the caret.
-    await p.waitForFunction(() => document.activeElement === document.querySelector('.picker input'));
-    await p.keyboard.type('Harbour');
+    // [[ lists pages as you type (suggest.js); a new name makes the page.
+    await p.keyboard.type('See [[Harbour');
     // Under load the list can lag the typing; wait until the list has caught up.
-    await p.waitForFunction(() => /Harbour/.test(document.querySelector('.picker li[aria-selected="true"]')?.textContent || ''));
+    await p.waitForFunction(() => /New page “Harbour”/.test(document.querySelector('.suggest:not([hidden]) li[aria-selected="true"]')?.textContent || ''));
     await p.keyboard.press('Enter');
     await p.waitForSelector('#outline-editor a.ref');
     await sleep(300);

@@ -14,6 +14,7 @@ import { VoiceChip } from './voice.js';
 import { MAX_BYTES } from './files.js';
 import { toast } from './menu.js';
 import { SlashMenu } from './slash.js';
+import { Suggest } from './suggest.js';
 import { TaskLine, redrawTasks } from './taskline.js';
 import { filedNote } from './thoughts.js';
 import { amountsOf } from './trainpage.js';
@@ -127,7 +128,7 @@ export class Notebook {
         OutlineDoc, OutlineItem, OutlineKeys, LineIds, LineChecks, EntryRef.configure({ onPick, onOpen }), TagMarks.configure({ onTag: (t) => this.showTag(t) }), GatherBadge.configure({ onTag: (t) => this.showTag(t), onOpen, origin: (id) => this.origins.get(id) || '' }), AltMark,
         OutlineFold.configure({ onZoom: (eid) => this.zoomed(eid) }),
         FileEmbed.configure({ onTooBig: (f) => toast(`“${f.name}” is too big to add (the limit is ${Math.round(MAX_BYTES / 1048576)} MB)`) }),
-        VoiceChip, SlashMenu,
+        VoiceChip, SlashMenu, Suggest,
         TaskLine.configure({
           task: (eid) => taskOf(this.store.cache.get(eid)),
           label: (t, done) => chipLabel(t, done),
