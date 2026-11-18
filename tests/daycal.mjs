@@ -56,6 +56,8 @@ const chips = (p) => p.locator('#plan-sheet .dc-chip').allInnerTexts();
 const words = (p) => p.locator('#plan .pl-task:not(.done) .pl-words').allInnerTexts();
 // Where on the screen a time of day is, on the grid.
 const yOf = async (p, min) => p.evaluate(([m, px]) => { const g = document.querySelector('#plan-sheet .dc-grid'); return g.getBoundingClientRect().top + (m - Number(g.dataset.from)) * px; }, [min, PX]);
+// Bring a time on the hours to the middle of the screen (on a slow machine it can sit below the fold).
+const showTime = async (p, min) => { await p.evaluate(([m, px]) => { const g = document.querySelector('#plan-sheet .dc-grid'); const y = g.getBoundingClientRect().top + (m - Number(g.dataset.from)) * px; let s = g.parentElement; while (s && !(s.scrollHeight > s.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(s).overflowY))) s = s.parentElement; (s || document.scrollingElement).scrollBy(0, y - innerHeight / 2); }, [min, PX]); await sleep(200); };
 const xOf = async (p) => p.evaluate(() => { const g = document.querySelector('#plan-sheet .dc-grid').getBoundingClientRect(); return g.left + g.width * 0.6; });
 const drag = async (p, x, y0, y1) => {
   await p.mouse.move(x, y0);
@@ -173,6 +175,7 @@ try {
   });
 
   await check('click an empty spot and write: a new task right there, and on the list at the end', async () => {
+    await showTime(page, 11 * 60 + 10);
     await page.mouse.click(await xOf(page), await yOf(page, 11 * 60 + 10));
     const input = page.locator('#plan-sheet .dc-new input');
     await input.waitFor();
