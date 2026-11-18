@@ -16,7 +16,7 @@
 
 import { popMenu } from './menu.js';
 import { getEntry } from './db.js';
-import { dayPlan, weave, addDays, isoOf, setTask, tickTask, PLAN_ID, savePlanSettings, taskOf, TASKS_PAGE } from './tasks.js';
+import { dayPlan, weave, addDays, isoOf, setTask, tickTask, weekOf, PLAN_ID, savePlanSettings, taskOf, TASKS_PAGE } from './tasks.js';
 import { clockWord } from './calendar.js';
 import { media } from './device.js';
 import { make } from './dom.js';
@@ -24,6 +24,9 @@ import { talkView, heardView, closeView } from './nowends.js';
 import { TrainNow } from './nowtrain.js';
 import { isTraining } from './training.js';
 import { LightNow } from './nowlight.js';
+import { isLight } from './firstlight.js';
+import { zoomOn } from './zoomstate.js';
+import { pageView, pageTarget, zoomTo, tieMenu, forOf } from './nowpage.js';
 import './now.css';
 
 export const SMALLS = 'smalls';
@@ -168,15 +171,26 @@ export class Now {
       if (back) cand = back;
     }
     const lastOf = (x) => (x.group ? 'A few small things' : x.item.row.text || 'Untitled');
+    // On the zoom there is no gate: the next line simply is the one thing (Part 2).
+    let auto = false;
+    if (zoomOn() && !cur && cand) {
+      auto = true;
+      cur = cand.group ? { smalls: true, items: cand.items.filter((i) => !st.skipped.includes(i.row.id)), item: null, name: '' } : { item: cand.item, name: cand.item.row.text || 'Untitled' };
+      if (cur.smalls) { if (!cur.items.length) cur.items = cand.items; cur.item = cur.items[0]; cur.name = cur.item.row.text || 'Untitled'; }
+      const at = rows.indexOf(cand);
+      if (at >= 0) rows.splice(at, 1);
+      cand = rows.find((x) => !x.event && !waiting(x)) || rows.find((x) => !x.event) || null;
+    }
     // A calendar event takes over from five minutes before it starts.
     const active = live.filter((e) => now >= e.start - TAKEOVER * 6e4 && now < e.end + LINGER * 6e4).sort((a, b) => a.start - b.start)[0] || null;
     const upcoming = live.filter((e) => e.start > now).sort((a, b) => a.start - b.start)[0] || null;
-    return { dp, rows, cur, cand, candName: cand ? lastOf(cand) : '', active, upcoming, more: rows.filter((x) => !x.event).length, smalls, together, back: !!(cand && prev && (cand.group ? prev === SMALLS : cand.item?.row.id === prev)) };
+    return { dp, rows, cur, auto, cand, candName: cand ? lastOf(cand) : '', active, upcoming, more: rows.filter((x) => !x.event).length, smalls, together, back: !!(cand && prev && (cand.group ? prev === SMALLS : cand.item?.row.id === prev)) };
   }
 
   // ---------- drawing ----------
 
   draw() {
+    if (zoomOn()) return this.drawPage();
     const p = this.p;
     const sheet = p.sheet;
     const m = (this.m = this.model());
@@ -216,6 +230,31 @@ export class Now {
     p.restore(sheet, held);
     if (typing?.isConnected) typing.focus({ preventScroll: true });
     if (numIn) sheet.querySelector(`#${numIn}`)?.focus({ preventScroll: true });
+    p.just = null;
+  }
+
+  // The zoom (Part 2): Now is a page, the one thing or the line being visited.
+  drawPage() {
+    const p = this.p;
+    const sheet = p.sheet;
+    const m = (this.m = this.model());
+    const held = p.held(sheet);
+    const typing = sheet.contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) ? document.activeElement.id : null;
+    if (this.mode === 'heard' && m.cur && !m.auto) this.mode = null;
+    const visit = !!pageTarget(this, m)?.visit;
+    const mode = m.active || visit ? null : this.mode;
+    const box = make('div', `now-view now-page${mode ? ' now-ends' : ''}`);
+    box.setAttribute('role', 'region');
+    box.setAttribute('aria-label', visit ? 'A line, opened' : 'Now');
+    if (m.active && !visit) box.append(this.eventView(m));
+    else if (mode === 'talk') box.append(talkView(this));
+    else if (mode === 'heard') box.append(heardView(this, m));
+    else if (mode === 'close') box.append(closeView(this, m));
+    else box.append(...pageView(this, m));
+    if (this.light.note && !m.active && !mode) box.querySelector('.np-hero')?.after(make('p', 'now-hint now-rnote', this.light.note));
+    sheet.replaceChildren(box);
+    p.restore(sheet, held);
+    if (typing) sheet.querySelector(`#${CSS.escape(typing)}`)?.focus({ preventScroll: true });
     p.just = null;
   }
 
@@ -311,7 +350,8 @@ export class Now {
     const them = cur.smalls ? 'They go' : 'It goes';
     one('later', 'Later today', `${them} to the end of today`, '1');
     one('tomorrow', 'Enough for today', `Counts as worked on, and ${cur.smalls ? 'they come' : 'it comes'} back tomorrow`, '2');
-    one('another', 'Another day', `Off today: ${cur.smalls ? 'they wait' : 'it waits'} in Plan under Not planned`, '3');
+    if (zoomOn()) one('week', 'Any day this week', `Off today: ${cur.smalls ? 'they wait' : 'it waits'} under Any day this week`, '3');
+    else one('another', 'Another day', `Off today: ${cur.smalls ? 'they wait' : 'it waits'} in Plan under Not planned`, '3');
     box.append(this.btn('keep', 'Keep going with it', 'quiet', 'Esc'));
     return box;
   }
@@ -419,7 +459,7 @@ export class Now {
     if (last?.t) {
       const said = last.k === 'done' ? (last.left ? `Done. ${last.left} left for later.` : 'Done.')
         : last.k === 'event' ? (last.happened ? 'Over.' : 'It did not happen.')
-          : { training: 'Off today. Your place in the round stays.', later: 'Set aside for later today.', tomorrow: 'Enough for today. It comes back tomorrow.', another: 'Off today. It waits in Plan under Not planned.' }[last.where] || '';
+          : { training: 'Off today. Your place in the round stays.', later: 'Set aside for later today.', week: 'Off today. It waits under Any day this week.', tomorrow: 'Enough for today. It comes back tomorrow.', another: 'Off today. It waits in Plan under Not planned.' }[last.where] || '';
       const was = make('p', `now-was${last.k === 'done' || (last.k === 'event' && last.happened) ? ' struck' : ''}`);
       was.append(make('span', 'w', last.t), make('span', 's', ` ${said}`));
       mid.append(was);
@@ -484,7 +524,9 @@ export class Now {
 
   async click(e) {
     const el = e.target.closest('[data-now]');
-    if (!el || !this.shown || this.busy) return false;
+    if (!el || this.busy) return false;
+    // Today's top (the zoom) offers the two ends of the day too.
+    if (!this.shown && !(zoomOn() && ['talkday', 'closeday'].includes(el.dataset.now))) return false;
     const act = el.dataset.now;
     this.busy = true;
     if (!/^l/.test(act)) this.light.note = '';
@@ -513,6 +555,7 @@ export class Now {
       else if (act === 'closeday') this.openClose();
       else if (act === 'close-add') this.addAlso(this.forms.close?.querySelector('.now-addin'));
       else if (act === 'close-save') await this.saveClose();
+      else if (/^np-/.test(act)) await this.pageAct(act, el);
       else if (act === 'plan') this.p.goTab('plan');
       else if (act === 'page') this.p.goTab('page');
     } finally { this.busy = false; }
@@ -533,6 +576,71 @@ export class Now {
     const w = cur && !cur.smalls ? whereOf(cur.item) : null;
     if (!w) return;
     await this.p.hooks.openEntry(w.id);
+  }
+
+  // ---------- the page (the zoom, Part 2) ----------
+
+  target() { return pageTarget(this, this.m || this.model()); }
+
+  async pageAct(act, el) {
+    const t = this.target();
+    const i = t?.item;
+    if (act === 'np-today') return zoomTo({ stop: 'today' });
+    if (act === 'np-home') return zoomTo({ stop: 'now' });
+    if (!i) return undefined;
+    if (act === 'np-done') {
+      if (!t.visit) return this.done();
+      if (isLight(i.row) && !i.row.fields?.done) return this.light.read();
+      const on = !i.row.fields?.done;
+      await this.p.wrote(await tickTask(i.row.id, on));
+      this.p.hooks.toast?.(on ? `“${clip(i.row.text, 40)}” done` : 'Not done', { label: 'Undo', run: async () => { await this.p.wrote(await tickTask(i.row.id, !on)); } });
+      return undefined;
+    }
+    if (act === 'np-bring') return this.bring(i);
+    if (act === 'np-proj') return i.world ? zoomTo({ place: { view: 'world', id: i.world.id }, way: 'next' }) : undefined;
+    if (act === 'np-door') return this.p.hooks.writeHere?.(el.dataset.id || forOf(i));
+    if (act === 'np-tie') return tieMenu(this, i, el);
+    return undefined;
+  }
+
+  // Bring to today: after the one thing, and he is on it.
+  async bring(i) {
+    const today = this.p.today;
+    const was = { ...this.st };
+    const cur = this.m?.cur;
+    const order = cur && !cur.smalls && cur.item.task.day === today ? (cur.item.task.order || 0) + 0.5 : this.p.lastOrder(today);
+    const back = async () => { await this.save({ task: was.task, since: was.since, skipped: was.skipped, last: was.last }); };
+    await this.p.applyWhen([i.row.id], { day: today }, 'today', { undo: back, extra: () => ({ order }) });
+    await this.save({ task: i.row.id, since: Date.now(), last: null });
+    this.p.hooks.toast?.('Brought to today, and you’re on it');
+    return zoomTo({ stop: 'now' });
+  }
+
+  async tie(id, pieceId) {
+    await this.p.wrote(await setTask(id, { for: pieceId }));
+    this.p.hooks.toast?.('Tied. Its page opens on that piece', { label: 'Undo', run: async () => { await this.p.wrote(await setTask(id, { for: null })); } });
+  }
+
+  pageKey(k, e, m) {
+    const t = pageTarget(this, m);
+    const i = t?.item;
+    const t0 = e.target;
+    if (m.active && !t?.visit) return null;
+    if (i && !t.visit && isLight(i.row) && !i.row.fields?.done) { const g = this.light.key(k, e); if (g) return g; }
+    if (k === 'd' && i) return () => this.pageAct('np-done');
+    if (k === 'b' && t?.visit && !(i.task.day && i.task.day <= this.p.today) && !i.row.fields?.done) return () => this.bring(i);
+    if (k === 'n' && !t?.visit && m.cur) return () => { this.asking = true; this.p.redraw(); this.focusFirst('.now-choice'); };
+    if (k === 's' && m.cur?.smalls && !t?.visit) return () => this.skip();
+    if (k === 's' && this.train.active(m.cur) && !this.train.ask && !t?.visit) return () => this.train.move(1, null);
+    if (k === 't' && !m.cur && this.morning(m)) return () => this.openTalk();
+    if (k === 'c' && !m.cur && this.evening()) return () => this.openClose();
+    const into = (e.key === 'Enter' && !t0?.closest?.('button, a')) || e.key === 'ArrowRight' || k === 'o';
+    if (into && i) {
+      const f = forOf(i);
+      if (f) return () => this.p.hooks.writeHere?.(f);
+      if (k === 'o' && whereOf(i)) return () => this.p.hooks.openEntry(whereOf(i).id);
+    }
+    return null;
   }
 
   focusFirst(sel) { if (hover.matches) requestAnimationFrame(() => this.p.sheet.querySelector(sel)?.focus()); }
@@ -564,6 +672,7 @@ export class Now {
     const cur = m.cur;
     if (!cur) return;
     if (this.train.active(cur)) { await this.train.done(); return; }
+    if (!cur.smalls && isLight(cur.item.row)) { await this.light.read(); return; }
     const was = { ...this.st };
     const id = cur.item.row.id;
     await this.p.wrote(await tickTask(id, true));
@@ -610,6 +719,9 @@ export class Now {
         undo: back,
         extra: (t) => ({ worked: [...new Set([...(Array.isArray(t?.worked) ? t.worked : []), today])] })
       });
+    } else if (where === 'week') {
+      const mon = weekOf(today)[0];
+      await this.p.applyWhen(ids, { span: { kind: 'week', start: mon } }, 'any day this week', { undo: back });
     } else await this.p.applyWhen(ids, null, '', { undo: back });
     await this.after(last);
   }
@@ -723,7 +835,8 @@ export class Now {
     const m = this.m || this.model();
     const k = e.key.toLowerCase();
     let go = null;
-    if (this.asking && ['1', '2', '3'].includes(k)) go = () => this.aside(['later', 'tomorrow', 'another'][Number(k) - 1]);
+    if (zoomOn() && !this.asking && !this.mode) { go = this.pageKey(k, e, m); if (!go) return; }
+    else if (this.asking && ['1', '2', '3'].includes(k)) go = () => this.aside(['later', 'tomorrow', zoomOn() ? 'week' : 'another'][Number(k) - 1]);
     else if (this.asking && k === '4' && this.train.active(m.cur)) go = () => this.aside('own');
     else if (this.asking && e.key === 'Escape') go = () => { this.asking = false; this.p.redraw(); };
     else if (m.active) return;

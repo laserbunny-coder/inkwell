@@ -2,7 +2,10 @@
 // and it lands where you are).
 import { putEntries, children, getEntry, byKind, isTrashed } from '../db.js';
 import { popMenu, ask, askText, showCopy, toast } from '../menu.js';
-import { noteTypes } from '../model.js';
+import { noteTypes, entry, newId, tagsIn, outline } from '../model.js';
+import { GAP } from '../order.js';
+import { ensureLightLine } from '../firstlight.js';
+import { zoomOn } from '../zoomstate.js';
 import { MAX_BYTES } from '../files.js';
 import { titleOf, dayId } from '../notebook.js';
 import { taskHint } from '../pages.js';
@@ -27,13 +30,13 @@ import { autoOn } from '../auto.js';
 import { inPane, host as paneHost } from '../panes.js';
 import { aheadSource } from '../ahead.js';
 import { events as calendarEvents } from '../calendar.js';
-import { bookType, bookOf } from '../library.js';
+import { bookType, bookOf, kindName } from '../library.js';
 import { isoToday } from '../dates.js';
 import { addCommands } from './commandlist.js';
 import { $, editor, inNotebook, root, state, store, view } from '../main.js';
 import { touch } from './scriptbar.js';
 import { currentEditor, notebook } from './notebookview.js';
-import { go, historyMode, lastPlace, openEntry, placeOf, setHistoryMode } from './routing.js';
+import { go, historyMode, lastPlace, openBook, openEntry, placeOf, setHistoryMode } from './routing.js';
 import { applyRemote, caretAfter, setCaretAfter, sync } from './syncwiring.js';
 import { nextDate, renderWorld } from './libraryview.js';
 import { frame, nav } from './workpages.js';
@@ -712,7 +715,19 @@ function wireTalking() {
       bible: (body) => (canAskServer() ? askServer(body) : null),
       // Training (Part 6): today's line, once a day, not on Sunday.
       // Not in automated test runs unless asked for (src/auto.js).
-      daily: (items, today) => (inPane || hidden().has('training') || !autoOn('training') ? [] : ensureTrainingLine(items, today)),
+      daily: async (items, today) => {
+        if (inPane) return [];
+        const rows = hidden().has('training') || !autoOn('training') ? [] : await ensureTrainingLine(items, today);
+        // First light is a line of the day on the zoom (Part 2).
+        if (zoomOn() && !hidden().has('firstlight') && autoOn('firstlight')) rows.push(...(await ensureLightLine(items, today)));
+        return rows;
+      },
+      // The zoom's line page (Part 2): the door into a step's piece, the pieces
+      // to tie it to, into the text with the cursor at the end, a note under it.
+      doorOf: (id) => doorOf(id),
+      piecesOf: (worldId) => piecesOf(worldId),
+      writeHere: (id) => writeHere(id),
+      addNote: (id, text) => addNote(id, text),
       closeDay: (answers) => closeDayFromNow(answers),
       toast
     }
@@ -724,3 +739,58 @@ function wireTalking() {
 }
 
 export { nowStrip, openToday, todayOpensOnNow, askServer, asking, blankOnce, canAskServer, capture, captureHere, dayReview, deskBackend, deskPage, flipPlan, inToday, landShares, looseFoot, looseSoon, openAsked, openCapture, plan, projectPage, scribeKept, setAsking, showCapture, tagsPage, todayKey, wireTalking, writeOut };
+
+// ---------- the zoom's line page (Part 2) ----------
+
+const said = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+// The piece or page a step is for: its name, kind and size, its last two lines.
+async function doorOf(id) {
+  const r = await getEntry(id);
+  if (!r || r.deleted || isTrashed(r)) return null;
+  const lastOf = (rows) => rows.filter((x) => !x.deleted && said(x.text)).slice(-2).map((x) => ({ text: said(x.text), head: x.kind === 'scene' || x.kind === 'heading' || ['scene', 'character'].includes(x.fields?.el) }));
+  if (r.kind === 'project' && bookType(r) !== 'lines') {
+    const chs = (await outline(r.id)).flatMap((a) => a.chapters).filter((c) => !c.deleted);
+    const last = chs.at(-1);
+    const n = chs.length;
+    return { id: r.id, name: r.title || 'Untitled', kind: kindName(r), size: n ? `${n} chapter${n === 1 ? '' : 's'}` : '', last: last ? lastOf(await children(last.id)) : [] };
+  }
+  if (r.kind === 'project' || r.kind === 'page' || r.kind === 'day') {
+    const lines = (await children(r.id)).filter((x) => x.kind === 'line' && !x.deleted);
+    const n = lines.length;
+    return { id: r.id, name: r.title || titleOf(r) || 'Untitled', kind: r.kind === 'project' ? kindName(r) : r.kind === 'day' ? 'Day' : 'Page', size: n ? `${n} line${n === 1 ? '' : 's'}` : '', last: lastOf(lines) };
+  }
+  if (r.kind === 'chapter') return { id: r.id, name: r.title || 'Untitled', kind: 'Chapter', size: '', last: lastOf(await children(r.id)) };
+  return null;
+}
+
+// A project's pieces, to tie a step to one.
+async function piecesOf(worldId) {
+  if (!worldId) return [];
+  return (await children(worldId)).filter((r) => r.kind === 'project' && !r.deleted && !isTrashed(r)).map((r) => ({ id: r.id, name: r.title || 'Untitled', kind: kindName(r) }));
+}
+
+// Into the text, the cursor at the end, ready to type.
+async function writeHere(id) {
+  const r = await getEntry(id);
+  if (!r || r.deleted) return;
+  if (r.kind === 'project' && bookType(r) !== 'lines') await openBook(r.id);
+  else await openEntry(id);
+  // Once a key goes down he has moved on (Esc, Alt + J…): don't pull him back.
+  let moved = false;
+  const stop = () => { moved = true; };
+  document.addEventListener('keydown', stop, { capture: true, once: true });
+  const end = () => { if (moved) return; const ed = currentEditor(); try { ed?.commands.focus('end', { scrollIntoView: true }); } catch { /* not ready yet */ } };
+  requestAnimationFrame(end);
+  setTimeout(() => { end(); document.removeEventListener('keydown', stop, true); }, 350);
+}
+
+// "Write a note": one more line under it.
+async function addNote(id, text) {
+  const t = said(text);
+  if (!t) return null;
+  const kids = (await children(id)).filter((r) => !r.deleted);
+  const row = entry('line', { id: newId('li'), parent_id: id, sort: (kids.at(-1)?.sort || 0) + GAP, text: t, content: [{ type: 'text', text: t }], tags: tagsIn(t), links: [], fields: { done: false } });
+  await putEntries([row]);
+  await applyRemote([row]);
+  return row;
+}

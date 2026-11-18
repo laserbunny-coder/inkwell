@@ -73,7 +73,7 @@ export function drawYear(plan) {
       b.type = 'button';
       b.append(make('i'), make('span', 'yr-day', long(d.iso, { month: 'short', day: 'numeric' })), make('span', 'yr-text', clip(d.text, 40)));
       b.title = d.hard ? 'A date to hit that can’t move. Open it where it’s written' : 'A date to hit. Open it where it’s written';
-      b.addEventListener('click', () => plan.hooks.openEntry(d.id));
+      b.addEventListener('click', () => plan.openLine(d.id));
       box.append(b);
     }
     if (m.dates.length > 4) box.append(make('span', 'yr-more', `${m.dates.length - 4} more dates`));
@@ -87,7 +87,7 @@ export function drawYear(plan) {
     const b = make('button', 'yr-line', clip(i.row.text));
     b.type = 'button';
     b.title = 'Open it where it’s written';
-    b.addEventListener('click', () => plan.hooks.openEntry(i.row.id));
+    b.addEventListener('click', () => plan.openLine(i));
     some.append(b);
   }
   const foot = make('div', 'yr-foot');

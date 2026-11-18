@@ -14,8 +14,9 @@
 // { nokey: true }: then each chapter name links to esv.org and "I read it"
 // is the way through. Only today's chapters are kept on the device.
 
-import { getEntry } from './db.js';
-import { PLAN_ID, savePlanSettings, isoOf, tickTask, addDays } from './tasks.js';
+import { getEntry, putEntries, children } from './db.js';
+import { PLAN_ID, savePlanSettings, isoOf, tickTask, addDays, addTask } from './tasks.js';
+import { trash } from './trash.js';
 import { withDay, withoutDay, cleanDays, trackWords, daysFromHistory } from './readstats.js';
 
 const OT = [['Genesis', 50], ['Exodus', 40], ['Leviticus', 27], ['Numbers', 36], ['Deuteronomy', 34], ['Joshua', 24], ['Judges', 21], ['Ruth', 4], ['1 Samuel', 31], ['2 Samuel', 24], ['1 Kings', 22], ['2 Kings', 25], ['1 Chronicles', 29], ['2 Chronicles', 36], ['Ezra', 10], ['Nehemiah', 13], ['Esther', 10], ['Job', 42], ['Song of Solomon', 8], ['Isaiah', 66], ['Jeremiah', 52], ['Lamentations', 5], ['Ezekiel', 48], ['Daniel', 12], ['Hosea', 14], ['Joel', 3], ['Amos', 9], ['Obadiah', 1], ['Jonah', 4], ['Micah', 7], ['Nahum', 3], ['Habakkuk', 3], ['Zephaniah', 3], ['Haggai', 2], ['Zechariah', 14], ['Malachi', 4]];
@@ -142,4 +143,56 @@ export async function tickBibleHabit(items, today = isoOf()) {
   const h = items.find((i) => i.mine !== false && i.task?.habit && !i.row.fields?.done && !i.ghost && i.task.day === today && BIBLE.test(i.row.text || ''));
   if (!h) return null;
   return { id: h.row.id, rows: await tickTask(h.row.id, true) };
+}
+
+// ---------- First light as a daily line (the zoom, Part 2, Nov 17 2026) ----------
+
+// "First light" is the first line of each morning, like Training's line: it
+// can be dragged and moved like any line, opening it shows the reading, and
+// done counts as read. One that wasn't read lapses: it never piles up (the
+// Nov 16 rule), and the reading log keeps the days he did read.
+export const isLight = (row) => !!row?.fields?.firstlight && row?.kind === 'line' && !!row.fields?.task;
+export const lightToday = (items, today) => items.find((i) => isLight(i.row) && !i.ghost && !i.occ && (i.task.day === today || (i.row.fields?.done && isoOf(i.task.done_at || 0) === today)));
+
+// → rows written: stale lines gone, today's made (once a day, unless read or set aside already).
+export async function ensureLightLine(items, today = isoOf()) {
+  const out = [...(await lapseLight(items, today))];
+  if (lightToday(items, today)) return out;
+  const st = await readReading();
+  if (st.read === today || st.skip === today || st.made === today) return out;
+  const orders = items.filter((i) => i.task.day === today).map((i) => i.task.order || 0);
+  const made = await addTask({ text: 'First light', day: today, order: Math.min(0, ...orders) - 1 });
+  const line = made.at(-1);
+  line.fields = { ...line.fields, firstlight: true };
+  line.updated_at = Date.now();
+  await putEntries([line]);
+  out.push(...made);
+  const saved = await saveReading({ ...st, made: today });
+  if (saved) out.push(...[].concat(saved));
+  return out;
+}
+
+export async function lapseLight(items, today = isoOf()) {
+  const stale = items.filter((i) => isLight(i.row) && !i.row.fields?.done && !i.ghost && !i.occ && i.task.day && i.task.day < today);
+  const out = [];
+  for (const i of stale) out.push(...(await dropLine(i.row.id)));
+  return out;
+}
+
+// Set aside for the day ("Not this morning"): the line goes, nothing piles up.
+export async function dropLine(id) {
+  const r = await getEntry(id);
+  if (!r || r.deleted || r.fields?.done || r.fields?.trashed) return [];
+  const kids = (await children(r.id)).filter((c) => !c.deleted && String(c.text || '').trim());
+  if (kids.length) { await trash(r); return [r]; }
+  const row = { ...r, deleted: true, updated_at: Date.now() };
+  await putEntries([row]);
+  return [row];
+}
+
+// Read: today's line is ticked too (wherever he marked it).
+export async function tickLight(items, today = isoOf(), on = true) {
+  const i = lightToday(items, today);
+  if (!i || !!i.row.fields?.done === on) return [];
+  return tickTask(i.row.id, on);
 }
