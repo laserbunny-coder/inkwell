@@ -24,6 +24,7 @@ import { streakBlock, chartBox } from './trainview.js';
 import { GOALS } from './trainstats.js';
 import { readingLog, readReading, saveReading, toggledDay } from './firstlight.js';
 import { readBlock } from './readview.js';
+import { zoomOn } from './zoomstate.js';
 
 export const DESK_ID = 'settings-desk';
 const KIND = { decision: 'Decide', blocked: 'Do', review: 'Try' };
@@ -52,6 +53,21 @@ export async function nextStep(worldId) {
     return null;
   };
   return walk(`steps-${worldId}`);
+}
+// A project's next few open steps, in order (the Desk in the zoom shows two).
+export async function nextSteps(worldId, n = 2) {
+  const out = [];
+  const walk = async (parent, depth = 0) => {
+    const kids = (await children(parent)).filter((r) => r.kind === 'line' && !r.deleted && !isTrashed(r)).sort((a, b) => (a.sort || 0) - (b.sort || 0));
+    for (const r of kids) {
+      if (out.length > n) return;
+      const t = taskOf(r);
+      if (t && !r.fields?.done && String(r.text || '').trim()) out.push(r);
+      else if (depth < 6 && !r.fields?.done) await walk(r.id, depth + 1);
+    }
+  };
+  await walk(`steps-${worldId}`);
+  return out;
 }
 const PACIFIC = 'America/Los_Angeles';
 const DAY = 864e5;
@@ -430,6 +446,7 @@ export class DeskPage {
   async callLater(id) { await this.later(id, new Date(tomorrowMorning(Date.now())).toISOString()); if (this.showing()) this.load({ quiet: true }); }
 
   async stageParts({ now, failed }) {
+    if (zoomOn()) return this.zoomParts({ now, failed });
     const { worlds, settings } = await this.seating();
     const data = this.data || { needs: [], updates: [] };
     const seats = seatsFor({ worlds, needs: data.needs, updates: data.updates, settings, now });
@@ -512,6 +529,163 @@ export class DeskPage {
 
     if (this.data) parts.push(this.catchup(data.updates, now, isNew));
     return parts;
+  }
+
+  // ---- The Desk in the zoom (Part 4) ----
+  // The projects on stage in his order, each with its next two steps; one
+  // folded line at the top for what needs you and who is working (it opens
+  // Needs you, Working, Catch-up and History right there); one quiet row
+  // "In the wings"; Reading and Training below, as they are.
+  async zoomParts({ now, failed }) {
+    const { worlds, settings } = await this.seating();
+    const data = this.data || { needs: [], updates: [] };
+    const seats = seatsFor({ worlds, needs: data.needs, updates: data.updates, settings, now });
+    this.settings = settings;
+    this.worlds = worlds;
+    const isNew = (ms) => !!this.seen && ms > this.seen;
+    const calls = seats.flatMap((s) => s.calls);
+    const later = seats.flatMap((s) => s.later);
+    const crew = seats.flatMap((s) => s.crew.filter((c) => !c.quiet).map((c) => ({ ...c, seat: s })));
+    const say = this.talk?.();
+    let talk = null;
+    if (say) {
+      talk = make('button', 'dk-talk', '✦ Talk it through');
+      talk.title = 'Talk it through with Claude, beside the Desk (Alt + T)';
+      talk.addEventListener('click', say);
+    }
+    const head = make('header', 'dk-head zd-head');
+    const titles = make('div', 'dk-titles');
+    titles.append(make('div', 'dk-eyebrow', 'On stage'), make('h1', '', 'Desk'));
+    head.append(titles);
+    const side = make('div', 'dk-side');
+    if (talk) side.append(talk);
+    const hist = make('button', 'dk-link zd-hist', 'History');
+    hist.title = 'Every Claude thread there has been, newest first';
+    hist.addEventListener('click', () => this.go({ view: 'desk', tab: 'history' }));
+    side.append(hist);
+    head.append(side);
+    const parts = [head];
+
+    // The folded line: only when something is waiting or running.
+    if (calls.length || crew.length || later.length) parts.push(this.crewFold({ calls, crew, later, data, now, isNew }));
+    else if (!this.data) parts.push(this.note(failed));
+
+    const on = seats.filter((s) => s.stage === 'on');
+    const steps = new Map();
+    for (const s of on) if (s.world) steps.set(s.world.id, await nextSteps(s.world.id, 2));
+    const box = make('div', 'zd-projs');
+    box.dataset.seat = 'on';
+    for (const s of on) box.append(this.zoomBox(s, steps.get(s.world?.id) || [], now));
+    if (on.length) parts.push(box);
+    else parts.push(make('p', 'hint dk-empty', 'Nothing is on stage. Carry a project here from the wings, or right-click one and pick On stage.'));
+
+    { const r = await this.readingBlock(); if (r) parts.push(r); }
+    if (!document.documentElement.classList.contains('hide-training')) { const t = await this.trainingBlock(); if (t) parts.push(t); }
+
+    const wings = seats.filter((s) => s.stage === 'wings' && s.world);
+    const row = make('section', 'zd-wings');
+    row.dataset.seat = 'wings';
+    row.append(make('h2', 'dk-label', 'In the wings'));
+    const chips = make('div', 'zd-chips');
+    for (const s of wings) {
+      const c = make('button', 'zd-chip', s.name);
+      c.type = 'button';
+      c.dataset.pid = s.world.id;
+      c.draggable = true;
+      c.title = 'Open it. Drag it onto the Desk or a seat; right-click for its seat';
+      c.addEventListener('click', () => this.go({ view: 'world', id: s.world.id }));
+      chips.append(c);
+    }
+    if (!wings.length) chips.append(make('span', 'zd-none', 'Nothing is waiting in the wings.'));
+    row.append(chips);
+    parts.push(row);
+    return parts;
+  }
+
+  // "2 need you · 3 threads working": folded, it is one line; open, it shows
+  // what needs you, who is working, Catch-up and History.
+  crewFold({ calls, crew, later, data, now, isNew }) {
+    const open = ls.get('deskCrewOpen', '') === '1';
+    const sec = make('section', `zd-crew${open ? ' open' : ''}`);
+    const line = make('button', 'zd-crewline');
+    line.type = 'button';
+    line.setAttribute('aria-expanded', String(open));
+    const bits = [];
+    if (calls.length) bits.push(`${calls.length} need${calls.length === 1 ? 's' : ''} you`);
+    if (crew.length) bits.push(`${crew.length} thread${crew.length === 1 ? '' : 's'} working`);
+    if (!bits.length && later.length) bits.push(`${later.length} set aside until tomorrow`);
+    if (calls.length) line.append(make('i', 'dk-sig'));
+    line.append(make('span', 'zd-crew-t', bits.join(' · ')), make('span', 'zd-chev', open ? '▾' : '▸'));
+    line.title = open ? 'Fold it away' : 'What needs you, who is working, Catch-up and History';
+    line.addEventListener('click', () => { ls.set('deskCrewOpen', open ? '' : '1'); this.render({ now: this.now || now, failed: false }); });
+    sec.append(line);
+    if (!open) return sec;
+    const inner = make('div', 'zd-crew-in');
+    if (calls.length) {
+      const h = make('h3', 'dk-sub', 'Needs you');
+      if (calls.length > 1 && this.through) { const b = make('button', 'dk-link zd-thru', 'Go through them'); b.addEventListener('click', () => this.through()); h.append(b); }
+      const list = make('div', 'dk-list');
+      for (const c of calls) list.append(this.call(c, now, isNew));
+      inner.append(h, list);
+    }
+    if (crew.length) {
+      const list = make('div', 'dk-list');
+      for (const c of crew) {
+        const row = make('a', 'dk-crew');
+        row.href = web(c.link); row.target = '_blank'; row.rel = 'noopener';
+        row.append(make('i', 'dk-pulse'), make('span', 'dk-crew-t', c.title), make('span', 'dk-crew-s', `${c.seat.name} · ${when(c.at, now)}`));
+        list.append(row);
+      }
+      inner.append(make('h3', 'dk-sub', 'Working'), list);
+    }
+    if (later.length) {
+      const l = make('p', 'hint dk-later', `${later.length} set aside until tomorrow morning. `);
+      const back = make('button', 'dk-link', 'Bring back');
+      back.addEventListener('click', async () => { for (const n of later) await this.later(n.id, null).catch((e) => console.warn(e)); this.load({ quiet: true }); });
+      l.append(back);
+      inner.append(l);
+    }
+    const more = make('div', 'zd-crew-more');
+    const hist = make('button', 'dk-link', 'History: every thread');
+    hist.addEventListener('click', () => this.go({ view: 'desk', tab: 'history' }));
+    more.append(hist);
+    inner.append(more);
+    if (this.data) inner.append(this.catchup(data.updates, now, isNew));
+    sec.append(inner);
+    return sec;
+  }
+
+  // One project on stage: its name (into it), its area, its next two steps.
+  zoomBox(seat, steps, now) {
+    const el = make('section', 'zd-proj');
+    if (seat.world) { el.dataset.pid = seat.world.id; el.draggable = true; }
+    const h = make('div', 'zd-ph');
+    const name = this.nameLink(seat);
+    name.classList.add('zd-name');
+    const dot = make('i', 'dk-dot');
+    if (seat.color) dot.style.background = seat.color;
+    h.append(dot, name);
+    if (seat.calls.length) h.append(make('span', 'zd-calls', `${seat.calls.length} need${seat.calls.length === 1 ? 's' : ''} you`));
+    el.append(h);
+    if (!seat.world) return el;
+    const list = make('div', 'zd-steps');
+    for (const r of steps.slice(0, 2)) {
+      const b = make('button', 'zd-step');
+      b.type = 'button';
+      b.dataset.task = r.id;
+      const t = taskOf(r);
+      b.append(make('i', 'zd-ring'), make('span', 'zd-step-t', r.text), make('span', 'zd-when', t ? chipLabel(t) : ''));
+      b.title = 'Open it';
+      b.addEventListener('click', (e) => { e.stopPropagation(); this.openLine ? this.openLine(r.id) : this.open(r.id); });
+      list.append(b);
+    }
+    if (!steps.length) {
+      const add = make('button', 'dk-link zd-add', 'No next step yet. Add one');
+      add.addEventListener('click', (e) => { e.stopPropagation(); this.addStep?.(seat.world.id); });
+      list.append(add);
+    } else if (steps.length > 2) list.append(make('span', 'zd-more', 'and more on its Steps'));
+    el.append(list);
+    return el;
   }
 
   // One project on stage: what it's for, where it stands, what needs you, who's on it.

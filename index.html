@@ -121,6 +121,7 @@
         <span class="lib-jumps"><button type="button" class="ghost-btn lib-drawer" data-cmd="drawer">Drawer</button><button type="button" class="ghost-btn lib-tags" data-cmd="tags">Tags</button></span>
         <div id="lib-areas" class="chips" role="group" aria-label="Areas"></div>
       </div>
+      <div id="lib-zoom" class="zl" hidden></div>
       <div class="lib-bar"><div id="lib-path" class="hint"></div><label class="lib-sort">Sort <select id="lib-sort" aria-label="Sort books"><option value="recent">Recently edited</option><option value="title">Title</option><option value="made">Newest first</option><option value="custom">My order</option></select></label></div>
       <div id="lib-books" class="cards"></div>
       <form id="lib-new" class="lib-new" hidden>
@@ -181,6 +182,7 @@
         <button type="button" class="pill" id="ph-continue">Continue writing</button>
         <span id="ph-more"></span>
       </div>
+      <div id="ph-dots" class="zp-dots" role="group" aria-label="Stage" hidden></div>
       <div class="ph-meta"><input id="ph-label" class="ph-label" list="piece-labels" aria-label="What this is (Novel, Gag, Episode…)" autocomplete="off" spellcheck="false"> · <label>Written as <select id="ph-kind" aria-label="How it's written"></select></label> · <label>Status <select id="ph-stage" aria-label="Status"></select></label> <button type="button" class="ghost-btn ph-next" id="ph-next" hidden></button> · <span id="ph-stats"></span> · <span id="ph-world"></span></div>
       <datalist id="piece-labels"></datalist>
       <div class="ph-grid">

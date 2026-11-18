@@ -303,3 +303,109 @@ html.zoom .zm-np:hover, html.zoom .zm-np[aria-expanded="true"] { color: var(--in
 html.zoom.zm-picking .zm-mic { visibility: hidden; }
 /* With the shelf open on a wide screen, the page makes room beside it, so days stay in sight to drop on. */
 @media (min-width: 900px) { html.zoom.zm-shelf-on .plan-home { padding-right: 340px; } }
+
+/* ---------- Part 4: seats, the Desk, the Library, the project ---------- */
+/* The seat bar: the four seats, right above the ruler. */
+.zm-seatbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(60px + env(safe-area-inset-bottom, 0px)); z-index: 62; display: flex; align-items: center; gap: 2px; max-width: calc(100vw - 24px); padding: 5px; background: var(--panel, var(--raise)); border: 1px solid var(--line2, var(--line)); border-radius: 12px; box-shadow: 0 12px 34px rgba(0, 0, 0, .4); font: 13.5px var(--ui); color: var(--ink); }
+.zm-seatbar[hidden] { display: none; }
+.zm-sb-name { font-weight: 500; color: var(--muted); padding: 0 8px 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.zm-seatbar.carrying .zm-sb-name, .zm-seatbar.carrying .zm-sb-x { display: none; }
+.zm-sb { border: 1px solid transparent; background: transparent; color: var(--ink); border-radius: 8px; padding: 8px 12px; font: inherit; white-space: nowrap; cursor: pointer; }
+.zm-sb:hover, .zm-sb:focus-visible, .zm-sb.over { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: var(--accent); outline: none; }
+.zm-sb[aria-current] { color: var(--faint); }
+.zm-sb[aria-current]::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 7px; vertical-align: 2px; }
+.zm-sb-x { color: var(--faint); padding: 8px 10px; }
+html.zoom.zm-seating .zm-mic { visibility: hidden; }
+.zm-dropon-p { outline: 2px dashed var(--accent); outline-offset: 3px; border-radius: 8px; }
+@media (max-width: 640px) {
+  .zm-seatbar { left: 8px; right: 8px; transform: none; flex-wrap: wrap; justify-content: space-between; gap: 2px 0; }
+  .zm-sb-name { flex: 0 0 100%; max-width: none; padding: 5px 8px 3px; }
+  .zm-sb { padding: 9px 8px; font-size: 13px; }
+}
+
+/* The Desk in the zoom. */
+@media (min-width: 641px) { .zd-head { align-items: flex-end; } }
+.zd-hist { font: 13px var(--ui); }
+.zd-crew { margin: 6px 0 18px; }
+.zd-crewline { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; padding: 6px 0; color: var(--muted); font: 14px var(--ui); cursor: pointer; }
+.zd-crewline:hover { color: var(--ink); }
+.zd-chev { color: var(--faint); font-size: 11px; }
+.zd-crew-in { border-left: 2px solid var(--line); padding: 4px 0 4px 16px; margin: 4px 0 8px; }
+.zd-crew-in .dk-sub { display: flex; align-items: baseline; gap: 12px; margin-top: 10px; }
+.zd-crew-more { margin: 12px 0 0; }
+.zd-projs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin: 8px 0 26px; }
+.zd-proj { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 14px; min-width: 0; background: color-mix(in srgb, var(--raise) 40%, transparent); }
+.zd-proj[draggable="true"] { cursor: grab; }
+.zd-ph { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+.zd-name { font-family: var(--title); font-size: 22px; line-height: 1.2; }
+.zd-calls { margin-left: auto; font: 12px var(--ui); color: var(--signal, var(--accent)); white-space: nowrap; }
+.zd-steps { display: flex; flex-direction: column; gap: 1px; }
+.zd-step { display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 10px; border: 0; background: none; color: var(--ink); font: 15px var(--prose, var(--ui)); text-align: left; padding: 6px 4px; margin: 0 -4px; border-radius: 7px; cursor: pointer; }
+.zd-step:hover { background: var(--raise); }
+.zd-ring { width: 12px; height: 12px; border: 1.5px solid var(--faint); border-radius: 50%; }
+.zd-step-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zd-when { font: 12px var(--ui); color: var(--faint); white-space: nowrap; }
+.zd-more, .zd-none { font: 12.5px var(--ui); color: var(--faint); padding: 4px 0; }
+.zd-add { font: 13px var(--ui); text-align: left; padding: 6px 0; }
+.zd-wings { margin: 26px 0 10px; }
+.zd-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.zd-chip, .zl-chip { border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 99px; padding: 6px 13px; font: 13.5px var(--ui); cursor: pointer; }
+.zd-chip:hover, .zl-chip:hover { border-color: var(--accent); }
+.zd-chip[draggable="true"], .zl-row[draggable="true"] { cursor: grab; }
+
+/* The Library in the zoom. */
+html.zoom .library :is(#lib-areas, .lib-bar, #lib-books, .lib-jumps, #lib-done-box) { display: none; }
+.zl { display: flex; flex-direction: column; gap: 26px; margin: 18px 0 30px; }
+.zl-h { display: flex; align-items: center; gap: 8px; font: 500 11.5px var(--ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.zl-into { border: 0; background: none; padding: 0; cursor: pointer; }
+.zl-into:hover { color: var(--accent); }
+.zl-stage { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 10px; }
+.zl-areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 22px 28px; }
+.zl-area { min-width: 0; }
+.zl-row { display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.zl-name { flex: 1; min-width: 0; border: 0; background: none; color: var(--ink); font: 17px var(--prose, var(--ui)); text-align: left; padding: 8px 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zl-name:hover { color: var(--accent); }
+.zl-seat { flex: none; border: 0; background: none; padding: 4px 0; color: var(--faint); font: 12.5px var(--ui); cursor: pointer; white-space: nowrap; }
+.zl-seat.s-on { color: var(--accent); }
+.zl-seat:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.zl-add { border: 0; background: none; color: var(--faint); font: 18px/1 var(--ui); padding: 8px 2px; cursor: pointer; }
+.zl-add:hover { color: var(--accent); }
+.zl-newarea { align-self: start; justify-self: start; font-size: 14px; letter-spacing: .04em; }
+.zl-areas > .chip-input { align-self: start; justify-self: start; max-width: 220px; }
+
+/* A project's Overview in the zoom: what it is and where its work is first;
+   its facts (north star, now, next date), crew and turns lower down. */
+html.zoom .wp-sheet { display: flex; flex-direction: column; }
+html.zoom .wp-sheet > .wp-eyebrow { order: 1; }
+html.zoom .wp-sheet > .wp-head { order: 2; }
+html.zoom .wp-sheet > #wh-logline { order: 3; }
+html.zoom .wp-sheet > #wh-finished { order: 4; }
+html.zoom .wp-sheet > #wh-calls { order: 5; }
+html.zoom .wp-sheet > #wh-stagebar { order: 6; }
+html.zoom .wp-sheet > #wh-steps { order: 7; }
+html.zoom .wp-sheet > #wh-pieces-box { order: 8; }
+html.zoom .wp-sheet > #wh-next-box { order: 9; }
+html.zoom .wp-sheet > #wh-facts { order: 10; margin-top: 18px; }
+html.zoom .wp-sheet > #wh-crew { order: 11; }
+html.zoom .wp-sheet > #wh-turns { order: 12; }
+html.zoom .wp-sheet > #wh-recent-box { order: 13; }
+html.zoom #wh-stagebar { height: auto; overflow: visible; display: block; margin: 16px 0 24px; max-width: none; }
+html.zoom #wh-stagebar[hidden] { display: none; }
+.zw-stand { display: flex; width: 100%; gap: 3px; border: 0; background: none; padding: 0; cursor: pointer; text-align: left; }
+.zw-sg { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.zw-sg i { display: block; height: 4px; border-radius: 2px; background: var(--line); }
+.zw-sg.has i { background: var(--accent); }
+.zw-sg b { font: 400 11.5px var(--ui); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zw-sg.has b { color: var(--muted); }
+.zw-stand:hover .zw-sg b { color: var(--ink); }
+.wp-lifeword { border: 0; background: none; padding: 0; font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--accent); cursor: pointer; }
+.wp-lifeword:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* A piece in the zoom: its stage as dots under its name. */
+.zp-dots { display: flex; align-items: center; gap: 6px; margin: 4px 0 10px; }
+.zp-dots[hidden] { display: none; }
+.zp-dot { width: 12px; height: 12px; padding: 0; border-radius: 50%; border: 1.5px solid var(--faint); background: transparent; cursor: pointer; }
+.zp-dot.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.zp-dot.here { background: var(--accent); }
+.zp-dot:hover { border-color: var(--ink); }
+.zp-word { font: 12.5px var(--ui); color: var(--muted); margin-left: 6px; }

@@ -1,4 +1,5 @@
 // The command box (Ctrl + K) and go-to (Ctrl + O).
+import { zoomOn } from '../zoomstate.js';
 import { media } from '../device.js';
 import { SECTION_NAMES } from '../schema.js';
 import { keyLabel, showKeysForThisComputer } from '../keys.js';
@@ -264,6 +265,8 @@ function wireCommands() {
     recent: () => nav.recent,
     jump: (place) => go(place),
     rooms: () => {
+      // In the zoom the ruler is the rooms (Part 4): Go keeps search, back and projects.
+      if (zoomOn()) return [];
       const v = view();
       const active = strip.ctx?.active || null;
       const inside = strip.tabs.some((t) => t.n != null);

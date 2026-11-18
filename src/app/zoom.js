@@ -22,7 +22,7 @@ import { make } from '../dom.js';
 import { media } from '../device.js';
 import { popMenu, closeMenu } from '../menu.js';
 import { getEntry } from '../db.js';
-import { worldOf } from '../library.js';
+import { worldOf, worldStats, pagesIn } from '../library.js';
 import { isoToday, isoOf } from '../dates.js';
 import { inPane } from '../panes.js';
 import { zoomOn, classicLayout, setClassicLayout } from '../zoomstate.js';
@@ -32,7 +32,7 @@ import { addCommands } from './commandlist.js';
 import { body, gone, root, state } from '../main.js';
 import { go, lastPlace } from './routing.js';
 import { frame } from './workpages.js';
-import { plan } from './talking.js';
+import { plan, deskPage } from './talking.js';
 import { togglePageSettings, hidden } from './pagesettings.js';
 
 const roomy = media('roomy');
@@ -224,6 +224,32 @@ function pan(dir) {
   if (p?.view === 'plan' && p.tab === 'ahead') {
     const from = addDays(weekOf(p.week || isoOf())[0], dir * 28);
     return zoomGo({ view: 'plan', tab: 'ahead', ...(from === weekOf(isoOf())[0] ? {} : { week: from }) }, dir > 0 ? 'next' : 'prev');
+  }
+  // Where (Part 4): the next project, the next piece, the next bible page.
+  return panPlace(p, dir);
+}
+async function panPlace(p, dir) {
+  const way = dir > 0 ? 'next' : 'prev';
+  const step = (ids, id) => { const i = ids.indexOf(id); return i < 0 ? null : ids[i + dir] || null; };
+  if (p?.view === 'world' && p.id) {
+    const ids = await deskPage.order().catch(() => []);
+    const to = step(ids, p.id);
+    return to ? zoomGo({ view: 'world', id: to }, way) : null;
+  }
+  if (p?.view === 'project' && p.id) {
+    const w = await worldOf(await getEntry(p.id)).catch(() => null);
+    if (!w) return null;
+    const ids = (await worldStats(w)).pieces.map((x) => x.row.id);
+    const to = step(ids, p.id);
+    return to ? zoomGo({ view: 'project', id: to }, way) : null;
+  }
+  if (p?.view === 'notebook' && p.pageId && !p.pageId.startsWith('day-')) {
+    const pg = await getEntry(p.pageId);
+    const w = pg ? await worldOf(pg).catch(() => null) : null;
+    if (!w || pg.parent_id !== w.id) return null;
+    const ids = (await pagesIn(w.id)).map((x) => x.id);
+    const to = step(ids, p.pageId);
+    return to ? zoomGo({ view: 'notebook', pageId: to }, way) : null;
   }
   return null;
 }

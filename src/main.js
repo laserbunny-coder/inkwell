@@ -109,6 +109,7 @@ import { sendSelectionPicker, showClaudeKnows, showTidy, wireQuickInserts } from
 import { asking, landShares, openAsked, openCapture, setAsking, showCapture, wireTalking } from './app/talking.js';
 import { besideItem, paneMoves, panes, reviewAsked, reviewing, setReviewing, wireBeside } from './app/beside.js';
 import { wireZoom } from './app/zoom.js';
+import { wireSeats } from './app/seats.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -278,6 +279,7 @@ wireTalking();
 
 wireBeside();
 wireZoom();
+wireSeats();
 
 // ---------- start ----------
 

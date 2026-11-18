@@ -74,7 +74,7 @@ try {
   });
 
   await check('a project opens on the Project stop; Esc steps out to the Desk, then the Library', async () => {
-    await p.locator('#lib-books .card').first().click();
+    await p.locator('.zl-row .zl-name').first().click();
     await at(p, 'project');
     assert.equal((await place(p)).view, 'world');
     await blur(p);
