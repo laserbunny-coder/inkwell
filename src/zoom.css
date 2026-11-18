@@ -293,3 +293,11 @@ html.zoom .zm-np:hover, html.zoom .zm-np[aria-expanded="true"] { color: var(--in
   .mo-days { max-width: 100%; }
 }
 .zm-mb-name { padding: 0 8px; color: var(--muted); font-size: 12.5px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* "N left from earlier days": one quiet line, its fold a plain triangle. */
+.pl-early.quiet { gap: 6px; }
+.pl-early.quiet .pl-early-tri { appearance: none; background: none; border: 0; padding: 4px 2px; cursor: pointer; color: var(--faint); font-size: 11px; width: auto; }
+.pl-early.quiet .pl-early-n { appearance: none; background: none; border: 0; padding: 4px 0; cursor: pointer; color: var(--muted); font: 13.5px var(--ui); }
+.pl-early.quiet .pl-early-tri:hover, .pl-early.quiet .pl-early-n:hover { color: var(--ink); }
+/* While a line is picked, its bar takes the mic's corner. */
+html.zoom.zm-picking .zm-mic { visibility: hidden; }
