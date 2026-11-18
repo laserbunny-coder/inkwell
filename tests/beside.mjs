@@ -96,7 +96,9 @@ async function seed(p) {
     ]);
   }, new Date(NOW).getTime());
   await p.reload();
+  await p.waitForLoadState('load');
   await p.waitForFunction(() => document.documentElement.dataset.started === '1');
+  await sleep(300);
   await goMain(p, { view: 'notebook', pageId: 'day-2026-11-09' });
 }
 
