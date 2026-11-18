@@ -15,7 +15,7 @@ const server = spawn('node_modules/.bin/vite', ['preview', '--port', String(PORT
 await sleep(1500);
 
 const browser = withoutSync(await chromium.launch());
-const page = await (await browser.newContext()).newPage();
+const page = await (await browser.newContext({ reducedMotion: 'reduce' })).newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 const entries = () => page.evaluate(() => new Promise((res) => {
@@ -127,6 +127,10 @@ try {
       };
       window.__editor.chain().focus('end').run();
     });
+    // The closed panel hands focus back a moment later; type only once the text has it, at its end.
+    await page.waitForFunction(() => { const ed = window.__editor; return ed.isFocused && ed.state.selection.from === ed.state.doc.content.size - 1 && !document.querySelector('.alt-panel:not([hidden])'); });
+    await sleep(150);
+    await page.evaluate(() => window.__editor.chain().focus('end').run());
     await page.keyboard.press('Enter');
     await page.keyboard.type('She took a long walk.');
     const p = page.locator('#editor .ProseMirror p').last();
