@@ -17,7 +17,7 @@ import { dayMenu } from './historyview.js';
 import { writing } from './commands.js';
 import { moveLinePicker, sendSelectionPicker } from './quickinserts.js';
 import { captureHere, plan, writeOut } from './talking.js';
-import { besideItem, listSoon, planningView, pull, whenHere } from './beside.js';
+import { besideItem, listSoon, paneMoves, planningView, pull, whenHere } from './beside.js';
 import { amountsMenu } from '../trainpage.js';
 
 // ---------- notebook ----------

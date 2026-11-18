@@ -343,14 +343,6 @@ try {
     await page.waitForFunction(() => window.__panes.count === 0);
   });
 
-  await check('Look → Beside off: the button goes, and Ctrl + \\ says where to switch it on', async () => {
-    await page.evaluate(() => { const c = document.querySelector('[data-show="panes"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); });
-    await page.keyboard.press('Control+Backslash');
-    await page.waitForFunction(() => /switched off/.test(document.querySelector('.toast')?.textContent || ''));
-    assert.equal(await count(page), 0);
-    await page.evaluate(() => { const c = document.querySelector('[data-show="panes"]'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); });
-  });
-
   await check('every look draws it, and nothing went wrong on the page', async () => {
     await goMain(page, { view: 'write', chapterId: 'ch_r' });
     await page.keyboard.press('Control+Backslash');

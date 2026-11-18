@@ -156,12 +156,9 @@ try {
     assert.equal((await get(a, 'td-week-2026-11-02')).fields.tidy.items.length, 7);
   });
 
-  await check('today shows a quiet tidy line, which can be switched off', async () => {
-    await a.waitForSelector('.tidy-nudge:not([hidden])');
-    assert.match(await a.locator('.tidy-nudge').innerText(), /tidy pass · 8 to look at · claude changed 7 things/i);
-    await a.evaluate(() => document.documentElement.classList.add('hide-tidy'));
-    assert.equal(await a.locator('.tidy-nudge').isVisible(), false);
-    await a.evaluate(() => document.documentElement.classList.remove('hide-tidy'));
+  await check('Today has no tidy reminder line any more (the pass is in Ctrl + K)', async () => {
+    await sleep(500);
+    assert.equal(await a.locator('.tidy-nudge:visible').count(), 0);
   });
 
   await check('the pass opens from Ctrl + K and lists each suggestion with why, Yes and No', async () => {

@@ -183,15 +183,14 @@ try {
     await page.evaluate(() => localStorage.removeItem('cal-mode'));
   });
 
-  await check('under Look: the events can be switched off', async () => {
+  await check('the events are always there: no switch for them under Look', async () => {
+    await page.evaluate(() => localStorage.setItem('hide', JSON.stringify(['calendar'])));
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
     await day(page, '2026-11-09');
     await page.waitForSelector('#plan .pl-ev');
-    await page.evaluate(() => document.documentElement.classList.add('hide-calendar'));
-    assert.ok(await page.locator('#plan .pl-cal').isHidden());
-    await page.evaluate(() => document.documentElement.classList.remove('hide-calendar'));
-    assert.ok(await page.locator('input[data-show="calendar"]').count());
+    assert.ok(await page.locator('#plan .pl-cal').isVisible(), 'an old hidden choice brings them back');
+    assert.equal(await page.locator('input[data-show="calendar"]').count(), 0);
     assert.deepEqual(page.errors, []);
   });
 

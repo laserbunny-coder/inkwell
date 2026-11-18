@@ -88,12 +88,9 @@ try {
     assert.ok(rows.slice(0, a).some((r) => /Pay the rent/.test(r)), 'Pay the rent stays in the morning');
   });
 
-  await check('a Look switch hides the dividers', async () => {
-    await run(p, 'Show or hide the afternoon and evening dividers');
-    await blur(p);
-    await p.waitForFunction(() => !document.querySelector('#plan-sheet .pl-part'));
-    await run(p, 'Show or hide the afternoon and evening dividers');
-    await blur(p);
+  await check('the dividers are always there: no switch for them any more', async () => {
+    const list = await p.evaluate(() => window.__commandList().map((c) => c.label));
+    assert.ok(!list.includes('Show or hide the afternoon and evening dividers'));
     await p.waitForSelector('#plan-sheet .pl-part');
   });
 

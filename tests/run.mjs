@@ -589,19 +589,13 @@ try {
     assert.ok(row?.fields.types.some((t) => t.name === 'Props'));
   });
 
-  await check('Linked from shows with a count, and can be switched off', async () => {
+  await check('Linked from shows with a count', async () => {
     await p.keyboard.press('Control+O');
     await p.keyboard.type('Lighthouse keeper');
     await p.keyboard.press('Enter');
     await p.waitForSelector('#nb-links', { state: 'visible' });
     assert.equal(await p.locator('#nb-links').innerText(), 'Linked from 1');
-    await sleep(500); // let the page finish opening, so it doesn't take focus back from the menu
-    await p.keyboard.press('Control+K');
-    await p.keyboard.type('hide "Linked from"');
-    await p.waitForFunction(() => document.querySelector('#palette-list li')?.textContent.includes('Linked from'));
-    await p.keyboard.press('Enter');
-    await p.waitForFunction(() => document.documentElement.classList.contains('hide-links'), null, { timeout: 3000 });
-    assert.equal(await p.locator('.notebook .backlinks').isVisible(), false);
+    await sleep(500); // let the page finish opening
   });
 
   await check('shortcuts: Library, a day back and the shortcuts sheet', async () => {

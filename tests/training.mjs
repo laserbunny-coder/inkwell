@@ -141,7 +141,7 @@ try {
     assert.match(await sheet(page).locator('.now-tsay').innerText(), /Last time 24 inches, 4 of 5 jumps/);
   });
 
-  await check('after the last one: the gate, a line on today’s page, and the place moves on', async () => {
+  await check('after the last one: a line on today’s page, the toast says so, and the place moves on', async () => {
     for (let n = 0; n < 5; n++) await press(page, 's');
     await until(async () => !(await sheet(page).locator('.now-train').count()));
     const st = await state(page);
@@ -156,7 +156,8 @@ try {
     assert.equal(l.fields.done, true);
     // Part 7: the log keeps the day, the session and its numbers.
     assert.deepEqual(st.log, [{ d: MON, s: 'Evaluation 1', h: true, n: { reach: 90, vtest: 24 }, st: {} }]);
-    await shot(page, 'train-gate');
+    assert.match(await page.locator('.toast').last().innerText(), /Training: Evaluation 1, on today’s page\./);
+    await shot(page, 'train-done');
   });
 
   await check('a missed day changes nothing; the next session is still next', async () => {
@@ -382,32 +383,19 @@ try {
     await page.waitForSelector('.dk-goal-btn[data-goal="lever"][aria-expanded="true"]');
     await page.locator('.dk-train').scrollIntoViewIfNeeded();
     await shot(page, 'train-streak');
-    // Each switch hides its part; with both off the block is Part 6's.
+    // Always there now (Nov 17 2026): an old hide class changes nothing.
     await page.evaluate(() => document.documentElement.classList.add('hide-trainstreak', 'hide-traincharts'));
     await page.evaluate(() => { history.pushState({ view: 'today' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'today' } })); });
     await page.evaluate(() => { history.pushState({ view: 'desk' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'desk' } })); });
-    await page.waitForSelector('.dk-train');
+    await page.waitForSelector('.dk-train .tr-streak');
     await settle(page);
-    assert.equal(await page.locator('.dk-train .tr-streak').count(), 0);
-    assert.equal(await page.locator('.dk-train .dk-goal-btn').count(), 0);
-    assert.equal(await page.locator('.dk-train div.dk-goal').count(), 5);
+    assert.ok(await page.locator('.dk-train .dk-goal-btn').count() > 0);
     await page.evaluate(() => document.documentElement.classList.remove('hide-trainstreak', 'hide-traincharts'));
   });
 
-  await check('the gate: one quiet line under Done.', async () => {
-    await toNow(page);
-    await page.evaluate(() => window.__plan.now.after({ k: 'done', t: 'Training: Hard A', note: 'Best yet: advanced tuck front lever, 10 seconds. 10 days in a row.' }));
-    await settle(page);
-    assert.equal(await sheet(page).locator('.now-tnote').innerText(), 'Best yet: advanced tuck front lever, 10 seconds. 10 days in a row.');
-    await shot(page, 'train-bestyet');
-    await page.evaluate(() => window.__plan.now.after({ k: 'done', t: 'Write the two-minute hook' }));
-    await settle(page);
-    assert.equal(await sheet(page).locator('.now-tnote').count(), 0);
+  await check('the Training page: an outline, the amounts as a chip to tap', async () => {
     await page.evaluate(() => { history.pushState({ view: 'desk' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'desk' } })); });
     await page.waitForSelector('.dk-train');
-  });
-
-  await check('the Training page: an outline, the amounts as a chip to tap', async () => {
     await page.locator('.dk-train button', { hasText: 'The Training page' }).click();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
     await settle(page);
@@ -422,13 +410,9 @@ try {
     await page.keyboard.press('Escape');
   });
 
-  await check('no line on Sunday; with the switch off, none at all', async () => {
+  await check('no line on Sunday', async () => {
     await dayIs(page, SUN);
     assert.equal((await lines(page, SUN)).length, 0);
-    await page.evaluate(() => { const h = JSON.parse(localStorage.getItem('hide') || '[]'); h.push('training'); localStorage.setItem('hide', JSON.stringify(h)); });
-    await dayIs(page, '2026-11-23');
-    assert.equal((await lines(page, '2026-11-23')).length, 0);
-    await page.evaluate(() => { localStorage.setItem('hide', JSON.stringify(JSON.parse(localStorage.getItem('hide')).filter((x) => x !== 'training'))); });
   });
   await check('a week set by Claude: each weekday its own session, the other days rest', async () => {
     await patchState(page, { round: 8, at: null, made: null, week: { 1: 'Hard B', 3: 'Light' } });

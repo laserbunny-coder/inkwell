@@ -24,7 +24,7 @@ import { talkView, heardView, closeView } from './nowends.js';
 import { TrainNow } from './nowtrain.js';
 import { LightNow } from './nowlight.js';
 import { isLight, lineName } from './firstlight.js';
-import { pageTarget, zoomTo, tieMenu, forOf } from './nowpage.js';
+import { pageView, pageTarget, zoomTo, tieMenu, forOf } from './nowpage.js';
 import './now.css';
 
 export const SMALLS = 'smalls';

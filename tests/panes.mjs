@@ -208,17 +208,10 @@ try {
     assert.match(await p.locator('#crumb').innerText(), new RegExp(firstTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   });
 
-  await check('Aa → Panes off closes them, and middle-click no longer opens one', async () => {
-    await p.evaluate(() => { const c = document.querySelector('[data-show="panes"]'); c.checked = false; c.dispatchEvent(new Event('change')); });
+  // Panes are always on now (Nov 17 2026): close them with their ×.
+  await check('each pane closes with its ×', async () => {
+    while (await p.locator('.pane-close').count()) { await p.locator('.pane-close').first().click(); await sleep(300); }
     assert.equal(await p.locator('.pane').count(), 0);
-    await toToday(p);
-    const li = p.locator('#outline-editor li').first();
-    await li.hover();
-    const g = await li.locator(':scope > .line-gutter .bullet').boundingBox();
-    await p.mouse.click(g.x + g.width / 2, g.y + g.height / 2, { button: 'middle' });
-    await sleep(800);
-    assert.equal(await p.locator('.pane').count(), 0);
-    await p.evaluate(() => { const c = document.querySelector('[data-show="panes"]'); c.checked = true; c.dispatchEvent(new Event('change')); });
   });
 
   await check('a middle-click on a result in Ctrl + K opens it beside (Shift + Enter there adds a line to today)', async () => {

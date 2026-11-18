@@ -386,19 +386,14 @@ try {
     assert.equal(await page.locator('#wh-steps input[data-add]').getAttribute('placeholder'), 'Book the campsite for Friday night');
   });
 
-  await check('each part can be switched off under Look', async () => {
-    const flip = (name, on) => page.evaluate(([n, v]) => { const c = document.querySelector(`[data-show="${n}"]`); c.checked = v; c.dispatchEvent(new Event('change', { bubbles: true })); }, [name, on]);
-    await flip('projsteps', false);
-    assert.ok(await page.locator('#wh-steps').isHidden());
+  await check('steps, crew and turns are always there; “Recently” went (Nov 17 2026)', async () => {
+    await page.evaluate(() => document.documentElement.classList.add('hide-projsteps', 'hide-projcrew'));
     await world(page);
-    await flip('projcrew', false);
-    assert.ok(await page.locator('#wh-crew').isHidden());
-    assert.ok(await page.locator('#wh-turns').isHidden());
-    await flip('projrecent', false);
-    assert.ok(await page.locator('#wh-recent-box').isHidden());
-    for (const n of ['projsteps', 'projcrew', 'projrecent']) await flip(n, true);
     assert.ok(await page.locator('#wh-steps').isVisible());
     assert.ok(await page.locator('#wh-turns').isVisible());
+    assert.equal(await page.locator('#wh-recent-box').count(), 0);
+    assert.equal(await page.locator('[data-show="projsteps"], [data-show="projcrew"], [data-show="projrecent"]').count(), 0);
+    await page.evaluate(() => document.documentElement.classList.remove('hide-projsteps', 'hide-projcrew'));
   });
 
   await check('every look draws it without spilling, and nothing went wrong', async () => {

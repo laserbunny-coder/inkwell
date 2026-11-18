@@ -69,7 +69,17 @@ const menuPick = async (p, ...labels) => {
   for (const l of labels) { await p.locator('.pop-menu button', { hasText: l }).first().click(); await sleep(250); }
 };
 const openTrash = (p) => p.evaluate(() => { document.querySelector('#lib-trash-box').open = true; });
-const cardTitles = (p) => p.locator('#lib-books .card-title').allInnerTexts();
+// The zoom's Library: areas with their projects' names.
+const lib = async (p) => { await p.keyboard.press('Control+Shift+O'); await p.waitForSelector('#lib-zoom .zl-name'); await sleep(300); };
+const cardTitles = (p) => p.locator('#lib-zoom .zl-area .zl-name').allInnerTexts();
+const openWorld = async (p, title) => {
+  await p.locator('#lib-zoom .zl-name', { hasText: new RegExp(`^${title}$`) }).first().click();
+  await p.waitForSelector('.world-home', { state: 'visible' });
+  await sleep(300);
+};
+// A project's own ⋯ (on its page).
+const worldMore = async (p, title, ...labels) => { await lib(p); await openWorld(p, title); await p.locator('#wh-more .more-btn').click(); await menuPick(p, ...labels); };
+const areaNames = (p) => p.locator('#lib-zoom .zl-area .zl-h').allTextContents();
 const book = async (p, title) => (await all(p)).find((e) => e.kind === 'project' && e.title === title && !e.deleted);
 const world = async (p, title) => (await all(p)).find((e) => e.kind === 'world' && e.title === title && !e.deleted);
 
@@ -92,17 +102,15 @@ try {
     await a.locator('#editor .ProseMirror').click();
     await a.keyboard.type('It was a bright cold day in April, and the clocks were striking thirteen.');
     await sleep(800);
-    await a.keyboard.press('Control+Shift+O');
-    await sleep(400);
-    await a.locator('.card-new').click();
+    await lib(a);
+    await a.locator('#lib-zoom .zl-area .zl-add').first().click();
+    await a.waitForSelector('#lib-new', { state: 'visible' });
     await a.locator('#lib-new-title').fill('Research');
     await a.locator('#lib-new button[type=submit]').click();
     await sleep(600);
     // It opened on its Idea page; go to the world and change its piece.
-    await a.keyboard.press('Control+Shift+O');
-    await sleep(400);
-    await a.locator('#lib-books .card', { hasText: 'Research' }).click();
-    await a.waitForSelector('.world-home', { state: 'visible' });
+    await lib(a);
+    await openWorld(a, 'Research');
     await a.locator('#wh-pieces li', { hasText: 'Research' }).locator('.more-btn').click();
     await menuPick(a, 'Written as', 'Outline');
     await sleep(400);
@@ -113,14 +121,11 @@ try {
     await a.locator('#ph-label').press('Enter');
     await sleep(400);
     assert.equal((await book(a, 'Research')).fields.label, 'Gag');
-    await a.keyboard.press('Control+Shift+O');
-    await sleep(400);
-    assert.match(await a.locator('#lib-books .card', { hasText: 'Research' }).innerText(), /gag/);
   });
 
   await check('writing a piece with words in it as an outline asks first and keeps the manuscript', async () => {
-    await a.locator('#lib-books .card', { hasText: 'Untitled novel' }).click();
-    await a.waitForSelector('.world-home', { state: 'visible' });
+    await lib(a);
+    await openWorld(a, 'Untitled novel');
     await a.locator('#wh-pieces li .loose-title', { hasText: 'Untitled novel' }).click();
     await a.waitForSelector('.project-home', { state: 'visible' });
     await a.locator('#ph-kind').selectOption('lines');
@@ -144,24 +149,20 @@ try {
   });
 
   await check('a world goes to the Trash, Undo brings it straight back', async () => {
-    await a.keyboard.press('Control+Shift+O');
+    await worldMore(a, 'Research', 'Move to Trash');
     await sleep(400);
-    await a.locator('.card-wrap', { hasText: 'Research' }).hover();
-    await a.locator('.card-wrap', { hasText: 'Research' }).locator('.more-btn').click();
-    await menuPick(a, 'Move to Trash');
-    await sleep(400);
+    await lib(a);
     assert.ok(!(await cardTitles(a)).includes('Research'));
-    assert.ok(!(await a.locator('#outline-tree').innerText()).includes('Research'));
     assert.match(await a.locator('#lib-trash-box summary').innerText(), /Trash \(1\)/i);
     await a.locator('.toast-action', { hasText: 'Undo' }).click();
     await sleep(500);
+    await lib(a);
     assert.ok((await cardTitles(a)).includes('Research'));
     assert.ok(await a.locator('#lib-trash-box').isHidden());
   });
 
   await check('a world with writing asks before it goes, and comes back whole from the Trash', async () => {
-    await a.locator('#lib-books .card', { hasText: 'Untitled novel' }).click();
-    await sleep(300);
+    await openWorld(a, 'Untitled novel');
     await a.locator('#wh-continue').click();
     await sleep(500);
     await command(a, 'This world: rename');
@@ -181,8 +182,8 @@ try {
     await openTrash(a);
     await a.locator('#lib-trash li', { hasText: 'Untitled novel' }).locator('button', { hasText: 'Restore' }).click();
     await sleep(500);
-    await a.locator('#lib-books .card', { hasText: 'Untitled novel' }).click();
-    await sleep(300);
+    await lib(a);
+    await openWorld(a, 'Untitled novel');
     await a.locator('#wh-continue').click();
     await sleep(600);
     assert.match(await a.locator('#editor .ProseMirror').innerText(), /clocks were striking thirteen/);
@@ -231,7 +232,6 @@ try {
     await menuPick(a, 'Move to Trash');
     await sleep(600);
     assert.equal(await a.evaluate(() => document.documentElement.dataset.view), 'world');
-    assert.ok(!(await a.locator('#wh-recent').innerText()).includes('Idea'));
     const row = (await all(a)).find((e) => e.id === idea.id);
     assert.equal(row.fields.trashedWith, idea.id);
     const line = (await all(a)).find((e) => e.kind === 'line' && e.text === 'A thought worth keeping');
@@ -239,10 +239,6 @@ try {
   });
 
   await check('an area with a world in it asks first, and Restore brings both back', async () => {
-    await a.keyboard.press('Control+Shift+O');
-    await sleep(300);
-    await a.locator('#lib-areas .chip', { hasText: 'Business' }).click();
-    await sleep(300);
     const research = await world(a, 'Research');
     await a.evaluate(async (id) => {
       const r = indexedDB.open('writing');
@@ -252,34 +248,37 @@ try {
       s.get(id).onsuccess = (e) => { s.put({ ...e.target.result, area_id: 'area-business', updated_at: Date.now() }); tx.objectStore('outbox').put({ id }); };
       await new Promise((res) => { tx.oncomplete = res; });
     }, research.id);
-    await command(a, 'This area');
+    await a.keyboard.press('Control+Shift+O');
+    await sleep(300);
+    await lib(a);
+    // An area's menu is a right-click on its name.
+    await a.locator('#lib-zoom .zl-area .zl-h', { hasText: 'Business' }).click({ button: 'right' });
     await menuPick(a, 'Move to Trash');
     await a.waitForSelector('.ask');
     assert.match(await a.locator('.ask').innerText(), /1 world/);
     await a.locator('.ask .pill', { hasText: 'Move to Trash' }).click();
     await sleep(500);
-    assert.ok(!(await a.locator('#lib-areas').innerText()).includes('Business'));
+    assert.ok(!(await areaNames(a)).includes('Business'));
     assert.ok(!(await cardTitles(a)).includes('Research'));
     await openTrash(a);
     await a.locator('#lib-trash li', { hasText: 'Business' }).locator('button', { hasText: 'Restore' }).click();
     await sleep(500);
-    assert.ok((await a.locator('#lib-areas').innerText()).includes('Business'));
+    await lib(a);
+    assert.ok((await areaNames(a)).includes('Business'));
     assert.ok((await cardTitles(a)).includes('Research'));
   });
 
   await check('Trash and Restore reach the other device', async () => {
     await syncNow(a);
     await syncNow(b);
-    await b.keyboard.press('Control+Shift+O');
-    await sleep(500);
+    await lib(b);
     assert.ok((await cardTitles(b)).includes('Research'));
-    await b.locator('.card-wrap', { hasText: 'Research' }).hover();
-    await b.locator('.card-wrap', { hasText: 'Research' }).locator('.more-btn').click();
-    await menuPick(b, 'Move to Trash');
+    await worldMore(b, 'Research', 'Move to Trash');
     await sleep(400);
     await syncNow(b);
     await syncNow(a);
     await sleep(500);
+    await lib(a);
     assert.ok(!(await cardTitles(a)).includes('Research'), 'gone on the first device too');
     await openTrash(a);
     await a.locator('#lib-trash li', { hasText: 'Research' }).locator('button', { hasText: 'Restore' }).click();
@@ -287,12 +286,13 @@ try {
     await syncNow(a);
     await syncNow(b);
     await sleep(500);
+    await lib(b);
     assert.ok((await cardTitles(b)).includes('Research'), 'back on the second device');
   });
 
   await check('the open chapter going to the Trash on another device moves you off it', async () => {
-    await b.locator('#lib-books .card', { hasText: 'Untitled novel' }).click();
-    await sleep(300);
+    await lib(b);
+    await openWorld(b, 'Untitled novel');
     await b.locator('#wh-continue').click();
     await sleep(600);
     assert.equal(await b.evaluate(() => document.documentElement.dataset.view || 'write'), 'write');

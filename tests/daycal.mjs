@@ -215,43 +215,34 @@ try {
   });
 
   const px = () => page.evaluate(() => parseFloat(document.querySelector('#plan-sheet .dc-grid').style.getPropertyValue('--px')));
-  await check('zoom: Fit day puts the whole day on the screen; − and +, and Ctrl + scroll', async () => {
-    await page.locator('#plan-sheet .dc-z-fit').click();
-    const g = await page.locator('#plan-sheet .dc-grid').boundingBox();
-    assert.ok(g.y + g.height <= 1000 + 1, `the day ends on the screen (${g.y + g.height})`);
-    assert.ok(g.height > 500, `and fills it (${g.height})`);
-    assert.equal(await page.locator('#plan-sheet .dc-z-fit').getAttribute('aria-pressed'), 'true');
-    const fit = await px();
-    await page.locator('#plan-sheet .dc-z-in').click();
-    assert.ok(Math.abs((await px()) - fit * 1.25) < 0.01, 'one step in');
-    await page.locator('#plan-sheet .dc-z-out').click();
-    await page.locator('#plan-sheet .dc-z-out').click();
-    assert.ok(Math.abs((await px()) - fit / 1.25) < 0.01, 'two steps out');
-    // Blocks follow the zoom.
-    const b = await blk(page, 'Print the call sheet').boundingBox();
-    assert.ok(Math.abs(b.height - (30 * (await px()) - 2)) < 1.5, `a half hour is ${b.height}px`);
+  // The − Fit day + buttons went (Nov 17 2026); Ctrl + scroll and a pinch still zoom.
+  let zoomed = 0;
+  await check('zoom: Ctrl + scroll zooms the hours, and blocks follow', async () => {
+    assert.equal(await page.locator('#plan-sheet .dc-z-fit, #plan-sheet .dc-z-in').count(), 0, 'no zoom buttons');
     const before = await px();
     const gg = await page.locator('#plan-sheet .dc-grid').boundingBox();
-    await page.mouse.move(gg.x + gg.width * 0.6, gg.y + 100);
-    await page.keyboard.down('Control');
-    await page.mouse.wheel(0, -200);
-    await page.keyboard.up('Control');
+    // Somewhere on the hours that's on the screen.
+    await page.mouse.move(gg.x + gg.width * 0.6, Math.max(gg.y + 100, 300));
+    // (Sent to the hours themselves: a real wheel here can land on the page behind.)
+    await page.evaluate(([x, y]) => document.querySelector('#plan-sheet .dc-grid').dispatchEvent(new WheelEvent('wheel', { deltaY: -200, ctrlKey: true, clientX: x, clientY: y, bubbles: true, cancelable: true })), [gg.x + gg.width * 0.6, Math.max(gg.y + 100, 300)]);
     await sleep(400);
-    assert.ok((await px()) > before * 1.3, 'Ctrl + scroll up zooms in');
+    zoomed = await px();
+    assert.ok(zoomed > before * 1.3, 'Ctrl + scroll up zooms in');
+    const b = await blk(page, 'Print the call sheet').boundingBox();
+    assert.ok(Math.abs(b.height - (30 * zoomed - 2)) < 1.5, `a half hour is ${b.height}px`);
     // A drag still lands where it looks like it does, at any zoom.
-    await page.locator('#plan-sheet .dc-z-fit').click();
+    const was = (await placedAt(page, 'Print the call sheet')).at;
     const c = await centre(blk(page, 'Print the call sheet'));
-    await drag(page, c.x, c.y, c.y + 60 * (await px()));
-    assert.deepEqual(await placedAt(page, 'Print the call sheet'), { day: TODAY, at: 20 * 60 });
-    assert.equal(await page.evaluate(() => localStorage.getItem('calHours')), 'fit');
+    await drag(page, c.x, c.y, c.y + 60 * zoomed);
+    assert.deepEqual(await placedAt(page, 'Print the call sheet'), { day: TODAY, at: was + 60 }, 'an hour later');
   });
 
-  await check('Calendar opens on the zoom used last on this device', async () => {
+  await check('the hours open on the zoom used last on this device', async () => {
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
     await go(page, { view: 'plan', tab: 'calday' });
     await page.waitForSelector('#plan-sheet .dc-grid');
-    await page.waitForFunction(() => document.querySelector('#plan-sheet .dc-z-fit')?.getAttribute('aria-pressed') === 'true');
+    assert.ok(Math.abs((await px()) - zoomed) < 0.01);
     assert.deepEqual(page.errors, []);
   });
 

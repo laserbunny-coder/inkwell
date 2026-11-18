@@ -59,6 +59,8 @@ const pick = async (p, label) => { await p.locator('.pop-menu .pop-item', { hasT
 
 const browser = withoutSync(await chromium.launch());
 const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1360, height: 900 } });
+// A project's pieces shown as the board (its stage line toggles it).
+await ctx.addInitScript(() => { try { localStorage.setItem('piecesAs', 'board'); } catch { /* no storage */ } });
 const page = await ctx.newPage();
 page.errors = [];
 page.on('pageerror', (e) => { page.errors.push(e.message); if (process.env.DEBUG) console.log(e.stack); });

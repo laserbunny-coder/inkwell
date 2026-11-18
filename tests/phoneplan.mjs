@@ -19,9 +19,15 @@ const NOW = new Date('2026-11-09T14:04:00-08:00');
 
 const browser = withoutSync(await chromium.launch());
 const still = (p) => p.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {}))));
-const words = (p) => p.locator('#plan .pl-task .pl-words').allInnerTexts();
+const words = (p) => p.locator('#plan-sheet .pl-task .pl-words').allInnerTexts();
 const started = (p) => p.waitForFunction(() => document.documentElement.dataset.started === '1');
-const onToday = (p) => p.evaluate(() => document.documentElement.dataset.view === 'notebook' && !!document.querySelector('#plan') && !document.querySelector('#plan').hidden);
+// Today's page (where the phone opens after a while away).
+const onToday = (p) => p.evaluate(() => document.documentElement.dataset.view === 'notebook' && /^day-/.test(history.state?.pageId || ''));
+// Today's list on the ruler.
+const toList = async (p) => {
+  await p.evaluate(() => { const x = { view: 'plan', tab: 'day' }; history.pushState(x, ''); dispatchEvent(new PopStateEvent('popstate', { state: x })); });
+  await p.waitForFunction(() => document.documentElement.dataset.view === 'plan' && document.querySelector('#plan-sheet')?.dataset.tab === 'day');
+};
 
 let failed = 0;
 async function check(name, fn) {
@@ -51,12 +57,11 @@ try {
   await phone.clock.install({ time: NOW });
   await phone.goto(URL);
   await started(phone);
-  await phone.evaluate(() => document.querySelector('#view-toggle').click());
-  await phone.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
+  await toList(phone);
   await still(phone);
   await phone.waitForFunction(() => { document.activeElement?.blur(); return !document.body.classList.contains('kb-up'); });
   for (const t of ['Call Dana', 'Order the storage drive', 'Board reel 2']) {
-    const input = phone.locator('#plan input[data-add]').first();
+    const input = phone.locator('#plan-sheet input[data-add]').first();
     await input.fill(t);
     await input.press('Enter');
     await sleep(350);
@@ -67,33 +72,33 @@ try {
 
   await check('phone: hold a task, then slide it to a new place in the day', async () => {
     assert.deepEqual(await words(phone), ['Call Dana', 'Order the storage drive', 'Board reel 2']);
-    const a = await centre(phone.locator('#plan .pl-task', { hasText: 'Board reel 2' }).locator('.pl-title'));
-    const top = await centre(phone.locator('#plan .pl-task', { hasText: 'Call Dana' }));
+    const a = await centre(phone.locator('#plan-sheet .pl-task', { hasText: 'Board reel 2' }).locator('.pl-title'));
+    const top = await centre(phone.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }));
     await hold(cdp, a.x, a.y, 450);
-    assert.ok(await phone.locator('#plan .pl-task.pl-armed', { hasText: 'Board reel 2' }).count(), 'the held task lights up');
+    assert.ok(await phone.locator('#plan-sheet .pl-task.pl-armed', { hasText: 'Board reel 2' }).count(), 'the held task lights up');
     await slide(cdp, a.x, a.y, top.y - 12);
-    assert.ok(await phone.locator('#plan .pl-task.dragging').count(), 'it is being moved');
+    assert.ok(await phone.locator('#plan-sheet .pl-task.dragging').count(), 'it is being moved');
     await lift(cdp);
-    await phone.waitForFunction(() => document.querySelector('#plan .pl-task .pl-words')?.innerText === 'Board reel 2');
+    await phone.waitForFunction(() => document.querySelector('#plan-sheet .pl-task .pl-words')?.innerText === 'Board reel 2');
     assert.deepEqual(await words(phone), ['Board reel 2', 'Call Dana', 'Order the storage drive']);
   });
 
   await check('phone: a finger on the six dots slides the task at once, no waiting, and a copy rides under the finger', async () => {
-    const g = await centre(phone.locator('#plan .pl-task', { hasText: 'Order the storage drive' }).locator('.pl-grip'));
-    const top = await centre(phone.locator('#plan .pl-task', { hasText: 'Board reel 2' }));
+    const g = await centre(phone.locator('#plan-sheet .pl-task', { hasText: 'Order the storage drive' }).locator('.pl-grip'));
+    const top = await centre(phone.locator('#plan-sheet .pl-task', { hasText: 'Board reel 2' }));
     await hold(cdp, g.x, g.y, 20);
     await slide(cdp, g.x, g.y, top.y - 12);
     assert.equal(await phone.locator('.pl-lift').count(), 1, 'the task lifts and follows the finger');
     await lift(cdp);
-    await phone.waitForFunction(() => document.querySelector('#plan .pl-task .pl-words')?.innerText === 'Order the storage drive');
+    await phone.waitForFunction(() => document.querySelector('#plan-sheet .pl-task .pl-words')?.innerText === 'Order the storage drive');
     assert.deepEqual(await words(phone), ['Order the storage drive', 'Board reel 2', 'Call Dana']);
     assert.equal(await phone.locator('.pl-lift').count(), 0, 'and is gone once it lands');
   });
 
   await check('phone: the phone’s own long-press menu doesn’t end a hold; the task still slides', async () => {
-    const row = phone.locator('#plan .pl-task', { hasText: 'Call Dana' });
+    const row = phone.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' });
     const a = await centre(row.locator('.pl-title'));
-    const top = await centre(phone.locator('#plan .pl-task', { hasText: 'Order the storage drive' }));
+    const top = await centre(phone.locator('#plan-sheet .pl-task', { hasText: 'Order the storage drive' }));
     await hold(cdp, a.x, a.y, 460);
     // Android sends a contextmenu about half a second into a long press.
     const stopped = await row.evaluate((r) => !r.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
@@ -101,22 +106,22 @@ try {
     assert.equal(await phone.locator('.pop-menu').count(), 0, 'no menu yet');
     await slide(cdp, a.x, a.y, top.y - 12);
     await lift(cdp);
-    await phone.waitForFunction(() => document.querySelector('#plan .pl-task .pl-words')?.innerText === 'Call Dana');
+    await phone.waitForFunction(() => document.querySelector('#plan-sheet .pl-task .pl-words')?.innerText === 'Call Dana');
     assert.deepEqual(await words(phone), ['Call Dana', 'Order the storage drive', 'Board reel 2']);
   });
 
   await check('phone: held still on its words and let go, a task settles back and nothing opens', async () => {
-    const a = await centre(phone.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-title'));
+    const a = await centre(phone.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('.pl-title'));
     await hold(cdp, a.x, a.y, 500);
     await lift(cdp);
     await sleep(400);
     assert.equal(await phone.locator('.pop-menu').count(), 0, 'no menu');
-    assert.equal(await phone.locator('#plan .pl-task.pl-armed, .pl-lift').count(), 0, 'it settled back');
+    assert.equal(await phone.locator('#plan-sheet .pl-task.pl-armed, .pl-lift').count(), 0, 'it settled back');
     assert.deepEqual(await words(phone), ['Call Dana', 'Order the storage drive', 'Board reel 2']);
   });
 
   await check('phone: holding the six dots still opens the task’s menu, which can send it to the bottom or the top', async () => {
-    const a = await centre(phone.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-grip'));
+    const a = await centre(phone.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('.pl-grip'));
     await hold(cdp, a.x, a.y, 600);
     await phone.waitForSelector('.pop-menu');
     await lift(cdp);
@@ -125,19 +130,19 @@ try {
     assert.equal(await phone.locator('#outline-editor li.zoom-root').count(), 0, 'and nothing zoomed');
     await phone.waitForSelector('.pop-menu');
     await phone.locator('.pop-menu .pop-item', { hasText: 'Move to the bottom' }).click();
-    await phone.waitForFunction(() => [...document.querySelectorAll('#plan .pl-task .pl-words')].at(-1)?.innerText === 'Call Dana');
+    await phone.waitForFunction(() => [...document.querySelectorAll('#plan-sheet .pl-task .pl-words')].at(-1)?.innerText === 'Call Dana');
     assert.deepEqual(await words(phone), ['Order the storage drive', 'Board reel 2', 'Call Dana']);
-    const b = await centre(phone.locator('#plan .pl-task', { hasText: 'Board reel 2' }).locator('.pl-grip'));
+    const b = await centre(phone.locator('#plan-sheet .pl-task', { hasText: 'Board reel 2' }).locator('.pl-grip'));
     await hold(cdp, b.x, b.y, 600);
     await lift(cdp);
     await phone.waitForSelector('.pop-menu');
     await phone.locator('.pop-menu .pop-item', { hasText: 'Move to the top' }).click();
-    await phone.waitForFunction(() => document.querySelector('#plan .pl-task .pl-words')?.innerText === 'Board reel 2');
+    await phone.waitForFunction(() => document.querySelector('#plan-sheet .pl-task .pl-words')?.innerText === 'Board reel 2');
     assert.deepEqual(await words(phone), ['Board reel 2', 'Order the storage drive', 'Call Dana']);
   });
 
   await check('phone: a quick swipe over the tasks moves nothing', async () => {
-    const a = await centre(phone.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-title'));
+    const a = await centre(phone.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('.pl-title'));
     await hold(cdp, a.x, a.y, 40);
     await slide(cdp, a.x, a.y, a.y + 120);
     await lift(cdp);
@@ -145,28 +150,28 @@ try {
     assert.deepEqual(await words(phone), ['Board reel 2', 'Order the storage drive', 'Call Dana']);
   });
 
-  await check('phone: six dots show on every task that can move, and a tap zooms into the task and Back comes out again', async () => {
-    assert.equal(await phone.locator('#plan .pl-task[data-move] .pl-grip').count(), 3);
-    assert.ok(Number(await phone.locator('#plan .pl-grip').first().evaluate((g) => getComputedStyle(g).opacity)) > 0.5, 'no hover on a phone: always there');
+  await check('phone: six dots show on every task that can move, and a tap opens the task on Now and Back comes out again', async () => {
+    assert.equal(await phone.locator('#plan-sheet .pl-task[data-move] .pl-grip').count(), 3);
+    assert.ok(Number(await phone.locator('#plan-sheet .pl-grip').first().evaluate((g) => getComputedStyle(g).opacity)) > 0.5, 'no hover on a phone: always there');
     assert.equal(await phone.locator('.pane-frame').count(), 0, 'sliding a task opened nothing');
     assert.ok(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'nothing spills');
-    await phone.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-words').tap();
-    await phone.waitForFunction(() => /Call Dana/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''));
+    await phone.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('.pl-words').tap();
+    await phone.waitForFunction(() => /Call Dana/.test(document.querySelector('#plan-sheet .np-tx')?.textContent || ''));
     assert.equal(await phone.locator('.pane-frame').count(), 0, 'it opens in place, as a page');
     await phone.goBack();
-    await phone.waitForFunction(() => !document.querySelector('#outline-editor li.zoom-root') && document.querySelectorAll('#plan .pl-task').length === 3);
+    await phone.waitForFunction(() => document.querySelector('#plan-sheet')?.dataset.tab === 'day' && document.querySelectorAll('#plan-sheet .pl-task').length === 3);
   });
 
   await check('phone: the new order is kept', async () => {
     await phone.reload();
     await started(phone);
-    await phone.waitForFunction(() => document.querySelectorAll('#plan .pl-task').length === 3);
+    await phone.waitForFunction(() => document.querySelectorAll('#plan-sheet .pl-task').length === 3);
     assert.deepEqual(await words(phone), ['Board reel 2', 'Order the storage drive', 'Call Dana']);
   });
 
   await check('phone: back within a few hours, it opens where you left off', async () => {
-    await phone.evaluate(() => document.querySelector('[data-room="library"], #rail [data-go="library"]')?.click());
-    await phone.evaluate(() => { const p = JSON.parse(localStorage.getItem('place')); if (p.view === 'notebook') localStorage.setItem('place', JSON.stringify({ view: 'library' })); });
+    await phone.locator('.zm-ruler [data-stop="library"]').tap();
+    await phone.waitForFunction(() => document.documentElement.dataset.view === 'library');
     await phone.goto('about:blank');
     await phone.clock.fastForward('01:00:00');
     await phone.goto(URL);
@@ -196,74 +201,76 @@ try {
     await p.clock.install({ time: NOW });
     await p.goto(URL);
     await started(p);
-    await p.evaluate(() => document.querySelector('#view-toggle').click());
-    await p.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
+    await toList(p);
     await still(p);
     for (const t of ['Call Dana', 'Order the storage drive', 'Board reel 2']) {
-      const input = p.locator('#plan input[data-add]').first();
+      const input = p.locator('#plan-sheet input[data-add]').first();
       await input.fill(t);
       await input.press('Enter');
-      await p.waitForFunction((t) => [...document.querySelectorAll('#plan .pl-task .pl-words')].some((w) => w.innerText === t), t, { timeout: 10000 });
+      await p.waitForFunction((t) => [...document.querySelectorAll('#plan-sheet .pl-task .pl-words')].some((w) => w.innerText === t), t, { timeout: 10000 });
     }
     await p.evaluate(() => document.activeElement?.blur());
     // The next day: all three are carried over.
     await p.clock.fastForward('24:00:00');
     await p.reload();
     await started(p);
-    await p.waitForFunction(() => document.querySelectorAll('#plan .pl-task.carried').length === 3);
+    // A new day opens on today's page; earlier days unfolded on the list.
+    await p.evaluate(() => localStorage.setItem('earlyOpen', '2026-11-10'));
+    await toList(p);
+    await p.waitForFunction(() => document.querySelectorAll('#plan-sheet .pl-task.carried').length === 3);
     await p.evaluate(() => document.activeElement?.blur());
     // Wait for the add to land before going on: on a slow runner the list
     // was still being drawn after the reload, and the checks raced it.
-    const add = p.locator('#plan input[data-add]').first();
+    const add = p.locator('#plan-sheet input[data-add]').first();
     await add.fill('Pack the van');
     await add.press('Enter');
-    await p.waitForFunction(() => [...document.querySelectorAll('#plan .pl-task .pl-words')].some((w) => w.innerText === 'Pack the van'), null, { timeout: 10000 });
+    await p.waitForFunction(() => [...document.querySelectorAll('#plan-sheet .pl-task .pl-words')].some((w) => w.innerText === 'Pack the van'), null, { timeout: 10000 });
     await p.evaluate(() => document.activeElement?.blur());
     await sleep(300);
     const pc = await c.newCDPSession(p);
 
     await check('phone: a task from an earlier day moves up among the others from earlier days, and keeps its day', async () => {
       assert.deepEqual(await words(p), ['Call Dana', 'Order the storage drive', 'Board reel 2', 'Pack the van']);
-      const a = await centre(p.locator('#plan .pl-task', { hasText: 'Board reel 2' }).locator('.pl-title'));
-      const top = await centre(p.locator('#plan .pl-task', { hasText: 'Call Dana' }));
+      const a = await centre(p.locator('#plan-sheet .pl-task', { hasText: 'Board reel 2' }).locator('.pl-title'));
+      const top = await centre(p.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }));
       await hold(pc, a.x, a.y, 450);
       await slide(pc, a.x, a.y, top.y - 12);
       await lift(pc);
-      await p.waitForFunction(() => document.querySelector('#plan .pl-task .pl-words')?.innerText === 'Board reel 2');
+      await p.waitForFunction(() => document.querySelector('#plan-sheet .pl-task .pl-words')?.innerText === 'Board reel 2');
       assert.deepEqual(await words(p), ['Board reel 2', 'Call Dana', 'Order the storage drive', 'Pack the van']);
-      assert.equal(await p.locator('#plan .pl-task.carried').count(), 3, 'all three still from yesterday');
+      assert.equal(await p.locator('#plan-sheet .pl-task.carried').count(), 3, 'all three still from yesterday');
     });
 
     await check('phone: and down among them too, with the dots', async () => {
-      const g = await centre(p.locator('#plan .pl-task', { hasText: 'Board reel 2' }).locator('.pl-grip'));
-      const b = await centre(p.locator('#plan .pl-task', { hasText: 'Order the storage drive' }));
+      const g = await centre(p.locator('#plan-sheet .pl-task', { hasText: 'Board reel 2' }).locator('.pl-grip'));
+      const b = await centre(p.locator('#plan-sheet .pl-task', { hasText: 'Order the storage drive' }));
       await hold(pc, g.x, g.y, 20);
       await slide(pc, g.x, g.y, b.y + 12);
       await lift(pc);
-      await p.waitForFunction(() => [...document.querySelectorAll('#plan .pl-task .pl-words')][2]?.innerText === 'Board reel 2');
+      await p.waitForFunction(() => [...document.querySelectorAll('#plan-sheet .pl-task .pl-words')][2]?.innerText === 'Board reel 2');
       assert.deepEqual(await words(p), ['Call Dana', 'Order the storage drive', 'Board reel 2', 'Pack the van']);
     });
 
     await check('phone: Move to the top on one from an earlier day puts it at the top of the list', async () => {
-      const g = await centre(p.locator('#plan .pl-task', { hasText: 'Order the storage drive' }).locator('.pl-grip'));
+      const g = await centre(p.locator('#plan-sheet .pl-task', { hasText: 'Order the storage drive' }).locator('.pl-grip'));
       await hold(pc, g.x, g.y, 600);
       await lift(pc);
       await p.waitForSelector('.pop-menu');
       await p.locator('.pop-menu .pop-item', { hasText: 'Move to the top' }).click();
-      await p.waitForFunction(() => document.querySelector('#plan .pl-task .pl-words')?.innerText === 'Order the storage drive');
+      await p.waitForFunction(() => document.querySelector('#plan-sheet .pl-task .pl-words')?.innerText === 'Order the storage drive');
       assert.deepEqual(await words(p), ['Order the storage drive', 'Call Dana', 'Board reel 2', 'Pack the van']);
     });
 
     await check('phone: one from an earlier day slid down among today’s becomes today’s; today’s go no higher than just under the earlier ones', async () => {
-      const a = await centre(p.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-title'));
-      const end = await centre(p.locator('#plan .pl-task', { hasText: 'Pack the van' }));
+      const a = await centre(p.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('.pl-title'));
+      const end = await centre(p.locator('#plan-sheet .pl-task', { hasText: 'Pack the van' }));
       await hold(pc, a.x, a.y, 450);
       await slide(pc, a.x, a.y, end.y + 12);
       await lift(pc);
-      await p.waitForFunction(() => [...document.querySelectorAll('#plan .pl-task .pl-words')].at(-1)?.innerText === 'Call Dana');
-      assert.equal(await p.locator('#plan .pl-task.carried').count(), 2);
-      const v = await centre(p.locator('#plan .pl-task', { hasText: 'Pack the van' }).locator('.pl-title'));
-      const top = await centre(p.locator('#plan .pl-task', { hasText: 'Order the storage drive' }));
+      await p.waitForFunction(() => [...document.querySelectorAll('#plan-sheet .pl-task .pl-words')].at(-1)?.innerText === 'Call Dana');
+      assert.equal(await p.locator('#plan-sheet .pl-task.carried').count(), 2);
+      const v = await centre(p.locator('#plan-sheet .pl-task', { hasText: 'Pack the van' }).locator('.pl-title'));
+      const top = await centre(p.locator('#plan-sheet .pl-task', { hasText: 'Order the storage drive' }));
       await hold(pc, v.x, v.y, 450);
       await slide(pc, v.x, v.y, top.y - 12);
       await lift(pc);
@@ -274,7 +281,7 @@ try {
     await check('phone: the order of the earlier ones is kept', async () => {
       await p.reload();
       await started(p);
-      await p.waitForFunction(() => document.querySelectorAll('#plan .pl-task').length === 4);
+      await p.waitForFunction(() => document.querySelectorAll('#plan-sheet .pl-task').length === 4);
       assert.deepEqual(await words(p), ['Order the storage drive', 'Board reel 2', 'Pack the van', 'Call Dana']);
       assert.deepEqual(p.errors, []);
     });

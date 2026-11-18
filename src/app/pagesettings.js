@@ -7,7 +7,7 @@ import { outline } from '../model.js';
 import { resetLinkPics } from '../filenode.js';
 import { SHOWS } from '../shows.js';
 import { nowChanged } from '../now.js';
-import { DEFAULT_FONT, setFont, currentFont, loadPreviews } from '../fonts.js';
+import { FONTS, FONT_GROUPS, DEFAULT_FONT, setFont, currentFont, loadPreviews } from '../fonts.js';
 import { inPane } from '../panes.js';
 import { make } from '../dom.js';
 import { addCommands, mod } from './commandlist.js';

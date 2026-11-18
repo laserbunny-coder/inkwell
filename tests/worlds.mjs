@@ -148,7 +148,7 @@ try {
     assert.ok(!live().some((r) => r.kind === 'project' && !r.parent_id), 'no book left outside a world');
   });
 
-  await check('the Library shows worlds, and opening one shows its pieces and bible', async () => {
+  await check('the Library shows worlds, and opening one shows its pieces', async () => {
     await laptop.keyboard.press('Control+Shift+O');
     await sleep(500);
     await laptop.waitForSelector('#lib-zoom:not([hidden]) .zl-name');
@@ -159,9 +159,6 @@ try {
     await sleep(500);
     assert.equal(await laptop.evaluate(() => document.documentElement.dataset.view), 'world');
     assert.match(await laptop.locator('#wh-pieces').innerText(), /The Harbour/);
-    const bible = await laptop.locator('#wh-recent').innerText();
-    assert.match(bible, /Research/);
-    assert.match(bible, /Idea/);
   });
 
   const phone = await device();

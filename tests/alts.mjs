@@ -100,7 +100,7 @@ try {
     assert.equal(await page.locator('#editor p[data-pv]').count(), 0);
   });
 
-  await check('switching marks off hides the underline; focus hides it too', async () => {
+  await check('a word with alternates is underlined', async () => {
     await page.keyboard.press('Escape');
     await page.evaluate(() => window.__editor.chain().focus().setTextSelection(7).run());
     await page.keyboard.press('Control+Shift+E');
@@ -112,12 +112,6 @@ try {
     await page.keyboard.press('Escape');
     const deco = () => page.locator('#editor .alt').first().evaluate((el) => getComputedStyle(el).textDecorationLine);
     assert.equal(await deco(), 'underline');
-    await page.evaluate(() => document.documentElement.classList.add('hide-alts'));
-    assert.equal(await deco(), 'none');
-    await page.evaluate(() => document.documentElement.classList.remove('hide-alts'));
-    await page.evaluate(() => document.documentElement.classList.add('focus'));
-    assert.equal(await deco(), 'none');
-    await page.evaluate(() => document.documentElement.classList.remove('focus'));
   });
 
   await check('Ask Claude adds suggestions that fit, widening to fix "a" and "an"', async () => {
@@ -220,14 +214,14 @@ try {
     await ph.waitForFunction(() => window.__editor.state.doc.textContent === 'She wandered home.');
     await ph.locator('.script-bar [data-alt="prev"]').tap();
     await ph.waitForFunction(() => window.__editor.state.doc.textContent === 'She walked home.');
-    // Turning alternates off leaves just the mic and + on prose.
+    // Alternates are always on now (Nov 17 2026): an old "hidden" choice brings them back.
     await ph.evaluate(() => { localStorage.setItem('hide', JSON.stringify(['alts'])); });
     await ph.reload();
     await ph.waitForSelector('#editor .ProseMirror');
     await sleep(500);
     await ph.locator('#editor .ProseMirror').tap();
     await sleep(300);
-    assert.deepEqual(await shown(), ['talk', 'insert', 'down']);
+    assert.deepEqual(await shown(), ['talk', 'word', 'ask', 'para', 'prev', 'next', 'insert', 'down']);
     await phoneCtx.close();
   });
 

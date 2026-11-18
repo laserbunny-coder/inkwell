@@ -9,7 +9,7 @@ import { PlotGrid, worldPromises } from '../grid.js';
 import { isLife, personalArea } from '../pages.js';
 import { gatherItems } from '../stages.js';
 import { dayWord } from '../tasks.js';
-import { isFinished, areas, bookType, hasManuscript, kindName, areaColor, newArea, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, worlds, worldOf, piecesIn, worldStats, usedLabels, SHAPES, shapeOf, nextLevel, newShaped, editedAt, defaultLabel, stageOf, nextLabel, setForNew, typeForSet, stageSetOf, stagesOf, isReady } from '../library.js';
+import { isFinished, areas, bookType, hasManuscript, kindName, areaColor, newArea, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, worlds, worldOf, piecesIn, worldTree, worldStats, usedLabels, SHAPES, shapeOf, nextLevel, newShaped, editedAt, defaultLabel, stageOf, nextLabel, setForNew, typeForSet, stageSetOf, stagesOf, isReady } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday, isoOf } from '../dates.js';
 import { addCommands } from './commandlist.js';
@@ -711,6 +711,9 @@ async function renderWorld() {
   // needs you, the crew and the turns. The next date is the soonest dated
   // step or shoot day.
   worldDates = dates;
+  // What was touched last, for the project's where-line ("Recently" itself went).
+  const { pages } = await worldTree(w.id);
+  const recent = [...s.pieces.map(({ row }) => row), ...pages.map(({ row }) => row)].sort((a, b) => editedAt(b) - editedAt(a)).slice(0, 1);
   const lately = recent[0] && editedAt(recent[0]) ? { title: recent[0].title || 'Untitled', at: editedAt(recent[0]), run: () => (recent[0].kind === 'page' ? go({ view: 'notebook', pageId: recent[0].id }) : go({ view: 'project', id: recent[0].id })) } : null;
   // The same clock the Desk seats it by, so the two never disagree.
   await projectPage?.show(w, { color, edited: editedAt(w), last: lately, date: nextDate(w.id) });

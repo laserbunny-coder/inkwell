@@ -62,20 +62,20 @@ try {
   await add(p, 'Color pass on the trailer next week', true);
   await blur(p);
 
-  await check('First light is the first line of the day, and Now opens on it as a page', async () => {
+  await check('Bible reading is the first line of the day, and Now opens on it as a page', async () => {
     await p.keyboard.press('4');
     await at(p, 'now');
     await p.waitForSelector('.np-tx');
-    assert.equal(await heading(p), 'First light');
+    assert.equal(await heading(p), 'Bible reading');
     assert.match(await p.locator('.np-crumb').innerText(), /Every day/);
     assert.ok(await p.locator('.np-kind .now-reading li').count() >= 4, 'the reading list under it');
-    assert.ok(await task(p, '^First light$'), 'a line of the day');
+    assert.ok(await task(p, '^Bible reading$'), 'a line of the day');
   });
 
-  await check('read: First light is done and the next line simply is the one thing (no gate)', async () => {
+  await check('read: Bible reading is done and the next line simply is the one thing (no gate)', async () => {
     await p.keyboard.press('i');
     await p.waitForFunction(() => document.querySelector('.np-tx')?.textContent === 'Rewrite the cold open');
-    assert.equal((await task(p, '^First light$')).done, true);
+    assert.equal((await task(p, '^Bible reading$')).done, true);
     assert.equal(await p.locator('.now-acts .now-btn.go', { hasText: 'Begin' }).count(), 0, 'no Begin gate');
     assert.match(await p.locator('.np-foot').innerText(), /Not now/);
     assert.match(await p.locator('.np-foot').innerText(), /1 more today/);

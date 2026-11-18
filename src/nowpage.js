@@ -101,6 +101,7 @@ export function pageView(now, m) {
     k.append(now.light.view({ bare: true }));
     page.append(k);
   } else if (train && cur && now.train.active(cur)) {
+    // (The session draws its own Not now choices.)
     const k = make('div', 'np-kind');
     k.append(now.train.view(cur));
     page.append(k);
@@ -112,7 +113,7 @@ export function pageView(now, m) {
   if (!light && !train) notes.append(noteForm(now, i.row.id));
   if (notes.childElementCount) page.append(notes);
 
-  if (now.asking && cur) page.append(now.choices(cur));
+  if (now.asking && cur && !(train && now.train.active(cur))) page.append(now.choices(cur));
 
   const foot = make('div', 'np-foot');
   if (t.visit) {

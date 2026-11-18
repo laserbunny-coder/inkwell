@@ -121,7 +121,7 @@ try {
 
   // ---------- the strip ----------
 
-  await check('a world’s overview: its sentence, where its pieces are, what’s next and what was written lately', async () => {
+  await check('a world’s overview: its sentence, where its pieces are, and what’s next', async () => {
     await go(page, { view: 'world', id: 'wd_nb' });
     await page.waitForSelector('#wh-next li button');
     assert.equal(await page.locator('#wh-logline').innerText(), 'A family bakery raises a troupe of hopeless ninjas.');
@@ -132,7 +132,6 @@ try {
     assert.match(next, /Gather\s*3 things in to file/i);
     assert.match(next, /Shoot day Sat, Jan 16 · Reel 2: Breakfast/);
     assert.match(next, /Board Reel 2: Breakfast/);
-    assert.match(await page.locator('#wh-recent').innerText(), /Reel 1: The Audition/);
     assert.ok(await page.locator('#wh-board-toggle').count() === 0);
   });
 

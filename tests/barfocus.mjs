@@ -29,7 +29,7 @@ try {
     Object.defineProperty(window, 'visualViewport', { value: vv });
     window.__kb = (up) => { vv.height = up ? h - 320 : h; vv.dispatchEvent(new Event('resize')); };
     // An older device: switches that have since gone, and some still here.
-    if (!localStorage.getItem('hide')) localStorage.setItem('hide', JSON.stringify(['dots', 'handle', 'synopsis', 'plan', 'took', 'loose']));
+    if (!localStorage.getItem('hide')) localStorage.setItem('hide', JSON.stringify(['dots', 'handle', 'synopsis', 'plan', 'took', 'loose', 'calendar', 'claude']));
   }, H);
   const p = await ctx.newPage();
   p.on('pageerror', (e) => errors.push(e.message));
@@ -49,27 +49,23 @@ try {
 
   await check('an older device keeps what it chose, and the switches that went are simply on (bullets stay off)', async () => {
     const hide = await p.evaluate(() => JSON.parse(localStorage.getItem('hide')));
-    for (const gone of ['dots', 'handle', 'synopsis', 'plan', 'took']) assert.ok(!hide.includes(gone), `${gone} is on again`);
-    assert.ok(hide.includes('loose'), 'a kept switch stays off');
+    for (const gone of ['dots', 'handle', 'synopsis', 'plan', 'took', 'loose', 'calendar']) assert.ok(!hide.includes(gone), `${gone} is on again`);
+    assert.ok(hide.includes('claude'), 'a kept switch stays off');
     assert.ok(hide.includes('bullets'), 'bullets stay off');
   });
 
-  await check('the Aa panel: three tabs, and Show in groups opening on where you are', async () => {
+  await check('the Aa panel: three tabs; Show is one short list of eight, no groups', async () => {
     await run('Look, page and text settings');
     await p.waitForSelector('.page-settings:not([hidden])');
     assert.deepEqual(await p.locator('.ps-tab').allInnerTexts(), ['Look', 'Text', 'Show']);
     await p.locator('.ps-tab[data-pane="show"]').tap();
-    const groups = await p.evaluate(() => [...document.querySelectorAll('.ps-group')].map((g) => `${g.dataset.group}${g.classList.contains('open') ? '*' : ''}`));
-    assert.ok(groups.length >= 1 && groups.filter((g) => g.endsWith('*')).length === 1, `one group open: ${groups}`);
-    const rows = await p.evaluate(() => document.querySelectorAll('.ps-show .switch').length + document.querySelectorAll('.ps-show .ps-choice').length);
-    assert.ok(rows > 0, 'switches are there');
+    assert.equal(await p.locator('.ps-show .ps-group').count(), 0, 'no folding groups');
+    assert.equal(SHOWS.length, 8);
+    const text = await p.locator('.ps-show').innerText();
+    for (const s of SHOWS) assert.ok(text.includes(s.label), s.label);
     // A switch and its command are the same thing.
-    const sw = p.locator('.ps-show .switch:has([data-show="loose"]) input');
-    if (await sw.count()) {
-      await p.locator('.ps-group:has([data-show="loose"]) .ps-ghead').tap();
-      await sw.tap();
-      assert.ok(!(await p.evaluate(() => document.documentElement.classList.contains('hide-loose'))));
-    }
+    await p.locator('.ps-show .switch:has([data-show="claude"]) input').tap();
+    assert.ok(!(await p.evaluate(() => document.documentElement.classList.contains('hide-claude'))));
     await p.locator('#page-done').tap();
   });
 

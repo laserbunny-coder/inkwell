@@ -144,15 +144,12 @@ try {
     assert.ok(kept, 'a passing note just stays on the page');
   });
 
-  await check('on today’s page: “Filed under …” after the line (Look switch), and nothing loose', async () => {
+  await check('on today’s page: “Filed under …” after the line, always', async () => {
     await toPage(page);
     const notes = await page.locator('#outline-editor .thought-note').allInnerTexts();
     assert.deepEqual(notes, ['Filed under the Drawer', 'Filed under Not planned', 'Filed under the Workshop and To look up']);
     assert.equal(await page.locator('#outline-editor .is-loose').count(), 0);
     await shot(page, 'filed-notes');
-    await page.evaluate(() => { const h = JSON.parse(localStorage.getItem('hide') || '[]'); h.push('nowfiled'); localStorage.setItem('hide', JSON.stringify(h)); document.documentElement.classList.add('hide-nowfiled'); });
-    assert.equal(await page.locator('#outline-editor .thought-note').first().isVisible(), false);
-    await page.evaluate(() => { localStorage.setItem('hide', JSON.stringify(JSON.parse(localStorage.getItem('hide')).filter((x) => x !== 'nowfiled'))); document.documentElement.classList.remove('hide-nowfiled'); });
   });
 
   await check('an instruction about today changes the plan instead, with Undo, and nothing stays on the page', async () => {
@@ -184,9 +181,11 @@ try {
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
     await toPage(page);
-    await page.waitForSelector('#loose-foot .loose-keep');
-    await shot(page, 'keep-on-page');
-    await page.locator('#loose-foot .loose-keep').click();
+    // The count under the day went (Nov 17 2026); the command stays.
+    await page.keyboard.press('Control+k');
+    await page.waitForFunction(() => !document.querySelector('.palette')?.hidden);
+    await page.locator('.palette input').fill('Keep this day’s loose lines');
+    await page.locator('.palette li', { hasText: 'Keep this day’s loose lines on the page' }).first().click();
     const l = await until(async () => { const r = (await all(page)).find((x) => x.id === 'li_dump'); return r.fields?.thought?.state === 'filed' ? r : null; });
     assert.deepEqual(l.fields.thought.to, ['drawer']);
     assert.equal(l.text, 'A heist where the vault is a bakery');
@@ -203,15 +202,9 @@ try {
     assert.equal(await page.evaluate(() => document.querySelector('#plan-sheet').dataset.tab), 'now');
   });
 
-  await check('the new switches are in All commands', async () => {
-    await page.keyboard.press('Control+k');
-    await page.waitForFunction(() => !document.querySelector('.palette')?.hidden);
-    for (const q of ['Show or hide the line to get it out of your head', 'Show or hide where a thought was filed']) {
-      await page.locator('.palette input').fill(q);
-      await sleep(250);
-      assert.ok(await page.locator('.palette li', { hasText: q }).count() > 0, q);
-    }
-    await page.keyboard.press('Escape');
+  await check('their switches went: both are simply on', async () => {
+    const list = await page.evaluate(() => window.__commandList().map((c) => c.label));
+    for (const q of ['Show or hide the line to get it out of your head', 'Show or hide where a thought was filed']) assert.ok(!list.includes(q), q);
   });
   assert.deepEqual(page.errors, []);
 

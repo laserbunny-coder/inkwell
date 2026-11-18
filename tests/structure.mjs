@@ -109,6 +109,7 @@ async function device(opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, colorScheme: 'dark', ...opts });
   await ctx.exposeFunction('__remote', remote);
   await ctx.addInitScript(fake);
+  await ctx.addInitScript(() => { try { if (localStorage.getItem('piecesAs') === null) localStorage.setItem('piecesAs', 'board'); } catch { /* no storage */ } });
   const page = await ctx.newPage();
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));
@@ -210,51 +211,18 @@ try {
     assert.ok(await laptop.locator('.scene-break[data-eid="sp_s1"] .scene-synopsis').isVisible());
   });
 
-  await check('focus mode is just the words: a script’s sections and summaries fold away, and come back after', async () => {
+  await check('Ctrl+Shift+. puts a script’s section titles away and brings them back', async () => {
     const box = () => laptop.locator('.scene-break[data-eid="sp_s1"]').boundingBox();
-    const before = await box();
-    assert.ok(before.height > 20);
-    await laptop.keyboard.press('Control+Period');
-    await sleep(400);
-    assert.ok(await laptop.evaluate(() => document.documentElement.classList.contains('focus')));
-    assert.equal((await box()).height, 0, 'the section folds away');
-    assert.equal((await laptop.locator('.scene-break[data-eid="sp_q1"]').boundingBox()).height, 0, 'sequences too');
-    assert.ok(await laptop.locator('#editor p[data-el="scene"]', { hasText: 'INT. KITCHEN' }).isVisible(), 'the script itself stays');
-    await laptop.keyboard.press('Control+Period');
-    await sleep(400);
-    assert.ok((await box()).height > 20, 'and is back after focus');
-  });
-
-  await check('Ctrl+Shift+. brings section titles back in Focus, or puts them away outside it', async () => {
-    const box = () => laptop.locator('.scene-break[data-eid="sp_s1"]').boundingBox();
-    const shown = async () => (await box()).height > 20;
+    const shown = async () => (await box())?.height > 20;
     await laptop.locator('#editor p[data-eid="pp_2"]').click();
-    await laptop.keyboard.press('Control+Period');
-    await sleep(400);
-    assert.ok(!(await shown()), 'Focus starts without them');
+    assert.ok(await shown(), 'showing at first');
     await laptop.keyboard.press('Control+Shift+Period');
     await sleep(200);
-    assert.ok(await shown(), 'asked for in Focus');
-    assert.ok(await laptop.locator('.scene-break[data-eid="sp_s1"] .scene-synopsis').isVisible(), 'with the summary');
-    assert.equal(await laptop.evaluate(() => localStorage.getItem('focusSections')), '1', 'remembered on this device');
-    await laptop.keyboard.press('Control+Period');
-    await sleep(400);
-    assert.ok(await shown(), 'still there out of Focus');
-    await laptop.keyboard.press('Control+Shift+Period');
-    await sleep(200);
-    assert.ok(!(await shown()), 'put away out of Focus');
+    assert.ok(!(await shown()), 'put away');
     assert.ok(await laptop.locator('#editor p[data-el="scene"]', { hasText: 'INT. KITCHEN' }).isVisible(), 'the script itself stays');
-    await laptop.keyboard.press('Control+Period');
-    await sleep(400);
-    assert.ok(await shown(), 'Focus keeps its own choice');
-    await laptop.keyboard.press('Control+Shift+Period');
-    await sleep(200);
-    assert.ok(!(await shown()), 'and lets it go again');
-    await laptop.keyboard.press('Control+Period');
-    await sleep(400);
     await command(laptop, 'Show or hide section titles');
+    await sleep(200);
     assert.ok(await shown(), 'the command brings them back too');
-    assert.equal(await laptop.evaluate(() => document.querySelector('[data-show="sections"]').checked), true, 'the Aa switch follows');
   });
 
   // ---------- the grid ----------
