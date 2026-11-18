@@ -19,6 +19,8 @@ export type Task = {
   span?: { kind: "week" | "month" | "later"; start: string | null } | null;
   /** Its place under a heading of What's when. */
   rank?: { h: string; n: number } | null;
+  /** What it's work on: a piece or a bible page (its page opens on that piece's text). */
+  for?: string | null;
 };
 
 export const blank = (): Task => ({ v: 1, day: null, est: null, done_at: null, actual: null, log: [], run: null, order: 0 });

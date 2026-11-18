@@ -14,6 +14,9 @@
 //   life         a world that's really life (a trip, Christmas) made a life project
 //   area         a world moved into an area
 //   rename       a world, page or piece given a clearer name
+//   tie          an open step tied to the piece or page it is work on
+//                (fields.task.for), so its page opens on that piece; only
+//                suggested from a chat, not by the weekly pass
 //
 // A batch of suggestions is one entry of kind 'tidy' (id td-week-<Monday> for
 // the weekly one, td_… for one asked for now or added by Claude in a chat).
@@ -24,7 +27,9 @@ export type Row = {
   links: string[]; fields: Record<string, unknown>; area_id: string | null; created_at: string; updated_at?: string; deleted?: boolean; sort?: number;
 };
 
-export const TYPES = ["merge", "trash_empty", "file", "drawer", "tags", "life", "area", "rename"] as const;
+export const TYPES = ["merge", "trash_empty", "file", "drawer", "tags", "life", "area", "rename", "tie"] as const;
+/** What the weekly pass may suggest (ties come from a chat). */
+const WEEKLY = TYPES.filter((t) => t !== "tie");
 export type Kind = typeof TYPES[number];
 
 export type Item = {
@@ -69,7 +74,7 @@ export const TIDY_SCHEMA = {
         additionalProperties: false,
         required: ["type", "a", "b", "text", "why"],
         properties: {
-          type: { type: "string", enum: [...TYPES] },
+          type: { type: "string", enum: [...WEEKLY] },
           a: { type: "string" }, b: { type: "string" }, text: { type: "string" }, why: { type: "string" },
         },
       },
@@ -219,6 +224,7 @@ export function titleOf(type: Kind, a?: Row, b?: Row, text = "", tagA = "", tagB
     case "life": return `Make ${q(a!.title)} a life project`;
     case "area": return `Move ${q(a!.title)} to ${b!.title}`;
     case "rename": return `Rename ${q(a!.title)} to ${q(text)}`;
+    case "tie": return `Tie ${q(a!.text)} to ${q(b!.title)}`;
   }
 }
 
@@ -239,7 +245,7 @@ export function checkTidy(out: Out, labels: Labels, input: Pick<Input, "empty" |
   const used = new Set<string>();
   for (const s of out.items ?? []) {
     const type = String(s.type ?? "") as Kind;
-    if (!TYPES.includes(type)) continue;
+    if (!WEEKLY.includes(type)) continue;
     const A = labels.byLabel.get(String(s.a ?? "").trim().toUpperCase());
     const B = labels.byLabel.get(String(s.b ?? "").trim().toUpperCase());
     const why = clean(String(s.why ?? ""), 300);
@@ -321,6 +327,13 @@ export function oneSuggestion(type: string, a: Row | undefined, b: Row | undefin
       const name = clean(text, 120);
       if (!a || !["world", "page", "project"].includes(a.kind) || !name) return "rename takes a world, page or piece (a) and the new name (text).";
       return mk({ type: t, a: a.id, text: name, why: w }, titleOf(t, a, undefined, name));
+    }
+    case "tie": {
+      const task = a?.fields?.task as { v?: number; for?: string | null } | undefined;
+      if (a?.kind !== "line" || !task?.v || a.fields?.done) return "tie takes an open task (a) and the piece or bible page it is work on (b).";
+      if (!b || !(b.kind === "project" || (b.kind === "page" && !b.id.startsWith("steps-") && b.id !== "page-tasks"))) return "tie takes a piece or a bible page as b.";
+      if (task.for === b.id) return "That step is already tied to it.";
+      return mk({ type: t, a: a.id, b: b.id, why: w }, titleOf(t, a, b));
     }
   }
 }

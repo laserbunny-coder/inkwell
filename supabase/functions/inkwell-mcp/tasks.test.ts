@@ -310,4 +310,38 @@ assert.equal(dueDay({ day: "2026-11-09", repeat: { every: "week", n: 1, days: [1
 rows.push(e("li-train-old", "line", "page-tasks", { text: "Training", fields: { ...task(addDays(TODAY, -2)), training: true } }));
 assert.ok(!(await call("list_tasks", { from: "today" })).tasks.some((t: any) => t.id === "li-train-old"));
 
+// What a step is for (the zoom, Part 5): a piece or a bible page, so its
+// page in Inkwell opens straight onto that piece.
+rows.push(
+  e("wd-nb", "world", null, { title: "The Ninja Bunch" }),
+  e("pr-reel2", "project", "wd-nb", { title: "Reel 2: Breakfast", type: "screenplay" }),
+  e("pg-kenji", "page", "wd-nb", { title: "Kenji" }),
+);
+const tf = await call("add_task", { text: "Board Reel 2", to: "wd-nb", day: "today", for: "pr-reel2" });
+assert.equal(tf.for, "Reel 2: Breakfast");
+assert.equal(get(tf.id).fields.task.for, "pr-reel2");
+assert.equal(get(tf.id).parent_id, "steps-wd-nb", "it still lives on the Steps page");
+let lf = (await call("list_tasks", { world_id: "wd-nb" })).tasks.find((x: any) => x.id === tf.id);
+assert.equal(lf.for, "Reel 2: Breakfast");
+assert.equal(lf.for_id, "pr-reel2");
+// Written on a bible page, a step is work on that page by itself.
+const tp = await call("add_task", { text: "Pick Kenji's voice", to: "pg-kenji" });
+assert.equal(get(tp.id).fields.task.for, "pg-kenji");
+// Not on the Steps page or the Tasks page.
+assert.ok(!get((await call("add_task", { text: "Plain", to: "wd-nb" })).id).fields.task.for);
+assert.ok((await call("add_task", { text: "x", for: "wd-nb" })).error, "a world isn't a piece");
+assert.ok((await call("add_task", { text: "x", for: "steps-wd-nb" })).error, "nor its Steps page");
+// update_task ties, unties, and its Undo puts it back.
+const ut = await call("update_task", { id: "li-a1", for: "pg-kenji" });
+assert.ok(ut.changed.some((b: string) => /for “Kenji”/.test(b)));
+assert.equal(get("li-a1").fields.task.for, "pg-kenji");
+await call("undo_change", { change_id: ut.change_id });
+assert.ok(!get("li-a1").fields.task.for, "undone");
+await call("update_task", { id: tf.id, for: null });
+assert.ok(!get(tf.id).fields.task.for, "untied");
+// A tie can wait on the tidy pass.
+const tt = await call("suggest_tidy", { suggestions: [{ type: "tie", a: tf.id, b: "pr-reel2", why: "Boarding Reel 2 is work on Reel 2." }] });
+assert.match(tt.added[0], /Tie “Board Reel 2” to “Reel 2: Breakfast”/);
+assert.match((await call("suggest_tidy", { suggestions: [{ type: "tie", a: "pg-kenji", b: "pr-reel2", why: "x" }] })).error, /open task/);
+
 console.log("inkwell-mcp tasks: all checks passed");
