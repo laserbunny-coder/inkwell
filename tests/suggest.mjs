@@ -17,6 +17,8 @@ const URL = `http://localhost:${PORT}/`;
 
 const pad = (n) => String(n).padStart(2, '0');
 const d = new Date();
+const SHOTS = process.env.SHOTS;
+const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: `${SHOTS}/${name}.png` }); };
 const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const DAY = `day-${today}`;
 
@@ -104,6 +106,7 @@ try {
     await page.keyboard.type('#');
     await listShows(page);
     assert.deepEqual(await shownList(page), ['#stunts', '#anime', '#music']);
+    await shot(page, 'sg-hash');
     await page.keyboard.type('u');
     // Matches anywhere in the tag, words that start with it first.
     await page.waitForFunction(() => document.querySelectorAll('.suggest li').length === 2);
@@ -161,6 +164,7 @@ try {
     await listShows(page);
     assert.deepEqual(await shownList(page), ['Episode 1', 'Episode 1', 'New page “Epi”']);
     assert.deepEqual((await hints(page)).slice(0, 2).sort(), ['Harbor Tales', 'The Ninja Bunch']);
+    await shot(page, 'sg-link');
     await page.keyboard.press('Escape');
     await page.keyboard.press('Shift+Home');
     await page.keyboard.press('Backspace');
@@ -202,6 +206,7 @@ try {
     // Mika has no type of her own: she sits in Characters.
     assert.deepEqual(await shownList(page), ['Kenji', 'Mika', 'Harbor Dojo']);
     assert.deepEqual(await hints(page), ['character', 'character', 'place']);
+    await shot(page, 'sg-at');
     await page.keyboard.type('har');
     await page.waitForFunction(() => document.querySelectorAll('.suggest li').length === 1);
     await page.keyboard.press('Enter');
@@ -222,6 +227,7 @@ try {
     assert.equal(await page.locator('#zm-thought-in').isVisible(), true, 'not filed yet');
     await page.keyboard.type('with [[Light');
     await listShows(page);
+    await shot(page, 'sg-thought');
     await page.keyboard.press('Enter');
     await listGone(page);
     assert.equal(await page.locator('#zm-thought-in').inputValue(), 'Rehearse #stunts with [[Lighthouse keeper]] ');
@@ -253,6 +259,7 @@ try {
     assert.ok(box.y >= caret.y + caret.height || box.y + box.height <= caret.y, 'never over the line being typed');
     const items = await phone.locator('.suggest li').evaluateAll((ls) => ls.map((l) => l.getBoundingClientRect().height));
     assert.ok(items.every((h) => h >= 40), 'thumb-sized');
+    await shot(phone, 'sg-phone');
     const wide = await phone.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     assert.ok(wide <= 1, `${wide}px too wide`);
     await phone.locator('.suggest li', { hasText: '#music' }).tap();

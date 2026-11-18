@@ -177,6 +177,21 @@ try {
     if (SHOTS) { await still(page); await page.screenshot({ path: `${SHOTS}/desk-history.png` }); }
   });
 
+  await check('History opened while the Desk is still drawing stays History', async () => {
+    // A redraw of the stage that finishes after the switch must not paint over History.
+    for (const wait of [0, 5, 15, 30, 60]) {
+      await goto(page, { view: 'desk' });
+      await page.evaluate((ms) => new Promise((done) => {
+        document.dispatchEvent(new Event('visibilitychange'));
+        setTimeout(() => { const pl = { view: 'desk', tab: 'history' }; history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); done(); }, ms);
+      }), wait);
+      await page.waitForSelector('.dk-thread', { timeout: 5000 });
+      await sleep(600);
+      assert.ok(await page.locator('.dk-thread').count() > 0, `History still shows after ${wait} ms`);
+      assert.equal(await page.locator('.dk-head h1').innerText(), 'History');
+    }
+  });
+
   await check('History filters and searches every line a thread ever logged', async () => {
     assert.deepEqual((await page.locator('.dk-filters button').allInnerTexts()).map((t) => t.replace(/\s+/g, '')), ['Everything9', 'Waitingonyou4', 'Closedwithlooseends0', 'Working0', 'Gonequiet1', 'Finished4']);
     await page.locator('.dk-filters button', { hasText: 'Waiting on you' }).click();
