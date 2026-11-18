@@ -66,7 +66,8 @@ const shot = async (p, name) => { if (SHOTS) { await p.evaluate(() => document.q
 const openNew = async (p) => {
   await go(p, { view: 'library' });
   await sleep(400);
-  await p.locator('.card-new').click();
+  // The zoom's Library: each area's + starts a new project there.
+  await p.locator('#lib-zoom .zl-area .zl-add').first().click();
   await p.waitForSelector('#lib-new', { state: 'visible' });
 };
 

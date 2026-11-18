@@ -74,7 +74,7 @@ try {
     assert.equal(new Set(list.map((c) => c.label)).size, list.length, 'each label once');
     assert.ok(!list.some((c) => /Daybook/.test(c.label)), 'no Daybook commands');
     const plan = list.filter((c) => c.group === 'plan').map((c) => c.label);
-    for (const want of [/^When/, /^Add a task/, /^Bring earlier days/, /^Go through the tasks/, /^From a project/, /^Calendar: week/, /^Calendar: six weeks/]) assert.ok(plan.some((l) => want.test(l)), `${want} in Plan and tasks`);
+    for (const want of [/^When/, /^Add a task/, /^Bring earlier days/, /^Go through the tasks/, /^From a project/, /^Calendar: week/]) assert.ok(plan.some((l) => want.test(l)), `${want} in Plan and tasks`);
   });
 
   await check('Ctrl + K and Ctrl + O open the same box; Enter on a just-opened box goes back', async () => {
@@ -88,7 +88,6 @@ try {
     await sleep(200);
     const k = await p.locator('#palette-list').innerText();
     assert.match(k, /JUMP BACK/i);
-    assert.match(k, /ROOMS/i);
     assert.match(k, /All commands/);
     assert.equal(await selected(p), 'Today', 'the first of Jump back is picked');
     await p.keyboard.press('Escape');
@@ -102,16 +101,16 @@ try {
     await p.waitForFunction(() => document.querySelector('#tb-back')?.textContent === '‹ Library');
   });
 
-  await check('the rooms, and “Right here” for where you are', async () => {
+  await check('“Right here” for where you are', async () => {
     if (await boxOpen(p)) await p.keyboard.press('Escape');
     await p.keyboard.press('Control+K');
     await p.waitForSelector('.palette.box:not([hidden])');
-    assert.deepEqual(await p.locator('.box-rooms .go-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up']);
     assert.match(await p.locator('#palette-list').innerText(), /RIGHT HERE, ON TODAY/i);
     const here = await rows(p);
     assert.ok(here.some((r) => /^Go through the tasks left/.test(r)), here.join(' | '));
     assert.ok(here.some((r) => /^From a project/.test(r)), here.join(' | '));
-    await p.locator('.box-rooms .box-chip', { hasText: 'Tags' }).click();
+    await p.locator('#palette-input').fill('Tags: every tag');
+    await p.locator('#palette-list li', { hasText: 'Tags: every tag' }).first().click();
     await p.waitForFunction(() => document.documentElement.dataset.view === 'tags');
     await p.keyboard.press('Control+K');
     await p.waitForSelector('.palette.box:not([hidden])');
@@ -262,67 +261,8 @@ try {
     assert.equal(await boxOpen(p), false);
   });
 
-  await check('the rail has one Go (Ctrl + K) where Go and Everything were', async () => {
-    assert.deepEqual(await p.locator('.rail-tools button').allInnerTexts(), ['Capture', 'Go', 'Look']);
-    await p.locator('.rail-tools button', { hasText: 'Go' }).click();
-    await p.waitForSelector('.palette.box:not([hidden])');
-    await p.keyboard.press('Escape');
-  });
 
-  await check('a Desk card shows the next step; its circle ticks it; none says so, with Add one', async () => {
-    await newProject(p, 'Camping trip 2027');
-    const input = p.locator('#wh-steps input[data-add]');
-    assert.equal(await input.getAttribute('placeholder'), 'Book the campsite for Friday night', 'a life project suggests a first step');
-    await input.fill('Book the campsite');
-    await input.press('Enter');
-    await sleep(400);
-    await input.fill('Pack the van');
-    await input.press('Enter');
-    await sleep(400);
-    await p.keyboard.press('Control+Shift+U');
-    await p.waitForFunction(() => document.documentElement.dataset.view === 'desk');
-    const card = p.locator('.dk-chair', { has: p.locator('.dk-name', { hasText: 'Camping trip 2027' }) });
-    await card.locator('.dk-next').waitFor();
-    assert.equal(await card.locator('.dk-next-name').innerText(), 'Book the campsite');
-    if (SHOTS) await p.screenshot({ path: `${SHOTS}/desk-next.png` });
-    await card.locator('.dk-tick').click();
-    await p.waitForFunction(() => [...document.querySelectorAll('.dk-next-name')].some((e) => e.textContent === 'Pack the van'));
-    assert.ok((await all(p)).find((r) => r.text === 'Book the campsite').fields.done, 'ticked');
-    await card.locator('.dk-tick').click();
-    await card.locator('.dk-next-none').waitFor();
-    assert.equal(await card.locator('.dk-next-none').innerText(), 'No next step yet');
-    await card.locator('.dk-next-add').click();
-    await p.waitForFunction(() => document.querySelector('#crumb')?.innerText.includes('Steps'));
-    // The Look switch puts it away.
-    await p.keyboard.press('Control+Shift+U');
-    await p.waitForFunction(() => document.documentElement.dataset.view === 'desk');
-    await p.evaluate(() => { const c = document.querySelector('[data-show="nextstep"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); });
-    await sleep(400);
-    assert.equal(await p.locator('.dk-next').count(), 0);
-    await p.evaluate(() => { const c = document.querySelector('[data-show="nextstep"]'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); });
-    await p.keyboard.press('Escape');
-  });
 
-  await check('the rail lists your projects in the Desk’s order', async () => {
-    await newProject(p, 'Harbor spot');
-    await p.keyboard.press('Control+Shift+U');
-    await p.waitForFunction(() => document.documentElement.dataset.view === 'desk');
-    await sleep(500);
-    const worlds = new Set((await all(p)).filter((r) => r.kind === 'world').map((r) => r.title));
-    const desk = (await p.locator('.dk-chair h3 .dk-name, .dk-row .dk-name').allInnerTexts()).filter((n) => worlds.has(n));
-    assert.deepEqual(await p.locator('.rail-projects .rail-name').allInnerTexts(), desk.slice(0, 7));
-    // Move the last one to the top: the rail follows.
-    const last = desk.at(-1);
-    const card = p.locator('.dk-chair', { has: p.locator('.dk-name', { hasText: last }) });
-    await card.locator('.dk-more').click();
-    await p.locator('.pop-menu .pop-item', { hasText: 'Move to the top' }).first().click();
-    await p.waitForFunction((n) => document.querySelector('.rail-projects .rail-name')?.textContent === n, last);
-    // In the box too, when nothing is typed.
-    await p.keyboard.press('Control+K');
-    await p.waitForSelector('.box-projects');
-    assert.equal(await p.locator('.box-projects .go-name').first().innerText(), last);
-    await p.keyboard.press('Escape');
-  });
 
   await check('no page errors on a computer', async () => { assert.deepEqual(p.errors, []); });
 
@@ -338,13 +278,12 @@ try {
   await q.waitForFunction(() => !document.body.classList.contains('kb-up'));
   await sleep(200);
 
-  await check('on a phone the Go button opens the box as a sheet, without the rooms the bar already has', async () => {
-    await q.locator('.pb-place').tap();
+  await check('on a phone the ruler’s Go opens the box as a sheet', async () => {
+    await q.locator('.zm-go').tap();
     await q.waitForSelector('.palette.box:not([hidden])');
     assert.notEqual(await q.evaluate(() => document.activeElement?.id), 'palette-input', 'the keyboard stays down');
     const box = await q.locator('.palette').boundingBox();
     assert.ok(Math.abs(box.y + box.height - 915) < 2, 'a sheet from the bottom');
-    assert.deepEqual(await q.locator('.box-rooms .go-name').allInnerTexts(), ['Drawer', 'Tags', 'Catch-up', 'Outline']);
     if (SHOTS) await q.screenshot({ path: `${SHOTS}/phone-go.png` });
   });
 

@@ -28,7 +28,8 @@ const Y = (min, less = 0) => `calc(var(--px, 1) * ${min}px${less ? ` - ${less}px
 const phoneish = isCompact;
 // The phone's bar at the bottom: the sheet sits on it, and drags scroll above it.
 const barH = () => {
-  const bar = document.querySelector('.placebar');
+  // The ruler at the bottom (the phone bar before the zoom).
+  const bar = document.querySelector('.zm-ruler') || document.querySelector('.placebar');
   const r = bar?.getBoundingClientRect();
   // (It's fixed to the screen, so it has no offsetParent: look at where it is.)
   return phoneish() && r && r.height && r.top < innerHeight && getComputedStyle(bar).visibility !== 'hidden' ? Math.max(0, Math.round(innerHeight - r.top)) : 0;

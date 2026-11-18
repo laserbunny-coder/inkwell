@@ -112,49 +112,6 @@ try {
     await p.keyboard.press('Escape');
   });
 
-  await check('the Library sorts by title, and the sidebar reaches every loose page', async () => {
-    await p.evaluate(async () => {
-      const r = indexedDB.open('writing');
-      await new Promise((res) => { r.onsuccess = res; });
-      const tx = r.result.transaction('entries', 'readwrite');
-      const now = Date.now();
-      for (const [i, t] of ['Zephyr', 'Anchor', 'Moss'].entries()) tx.objectStore('entries').put({ id: `pr_t${i}`, kind: 'project', title: t, area_id: 'area-writing', parent_id: null, sort: 0, text: '', content: null, tags: [], type: null, fields: { type: 'notes' }, links: [], deleted: false, created_at: now + i, updated_at: now - i * 1000 });
-      for (let i = 0; i < 15; i++) tx.objectStore('entries').put({ id: `pg_l${i}`, kind: 'page', title: `Loose ${i}`, parent_id: null, area_id: null, sort: 0, text: '', content: null, tags: [], type: null, fields: {}, links: [], deleted: false, created_at: now, updated_at: now - i });
-      await new Promise((res) => { tx.oncomplete = res; });
-    });
-    await p.reload();
-    await p.waitForSelector('#editor .ProseMirror', { state: 'attached' });
-    await sleep(600);
-    await p.keyboard.press('Control+Shift+O');
-    await sleep(400);
-    assert.deepEqual(await p.locator('#lib-books .card-title').allInnerTexts(), ['Zephyr', 'Anchor', 'Moss']);
-    await p.locator('#lib-sort').selectOption('title');
-    await sleep(300);
-    assert.deepEqual(await p.locator('#lib-books .card-title').allInnerTexts(), ['Anchor', 'Moss', 'Zephyr']);
-    assert.match(await p.locator('#outline-tree .tree-more').innerText(), /All 15 loose pages/);
-  });
-
-  await check('My order: dragging a card or Move earlier puts books where you want them, and it sticks', async () => {
-    await p.locator('#lib-sort').selectOption('custom');
-    await sleep(300);
-    const titles = () => p.locator('#lib-books .card-title').allInnerTexts();
-    assert.deepEqual(await titles(), ['Zephyr', 'Anchor', 'Moss']);
-    await p.locator('.card-wrap', { hasText: 'Moss' }).locator('.card').dragTo(p.locator('.card-wrap', { hasText: 'Zephyr' }), { targetPosition: { x: 10, y: 40 } });
-    await sleep(500);
-    assert.deepEqual(await titles(), ['Moss', 'Zephyr', 'Anchor']);
-    await p.locator('.card-wrap', { hasText: 'Anchor' }).hover();
-    await p.locator('.card-wrap', { hasText: 'Anchor' }).locator('.more-btn').click();
-    await p.locator('.pop-menu button', { hasText: 'Move earlier' }).click();
-    await sleep(500);
-    assert.deepEqual(await titles(), ['Moss', 'Anchor', 'Zephyr']);
-    await p.reload();
-    await p.waitForSelector('#editor .ProseMirror', { state: 'attached' });
-    await sleep(600);
-    await p.keyboard.press('Control+Shift+O');
-    await sleep(400);
-    assert.deepEqual(await titles(), ['Moss', 'Anchor', 'Zephyr']);
-  });
-
   await check('no page errors', async () => assert.deepEqual(errors, []));
 } finally {
   await browser.close();

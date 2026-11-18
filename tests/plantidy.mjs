@@ -145,7 +145,7 @@ try {
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
     await go(page, { view: 'notebook', pageId: 'day-2026-11-09' });
-    await page.waitForSelector('#plan .pl-hq');
+    await page.waitForSelector('#plan .pl-hq', { state: 'attached' });
     await focusTask(page, 'Email Dana the boards');
     await page.keyboard.press('Control+Shift+Backspace');
     await page.waitForFunction(() => ![...document.querySelectorAll('#plan .pl-words')].some((w) => w.textContent === 'Email Dana the boards'));
@@ -166,12 +166,12 @@ try {
   await go(page, { view: 'notebook', pageId: 'day-2026-11-11' });
   // More than three fold into one line; a click unfolds them in place.
   await page.waitForSelector('#plan .pl-early');
-  await page.locator('#plan .pl-early-n').click();
+  await page.locator('#plan .pl-early-tri').click();
   await page.waitForFunction(() => document.querySelectorAll('#plan .pl-task.carried').length === 7);
 
-  await check('Go through: the pile left from earlier days is offered on its line', async () => {
-    assert.match(await page.locator('#plan .pl-early-n').innerText(), /7 from earlier days/);
-    await page.locator('#plan .pl-early-b', { hasText: 'Go through' }).click();
+  await check('Go through: the quiet line of what’s left from earlier days opens it', async () => {
+    assert.match(await page.locator('#plan .pl-early-n').innerText(), /7 left from earlier days/);
+    await page.locator('#plan .pl-early-n').click();
     await page.waitForSelector('.thru-card');
     const opts = await page.evaluate(() => [...document.querySelectorAll('.thru-opt')].map((b) => `${b.dataset.key} ${b.querySelector('.thru-label').textContent}`));
     assert.deepEqual(opts.filter((o) => !/HQ/.test(o)), ['K Keep it for today', 'C Done: check it off', 'N Not today: off the day, still where it’s written', 'D Delete it', 'S Skip for now']);

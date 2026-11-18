@@ -91,8 +91,8 @@ try {
   await check('before anything else: today’s reading, six chapters from the four tracks', async () => {
     await toNow(page);
     assert.equal(await light(page), 1);
-    assert.equal(await sheet(page).locator('.now-light .now-eyebrow').innerText(), 'FIRST LIGHT');
-    assert.equal(await sheet(page).locator('.now-light .now-thing').innerText(), 'Today’s reading');
+    // Now is a page: First light is its daily line, the reading under its heading.
+    assert.match(await sheet(page).locator('.np-crumb').innerText(), /First light/);
     assert.deepEqual(await refs(page), ['Genesis 1', 'Genesis 2', 'Psalm 1', 'Proverbs 1', 'Matthew 1', 'Matthew 2']);
   });
 
@@ -165,11 +165,14 @@ try {
     await sheet(page).locator('[data-now="lsetok"]').click();
     await settle(page);
     assert.deepEqual(await refs(page), ['2 Kings 4', '2 Kings 5', 'Psalm 2', 'Ecclesiastes 12', 'Revelation 22', 'Matthew 1']);
+    const r1 = await reading(page);
     await press(page, 'i');
-    await page.evaluate(() => { window.__plan.now.light.open(); window.__plan.redraw(); });
-    await settle(page);
-    assert.deepEqual(await refs(page), ['2 Kings 6', '2 Kings 7', 'Psalm 3', 'Proverbs 1', 'Matthew 2', 'Matthew 3']);
-    await press(page, 'Escape');
+    // Read: the line is done, so the places are read from the log.
+    const r2 = await reading(page);
+    assert.equal(r2.ot, r1.ot + 2, 'two Old Testament chapters on');
+    assert.equal(r2.ps, r1.ps + 1, 'one psalm on');
+    assert.ok(r2.wi < r1.wi, 'Ecclesiastes 12 goes round to Proverbs');
+    assert.ok(r2.nt < r1.nt, 'Revelation 22 goes round to Matthew');
   });
 
   await check('the Desk: reading streak, seven days a week, and where you are in each track', async () => {

@@ -457,7 +457,8 @@ function gestures() {
   const holding = () => ['pl-touchdrag', 'line-holding', 'pl-calm', 'pull-dropping', 'dk-dragging'].some((c) => root.classList.contains(c) || body.classList.contains(c));
   document.addEventListener('touchstart', (e) => {
     if (!touch.matches) return;
-    if (e.touches.length === 2) { pinch = { d: gap(e.touches), done: false }; swipe = null; return; }
+    // The hours of Today keep their own pinch (it zooms the hours, not the ruler).
+    if (e.touches.length === 2) { pinch = e.target.closest?.('.dc-grid') ? null : { d: gap(e.touches), done: false }; swipe = null; return; }
     if (e.touches.length !== 1) { swipe = null; return; }
     pinch = null;
     const el = e.target;

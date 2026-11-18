@@ -306,9 +306,10 @@ try {
   });
 
   await check('the Desk’s calls: “Go through them” walks decisions first, then things to do, then things to try', async () => {
-    await page.keyboard.press('Control+Shift+U');
-    await page.waitForSelector('.desk-home .dk-chair', { state: 'visible' });
-    await page.locator('.dk-calls .dk-through').click();
+    // The Desk's calls are folded under one line; it unfolds.
+    await page.evaluate(() => { localStorage.setItem('deskCrewOpen', '1'); history.pushState({ view: 'desk' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'desk' } })); });
+    await page.waitForSelector('.zd-crew-in .zd-thru', { state: 'visible' });
+    await page.locator('.zd-crew-in .zd-thru').click();
     await page.waitForSelector('.thru');
     await still(page);
     const c = await card(page);
@@ -343,9 +344,9 @@ try {
   });
 
   await check('the Desk follows: one call left, so no “Go through them”', async () => {
-    await page.waitForFunction(() => /1 call waiting/.test(document.querySelector('.dk-calls')?.textContent || ''));
-    assert.equal(await page.locator('.dk-calls .dk-through').count(), 0);
-    assert.equal(await page.locator('#desk-toggle').getAttribute('data-n'), '1');
+    await page.waitForFunction(() => /1 needs you/.test(document.querySelector('.zd-crewline')?.textContent || ''));
+    assert.equal(await page.locator('.zd-thru').count(), 0);
+    assert.equal(await page.locator('.zm-ruler [data-stop="desk"]').getAttribute('aria-label'), 'Desk, 1 waiting on you');
   });
 
   await check('every look draws the card; motion off shows it at once; no page errors', async () => {

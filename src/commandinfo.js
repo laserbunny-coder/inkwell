@@ -10,7 +10,7 @@
 // be left out.
 //
 // Rooms (where): today (a day's page), plan (Plan), calendar (Calendar's
-// day, week and six weeks), desk, library (also the Drawer and Tags), write
+// day and week), desk, library (also the Drawer and Tags), write
 // (a chapter), script (a script), page (a page that isn't a day), world
 // (a project's own pages).
 
@@ -80,7 +80,6 @@ export const INFO = [
   { l: 'From a project: open one next to the plan, to drag its steps in', g: 'plan', h: 'Opens a project beside the plan, so you can drag its steps onto a day.', w: ['pull', 'project', 'beside', 'plan', 'drag', 'split', 'steps', 'pull from a project'], at: ['today', 'plan', 'calendar'] },
   { l: 'Calendar: day (today’s hours)', g: 'plan', h: 'The day as a calendar: hours down the side, tasks placed where you put them.', w: ['calendar', 'day', 'hours', 'time', 'schedule', 'timeline', 'see the day as a calendar'], at: ['today', 'calendar'] },
   { l: 'Calendar: week (seven days, and what’s for any day this week)', g: 'plan', h: 'Seven days side by side, with a tray for things that can go any day this week.', w: ['calendar', 'week', 'plan', 'tasks', 'schedule', 'tray', 'any day', 'seven days'], at: ['plan', 'calendar'] },
-  { l: 'Calendar: six weeks (a lane for each project)', g: 'plan', h: 'Six weeks ahead, with a lane for each project and its dates.', w: ['calendar', 'weeks ahead', 'ahead', 'six weeks', 'roadmap', 'weeks', 'months', 'dates', 'deadline', 'milestone', 'schedule', 'timeline', 'stretch'], at: ['calendar'] },
   { l: 'Go through loose lines: the last week’s unfiled lines, one at a time', g: 'plan', h: 'The last week’s lines that aren’t filed anywhere, one at a time, to file, plan or let go.', w: ['sort', 'file', 'loose', 'triage', 'review', 'inbox', 'tidy', 'unfiled'], at: ['today'] },
   { l: 'Go through what needs you: the Desk’s calls, one at a time', g: 'plan', h: 'The calls waiting on you from Claude threads, one at a time.', w: ['calls', 'needs you', 'decide', 'desk', 'triage', 'waiting', 'answer'], at: ['desk'] },
   { l: 'Done: strike this line through', g: 'plan', h: 'Ticks the line you’re on off (strikes it through). Again to undo.', w: ['tick', 'complete', 'finish', 'check off', 'strike'], n: N.line },

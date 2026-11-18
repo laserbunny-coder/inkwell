@@ -49,18 +49,19 @@ const all = (p) => p.evaluate(() => new Promise((res) => {
 }));
 const named = async (p, text) => (await all(p)).find((r) => r.text === text && r.fields?.task);
 const still = (p) => p.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {}))));
+let PL = '#plan';
 const go = async (p, place) => {
   await p.evaluate((pl) => { history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); }, place);
   await p.waitForFunction((pl) => (document.documentElement.dataset.view || 'write') === pl.view && history.state?.view === pl.view, place);
   await still(p);
   await sleep(350);
 };
-const add = async (p, text) => { const input = p.locator('#plan input[data-add]').first(); await input.fill(text); await input.press('Enter'); await sleep(400); };
+const add = async (p, text) => { const input = p.locator(`${PL} input[data-add]`).first(); await input.fill(text); await input.press('Enter'); await sleep(400); };
 // The list as drawn: events as "@ title", tasks by their words.
-const seq = (p) => p.evaluate(() => [...document.querySelectorAll('#plan .pl-list > .pl-task:not(.done), #plan .pl-list > .pl-wev')].map((el) => (el.classList.contains('pl-wev') ? `@ ${el.querySelector('.ev-w').textContent}` : el.querySelector('.pl-words').textContent)));
-const seqIs = (p, want) => p.waitForFunction((w) => JSON.stringify([...document.querySelectorAll('#plan .pl-list > .pl-task:not(.done), #plan .pl-list > .pl-wev')].map((el) => (el.classList.contains('pl-wev') ? `@ ${el.querySelector('.ev-w').textContent}` : el.querySelector('.pl-words').textContent))) === JSON.stringify(w), want, { timeout: 8000 }).catch(async () => { assert.deepEqual(await seq(p), want); });
-const row = (p, text) => p.locator('#plan .pl-task', { hasText: text });
-const ev = (p, text) => p.locator('#plan .pl-wev', { hasText: text });
+const seq = (p) => p.evaluate((pl) => [...document.querySelectorAll(`${pl} .pl-list > .pl-task:not(.done), ${pl} .pl-list > .pl-wev`)].map((el) => (el.classList.contains('pl-wev') ? `@ ${el.querySelector('.ev-w').textContent}` : el.querySelector('.pl-words').textContent)), PL);
+const seqIs = (p, want) => p.waitForFunction(([w, pl]) => JSON.stringify([...document.querySelectorAll(`${pl} .pl-list > .pl-task:not(.done), ${pl} .pl-list > .pl-wev`)].map((el) => (el.classList.contains('pl-wev') ? `@ ${el.querySelector('.ev-w').textContent}` : el.querySelector('.pl-words').textContent))) === JSON.stringify(w), [want, PL], { timeout: 8000 }).catch(async () => { assert.deepEqual(await seq(p), want); });
+const row = (p, text) => p.locator(`${PL} .pl-task`, { hasText: text });
+const ev = (p, text) => p.locator(`${PL} .pl-wev`, { hasText: text });
 const shot = async (p, name) => { if (SHOTS) { await p.evaluate(() => document.querySelector('.toast')?.remove()); await still(p); await sleep(250); await p.screenshot({ path: `${SHOTS}/${name}.png` }); } };
 const look = (p, name, on) => p.evaluate(([n, v]) => { const c = document.querySelector(`[data-show="${n}"]`); if (c.checked !== v) c.click(); }, [name, on]);
 
@@ -148,18 +149,8 @@ try {
     await seqIs(page, ['Email Dana the boards', '@ Standup with Nate', 'Cut the trailer', '@ Dentist', 'Print the call sheet', '@ Call with Dana']);
   });
 
-  await check('Look: time estimates bring the lengths and hours back (events are always woven in)', async () => {
-    await page.waitForSelector('#plan .pl-wev');
-    assert.equal(await page.locator('[data-show="woven"]').count(), 0, 'no switch to put events apart');
-    await look(page, 'estimates', true);
-    await page.waitForFunction(() => /2 h to do/.test(document.querySelector('#plan .pl-sum')?.textContent || ''));
-    assert.equal(await row(page, 'Cut the trailer').locator('.pl-est').innerText(), '2 h');
-    assert.equal(await page.locator('#plan .pl-left').count(), 1);
-    await look(page, 'estimates', false);
-    await page.waitForFunction(() => document.querySelector('#plan .pl-sum')?.textContent === '3 to do');
-  });
 
-  await check('the whole plan still works the same with time estimates off: tick, and it sinks', async () => {
+  await check('the whole plan works: tick, and it sinks', async () => {
     await row(page, 'Email Dana').locator('.pl-check').click();
     await page.waitForFunction(() => document.querySelector('#plan .pl-task.done'));
     assert.equal(await page.locator('#plan .pl-sum').innerText(), '2 to do · 1 done');
@@ -168,9 +159,11 @@ try {
 
   const phone = await open({ width: 412, height: 915 }, { hasTouch: true, isMobile: true, todayPage: false });
   await check('phone: the events sit in the list there too, and nothing spills', async () => {
-    await go(phone, { view: 'notebook', pageId: 'day-2026-11-09' });
+    // A phone's day page hides its plan: the list is Today's List face.
+    await go(phone, { view: 'plan', tab: 'day' });
+    PL = '#plan-sheet';
     await add(phone, 'Charge the camera batteries');
-    await phone.waitForSelector('#plan .pl-wev');
+    await phone.waitForSelector('#plan-sheet .pl-wev');
     assert.deepEqual(await seq(phone), ['@ Standup with Nate', 'Charge the camera batteries', '@ Dentist', '@ Call with Dana']);
     assert.ok(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await shot(phone, 'dayweave-phone');

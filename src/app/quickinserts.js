@@ -538,10 +538,6 @@ function wireQuickInserts() {
     else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyT') { e.preventDefault(); openTalk(); }
     // Alt + Shift + T: everything left from earlier days onto today.
     else if (e.altKey && !m && e.shiftKey && e.code === 'KeyT') { e.preventDefault(); plan.bringToday(); }
-    // Alt + P: the plan beside today's page, or on top of it.
-    // Alt + 1: Now, from anywhere (in text too), except where a project's page
-    // tabs have Alt + 0 to 6. Alt + 2, 3, 4 in Today: Page, Plan, Calendar
-    // (again in a calendar: the next zoom).
     // Alt + W: When (today, this week, next week, later…) for the line or lines here.
     else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyW') { e.preventDefault(); whenHere(); }
     // Alt + Left / Right: Back and Forward, everywhere (in a line too), so a task

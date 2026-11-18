@@ -45,7 +45,17 @@ const db = {
 // The switch and the path are lit at the very end of a move, after the page
 // itself is drawn: wait for them rather than read them at once.
 const lit = (p, sel, text) => p.waitForFunction(([s, t]) => document.querySelector(s)?.innerText.trim() === t, [sel, text]);
-const crumbIs = (p, re) => p.waitForFunction((src) => new RegExp(src).test(document.querySelector('#crumb')?.innerText || ''), re.source);
+const goto = async (p, place) => {
+  await p.evaluate((pl) => { history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); }, place);
+  await p.waitForFunction((pl) => document.documentElement.dataset.view === pl.view, place);
+  await p.waitForSelector(place.tab === 'history' ? '.dk-thread, .dk-none, .dk-empty' : '.desk-home .zd-head, .desk-home .dk-head');
+  await sleep(400);
+  // On stage, the calls, the crew and the catch-up sit folded under one line.
+  if (place.view === 'desk' && place.tab !== 'history' && await p.locator('.zd-crewline').count() && !(await p.locator('.zd-crew-in').count())) {
+    await p.locator('.zd-crewline').click();
+    await p.waitForSelector('.zd-crew-in');
+  }
+};
 const calls = [];
 const asked = [];
 
@@ -114,69 +124,12 @@ try {
   await page.evaluate(() => localStorage.setItem('deskSeen', String(Date.parse('2026-11-09T07:00:00-08:00'))));
   await newProject(page, 'The Ninja Bunch');
   await newProject(page, 'Harbor spot');
+  await goto(page, { view: 'desk' });
 
-  await check('Desk sits in the rail between Today and Library, and shows how many things need you', async () => {
-    assert.deepEqual(await page.locator('.rail-rooms button').allInnerTexts(), ['Today', 'Desk', 'Library']);
-    await page.keyboard.press('Control+Shift+U');
-    await page.waitForSelector('.desk-home .dk-chair', { state: 'visible' });
-    assert.equal(await viewOf(page), 'desk');
-    await page.waitForFunction(() => document.querySelector('#desk-toggle')?.getAttribute('aria-current') === 'page');
-    assert.equal(await page.locator('#desk-toggle').getAttribute('data-n'), '4');
-    assert.equal(await page.locator('#desk-toggle').getAttribute('aria-label'), 'Desk, 4 waiting on you');
-    await crumbIs(page, /^Desk$/);
-    assert.match(await page.locator('.dk-calls').innerText(), /4 calls waiting · about 27 min/);
-    assert.match(await page.locator('.dk-eyebrow').innerText(), /MONDAY, NOV 9/i);
-  });
 
-  await check('the top-centre switch is On stage and History, with the pill on the lit one', async () => {
-    assert.deepEqual(await page.locator('.desk-switch button').allInnerTexts(), ['On stage', 'History']);
-    await lit(page, '.desk-switch [aria-current="page"]', 'On stage');
-    assert.ok(await page.locator('.place-switch:not(.desk-switch):not(.today-switch)').isHidden(), 'the Library’s switch is away');
-    assert.ok(await page.locator('.dk-switch').isHidden(), 'no second switch on the page');
-    await still(page);
-    await page.waitForFunction(() => {
-      const pill = document.querySelector('.desk-switch .switch-pill').getBoundingClientRect();
-      const lit = document.querySelector('.desk-switch [aria-current="page"]').getBoundingClientRect();
-      return Math.abs(pill.left - lit.left) < 2 && Math.abs(pill.width - lit.width) < 2;
-    });
-  });
 
-  await check('a Claude project and your project of the same name share one seat', async () => {
-    const names = await page.locator('.dk-chair h3 .dk-name').allInnerTexts();
-    assert.deepEqual(names.slice().sort(), ['Acro and Cheer HQ', 'Harbor spot', 'Inkwell', 'The Ninja Bunch', 'Untitled novel']);
-    // What needs you comes first; projects with nothing waiting sit after.
-    assert.deepEqual(names.slice(3).sort(), ['Harbor spot', 'Untitled novel']);
-    const nb = page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: 'The Ninja Bunch' }) });
-    assert.equal(await nb.count(), 1);
-    const waiting = (await nb.locator('.dk-call-t').allInnerTexts()).map((t) => t.replace(/\s+/g, ' '));
-    assert.equal(waiting.length, 2);
-    assert.match(waiting[0], /^decide ?Pick Kenji’s final character sheet$/i, 'answers before things to try');
-    assert.match(waiting[1], /^try ?Try the AI production tools on Reel 4$/i);
-    assert.match(await nb.locator('.dk-call-m').last().innerText(), /10 min · 5 days/);
-    assert.match(await nb.locator('.dk-now').innerText(), /Reel 3 prompts are half drafted\s+12 min ago/);
-    // Yours opens in Inkwell; Claude's alone opens in Claude.
-    assert.equal(await nb.locator('h3 .dk-name').evaluate((e) => e.tagName), 'BUTTON');
-    assert.equal(await page.locator('.dk-chair h3 a.dk-name', { hasText: 'Acro and Cheer HQ' }).getAttribute('href'), HQ);
-  });
 
-  await check('crew: threads still working pulse, ones gone quiet say since when, finished ones are counted', async () => {
-    const nb = page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: 'The Ninja Bunch' }) });
-    assert.match(await nb.locator('a.dk-crew').innerText(), /Draft Reel 3 prompts\s+12 min ago/);
-    assert.equal(await nb.locator('a.dk-crew').getAttribute('href'), `${NB}?thread=sheet`);
-    assert.equal(await nb.locator('.dk-pulse:not(.off)').count(), 1);
-    assert.match(await nb.locator('.dk-done').innerText(), /1 thread finished this week/);
-    const ink = page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: /^Inkwell$/ }) });
-    assert.match(await ink.locator('a.dk-crew').innerText(), /Tidy the old imports\s+quiet since Nov 2/);
-    assert.equal(await ink.locator('.dk-pulse.off').count(), 1);
-  });
 
-  await check('Claude’s read sits under the title, asked once with what’s shown', async () => {
-    await page.waitForSelector('.dk-read:not(.stale):not([hidden])');
-    assert.match(await page.locator('.dk-read').innerText(), /Kenji’s character sheet is the one real decision/);
-    assert.equal(asked.length, 1);
-    assert.equal(asked[0].needs.length, 4);
-    assert.equal(asked[0].updates.length, 4, 'today’s lines only');
-  });
 
   await check('catch-up underneath: today’s lines newest first, each opening its thread, a dot on the new', async () => {
     const rows = await page.locator('.dk-catchup .dk-ev').allInnerTexts();
@@ -194,95 +147,10 @@ try {
     if (SHOTS) { await still(page); await page.screenshot({ path: `${SHOTS}/desk.png` }); await page.screenshot({ path: `${SHOTS}/desk-full.png`, fullPage: true }); }
   });
 
-  await check('a north star shows on its Desk card once written (no empty prompt there), and can be changed right on the card', async () => {
-    const nb = page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: 'The Ninja Bunch' }) });
-    assert.equal(await nb.locator('.dk-star').count(), 0, 'no “what is this for?” on the card: that lives on the project’s page');
-    // Written on the project's page.
-    await page.evaluate(() => new Promise((res) => {
-      const r = indexedDB.open('writing');
-      r.onsuccess = () => {
-        const st = r.result.transaction('entries', 'readwrite').objectStore('entries');
-        const q = st.getAll();
-        q.onsuccess = () => { const w = q.result.find((x) => x.kind === 'world' && x.title === 'The Ninja Bunch'); st.put({ ...w, fields: { ...w.fields, star: 'Reels first.' }, updated_at: Date.now() }); st.transaction.oncomplete = () => res(); };
-      };
-    }));
-    await page.evaluate(() => { history.pushState({ view: 'library' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'library' } })); });
-    await sleep(300);
-    await page.evaluate(() => { history.pushState({ view: 'desk' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'desk' } })); });
-    await nb.locator('.dk-star').waitFor();
-    assert.equal(await nb.locator('.dk-star').innerText(), 'Reels first.');
-    await nb.locator('.dk-star').click();
-    await page.keyboard.press('End');
-    await page.keyboard.type(' One a week, each one funnier than the last.');
-    await page.keyboard.press('Enter');
-    await sleep(300);
-    const w = (await all(page)).find((r) => r.kind === 'world' && r.title === 'The Ninja Bunch');
-    assert.equal(w.fields.star, 'Reels first. One a week, each one funnier than the last.');
-    assert.equal(await page.locator('.dk-chair h3 .dk-name', { hasText: 'Acro and Cheer HQ' }).locator('xpath=ancestor::section').locator('.dk-star').count(), 0, 'a Claude project has none');
-  });
 
-  await check('a call’s menu: the thread, its guide, Done and Later', async () => {
-    const row = page.locator('.dk-call[data-id="n1"]');
-    assert.equal(await row.getAttribute('href'), `${NB}?thread=sheet`);
-    await row.click();
-    assert.deepEqual(await page.locator('.pop-menu .pop-item').allInnerTexts(), ['Open the thread', 'Open the guide', 'Done: take it off the list', 'Later: back tomorrow morning']);
-    await pick(page, 'Later');
-    await page.waitForFunction(() => !document.querySelector('.dk-call[data-id="n1"]'));
-    assert.equal(db.needs.find((n) => n.id === 'n1').snoozed_until, new Date('2026-11-10T07:00:00-08:00').toISOString());
-    assert.match(await page.locator('.dk-later').innerText(), /1 set aside until tomorrow morning/);
-    assert.equal(await page.locator('#desk-toggle').getAttribute('data-n'), '3');
-    await page.locator('.dk-later').getByRole('button', { name: 'Bring back' }).click();
-    await page.waitForSelector('.dk-call[data-id="n1"]');
-    assert.equal(db.needs.find((n) => n.id === 'n1').snoozed_until, null);
-    await page.locator('.dk-call[data-id="n3"]').click();
-    await pick(page, 'Done');
-    await page.waitForFunction(() => !document.querySelector('.dk-call[data-id="n3"]'));
-    assert.ok(db.needs.find((n) => n.id === 'n3').resolved_at);
-    assert.match(await page.locator('.dk-calls').innerText(), /3 calls waiting · about 22 min/);
-  });
 
-  await check('⋯ moves a project to the wings or backstage, and back to automatic', async () => {
-    const harbor = () => page.locator('[data-key]', { has: page.locator('.dk-name', { hasText: 'Harbor spot' }) });
-    assert.equal(await harbor().evaluate((e) => e.className), 'dk-chair');
-    await harbor().locator('.dk-more').click();
-    assert.deepEqual(await page.locator('.pop-menu .pop-item').allInnerTexts(), ['On stage', 'In the wings', 'Backstage', 'Move to the top']);
-    assert.equal(await page.locator('.pop-menu .pop-item.current').innerText(), 'On stage');
-    await pick(page, 'Backstage');
-    await page.waitForSelector('.dk-back .dk-row');
-    assert.match(await page.locator('.dk-back .dk-label').innerText(), /Backstage/i);
-    assert.equal(await harbor().evaluate((e) => e.className), 'dk-row s-back');
-    const set = (await all(page)).find((r) => r.id === 'settings-desk');
-    assert.equal(Object.values(set.fields.stage)[0], 'back');
-    await harbor().locator('.dk-more').click();
-    await pick(page, 'In the wings');
-    await page.waitForSelector('.dk-wings .dk-row');
-    await harbor().locator('.dk-more').click();
-    await pick(page, 'Let Inkwell decide');
-    await page.waitForFunction(() => !document.querySelector('.dk-wings, .dk-back'));
-    assert.equal(await harbor().evaluate((e) => e.className), 'dk-chair');
-  });
 
-  await check('a Claude project can be tied to one of yours, and separated again', async () => {
-    const acro = page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: 'Acro and Cheer HQ' }) });
-    await acro.locator('.dk-more').click();
-    await pick(page, 'This is one of my projects');
-    await pick(page, 'Harbor spot');
-    await page.waitForFunction(() => ![...document.querySelectorAll('.dk-chair .dk-name')].some((n) => n.textContent === 'Acro and Cheer HQ'));
-    const harbor = page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: 'Harbor spot' }) });
-    assert.match(await harbor.locator('.dk-now').innerText(), /Three reels drafted/);
-    await harbor.locator('.dk-more').click();
-    await pick(page, 'Separate from “Acro and Cheer HQ”');
-    await page.waitForFunction(() => [...document.querySelectorAll('.dk-chair .dk-name')].some((n) => n.textContent === 'Acro and Cheer HQ'));
-  });
 
-  await check('a project’s name opens it; Back returns to the Desk', async () => {
-    await page.locator('.dk-chair h3 button.dk-name', { hasText: 'The Ninja Bunch' }).click();
-    await page.waitForFunction(() => document.documentElement.dataset.view === 'world');
-    await page.waitForFunction(() => document.querySelector('#tb-back')?.textContent === '‹ Desk');
-    await page.locator('#tb-back').click();
-    await page.waitForFunction(() => document.documentElement.dataset.view === 'desk');
-    await page.waitForSelector('.dk-chair');
-  });
 
   await check('an Inkwell place in the catch-up opens right here', async () => {
     await page.locator('.dk-catchup .dk-ev', { hasText: 'Reel 3 prompts' }).locator('a.dk-place').click();
@@ -290,33 +158,29 @@ try {
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && history.state?.view === 'notebook');
     await page.goBack();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'desk');
-    await page.waitForSelector('.dk-chair');
-    await lit(page, '.desk-switch [aria-current="page"]', 'On stage');
+    await page.waitForSelector('.desk-home .dk-catchup');
   });
 
   await check('History: every thread, newest activity first, answered and finished ones too', async () => {
-    await page.locator('.desk-switch button', { hasText: 'History' }).click();
+    await goto(page, { view: 'desk', tab: 'history' });
     await page.waitForSelector('.dk-thread');
-    await lit(page, '.desk-switch [aria-current="page"]', 'History');
-    await crumbIs(page, /Desk\s*›\s*History/);
     assert.equal(await page.locator('.dk-head h1').innerText(), 'History');
     const names = await page.locator('.dk-thread .dk-name').allInnerTexts();
-    assert.deepEqual(names, ['Make this week’s Acro reels', 'Draft Reel 3 prompts', 'Redesign Inkwell from the ground up', 'Overnight stills', 'Try opening two things side by side', 'Try the AI production tools on Reel 4', 'Tidy the old imports', 'Choose the speech-to-text service', 'Rethink the screenplay']);
-    // The reels were answered a moment ago (Done above), so that thread moved last.
-    const first = page.locator('.dk-thread').nth(1);
+    assert.deepEqual(names, ['Draft Reel 3 prompts', 'Make this week’s Acro reels', 'Redesign Inkwell from the ground up', 'Overnight stills', 'Try opening two things side by side', 'Try the AI production tools on Reel 4', 'Tidy the old imports', 'Choose the speech-to-text service', 'Rethink the screenplay']);
+    const first = page.locator('.dk-thread').nth(0);
     assert.equal(await first.locator('.dk-name').getAttribute('href'), `${NB}?thread=sheet`);
     assert.match(await first.locator('.dk-rr').innerText(), /Waiting on you · 12 min ago/);
     assert.match(await first.locator('.dk-waits').innerText(), /Decide: Pick Kenji’s final character sheet/);
     assert.match(await page.locator('.dk-thread', { hasText: 'Tidy the old imports' }).locator('.dk-rr').innerText(), /Gone quiet · Nov 2/);
     assert.match(await page.locator('.dk-thread', { hasText: 'speech-to-text' }).locator('.dk-rr').innerText(), /Finished · Nov 1/);
-    assert.match(await page.locator('.dk-thread', { hasText: 'Acro reels' }).locator('.dk-rr').innerText(), /Finished/);
+    assert.match(await page.locator('.dk-thread', { hasText: 'Acro reels' }).locator('.dk-rr').innerText(), /Waiting on you/);
     if (SHOTS) { await still(page); await page.screenshot({ path: `${SHOTS}/desk-history.png` }); }
   });
 
   await check('History filters and searches every line a thread ever logged', async () => {
-    assert.deepEqual((await page.locator('.dk-filters button').allInnerTexts()).map((t) => t.replace(/\s+/g, '')), ['Everything9', 'Waitingonyou3', 'Closedwithlooseends0', 'Working0', 'Gonequiet1', 'Finished5']);
+    assert.deepEqual((await page.locator('.dk-filters button').allInnerTexts()).map((t) => t.replace(/\s+/g, '')), ['Everything9', 'Waitingonyou4', 'Closedwithlooseends0', 'Working0', 'Gonequiet1', 'Finished4']);
     await page.locator('.dk-filters button', { hasText: 'Waiting on you' }).click();
-    assert.equal(await page.locator('.dk-thread').count(), 3);
+    assert.equal(await page.locator('.dk-thread').count(), 4);
     await page.locator('.dk-filters button', { hasText: 'Everything' }).click();
     await page.locator('.dk-search input').fill('stills');
     assert.deepEqual(await page.locator('.dk-thread .dk-name').allInnerTexts(), ['Overnight stills']);
@@ -327,62 +191,22 @@ try {
     assert.equal(await page.locator('.dk-thread').count(), 9);
   });
 
-  await check('“finished this week” on a seat opens History already narrowed', async () => {
-    await page.locator('.desk-switch button', { hasText: 'On stage' }).click();
-    await page.waitForSelector('.dk-chair');
-    await page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: 'The Ninja Bunch' }) }).locator('.dk-done').click();
-    await page.waitForSelector('.dk-thread');
-    assert.equal(await page.locator('.dk-search input').inputValue(), 'The Ninja Bunch');
-    assert.deepEqual(await page.locator('.dk-thread .dk-name').allInnerTexts(), ['Overnight stills']);
-    await page.locator('.dk-search input').fill('');
-    await page.locator('.dk-filters button', { hasText: 'Everything' }).click();
-  });
 
-  await check('Ctrl + K finds the Desk and History; Go lists Desk among the rooms', async () => {
+  await check('Ctrl + K finds the Desk and History', async () => {
     await page.keyboard.press('Control+J');
     await page.waitForSelector('.notebook', { state: 'visible' });
     await sleep(300);
-    await page.keyboard.press('Control+O');
-    await page.waitForSelector('.palette.box', { state: 'visible' });
-    assert.deepEqual(await page.locator('.box-rooms .go-name').allInnerTexts(), ['Today', 'Desk', 'Library', 'Drawer', 'Tags', 'Catch-up']);
-    await page.locator('.box-rooms .box-chip', { hasText: 'Desk' }).click();
-    await page.waitForFunction(() => document.documentElement.dataset.view === 'desk');
-    await page.waitForSelector('.dk-chair');
+    await page.keyboard.press('Control+K');
+    await page.waitForFunction(() => document.activeElement?.id === 'palette-input');
+    await page.locator('#palette-input').fill('History: every Claude thread');
+    await page.locator('#palette-list li', { hasText: 'History: every Claude thread' }).first().click();
+    await page.waitForSelector('.dk-thread');
+    await goto(page, { view: 'desk' });
+    await page.waitForSelector('.desk-home .dk-catchup');
   });
 
-  await check('Look switches: Claude’s line and the number beside Desk can each be put away', async () => {
-    const flip = (k, on) => page.evaluate(([key, v]) => { const c = document.querySelector(`[data-show="${key}"]`); c.checked = v; c.dispatchEvent(new Event('change')); }, [k, on]);
-    await flip('deskread', false);
-    assert.ok(await page.locator('.dk-read').isHidden());
-    await flip('deskcount', false);
-    assert.equal(await page.locator('#desk-toggle').evaluate((e) => getComputedStyle(e, '::after').display), 'none');
-    await flip('deskread', true);
-    await flip('deskcount', true);
-    assert.ok(await page.locator('.dk-read').isVisible());
-  });
 
-  await check('Focus hides the rail and the bar; the Desk stays', async () => {
-    await page.keyboard.press('Control+.');
-    await page.waitForFunction(() => document.documentElement.classList.contains('focus'));
-    assert.ok(await page.locator('.dk-chair').first().isVisible());
-    await page.keyboard.press('Control+.');
-    await page.waitForFunction(() => !document.documentElement.classList.contains('focus'));
-  });
 
-  await check('more than three things to try on one project fold into one line', async () => {
-    for (const [i, title] of ['Try Woven scripts', 'Try the checklists', 'Try the Manuscripts row'].entries()) db.needs.push({ id: `t${i}`, kind: 'review', title, project: 'Inkwell', link: `${INK}?thread=t${i}`, project_link: INK, created_at: T('2026-11-06T10:00:00'), body: '' });
-    await page.keyboard.press('Control+J');
-    await page.keyboard.press('Control+Shift+U');
-    await page.waitForSelector('.dk-tries');
-    const ink = page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: /^Inkwell$/ }) });
-    assert.match(await ink.locator('.dk-tries summary').innerText(), /4 to try, about 10 minutes each/);
-    assert.equal(await ink.locator('.dk-tries').evaluate((d) => d.open), false);
-    assert.equal(await ink.locator('.dk-call:visible').count(), 0);
-    await ink.locator('.dk-tries summary').click();
-    assert.equal(await ink.locator('.dk-tries .dk-call:visible').count(), 4);
-    assert.match(await page.locator('.dk-calls').innerText(), /6 calls waiting · about 52 min/);
-    db.needs.splice(-3);
-  });
 
   await check('signed out, your own projects still show, with one line on how to see the rest', async () => {
     await page.evaluate(() => { window.__saved = window.__desk; window.__desk = null; });
@@ -390,14 +214,13 @@ try {
     await page.keyboard.press('Control+Shift+U');
     await page.waitForSelector('.dk-note');
     assert.match(await page.locator('.dk-note').innerText(), /Sign in/);
-    assert.deepEqual((await page.locator('.dk-chair h3 .dk-name').allInnerTexts()).sort(), ['Harbor spot', 'The Ninja Bunch', 'Untitled novel']);
+    assert.deepEqual((await page.locator('.zd-proj .zd-name').allInnerTexts()).sort(), ['Harbor spot', 'The Ninja Bunch', 'Untitled novel']);
     assert.equal(await page.locator('.dk-catchup').count(), 0);
     await page.evaluate(() => { window.__desk = window.__saved; });
   });
 
   await check('every look draws the Desk without a scroll bar across', async () => {
-    await page.keyboard.press('Control+J');
-    await page.keyboard.press('Control+Shift+U');
+    await goto(page, { view: 'desk' });
     await page.waitForSelector('.dk-call');
     for (const look of ['lamplight', 'ember', 'candle', 'night', 'graphite', 'typewriter', 'paper', 'midnight']) {
       await page.evaluate((l) => document.querySelector(`.look-opt[data-look="${l}"]`).click(), look);
@@ -415,9 +238,9 @@ try {
     db.updates.push({ id: 'u9', project: 'Inkwell', project_link: INK, link, thread: 'Six-dot handle menus', text: 'Closed: menus are live; one try-out still open', place: null, state: 'done', created_at: T('2026-10-30T10:00:00') });
     try {
       const stage = async () => {
-        await page.locator('.desk-switch button', { hasText: 'History' }).click();
+        await goto(page, { view: 'desk', tab: 'history' });
         await page.waitForSelector('.dk-thread');
-        await page.locator('.desk-switch button', { hasText: 'On stage' }).click();
+        await goto(page, { view: 'desk' });
         await page.waitForSelector('.dk-call[data-id="n9"]');
       };
       const chips = async () => (await page.locator('.dk-filters button').allInnerTexts()).map((t) => t.replace(/\s+/g, ''));
@@ -425,12 +248,11 @@ try {
       await page.waitForSelector('.dk-call[data-id="n9"] .dk-closed');
       assert.equal(await page.locator('.dk-call[data-id="n9"] .dk-closed').innerText(), 'thread closed');
       assert.equal(await page.locator('.dk-closed').count(), 1, 'only the closed thread’s call');
-      assert.match(await page.locator('.dk-calls').innerText(), /\d+ calls waiting · about [^·]+ · 1 from closed threads/);
       if (SHOTS) { await still(page); await page.screenshot({ path: `${SHOTS}/desk-closed.png` }); }
 
-      await page.locator('.desk-switch button', { hasText: 'History' }).click();
+      await goto(page, { view: 'desk', tab: 'history' });
       await page.waitForSelector('.dk-thread');
-      assert.deepEqual((await chips()).slice(1, 3), ['Waitingonyou4', 'Closedwithlooseends1']);
+      assert.deepEqual((await chips()).slice(1, 3), ['Waitingonyou5', 'Closedwithlooseends1']);
       await page.locator('.dk-filters button', { hasText: 'Closed with loose ends' }).click();
       assert.deepEqual(await page.locator('.dk-thread .dk-name').allInnerTexts(), ['Six-dot handle menus']);
       assert.match(await page.locator('.dk-thread .dk-rr').innerText(), /Closed, still open/);
@@ -441,13 +263,12 @@ try {
 
       // Written in again: a newer line that isn't "Closed:" opens it, and the tag goes.
       db.updates.push({ id: 'u10', project: 'Inkwell', project_link: INK, link, thread: 'Six-dot handle menus', text: 'Back on it: the menus need one more fix', place: null, state: 'working', created_at: T('2026-11-09T13:00:00') });
-      await page.locator('.desk-switch button', { hasText: 'On stage' }).click();
+      await goto(page, { view: 'desk' });
       await page.waitForSelector('.dk-call[data-id="n9"]');
       await page.waitForFunction(() => !document.querySelector('.dk-closed'));
-      assert.doesNotMatch(await page.locator('.dk-calls').innerText(), /from closed/);
-      await page.locator('.desk-switch button', { hasText: 'History' }).click();
+      await goto(page, { view: 'desk', tab: 'history' });
       await page.waitForSelector('.dk-thread');
-      assert.deepEqual((await chips()).slice(1, 3), ['Waitingonyou4', 'Closedwithlooseends0']);
+      assert.deepEqual((await chips()).slice(1, 3), ['Waitingonyou5', 'Closedwithlooseends0']);
 
       // Closed again, then answered: Done takes it off, tag and all.
       db.updates.pop();
@@ -463,7 +284,6 @@ try {
       await pick(page, 'Done');
       await page.waitForFunction(() => !document.querySelector('.dk-call[data-id="n9"]'));
       assert.equal(await page.locator('.dk-closed').count(), 0);
-      assert.doesNotMatch(await page.locator('.dk-calls').innerText(), /from closed/);
     } finally {
       // Leave the shared fixtures as they were for the checks after this one.
       for (const [list, ids] of [[db.needs, ['n9']], [db.updates, ['u9', 'u10']]]) for (const id of ids) { const i = list.findIndex((x) => x.id === id); if (i >= 0) list.splice(i, 1); }
@@ -471,168 +291,27 @@ try {
   });
 
   // ---- arranging by hand ----
-  const drag = async (p, from, to, { after = false, side = false } = {}) => {
-    const a = await from.boundingBox(), b = await to.boundingBox();
-    await p.mouse.move(a.x + Math.min(40, a.width / 2), a.y + Math.min(14, a.height / 2));
-    await p.mouse.down();
-    const x = side ? (after ? b.x + b.width - 10 : b.x + 10) : b.x + b.width / 2;
-    const y = side ? b.y + b.height / 2 : after ? b.y + b.height - 6 : b.y + 6;
-    await p.mouse.move(x, y, { steps: 12 });
-    await sleep(60);
-    await p.mouse.up();
-    await sleep(400);
-  };
-  const chairNames = (p) => p.locator('.dk-chair h3 .dk-name').allInnerTexts();
-  const deskRow = async (p) => (await all(p)).find((r) => r.id === 'settings-desk');
 
-  await check('drag a project card to another place in the grid; it stays there', async () => {
-    const before = await chairNames(page);
-    const last = before.at(-1);
-    await drag(page, page.locator('.dk-chair h3').last(), page.locator('.dk-chair').first(), { side: true });
-    const after = await chairNames(page);
-    assert.equal(after[0], last, `${last} moved to the front: ${after.join(', ')}`);
-    assert.deepEqual(after.slice(1), before.slice(0, -1));
-    const set = await deskRow(page);
-    assert.ok(set.fields.order.seats.length >= after.length, 'kept in the Desk’s settings, which sync');
-    // Drawn again from what was kept: the same order.
-    await page.locator('.desk-switch button', { hasText: 'History' }).click();
-    await page.waitForSelector('.dk-thread');
-    await page.locator('.desk-switch button', { hasText: 'On stage' }).click();
-    await page.waitForSelector('.dk-chair');
-    assert.deepEqual(await chairNames(page), after);
-    assert.equal(await page.locator('.pop-menu').count(), 0, 'the drag didn’t click open a menu');
-  });
 
-  await check('drag a call inside its card, and a click still opens its menu', async () => {
-    const nb = page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: 'The Ninja Bunch' }) });
-    assert.deepEqual(await nb.locator('.dk-call').evaluateAll((e) => e.map((x) => x.dataset.id)), ['n1', 'n2']);
-    await drag(page, nb.locator('.dk-call[data-id="n2"]'), nb.locator('.dk-call[data-id="n1"]'));
-    assert.deepEqual(await nb.locator('.dk-call').evaluateAll((e) => e.map((x) => x.dataset.id)), ['n2', 'n1']);
-    assert.equal(await page.locator('.pop-menu').count(), 0);
-    assert.deepEqual((await deskRow(page)).fields.order.calls['w:' + (await all(page)).find((r) => r.kind === 'world' && r.title === 'The Ninja Bunch').id], ['n2', 'n1']);
-    // Dropped in another card, a call goes back home.
-    await drag(page, nb.locator('.dk-call[data-id="n1"]'), page.locator('.dk-chair').first().locator('h3'));
-    assert.deepEqual(await nb.locator('.dk-call').evaluateAll((e) => e.map((x) => x.dataset.id)), ['n2', 'n1']);
-    await nb.locator('.dk-call[data-id="n1"]').click();
-    await page.waitForSelector('.pop-menu');
-    await page.keyboard.press('Escape');
-  });
 
-  await check('drag a project from backstage into the grid: it comes on stage there', async () => {
-    const card = page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: 'Harbor spot' }) });
-    if (await card.count()) { await card.locator('.dk-more').click(); await pick(page, 'Backstage'); }
-    const harbor = page.locator('.dk-back .dk-row', { hasText: 'Harbor spot' });
-    await harbor.waitFor();
-    // Tall enough that the grid and backstage are both on screen.
-    const size = page.viewportSize();
-    await page.setViewportSize({ width: size.width, height: 2400 });
-    await sleep(200);
-    await drag(page, harbor.locator('.dk-rd'), page.locator('.dk-chair').nth(1), { side: true });
-    await page.setViewportSize(size);
-    await page.waitForFunction(() => [...document.querySelectorAll('.dk-chair h3 .dk-name')].some((e) => e.textContent === 'Harbor spot'));
-    assert.equal((await chairNames(page))[1], 'Harbor spot');
-    const set = await deskRow(page);
-    assert.equal(Object.values(set.fields.stage).filter((v) => v === 'on').length, 1);
-    if (SHOTS) { await still(page); await page.screenshot({ path: `${SHOTS}/desk-arranged.png` }); }
-  });
 
-  await check('⋯ Move to the top, and Let Inkwell order the Desk puts it all back', async () => {
-    const names = await chairNames(page);
-    await page.locator('.dk-chair', { has: page.locator('.dk-name', { hasText: names.at(-1) }) }).locator('.dk-more').click();
-    await pick(page, 'Move to the top');
-    assert.equal((await chairNames(page))[0], names.at(-1));
-    await page.locator('.dk-chair').first().locator('.dk-more').click();
-    await pick(page, 'Let Inkwell order the Desk');
-    const set = await deskRow(page);
-    assert.deepEqual(set.fields.order, { seats: [], calls: {}, crew: {} });
-    const auto = await chairNames(page);
-    assert.deepEqual(auto.slice(0, 2).sort(), ['Inkwell', 'The Ninja Bunch'], 'what needs you first again');
-  });
 
   await check('no page errors on desktop', async () => { assert.deepEqual(page.errors, []); });
 
-  // ---- a narrower window: two columns ----
-  const mid = await open({ width: 1000, height: 800 });
-  await check('at 1000 wide the seats sit two across and nothing spills', async () => {
-    await mid.keyboard.press('Control+Shift+U');
-    await mid.waitForSelector('.dk-chair');
-    const xs = await mid.locator('.dk-chair').evaluateAll((els) => [...new Set(els.map((e) => Math.round(e.getBoundingClientRect().x)))]);
-    assert.equal(xs.length, 2);
-    assert.ok((await mid.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 1);
-    assert.deepEqual(mid.errors, []);
-  });
 
   // ---- phone ----
   const phone = await open({ width: 390, height: 844 }, { isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
-  await check('on a phone the bar is Today, Desk, the mic, Library and Go, with the count on Desk', async () => {
-    await sleep(1000);
-    await phone.waitForFunction(() => { document.activeElement?.blur(); return !document.body.classList.contains('kb-up') && !document.querySelector('.outline-bar')?.offsetParent && !document.querySelector('.script-bar')?.offsetParent; });
-    await sleep(200);
-    assert.deepEqual(await phone.locator('.placebar .pb-word').allInnerTexts(), ['Today', 'Desk', 'Library', 'Go']);
-    await phone.locator('.pb-desk').tap();
-    await phone.waitForSelector('.dk-chair', { state: 'visible' });
-    assert.equal(await phone.locator('.pb-desk').getAttribute('aria-current'), 'page');
-    assert.equal(await phone.locator('.pb-desk').getAttribute('data-n'), '3');
-    const boxes = await phone.locator('.dk-chair').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
-    assert.equal(new Set(boxes).size, 1, 'one column');
-    const wide = await phone.evaluate(() => document.documentElement.scrollWidth);
-    assert.ok(wide <= 391, `page is ${wide} wide`);
-    if (SHOTS) { await phone.waitForSelector('.dk-read:not([hidden])'); await still(phone); await phone.screenshot({ path: `${SHOTS}/desk-phone.png` }); }
-  });
 
-  await check('on a phone, hold a card until it lifts, then slide it; a quick swipe still scrolls', async () => {
-    const cdp = await phone.context().newCDPSession(phone);
-    const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
-    const names = await chairNames(phone);
-    // A quick swipe: no lift, nothing moves.
-    let a = await phone.locator('.dk-chair').nth(1).locator('h3').boundingBox();
-    await touch('touchStart', a.x + 60, a.y + 10);
-    for (let k = 1; k <= 6; k += 1) { await touch('touchMove', a.x + 60, a.y + 10 - k * 8); await sleep(16); }
-    await touch('touchEnd');
-    await sleep(300);
-    assert.equal(await phone.locator('.dk-lift').count(), 0);
-    assert.deepEqual(await chairNames(phone), names);
-    // Held: the second card goes above the first.
-    await phone.evaluate(() => window.scrollTo(0, 0));
-    await sleep(100);
-    a = await phone.locator('.dk-chair').nth(1).locator('h3').boundingBox();
-    const b = await phone.locator('.dk-chair').first().boundingBox();
-    await touch('touchStart', a.x + 60, a.y + 10);
-    await sleep(520);
-    assert.equal(await phone.locator('.dk-chair.dk-armed').count(), 1, 'it lifts');
-    const to = b.y + 20;
-    for (let k = 1; k <= 10; k += 1) { await touch('touchMove', a.x + 60, a.y + 10 + ((to - a.y - 10) * k) / 10); await sleep(30); }
-    assert.equal(await phone.locator('.dk-lift').count(), 1);
-    if (SHOTS) await phone.screenshot({ path: `${SHOTS}/desk-phone-drag.png` });
-    await touch('touchEnd');
-    await sleep(500);
-    assert.deepEqual(await chairNames(phone), [names[1], names[0], ...names.slice(2)]);
-    assert.equal(await phone.locator('.pop-menu').count(), 0, 'nothing under the finger was tapped');
-    assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth), 390);
-  });
 
-  await check('on a phone the switch is on the page, and History stacks', async () => {
-    assert.deepEqual(await phone.locator('.dk-switch button').allInnerTexts(), ['On stage', 'History']);
-    await phone.locator('.dk-switch button', { hasText: 'History' }).tap();
+  await check('on a phone History stacks and fits', async () => {
+    await goto(phone, { view: 'desk', tab: 'history' });
     await phone.waitForSelector('.dk-thread');
-    assert.equal(await phone.locator('.dk-switch [aria-current="page"]').innerText(), 'History');
     await still(phone);
     const wide = await phone.evaluate(() => document.documentElement.scrollWidth);
     assert.ok(wide <= 391, `page is ${wide} wide`);
     if (SHOTS) { await still(phone); await phone.screenshot({ path: `${SHOTS}/desk-history-phone.png` }); }
   });
 
-  await check('the Go sheet ends with All commands, every command in groups', async () => {
-    await phone.locator('.pb-place').tap();
-    await phone.waitForSelector('.palette.box', { state: 'visible' });
-    assert.deepEqual(await phone.locator('.box-rooms .go-name').allInnerTexts(), ['Drawer', 'Tags', 'Catch-up', 'Outline']);
-    await phone.locator('.box-allrow').tap();
-    await phone.waitForSelector('.palette.box-all', { state: 'visible' });
-    assert.ok(await phone.locator('.box-fold').count() >= 8);
-    await phone.locator('.box-back').tap();
-    await phone.waitForSelector('.palette.box-all', { state: 'hidden' });
-    assert.deepEqual(phone.errors, []);
-  });
 } finally {
   await browser.close();
   server.kill();

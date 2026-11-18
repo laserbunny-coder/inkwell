@@ -49,7 +49,7 @@ const go = async (p, place) => {
   await still(p);
   await sleep(350);
 };
-const add = async (p, text) => { const input = p.locator('#plan input[data-add]').first(); await input.fill(text); await input.press('Enter'); await sleep(400); };
+const add = async (p, text, at = '#plan') => { const input = p.locator(`${at} input[data-add]`).first(); await input.fill(text); await input.press('Enter'); await sleep(400); };
 const blk = (p, text) => p.locator('#plan-sheet .dc-blk', { hasText: text });
 const chip = (p, text) => p.locator('#plan-sheet .dc-chip', { hasText: text });
 const chips = (p) => p.locator('#plan-sheet .dc-chip').allInnerTexts();
@@ -89,13 +89,13 @@ try {
   await add(page, 'Cut the trailer');
   await add(page, 'Email Dana the boards');
   await add(page, 'Print the call sheet');
-  const order = await words(page);
+  // The day's list folds what's left from earlier days into one line; the
+  // calendar's waiting tasks hold it too, first.
+  const order = ['Back up the drives', ...(await words(page))];
 
   await check('Calendar’s Day shows the day by the hour, with nothing placed yet', async () => {
     assert.equal(await page.locator('#plan .pl-view').count(), 0, 'no List | Calendar inside the plan any more');
-    await page.locator('.today-switch button', { hasText: 'Calendar' }).click();
-    await page.waitForSelector('#plan-sheet .pl-zoom');
-    await page.locator('#plan-sheet .pl-zoom button[data-tab="calday"]').click();
+    await go(page, { view: 'plan', tab: 'calday' });
     await page.waitForSelector('#plan-sheet .dc-grid');
     // What has no time yet waits behind one button.
     assert.equal(await page.locator('#plan-sheet .dc-unsched').innerText(), `Unscheduled · ${order.length}`);
@@ -188,7 +188,7 @@ try {
   await check('the calendar never reorders the list, and the list never moves a block', async () => {
     await go(page, { view: 'notebook', pageId: `day-${TODAY}` });
     await page.waitForSelector('#plan .pl-list');
-    assert.deepEqual(await words(page), [...order, 'Call the print shop']);
+    assert.deepEqual(await words(page), [...order.slice(1), 'Call the print shop']);
     assert.equal(await page.locator('#plan .pl-task .pl-est:visible').count(), 0, 'no times on the list');
     await page.locator('#plan .pl-task', { hasText: 'Print the call sheet' }).locator('.pl-words').focus();
     await page.keyboard.press('Alt+ArrowUp');
@@ -207,9 +207,9 @@ try {
     assert.ok((await chips(page)).includes('Email Dana the boards'));
   });
 
-  await check('a click on a block zooms into the task, and Alt + Left comes back to the calendar', async () => {
+  await check('a click on a block opens the task on its page, and Alt + Left comes back to the calendar', async () => {
     await blk(page, 'Call the print shop').click();
-    await page.waitForFunction(() => /Call the print shop/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''), null, { timeout: 15000 });
+    await page.waitForFunction(() => /Call the print shop/.test(document.querySelector('#plan-sheet .np-tx')?.textContent || ''), null, { timeout: 15000 });
     await page.keyboard.press('Alt+ArrowLeft');
     await page.waitForFunction(() => document.documentElement.dataset.view === 'plan' && !!document.querySelector('#plan-sheet .dc-grid'));
   });
@@ -249,8 +249,7 @@ try {
   await check('Calendar opens on the zoom used last on this device', async () => {
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
-    await go(page, { view: 'notebook', pageId: `day-${TODAY}` });
-    await page.locator('.today-switch button', { hasText: 'Calendar' }).click();
+    await go(page, { view: 'plan', tab: 'calday' });
     await page.waitForSelector('#plan-sheet .dc-grid');
     await page.waitForFunction(() => document.querySelector('#plan-sheet .dc-z-fit')?.getAttribute('aria-pressed') === 'true');
     assert.deepEqual(page.errors, []);
@@ -260,21 +259,18 @@ try {
   const phone = await open({ width: 412, height: 915 }, { hasTouch: true, isMobile: true, todayPage: false });
   const cdp = await phone.ctx.newCDPSession(phone);
   await check('phone: the calendar fits, and a block moves after a hold', async () => {
-    await go(phone, { view: 'notebook', pageId: `day-${TODAY}` });
-    await add(phone, 'Charge the batteries');
-    await phone.locator('.tp-switch button', { hasText: 'Calendar' }).tap();
-    await phone.waitForSelector('#plan-sheet .pl-zoom');
-    await still(phone);
-    await sleep(600);
-    await phone.locator('#plan-sheet .pl-zoom button[data-tab="calday"]').tap();
+    // A phone's day page hides its plan: add on Today's list, then its hours.
+    await go(phone, { view: 'plan', tab: 'day' });
+    await add(phone, 'Charge the batteries', '#plan-sheet');
+    await go(phone, { view: 'plan', tab: 'calday' });
     await phone.waitForSelector('#plan-sheet .dc-grid');
     // On a phone what isn't on the calendar waits in a sheet from the bottom.
     assert.equal(await phone.locator('#plan-sheet .dc-unsched').innerText(), 'Unscheduled · 1');
     await phone.locator('#plan-sheet .dc-unsched').tap();
     await phone.waitForSelector('#plan-sheet .dc-sheet', { state: 'visible' });
     const sb = await phone.locator('#plan-sheet .dc-sheet').boundingBox();
-    const barTop = await phone.evaluate(() => document.querySelector('.placebar').getBoundingClientRect().top);
-    assert.ok(Math.abs(sb.y + sb.height - barTop) < 2, `the sheet sits on the bar (${sb.y + sb.height} / ${barTop})`);
+    const barTop = await phone.evaluate(() => document.querySelector('.zm-ruler').getBoundingClientRect().top);
+    assert.ok(Math.abs(sb.y + sb.height - barTop) < 2, `the sheet sits on the ruler (${sb.y + sb.height} / ${barTop})`);
     await shot(phone, 'daycal-phone-sheet');
     await phone.locator('#plan-sheet .dc-chip', { hasText: 'Charge' }).tap();
     await phone.waitForSelector('#plan-sheet .dc-blk');
@@ -305,6 +301,8 @@ try {
   });
 
   await check('phone: pinch the hours to zoom out, and in', async () => {
+    await phone.waitForSelector('#plan-sheet .dc-grid');
+    await sleep(400); // the redraws after the last save settle
     const pxp = () => phone.evaluate(() => parseFloat(document.querySelector('#plan-sheet .dc-grid').style.getPropertyValue('--px')));
     const before = await pxp();
     const g = await phone.locator('#plan-sheet .dc-grid').boundingBox();

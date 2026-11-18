@@ -285,7 +285,12 @@ async function drawCrumb() {
   } else if (view() === 'drawer') {
     parts.push(lib, link('Drawer', () => {}, 'here'));
   } else if (view() === 'plan') {
-    // The ruler says which stop this is: no crumb.
+    // The ruler says which stop this is: no crumb. A pane has no ruler, so
+    // its head names the stop.
+    if (inPane) {
+      const NAMES = { now: 'Now', day: 'Today', week: 'Week', calday: 'Today by the hour', month: 'Month', year: 'Year' };
+      parts.push(link(NAMES[lastPlace?.tab] || 'Today', () => {}, 'here'));
+    }
   } else if (view() === 'sidenotes') {
     parts.push(link(sideNotes.title || 'No draft open', () => {}, 'here'));
   } else if (view() === 'talk') {

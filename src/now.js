@@ -114,7 +114,11 @@ export class Now {
     const open = dp.open.filter((i) => !i.ghost);
     const evs = p.cal.filter((e) => e.day === today && !e.allDay);
     const live = evs.filter((e) => !st.events[e.id]);
-    const seq = [...dp.carried.filter((i) => !i.ghost).map((item) => ({ item })), ...(live.length ? weave(open, live, today, now, today) : open.map((item) => ({ item })))];
+    // First light is the first line of the morning, ahead of what's left from
+    // earlier days too (unless he has dragged it down the day).
+    const lead = open[0] && isLight(open[0].row) ? [{ item: open[0] }] : [];
+    const rest = lead.length ? open.slice(1) : open;
+    const seq = [...lead, ...dp.carried.filter((i) => !i.ghost).map((item) => ({ item })), ...(live.length ? weave(rest, live, today, now, today) : rest.map((item) => ({ item })))];
     const item = (id) => seq.find((x) => x.item?.row.id === id)?.item || null;
     // What's current: one task (an old 'smalls' choice counts as none).
     let cur = null;
