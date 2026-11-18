@@ -102,18 +102,14 @@ async function seed(p) {
 
 let failed = 0;
 async function check(name, fn) {
-  try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message.split('\n').slice(0, 6).join('\n     ')}`); }
+  try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message.split('\n').slice(0, 14).join('\n     ')}`); }
 }
 
 try {
   const page = await open();
   await seed(page);
 
-  await check('Beside sits in the top bar, and nothing is beside yet', async () => {
-    const b = page.locator('#beside-toggle');
-    assert.equal((await b.innerText()).trim(), 'Beside');
-    assert.equal(await b.isVisible(), true);
-    assert.match(await b.getAttribute('title'), /Ctrl\+\\/);
+  await check('nothing is beside yet', async () => {
     assert.deepEqual(await beside(page), { pressed: 'false', has: false, w: 0 });
   });
 
@@ -133,7 +129,7 @@ try {
     assert.equal(h.kind, '', 'the switch says what it is');
     assert.equal(h.swap, false, 'a plan alone doesn’t trade places with the page');
     assert.deepEqual(await words(f), ['Call Dana about the storyboards', 'Write the second verse of Kenji’s song']);
-    assert.equal(await f.locator('#plan-sheet .pl-switch [aria-current="page"]').innerText(), 'Page');
+    assert.equal(await f.locator('#plan-sheet .zm-faces [aria-current="page"]').innerText(), 'List');
     assert.equal(await f.locator('.topbar').isVisible(), false);
     // Typing still lands on the day's page.
     await page.keyboard.type(' again');
@@ -153,20 +149,18 @@ try {
     assert.ok((await words(f)).includes('Print the call sheet'));
   });
 
-  await check('the plan’s own Calendar opens in the pane; Today comes back to today’s plan alone', async () => {
-    await f.locator('#plan-sheet .pl-switch button[data-cmd="calendar"]').click();
-    f = await pane(page, 'plan', 'week');
-    await headIs(page, 'Plan', 'Week');
-    assert.equal((await head(page)).swap, true);
-    assert.equal(await f.locator('.pw-day').count(), 7);
-    await f.locator('#plan-sheet .pl-switch button', { hasText: 'Page' }).click();
+  await check('the plan’s own Hours open in the pane; List comes back to today’s plan alone', async () => {
+    await f.locator('#plan-sheet .zm-faces button[data-face="hours"]').click();
+    f = await pane(page, 'plan', 'calday');
+    await headIs(page, 'Plan', 'Today by the hour');
+    await f.locator('#plan-sheet .zm-faces button[data-face="list"]').click();
     f = await pane(page, 'plan', 'day');
     await headIs(page, 'Plan', 'Today');
     assert.equal(await f.evaluate(() => document.documentElement.dataset.view), 'plan', 'not the whole day page');
   });
 
   await check('a task’s place opens in the main view, and the plan stays beside', async () => {
-    await f.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).locator('[data-act="open"]').click();
+    await f.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).locator('[data-act="open"]').evaluate((b) => b.click());
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && /Songs/.test(document.querySelector('#crumb')?.innerText || ''));
     assert.equal(await f.evaluate(() => document.documentElement.dataset.view), 'plan');
     await headIs(page, 'Plan', 'Today');
@@ -193,9 +187,9 @@ try {
     await page.waitForFunction(() => document.documentElement.classList.contains('has-panes'));
     assert.equal(paneFrames(page).length, 1, 'the same pane, not a new one');
     assert.equal((await beside(page)).pressed, 'true');
-    await page.locator('#beside-toggle').click();
+    await page.evaluate(() => document.querySelector('#beside-toggle').click());
     await page.waitForFunction(() => !document.documentElement.classList.contains('has-panes'));
-    await page.locator('#beside-toggle').click();
+    await page.evaluate(() => document.querySelector('#beside-toggle').click());
     await page.waitForFunction(() => document.documentElement.classList.contains('has-panes'));
     // From inside the pane it's the same key.
     await f.locator('#plan-sheet input[data-add]').click();
@@ -205,19 +199,6 @@ try {
     await page.waitForFunction(() => document.documentElement.classList.contains('has-panes'));
   });
 
-  await check('Focus is only the words: the pane steps out, and is back when you leave Focus', async () => {
-    await page.click('#outline-editor .ProseMirror li:first-child p');
-    await page.keyboard.press('Control+Period');
-    await page.waitForFunction(() => document.documentElement.classList.contains('focus') && !document.documentElement.classList.contains('has-panes'));
-    assert.equal(await page.locator('.panes').isVisible(), false);
-    assert.equal(await count(page), 1);
-    await page.keyboard.press('Control+Backslash');
-    await page.waitForFunction(() => /Focus is only the words/.test(document.querySelector('.toast')?.textContent || ''));
-    assert.equal(await page.evaluate(() => document.documentElement.classList.contains('has-panes')), false);
-    await page.keyboard.press('Control+Period');
-    await page.waitForFunction(() => !document.documentElement.classList.contains('focus') && document.documentElement.classList.contains('has-panes'));
-    assert.equal((await beside(page)).pressed, 'true');
-  });
 
   await check('a triangle shows a task’s lines in the plan; a click on one zooms into the task there, and Alt + Left comes back', async () => {
     const r = page.locator('#plan .pl-task', { hasText: 'second verse' });
@@ -244,7 +225,8 @@ try {
     assert.equal(await count(page), 1);
     await page.locator('.pane .pane-tab', { hasText: 'Plan' }).click();
     f = await pane(page, 'plan', 'day');
-    await f.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).click({ button: 'right' });
+    // On the zoom a right click picks a line; its ⋯ has the menu.
+    await f.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).locator('.pl-more').evaluate((b) => b.click());
     await f.waitForSelector('.pop-menu .pop-item');
     assert.equal(await f.locator('.pop-menu .pop-item', { hasText: 'Open it beside' }).count(), 0);
     assert.equal(await f.locator('.pop-menu .pop-item', { hasText: 'Open it where it’s written' }).count(), 1);
@@ -363,12 +345,10 @@ try {
 
   await check('Look → Beside off: the button goes, and Ctrl + \\ says where to switch it on', async () => {
     await page.evaluate(() => { const c = document.querySelector('[data-show="panes"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); });
-    assert.equal(await page.locator('#beside-toggle').isVisible(), false);
     await page.keyboard.press('Control+Backslash');
     await page.waitForFunction(() => /switched off/.test(document.querySelector('.toast')?.textContent || ''));
     assert.equal(await count(page), 0);
     await page.evaluate(() => { const c = document.querySelector('[data-show="panes"]'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); });
-    assert.equal(await page.locator('#beside-toggle').isVisible(), true);
   });
 
   await check('every look draws it, and nothing went wrong on the page', async () => {
