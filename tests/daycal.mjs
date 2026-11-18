@@ -232,6 +232,9 @@ try {
     assert.ok(Math.abs(b.height - (30 * zoomed - 2)) < 1.5, `a half hour is ${b.height}px`);
     // A drag still lands where it looks like it does, at any zoom.
     const was = (await placedAt(page, 'Print the call sheet')).at;
+    // Zoomed in, the block can sit low on the screen: bring it up so an hour below it is still on screen.
+    await blk(page, 'Print the call sheet').evaluate((e) => e.scrollIntoView({ block: 'center' }));
+    await sleep(300);
     const c = await centre(blk(page, 'Print the call sheet'));
     await drag(page, c.x, c.y, c.y + 60 * zoomed);
     assert.deepEqual(await placedAt(page, 'Print the call sheet'), { day: TODAY, at: was + 60 }, 'an hour later');

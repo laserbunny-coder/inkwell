@@ -468,10 +468,9 @@ try {
     await p.keyboard.type('Ferry tickets for Dad #gift');
     await sleep(900);
     await p.keyboard.press('Control+O');
-    await p.waitForSelector('.palette.box', { state: 'visible' });
-    await sleep(300);
-    await p.keyboard.type('Gift');
-    await sleep(300);
+    await p.waitForSelector('.palette.box[data-loaded]:not([hidden])');
+    await p.locator('#palette-input').fill('Gift');
+    await p.waitForFunction(() => [...document.querySelectorAll('#palette-list li')].some((l) => /^Gift/.test(l.textContent)));
     await p.locator('#palette-list li', { hasText: /^Gift/ }).first().click();
     await p.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Gift');
     await p.waitForFunction(() => document.querySelectorAll('#outline-editor li.mirror').length === 2);
@@ -634,6 +633,7 @@ try {
     if (!(await p.locator('.notebook').isVisible())) await p.keyboard.press('Control+J');
     await p.waitForSelector('.notebook', { state: 'visible' });
     await p.waitForFunction(() => document.querySelector('#nb-kind').textContent === 'Today');
+    if (!(await p.locator('#outline-editor li', { hasText: 'Call the harbourmaster' }).count())) console.log('NOHARB', await p.evaluate(() => [document.querySelector('#nb-title')?.textContent, document.querySelector('#nb-kind')?.textContent, JSON.stringify(history.state), document.querySelector('#outline-editor')?.innerText.slice(0, 300)]));
     const top = p.locator('#outline-editor li', { hasText: 'Call the harbourmaster' }).first();
     // Bullets are off by default: the dot only shows under the pointer.
     assert.equal(await top.locator(':scope > .line-gutter .bullet').evaluate((b) => getComputedStyle(b, '::after').opacity), '0');
@@ -1056,8 +1056,10 @@ try {
     // Esc outside text zooms out now, so open the chapter by name.
     const chapter = async () => {
       await p.keyboard.press('Control+O');
-      await p.keyboard.type('Chapter 1 · Winter');
-      await sleep(400);
+      await p.waitForSelector('.palette.box[data-loaded]:not([hidden])');
+      await p.locator('#palette-input').fill('Chapter 1 · Winter');
+      // Enter takes the top row, so wait until the chapter is that row.
+      await p.waitForFunction(() => /^Chapter 1chapter/.test(document.querySelector('#palette-list li')?.textContent || ''));
       await p.keyboard.press('Enter');
       await p.waitForSelector('#editor .ProseMirror', { state: 'visible' });
       await sleep(400);
@@ -1068,10 +1070,9 @@ try {
     await p.keyboard.type('A ship in a bottle for Dad. #gift');
     await sleep(900);
     await p.keyboard.press('Control+O');
-    await p.waitForSelector('.palette.box', { state: 'visible' });
-    await sleep(300);
-    await p.keyboard.type('Gift');
-    await sleep(300);
+    await p.waitForSelector('.palette.box[data-loaded]:not([hidden])');
+    await p.locator('#palette-input').fill('Gift');
+    await p.waitForFunction(() => [...document.querySelectorAll('#palette-list li')].some((l) => /^Gift/.test(l.textContent)));
     await p.locator('#palette-list li', { hasText: /^Gift/ }).first().click();
     await p.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Gift');
     await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li.mirror > p')].some((x) => x.textContent.startsWith('A ship in a bottle')));
