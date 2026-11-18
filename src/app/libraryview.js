@@ -17,7 +17,7 @@ import { $, editor, gone, gridTouched, notes, setGridTouched, state, store, view
 import { go, openBook, openEntry } from './routing.js';
 import { areaPath, dot, renameable, renderCrumb, renderRail, subtree } from './rail.js';
 import { setLife, finishWorld, reopenWorld, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, moveBookToArea, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu } from './tidying.js';
-import { renderBoard, goPage } from './workpages.js';
+import { renderBoard } from './workpages.js';
 import { askServer, canAskServer, deskPage, plan, projectPage } from './talking.js';
 import { seatMap, seatWord } from './seats.js';
 let worldDates = []; // the open project's dated things besides its steps (shoot days)
@@ -549,9 +549,12 @@ function stageLine(w, pieces) {
   for (const { row } of pieces) { const st = stageOf(row, w); n.set(st, (n.get(st) || 0) + 1); }
   const b = make('button', 'zw-stand');
   b.type = 'button';
-  b.title = 'Where the pieces stand. Click for the stage board (Alt + 5)';
+  const open = localStorage.getItem('piecesAs') === 'board';
+  b.title = open ? 'Where the pieces stand. Click to fold the stage board away' : 'Where the pieces stand. Click for the stage board';
+  b.setAttribute('aria-expanded', String(open));
   for (const [st, k] of n) { const seg = make('span', `zw-sg${k ? ' has' : ''}`); seg.append(make('i'), make('b', '', k ? `${st} ${k}` : st)); b.append(seg); }
-  b.addEventListener('click', () => goPage('make'));
+  // The stage board opens under it, right here (Make has no board).
+  b.addEventListener('click', () => { localStorage.setItem('piecesAs', open ? 'list' : 'board'); renderWorld(); });
   bar.replaceChildren(b);
   bar.hidden = false;
 }
@@ -648,11 +651,11 @@ async function renderWorld() {
   $('#wh-stagebar').hidden = true;
   const status = $('#wh-status');
   const canBoard = !life && s.pieces.length > 0;
-  // In the zoom: one thin line of how many pieces are at each stage (into the
-  // stage board on Make), and the pieces as a list under it.
+  // In the zoom: one thin line of how many pieces are at each stage, and the
+  // pieces as a list under it; the line opens the stage board in its place.
   const thin = canBoard;
   if (thin) stageLine(w, s.pieces);
-  const asList = !canBoard || thin || localStorage.getItem('piecesAs') === 'list';
+  const asList = !canBoard || localStorage.getItem('piecesAs') !== 'board';
   status.hidden = asList;
   if (canBoard) renderBoard(w, s.pieces);
   $('#wh-workflow').onclick = () => openStages(w);
