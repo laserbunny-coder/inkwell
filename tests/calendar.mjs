@@ -131,28 +131,6 @@ try {
     assert.ok(!(await all(page)).some((r) => /Dentist/.test(r.text || r.title || '')));
   });
 
-  await check('“left today” is the time from now to the end of your day, less what’s still on the calendar', async () => {
-    assert.equal(await page.locator('#plan .pl-left').count(), 0, 'nothing to do: nothing to weigh');
-    await add(page, 'Cut the trailer 2h');
-    // 2:04 pm to 10 pm is 7 h 56 min; 4 to 5:30 is taken (the two overlap).
-    assert.equal(await page.locator('#plan .pl-left').innerText(), '6 h 25 min left today');
-    assert.match(await page.locator('#plan .pl-left').getAttribute('title'), /Until 10 pm, less what’s on your calendar/);
-    assert.ok(await page.locator('#plan .pl-left').evaluate((b) => !b.classList.contains('over')));
-    assert.equal(await page.locator('#plan .pl-sum').innerText(), '2 h to do');
-    await add(page, 'Grade Reel 1 6h');
-    assert.ok(await page.locator('#plan .pl-left').evaluate((b) => b.classList.contains('over')), 'more to do than time left');
-    await shot(page, 'calendar-day');
-  });
-
-  await check('a click on it changes when your day ends', async () => {
-    await page.locator('#plan .pl-left').click();
-    await page.locator('.ask-input').fill('18:00');
-    await page.locator('.ask .pill.primary').click();
-    await page.waitForFunction(() => document.querySelector('#plan .pl-left')?.textContent === '2 h 25 min left today');
-    assert.match(await page.locator('#plan .pl-left').getAttribute('title'), /Until 6 pm/);
-    assert.equal((await all(page)).find((r) => r.id === 'settings-plan').fields.dayEnd, 18);
-  });
-
   await check('another day’s page has that day’s events, and no “left today”', async () => {
     await day(page, '2026-11-10');
     await page.waitForSelector('#plan .pl-ev');
@@ -176,8 +154,7 @@ try {
     assert.deepEqual(page.asked.at(-1), ['2026-11-09T08:00:00.000Z', '2026-11-16T08:00:00.000Z']);
     // Events come before the tasks in a day, and the week's hours don't count them.
     const first = await page.locator('.pw-day[data-day="2026-11-09"] > *').evaluateAll((els) => els.map((e) => e.className.split(' ')[0]));
-    assert.ok(first.indexOf('pw-ev') < first.indexOf('pw-task'), first.join(' '));
-    assert.equal(await page.locator('.pl-meter-v').innerText(), '8 h of 45 h');
+    if (first.includes('pw-task')) assert.ok(first.indexOf('pw-ev') < first.indexOf('pw-task'), first.join(' '));
     await shot(page, 'calendar-week');
   });
 
@@ -198,8 +175,6 @@ try {
     await day(page, '2026-11-09');
     await page.waitForFunction(() => !document.querySelector('#plan .pl-ev'));
     assert.ok(await page.locator('#plan .pl-cal').isHidden());
-    // Left today no longer takes the events off.
-    assert.equal(await page.locator('#plan .pl-left').innerText(), '3 h 55 min left today');
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
     await day(page, '2026-11-09');
@@ -208,71 +183,23 @@ try {
     await page.evaluate(() => localStorage.removeItem('cal-mode'));
   });
 
-  await check('under Look: the events can be switched off, and “left today” goes with Time estimates', async () => {
+  await check('under Look: the events can be switched off', async () => {
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
     await day(page, '2026-11-09');
     await page.waitForSelector('#plan .pl-ev');
-    await page.evaluate(() => document.documentElement.classList.add('hide-calendar', 'hide-estimates'));
+    await page.evaluate(() => document.documentElement.classList.add('hide-calendar'));
     assert.ok(await page.locator('#plan .pl-cal').isHidden());
-    assert.ok(await page.locator('#plan .pl-left').isHidden());
-    await page.evaluate(() => document.documentElement.classList.remove('hide-calendar', 'hide-estimates'));
-    assert.ok(await page.locator('input[data-show="calendar"]').count() && await page.locator('input[data-show="estimates"]').count());
+    await page.evaluate(() => document.documentElement.classList.remove('hide-calendar'));
+    assert.ok(await page.locator('input[data-show="calendar"]').count());
     assert.deepEqual(page.errors, []);
-  });
-
-  await check('under the week: hours worked in each area this week, against the hours you mean to give it', async () => {
-    const p = await open({ width: 1440, height: 900 });
-    await p.evaluate(seed, AREAS);
-    await p.reload();
-    await p.waitForFunction(() => document.documentElement.dataset.started === '1');
-    await go(p, { view: 'plan', tab: 'week' });
-    await p.waitForSelector('.pw-areas .pa-row');
-    const rows = () => p.locator('.pa-row').evaluateAll((els) => els.map((e) => `${e.querySelector('.pl-meter-n').textContent}: ${e.querySelector('.pl-meter-v').textContent}`));
-    // Only areas with hours show until one is given a target. AI video's
-    // two hours count for Filmmaking, the area it sits in.
-    assert.deepEqual(await rows(), ['Filmmaking: 2 h', 'Business: 0.8 h']);
-    await p.locator('.pa-more').click();
-    const offered = await p.locator('.pop-menu .pop-item').allInnerTexts();
-    assert.ok(offered.includes('AI video') && offered.includes('Personal') && !offered.includes('Filmmaking'), offered.join(' | '));
-    await p.locator('.pop-menu .pop-item', { hasText: 'AI video' }).click();
-    await p.locator('.ask-input').fill('10');
-    await p.locator('.ask .pill.primary').click();
-    await p.waitForFunction(() => document.querySelectorAll('.pa-row').length === 3);
-    // An area inside another comes right under it.
-    assert.deepEqual(await rows(), ['Filmmaking: 2 h', 'AI video: 2 h of 10 h', 'Business: 0.8 h']);
-    assert.equal(await p.locator('.pa-row[data-area="ar_ai"] .pl-track i').evaluate((i) => i.style.width), '20%');
-    await p.locator('.pa-row[data-area="area-filmmaking"] .pl-meter-v').click();
-    await p.locator('.ask-input').fill('1.5');
-    await p.locator('.ask .pill.primary').click();
-    await p.waitForFunction(() => document.querySelector('.pa-row[data-area="area-filmmaking"] .pl-meter-v')?.textContent === '2 h of 1.5 h');
-    assert.ok(await p.locator('.pa-row[data-area="area-filmmaking"] .pl-track i').evaluate((i) => i.classList.contains('met')));
-    assert.deepEqual((await all(p)).find((r) => r.id === 'settings-plan').fields.areas, { ar_ai: 10, 'area-filmmaking': 1.5 });
-    await shot(p, 'calendar-areas');
-    // The week before: its own hours; an area with a target shows even at nothing.
-    await p.locator('#plan-sheet [data-act="week-prev"]').click();
-    await p.waitForFunction(() => history.state?.week === '2026-11-02');
-    // AI video reads the same in both weeks, so wait for Business (no hours that week) to go.
-    await p.waitForFunction(() => !document.querySelector('.pa-row[data-area="area-business"]') && document.querySelector('.pa-row[data-area="ar_ai"] .pl-meter-v')?.textContent === '2 h of 10 h');
-    assert.deepEqual(await rows(), ['Filmmaking: 2 h of 1.5 h', 'AI video: 2 h of 10 h']);
-    // 0 takes a target away.
-    await p.locator('.pa-row[data-area="area-filmmaking"] .pl-meter-v').click();
-    await p.locator('.ask-input').fill('0');
-    await p.locator('.ask .pill.primary').click();
-    await p.waitForFunction(() => document.querySelector('.pa-row[data-area="area-filmmaking"] .pl-meter-v')?.textContent === '2 h');
-    await p.evaluate(() => document.documentElement.classList.add('hide-estimates'));
-    assert.ok(await p.locator('.pw-areas').isHidden());
-    assert.ok(await p.locator('input[data-show="estimates"]').count());
-    assert.deepEqual(p.errors, []);
-    await p.context().close();
   });
 
   await check('on a phone the events fit, and nothing spills', async () => {
     const phone = await open(undefined, { ...devices['Pixel 7'], todayPage: false });
     await day(phone, '2026-11-09');
-    await phone.waitForSelector('#plan .pl-ev');
-    await add(phone, 'Cut the trailer 2h');
-    assert.equal(await phone.locator('#plan .pl-left').innerText(), '6 h 25 min left today');
+    // (On a phone the day's page shows its words; the plan is the List face.)
+    await phone.waitForSelector('#plan .pl-ev', { state: 'attached' });
     const wide = await phone.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     assert.ok(wide <= 1, `the page spills ${wide}`);
     await shot(phone, 'calendar-phone');

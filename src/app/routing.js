@@ -298,7 +298,6 @@ addCommands(() => [
   { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
   { group: 'go', label: 'Calendar: day (today’s hours)', keys: '', words: ['calendar', 'day', 'hours', 'time', 'schedule'], run: () => go({ view: 'plan', tab: 'calday' }) },
   { group: 'go', label: 'Calendar: week (seven days, and what’s for any day this week)', keys: '', words: ['calendar', 'week', 'plan', 'tasks', 'schedule', 'tray', 'any day'], run: () => go({ view: 'plan', tab: 'week' }) },
-  { group: 'go', label: 'Calendar: six weeks (a lane for each project)', keys: '', words: ['calendar', 'weeks ahead', 'ahead', 'six weeks', 'roadmap', 'weeks', 'months', 'dates', 'deadline', 'milestone', 'schedule', 'timeline', 'stretch'], run: () => go({ view: 'plan', tab: 'ahead' }) },
   { group: 'go', label: 'Desk: every project, what needs you and who’s working on it', keys: `${mod}⇧U`, words: ['claude', 'threads', 'needs you', 'calls', 'catch-up', 'catchup', 'updates', 'projects', 'stage'], run: () => go({ view: 'desk' }) },
   { group: 'go', label: 'History: every Claude thread, newest first', keys: '', words: ['threads', 'closed', 'finished', 'desk', 'search threads'], run: () => go({ view: 'desk', tab: 'history' }) },
   { group: 'go', label: 'Today’s page', keys: `${mod}J`, run: () => go({ view: 'notebook', pageId: dayId(isoToday()) }) },

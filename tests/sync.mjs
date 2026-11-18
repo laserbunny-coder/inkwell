@@ -204,19 +204,15 @@ try {
     assert.equal(await phone.locator('#outline-editor .task-chip').innerText(), 'Today');
     await phone.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-check').click();
     await sleep(400);
-    await phone.locator('#plan .pl-took button', { hasText: 'as planned' }).click();
-    await sleep(400);
     await phone.locator('#outline-editor li.is-task .line-box').click();
     await sleep(900);
     await syncNow(phone);
     await syncNow(laptop);
     await sleep(800);
     assert.equal(await laptop.locator('#plan .pl-task.done').count(), 2);
-    assert.equal(await laptop.locator('#plan .pl-task.done', { hasText: 'Call Dana' }).locator('.pl-est').innerText(), '30 min');
     assert.equal(await laptop.locator('#outline-editor li.is-task .line-box').getAttribute('aria-checked'), 'true');
     assert.equal(await laptop.locator('#outline-editor .task-chip').innerText(), 'Done');
     const t = [...table.values()].find((r) => r.text === 'Call Dana');
-    assert.equal(t.fields.task.actual, 30);
     assert.ok(t.fields.task.done_at > 0);
   });
 

@@ -228,25 +228,19 @@ try {
     await page.waitForFunction(() => /Scribe has it too/.test(document.querySelector('.toast')?.textContent || ''));
   });
 
-  await check('the Mic in the top bar starts the same capture, aimed where the caret is', async () => {
+  await check('the mic at the corner starts the same capture, aimed where the caret is', async () => {
     await page.keyboard.press('Control+J');
     await page.waitForFunction(() => document.documentElement.dataset.view !== 'notebook');
     await page.click('#editor .ProseMirror');
     await page.keyboard.press('Control+End');
     await sleep(700);
-    await page.mouse.move(700, 20, { steps: 3 });
-    await page.waitForFunction(() => document.body.classList.contains('show-top'));
-    await sleep(300);
-    await page.locator('#mic-toggle').click();
+    await page.locator('.zm-mic').click();
     await page.waitForSelector('.capture[data-state="recording"]');
-    // Leave the mouse well below the bar, so it tucks away for the next checks.
-    await page.mouse.move(700, 600, { steps: 3 });
     assert.match(await page.locator('.cap-dest').innerText(), /^Into /);
     await page.keyboard.press('Escape');
     await page.waitForSelector('.capture', { state: 'hidden' });
     await page.keyboard.press('Control+J');
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
-    await page.waitForFunction(() => !document.body.classList.contains('show-top'));
     await sleep(700);
   });
 
