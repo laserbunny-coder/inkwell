@@ -79,6 +79,8 @@ export class ProjectPage {
   // Where it sits on the Desk; a click moves it.
   drawSeat(seat) {
     const b = this.els.seat;
+    // In the zoom, the seat word opens the seat bar above the ruler.
+    b.dataset.seatfor = this.world.id;
     // A finished project sits nowhere on the Desk: it says so instead.
     if (this.world?.fields?.finished) { b.textContent = 'Finished'; b.title = 'Put away on the Library’s Finished shelf'; b.onclick = null; return; }
     b.textContent = STAGES[seat.stage];

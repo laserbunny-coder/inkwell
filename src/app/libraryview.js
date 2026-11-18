@@ -16,9 +16,11 @@ import { addCommands } from './commandlist.js';
 import { $, editor, gone, gridTouched, notes, setGridTouched, state, store, view } from '../main.js';
 import { go, openBook, openEntry } from './routing.js';
 import { areaPath, dot, renameable, renderCrumb, renderRail, subtree } from './rail.js';
-import { finishWorld, reopenWorld, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, moveBookToArea, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu } from './tidying.js';
-import { renderBoard } from './workpages.js';
-import { askServer, canAskServer, plan, projectPage } from './talking.js';
+import { setLife, finishWorld, reopenWorld, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, moveBookToArea, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu } from './tidying.js';
+import { renderBoard, goPage } from './workpages.js';
+import { askServer, canAskServer, deskPage, plan, projectPage } from './talking.js';
+import { zoomOn } from '../zoomstate.js';
+import { seatMap, seatWord } from './seats.js';
 let worldDates = []; // the open project's dated things besides its steps (shoot days)
 
 // ---------- library view ----------
@@ -181,6 +183,105 @@ async function renderLibrary() {
   $('#lib-loose-box').hidden = !loose.length;
   renderFinished(inArea.filter(isFinished));
   await renderTrash();
+  await renderZoomLibrary(allAreas, allBooks);
+}
+
+// The Library in the zoom (Part 4): On stage (the Desk) first, then every
+// area with each project and its seat word, the Finished shelf, then the
+// Drawer, the daily pages, Tags and Trash under "Also here". A quiet + at the
+// end of each area's list starts a new project there. A project can be
+// carried onto a seat (the bar above the ruler) or right-clicked for it.
+async function renderZoomLibrary(allAreas, allBooks) {
+  const box = $('#lib-zoom');
+  box.hidden = !zoomOn();
+  if (box.hidden) { box.replaceChildren(); return; }
+  const seats = await seatMap();
+  const order = await deskPage.order().catch(() => []);
+  const rank = (w) => { const i = order.indexOf(w.id); return i < 0 ? 1e6 : i; };
+  const live = allBooks.filter((w) => !isFinished(w)).sort((a, b) => rank(a) - rank(b) || (a.title || '').localeCompare(b.title || ''));
+  const chip = (w) => {
+    const c = make('button', 'zl-chip', w.title || 'Untitled');
+    c.type = 'button';
+    c.dataset.pid = w.id;
+    c.draggable = true;
+    c.addEventListener('click', () => go({ view: 'world', id: w.id }));
+    return c;
+  };
+  const parts = [];
+  const stage = make('section', 'zl-stage');
+  stage.dataset.seat = 'on';
+  const into = make('button', 'zl-h zl-into', 'On stage: the Desk');
+  into.type = 'button';
+  into.title = 'Into the Desk (6)';
+  into.addEventListener('click', () => go({ view: 'desk' }));
+  const on = live.filter((w) => seats.get(w.id) === 'on');
+  const chips = make('div', 'zd-chips');
+  chips.append(...on.map(chip));
+  if (!on.length) chips.append(make('span', 'zd-none', 'Nothing is on stage.'));
+  stage.append(into, chips);
+  parts.push(stage);
+
+  const areaIds = [...allAreas.map((a) => a.id), ''];
+  const grid = make('div', 'zl-areas');
+  for (const id of areaIds) {
+    const list = live.filter((w) => (w.area_id || '') === id || (!id && !allAreas.some((a) => a.id === w.area_id)));
+    const area = allAreas.find((a) => a.id === id);
+    if (!list.length && (!area || area.parent_id)) continue;
+    const sec = make('section', 'zl-area');
+    const h = make('div', 'zl-h');
+    h.append(dot(areaColor(area)), document.createTextNode(area?.title || 'No area'));
+    if (area) onContextMenu(h, () => areaMenu(area));
+    sec.append(h);
+    for (const w of list) {
+      const row = make('div', 'zl-row');
+      row.dataset.pid = w.id;
+      row.draggable = true;
+      const name = make('button', 'zl-name', w.title || 'Untitled');
+      name.type = 'button';
+      name.addEventListener('click', () => go({ view: 'world', id: w.id }));
+      const seat = seats.get(w.id) || 'back';
+      const word = make('button', `zl-seat s-${seat}`, seatWord(seat));
+      word.type = 'button';
+      word.dataset.seatfor = w.id;
+      word.title = 'Where it sits (Alt + S)';
+      row.append(name, word);
+      sec.append(row);
+    }
+    if (area) {
+      const add = make('button', 'zl-add', '+');
+      add.type = 'button';
+      add.title = `A new project in ${area.title}`;
+      add.setAttribute('aria-label', add.title);
+      add.addEventListener('click', async () => { await showNewBook('novel'); $('#lib-new-area').value = area.id; });
+      sec.append(add);
+    }
+    grid.append(sec);
+  }
+  grid.append(addAreaChip(null));
+  parts.push(grid);
+
+  const done = allBooks.filter(isFinished).sort((a, b) => b.fields.finished - a.fields.finished);
+  const shelf = make('section', 'zl-done');
+  shelf.dataset.seat = 'done';
+  shelf.append(make('div', 'zl-h', 'Finished shelf'));
+  const dchips = make('div', 'zd-chips');
+  dchips.append(...done.map(chip));
+  if (!done.length) dchips.append(make('span', 'zd-none', 'Nothing finished yet. Carry a project here when it’s done.'));
+  shelf.append(dchips);
+  parts.push(shelf);
+
+  const also = make('section', 'zl-also');
+  also.append(make('div', 'zl-h', 'Also here'));
+  const achips = make('div', 'zd-chips');
+  const jump = (label, run, title = '') => { const b = make('button', 'zl-chip', label); b.type = 'button'; if (title) b.title = title; b.addEventListener('click', run); achips.append(b); };
+  jump('Drawer', () => go({ view: 'drawer' }), 'Sparks and ideas not in a project yet');
+  jump('Daily pages', () => go({ view: 'notebook', pageId: `day-${isoToday()}` }), 'Today’s page; the days before it are a step back');
+  jump('Tags', () => go({ view: 'tags' }));
+  const trash = $('#lib-trash-box');
+  if (!trash.hidden) jump('Trash', () => { trash.open = true; trash.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
+  also.append(achips);
+  parts.push(also);
+  box.replaceChildren(...parts);
 }
 
 // "today", "yesterday", "Nov 12": when a project was finished.
@@ -334,6 +435,22 @@ async function renderProject() {
   stageSel.replaceChildren(...stagesOf(b, world).map((st) => Object.assign(make('option', '', st), { value: st })));
   stageSel.value = stageOf(b, world);
   stageSel.onchange = () => setStage(b, stageSel.value);
+  // In the zoom: its stage as small dots under its name (click one to set it).
+  const dots = $('#ph-dots');
+  dots.hidden = !zoomOn();
+  if (zoomOn()) {
+    const list = stagesOf(b, world);
+    const here = list.indexOf(stageOf(b, world));
+    dots.replaceChildren(...list.map((st, i) => {
+      const d = make('button', `zp-dot${i <= here ? ' on' : ''}${i === here ? ' here' : ''}`);
+      d.type = 'button';
+      d.title = st;
+      d.setAttribute('aria-label', `${st}${i === here ? ' (now)' : ''}`);
+      if (i === here) d.setAttribute('aria-current', 'step');
+      d.addEventListener('click', () => setStage(b, st));
+      return d;
+    }), make('span', 'zp-word', list[here] || ''));
+  }
   // The one button that moves it on; the menu beside it goes back or skips.
   const next = $('#ph-next');
   const nl = nextLabel(stagesOf(b, world), stageOf(b, world));
@@ -421,6 +538,22 @@ async function renderProject() {
   $('#ph-daily-empty').hidden = mentions.length > 0;
 }
 
+// Where the pieces stand, as one thin line: each stage and how many are
+// at it. A click opens the stage board (Make).
+function stageLine(w, pieces) {
+  const bar = $('#wh-stagebar');
+  const names = stagesOf(pieces[0].row, w);
+  const n = new Map(names.map((x) => [x, 0]));
+  for (const { row } of pieces) { const st = stageOf(row, w); n.set(st, (n.get(st) || 0) + 1); }
+  const b = make('button', 'zw-stand');
+  b.type = 'button';
+  b.title = 'Where the pieces stand. Click for the stage board (Alt + 5)';
+  for (const [st, k] of n) { const seg = make('span', `zw-sg${k ? ' has' : ''}`); seg.append(make('i'), make('b', '', k ? `${st} ${k}` : st)); b.append(seg); }
+  b.addEventListener('click', () => goPage('make'));
+  bar.replaceChildren(b);
+  bar.hidden = false;
+}
+
 // One piece in a list: its name, what it is and its stage.
 function pieceRow(p, depth, world) {
   const li = make('li');
@@ -484,6 +617,17 @@ async function renderWorld() {
   const life = isLife(w);
   const shape = shapeOf(w, s.pieces.filter((p) => p.depth === 0).length);
   $('#wh-kind').textContent = shape.id === 'one' ? '' : shape.name;
+  // In the zoom, "Life project" beside the name is the switch (it was buried in ⋯ > Shape).
+  if (life && zoomOn()) {
+    const b = make('button', 'wp-lifeword', 'Life project');
+    b.type = 'button';
+    b.title = 'A life project: steps, notes and pages. Click to make it a story world';
+    b.addEventListener('click', () => popMenu(b, [
+      { label: 'Life project: steps, notes and pages', current: true, run: () => {} },
+      { label: 'Story world: Shape, Make and the look wall too', run: () => setLife(w, false) }
+    ]));
+    $('#wh-kind').replaceChildren(b);
+  }
   // What it is, in a sentence: type over it.
   const log = $('#wh-logline');
   log.textContent = w.fields?.logline || '';
@@ -502,13 +646,17 @@ async function renderWorld() {
   $('#wh-stagebar').hidden = true;
   const status = $('#wh-status');
   const canBoard = !life && s.pieces.length > 0;
-  const asList = !canBoard || localStorage.getItem('piecesAs') === 'list';
+  // In the zoom: one thin line of how many pieces are at each stage (into the
+  // stage board on Make), and the pieces as a list under it.
+  const thin = zoomOn() && canBoard;
+  if (thin) stageLine(w, s.pieces);
+  const asList = !canBoard || thin || localStorage.getItem('piecesAs') === 'list';
   status.hidden = asList;
   if (canBoard) renderBoard(w, s.pieces);
   $('#wh-workflow').onclick = () => openStages(w);
   $('#wh-workflow').hidden = !canBoard;
   const as = $('#wh-as');
-  as.hidden = !canBoard;
+  as.hidden = !canBoard || thin;
   as.textContent = asList ? 'By status' : 'As a list';
   as.onclick = () => { localStorage.setItem('piecesAs', asList ? 'board' : 'list'); renderWorld(); };
 

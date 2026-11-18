@@ -636,6 +636,8 @@ function wireTalking() {
       await openEntry(rows.at(-1).id);
     },
     through: () => through.open('calls'),
+    // The zoom's Desk: a step opens as its own page.
+    openLine: (id) => plan.openLine(id),
     // A call answered from a project's own page: that page looks again.
     acted: () => { projectPage?.stale(); if (view() === 'world') renderWorld(); },
     // ✦ Talk it through, from the Desk's head (not from inside a pane, and not with Beside off).

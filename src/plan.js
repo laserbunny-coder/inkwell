@@ -1982,8 +1982,10 @@ export class Plan {
   // The zoom (Part 2): whatever he clicks opens on the Now stop. A line on
   // today becomes the one thing; any other only opens, and nothing moves.
   async openLine(iOrId) {
-    if (!this.items) await this.refresh();
-    const i = typeof iOrId === 'string' ? (this.items || []).find((x) => x.row.id === iOrId && !x.ghost && !x.occ) : iOrId;
+    const find = () => (typeof iOrId === 'string' ? (this.items || []).find((x) => x.row.id === iOrId && !x.ghost && !x.occ) : iOrId);
+    let i = find();
+    // Not drawn yet (the plan loads when a time stop first opens): load it.
+    if (!i && typeof iOrId === 'string') { this.items = await loadTasks(); i = find(); }
     if (!i) return typeof iOrId === 'string' ? this.hooks.openEntry(iOrId) : null;
     const today = this.today;
     const onToday = !i.row.fields?.done && !!i.task.day && i.task.day <= today && !i.ghost;
