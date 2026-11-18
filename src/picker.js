@@ -19,6 +19,11 @@ export async function openPicker(editor) {
   all = kinds.flat().filter((e) => !e.deleted)
     .map((e) => ({ id: e.id, kind: e.kind, title: titleOf(e) }))
     .sort((a, b) => (a.kind === 'day' && b.kind === 'day' ? (a.id < b.id ? 1 : -1) : a.title.localeCompare(b.title)));
+  // Then projects and pieces (Nov 18 2026), as typing [[ offers them.
+  const [worlds, pieces] = await Promise.all([byKind('world'), byKind('project')]);
+  const name = (e) => e.title || 'Untitled';
+  all.push(...worlds.filter((e) => !e.deleted).map((e) => ({ id: e.id, kind: 'project', title: name(e) })).sort((a, b) => a.title.localeCompare(b.title)),
+    ...pieces.filter((e) => !e.deleted).map((e) => ({ id: e.id, kind: 'piece', title: name(e) })).sort((a, b) => a.title.localeCompare(b.title)));
   const at = editor.view.coordsAtPos(editor.state.selection.from);
   box.style.left = `${Math.max(8, Math.min(at.left, innerWidth - 328))}px`;
   box.style.top = `${Math.min(at.bottom + 6, innerHeight - 280)}px`;

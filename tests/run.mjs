@@ -228,9 +228,8 @@ try {
     await p.keyboard.press('Tab');
     await p.keyboard.type('Ask about the 1912 storm');
     await p.keyboard.press('Enter');
-    await p.keyboard.type('See [[');
-    await p.waitForSelector('.picker', { state: 'visible' });
-    await p.keyboard.type('Lighthouse keeper');
+    await p.keyboard.type('See [[Lighthouse keeper');
+    await p.waitForFunction(() => /Lighthouse keeper/.test(document.querySelector('.suggest:not([hidden]) li[aria-selected="true"]')?.textContent || ''));
     await p.keyboard.press('Enter');
     await sleep(800);
     const rows = await all();

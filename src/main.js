@@ -42,6 +42,7 @@ import { ScriptElements, ELEMENTS, elementLabel, SceneCodes } from './script.js'
 import { dayId } from './notebook.js';
 import './outline.js';
 import { SlashMenu, slashOpen } from './slash.js';
+import { Suggest, suggestOpen } from './suggest.js';
 import { Woven, newScene, placeList } from './woven.js';
 import './wovenlook.js';
 import './production.js';
@@ -124,8 +125,8 @@ const extensions = [
   TagMarks.configure({ onTag: (t) => notebook.showTag(t) }),
   ScriptElements.configure({ isScript: () => isScript() }),
   SceneCodes.configure({ numbering: () => (isScript() && state.project?.fields?.numbered ? numbering : null) }),
-  Woven.configure({ isWoven: () => isWoven(), busy: (v) => slashOpen(v), places: (doc) => placeList(biblePlaces, doc), onDot: (ref, anchor, title) => scenePop.open(ref, anchor, title), onBlocked: (m) => toast(m) }),
-  FileEmbed.configure({ onTooBig: tooBig }), SlashMenu
+  Woven.configure({ isWoven: () => isWoven(), busy: (v) => slashOpen(v) || suggestOpen(v), places: (doc) => placeList(biblePlaces, doc), onDot: (ref, anchor, title) => scenePop.open(ref, anchor, title), onBlocked: (m) => toast(m) }),
+  FileEmbed.configure({ onTooBig: tooBig }), SlashMenu, Suggest.configure({ isScript: () => isScript() })
 ];
 const isScript = () => root.classList.contains('script');
 // Woven: the script written as flowing prose, scene headings hidden (woven.js).

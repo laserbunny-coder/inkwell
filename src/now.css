@@ -262,4 +262,5 @@ a.now-video { text-decoration: none; }
 .ev-warn[hidden] { display: none; }
 .ev-warn:hover { color: var(--ink); }
 .ev-warn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (max-width: 640px) { .ev-warn { top: max(8px, env(safe-area-inset-top)); font-size: 14px; padding: 8px 16px; } }
+/* On a phone the top line is full: the warning sits just under it, never over the date. */
+@media (max-width: 640px) { .ev-warn { top: calc(env(safe-area-inset-top, 0px) + 52px); font-size: 14px; padding: 8px 16px; } }
