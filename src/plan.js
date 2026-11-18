@@ -24,9 +24,11 @@ import { make } from './dom.js';
 import { Now, SMALLS, isSmall } from './now.js';
 import { zoomOn } from './zoomstate.js';
 import { drawYear } from './year.js';
+import { drawMonth } from './month.js';
 import { isLight } from './firstlight.js';
 import { zoomTo } from './nowpage.js';
 import { inPane } from './panes.js';
+import { Pick, Shelf, timeOf, parseKey, moveTo, stopKey, rulerDrops } from './zoomtime.js';
 
 const ICON = {
   play: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4 2.5v11l9-5.500z" fill="currentColor"/></svg>',
@@ -114,6 +116,9 @@ export class Plan {
     this.aheadAdd = null; // { world, week, day } while something is being typed into a lane
     aheadDrags(this, sheet);
     this.now = new Now(this);
+    this.zpick = new Pick(this);
+    this.shelf = new Shelf(this);
+    rulerDrops(this, Plan);
   }
 
   item(id) { return this.items.find((i) => i.row.id === id) || null; }
@@ -157,6 +162,8 @@ export class Plan {
     this.week = place.week || null;
     // The zoom (Part 2): a line opened on the Now stop without moving it.
     this.lineId = this.tab === 'now' ? place.line || null : null;
+    // The zoom (Part 3): another day, gone into from the Week (Today's stop).
+    this.dayAt = this.tab === 'day' && place.day && place.day !== this.today ? place.day : null;
     this.aheadAdd = null;
     this.aheadHeld = false;
     this.sheet.dataset.tab = this.tab;
@@ -192,6 +199,7 @@ export class Plan {
     this.free = settings.free;
     this.dayEnd = settings.dayEnd;
     this.targets = settings.areas;
+    this.parts = settings.parts;
     if (areaList) this.areaList = areaList;
     if (src) this.aheadSrc = src;
     this.loadCalendar(turn);
@@ -218,13 +226,15 @@ export class Plan {
     if (this.pageShown) {
       if (this.tab === 'now') this.now.draw();
       else if (this.tab === 'pace') this.drawPace();
-      else if (this.tab === 'ahead') drawAhead(this);
-      else if (this.tab === 'day') { this.drawDay(this.sheet, this.today); if (zoomOn()) this.sheet.prepend(this.zoomTop()); }
+      else if (this.tab === 'ahead') { if (zoomOn()) drawMonth(this); else drawAhead(this); }
+      else if (this.tab === 'day') { this.drawDay(this.sheet, (zoomOn() && this.dayAt) || this.today); if (zoomOn()) this.sheet.prepend(this.zoomTop()); }
       else if (this.tab === 'year') drawYear(this);
       else if (this.tab === 'calday') this.drawCalDay();
       else if (this.tab === 'plan') this.drawOutline(this.sheet);
       else this.drawWeek();
     }
+    this.zpick?.paint();
+    this.shelf?.draw();
     this.hooks.redrawn?.();
   }
 
@@ -334,6 +344,7 @@ export class Plan {
   }
   // Today's list on the zoom: the date, Today, and its faces.
   zoomTop() {
+    if (this.dayAt) return this.dayTop(this.dayAt);
     const head = make('header', 'pl-top zm-today-top');
     const left = make('div');
     left.append(make('div', 'pl-eyebrow', long(this.today, { weekday: 'long', month: 'long', day: 'numeric' })), make('h1', '', 'Today'));
@@ -345,6 +356,30 @@ export class Plan {
     if (ends.childElementCount) left.append(ends);
     head.append(left, this.facesRow('day'));
     return head;
+  }
+
+  // Another day, on Today's stop: its name, and the days on either side
+  // (Shift + Left and Right). The ruler's Today stop takes you back to today.
+  dayTop(day) {
+    const head = make('header', 'pl-top zm-today-top');
+    const left = make('div');
+    const word = day === addDays(this.today, 1) ? 'Tomorrow' : day === addDays(this.today, -1) ? 'Yesterday' : long(day, { weekday: 'long' });
+    left.append(make('div', 'pl-eyebrow', long(day, { weekday: 'long', month: 'long', day: 'numeric' })), make('h1', '', word));
+    const nav = make('div', 'pl-nav');
+    const btn = (act, label, aria) => { const b = make('button', 'ghost-btn', label); b.dataset.act = act; b.setAttribute('aria-label', aria); return b; };
+    nav.append(btn('day-prev', '‹', 'The day before (Shift + Left)'), btn('day-today', 'Today', 'Back to today (3)'), btn('day-next', '›', 'The day after (Shift + Right)'));
+    head.append(left, nav);
+    return head;
+  }
+  // Into a day from the Week (the zoom): today is the Today stop; another day
+  // is its list on that stop.
+  intoDay(day) {
+    if (!day) return null;
+    return zoomTo({ place: day === this.today ? { view: 'plan', tab: 'day' } : { view: 'plan', tab: 'day', day }, way: 'in' });
+  }
+  dayStep(n) {
+    const d = addDays(this.dayAt || this.today, n);
+    return zoomTo({ place: d === this.today ? { view: 'plan', tab: 'day' } : { view: 'plan', tab: 'day', day: d }, way: n < 0 ? 'prev' : 'next' });
   }
 
   // Today, Plan, Calendar (Page, Plan, Calendar on a phone). On a calendar the
@@ -530,7 +565,63 @@ export class Plan {
       ...(timed.length ? weave(open, timed, day, Date.now(), today).flatMap((x) => (x.event ? [this.wovenEvent(x.event, x.at)] : row(x.item))) : open.flatMap(row))
     ];
     const below = hid ? [this.doneLine(hid)] : [];
-    return { p, evs, cal, above, below };
+    return { p, evs, cal, above: this.withParts(above, day), below };
+  }
+
+  // The zoom's two quiet dividers, Afternoon and Evening (Part 3). They are
+  // places in the day's order, never clock times: settings-plan fields.parts
+  // { day: { aft, eve } } holds each as an order value (a task whose order is
+  // above it comes after it). Never set: both sit at the end.
+  partsOf(day) {
+    const p = this.parts?.[day] || {};
+    const aft = Number.isFinite(p.aft) ? p.aft : Infinity;
+    const eve = Number.isFinite(p.eve) ? Math.max(p.eve, aft) : Infinity;
+    return { aft, eve };
+  }
+  partsShown() { return zoomOn() && !this.hooks.off?.('dayparts'); }
+  withParts(above, day) {
+    if (!this.partsShown()) return above;
+    const at = this.partsOf(day);
+    const out = [];
+    const put = { aft: false, eve: false };
+    const divider = (k) => {
+      const d = make('div', 'pl-part');
+      d.dataset.task = `part:${k}`;
+      d.dataset.part = k;
+      d.dataset.move = '1';
+      if (hover.matches) { d.draggable = true; d.title = 'A place in the order, not a time: drag it, or drag a line past it'; }
+      d.append(make('span', 'pl-part-l', k === 'aft' ? 'Afternoon' : 'Evening'));
+      put[k] = true;
+      return d;
+    };
+    for (const el of above) {
+      const id = el.classList?.contains('pl-task') && !el.classList.contains('carried') && !el.dataset.ghost ? el.dataset.task : null;
+      const o = id ? this.item(id)?.task.order || 0 : null;
+      if (o !== null) for (const k of ['aft', 'eve']) if (!put[k] && o > at[k]) out.push(divider(k));
+      out.push(el);
+    }
+    for (const k of ['aft', 'eve']) if (!put[k]) out.push(divider(k));
+    return out;
+  }
+  // A new order with the dividers in it: each takes the place just after the
+  // line above it (k + 0.5), and today's order is written as before.
+  async settleParts(day, seq) {
+    const parts = {};
+    let n = 0;
+    for (const x of seq) {
+      const id = x.dataset?.task || x.id;
+      if (id?.startsWith('part:')) parts[id.slice(5)] = n + 0.5;
+      else n += 1;
+    }
+    if (parts.aft !== undefined && parts.eve !== undefined && parts.eve < parts.aft) parts.eve = parts.aft;
+    const all = { ...(this.parts || {}) };
+    all[day] = { ...(all[day] || {}), ...parts };
+    // Only this week's days and later are kept.
+    const keep = addDays(this.today, -7);
+    for (const d of Object.keys(all)) if (d < keep) delete all[d];
+    this.parts = all;
+    const row = await savePlanSettings({ parts: all });
+    return [row];
   }
 
   // Open tasks with the done ones among them, each at its place in your order
@@ -704,6 +795,7 @@ export class Plan {
   // The line: "▸ 8 from earlier days", To today, Go through, ⋯. Three or fewer
   // never fold; with "Fold earlier days" off under Look they're always open.
   earlyLine(carried, { fold = true } = {}) {
+    if (zoomOn() && fold && carried.length) return this.earlyQuiet(carried);
     if (carried.length <= 3) return null;
     const foldable = fold && !this.hooks.off?.('foldearlier');
     const open = !foldable || this.earlyOpen;
@@ -724,6 +816,24 @@ export class Plan {
     more.setAttribute('aria-label', 'More for the tasks from earlier days');
     more.setAttribute('aria-haspopup', 'menu');
     el.append(n, acts);
+    return { el, open };
+  }
+
+  // The zoom (Part 3): one quiet line on top of Today, "3 left from earlier
+  // days". It opens the go-through; the small triangle shows them here.
+  earlyQuiet(carried) {
+    const open = !!this.earlyOpen;
+    const el = make('div', `pl-early quiet${open ? ' open' : ''}`);
+    el.setAttribute('role', 'group');
+    el.setAttribute('aria-label', 'From earlier days');
+    const tri = make('button', 'pl-early-tri', open ? '▾' : '▸');
+    tri.dataset.act = 'early-fold';
+    tri.setAttribute('aria-expanded', String(open));
+    tri.setAttribute('aria-label', open ? 'Fold them away' : 'Show them here');
+    const n = make('button', 'pl-early-n', `${carried.length} left from earlier days`);
+    n.dataset.act = this.hooks.goThrough ? 'thru-carried' : 'early-fold';
+    n.title = this.hooks.goThrough ? 'Go through them one at a time: keep it for today, take it off the day, tick it or delete it' : 'Show them here';
+    el.append(tri, n);
     return { el, open };
   }
 
@@ -1787,10 +1897,15 @@ export class Plan {
     if (i && row.dataset.ghost) i = { ...i, ghost: row.dataset.ghost };
     if (act === 'week-prev' || act === 'week-next') return this.hooks.go({ view: 'plan', tab: 'week', week: addDays(weekOf(this.week || this.today)[0], act === 'week-prev' ? -7 : 7) });
     if (act === 'week-now') return this.hooks.go({ view: 'plan', tab: 'week' });
+    if (act === 'open-day' && zoomOn()) return this.intoDay(el.closest('[data-day]').dataset.day);
     if (act === 'open-day') return this.hooks.go({ view: 'notebook', pageId: `day-${el.closest('[data-day]').dataset.day}` });
+    if (act === 'day-prev') return this.dayStep(-1);
+    if (act === 'day-next') return this.dayStep(1);
+    if (act === 'day-today') return zoomTo({ stop: 'today' });
     if (act === 'zoom') { this.calZoom = el.dataset.tab; return this.hooks.go({ view: 'plan', tab: el.dataset.tab }); }
     if (act === 'open-plan') { if (el.dataset.bucket) this.planFold(el.dataset.bucket, true); return this.hooks.go({ view: 'plan', tab: 'plan' }); }
     if (act === 'thru-carried') return this.hooks.goThrough?.();
+    if (act === 'week-day' && zoomOn()) { const day = el.closest('[data-day]').dataset.day; return day ? this.intoDay(day) : null; }
     if (act === 'week-day') {
       // A day of the week on a phone: that day in Plan (Any day: Plan, at This week).
       const day = el.closest('[data-day]').dataset.day;
@@ -1995,6 +2110,9 @@ export class Plan {
     // their order and go where it went.
     if (seq.some((x) => (x.dataset?.task || x.id) === SMALLS)) seq = seq.flatMap((x) => ((x.dataset?.task || x.id) === SMALLS ? this.smallIds().filter((id) => id !== moved).map((id) => ({ id })) : [x]));
     if (moved === SMALLS) moved = this.smallIds()[0];
+    const hasParts = seq.some((x) => (x.dataset?.task || x.id || '').startsWith('part:'));
+    const partRows = hasParts && list.dataset.day ? await this.settleParts(list.dataset.day, seq) : [];
+    seq = seq.filter((x) => !(x.dataset?.task || x.id || '').startsWith('part:'));
     const woven = seq.some((x) => x.classList?.contains('pl-wev'));
     let ev = -1;
     let pin = null;
@@ -2004,8 +2122,9 @@ export class Plan {
       const id = x.dataset?.task || x.id;
       ids.push(id);
       if (id === moved && woven) pin = { id, after: ev };
+      // (A divider moved: today's lines are numbered 1, 2, 3 so its place holds.)
     }
-    return this.wrote(await arrange(ids, list.dataset.day, pin));
+    return this.wrote([...partRows, ...(await arrange(ids, list.dataset.day, pin))]);
   }
 
   // Today's small things in their order (as Now groups them).
@@ -2363,8 +2482,19 @@ export class Plan {
   // to the tray.
   drags(root) {
     let id = null;
+    // Resting on a ruler stop with a line: the view under it zooms there.
+    let rest = null;
+    const restOn = (stop) => {
+      if (rest?.stop === stop) return;
+      clearTimeout(rest?.timer);
+      rest = stop ? { stop, timer: setTimeout(() => { if (zoomOn()) zoomTo({ stop }); }, 700) } : null;
+    };
     const clear = () => root.querySelectorAll('.drop-before, .drop-after, .drop-on').forEach((x) => x.classList.remove('drop-before', 'drop-after', 'drop-on'));
     const spot = (e, target = e.target) => {
+      // The zoom (Part 3): a place that names its time (a week, a month, the
+      // Not planned shelf) or a stop on the ruler.
+      const dz = zoomOn() ? target?.closest?.('[data-drop], .zm-ruler .zm-stop[data-stop]') : null;
+      if (dz) { const drop = dz.dataset.drop || stopKey(dz.dataset.stop, this.today); if (drop) return { drop, dz, stop: dz.dataset.stop || null }; }
       const zone = target?.closest?.('.pw-day, .pw-tray');
       if (zone) return { zone };
       // What's when: over a heading (or a folded one), at the end of it.
@@ -2377,7 +2507,7 @@ export class Plan {
       }
       if (!list) return null;
       // In a woven plan the events count as places too: a task can go just above or below one.
-      const all = [...list.querySelectorAll('.pl-task:is(:not(.done), .inplace):not(.ghost), .pl-wev')].filter((r) => r.dataset.task !== id && r.closest('.pl-list') === list);
+      const all = [...list.querySelectorAll('.pl-task:is(:not(.done), .inplace):not(.ghost), .pl-wev, .pl-part')].filter((r) => r.dataset.task !== id && r.closest('.pl-list') === list);
       let after = null;
       for (const r of all) { const b = r.getBoundingClientRect(); if (e.clientY > b.top + b.height / 2) after = r; }
       // Tasks from earlier days sit on top. One of those can move among them
@@ -2392,7 +2522,10 @@ export class Plan {
     const show = (s) => {
       clear();
       root.querySelectorAll('.pull-over').forEach((x) => x.classList.remove('pull-over'));
+      document.querySelectorAll('.zm-dropon').forEach((x) => x.classList.remove('zm-dropon'));
+      restOn(s?.stop || null);
       if (!s) return;
+      if (s.drop) { s.dz.classList.add('zm-dropon'); return; }
       if (s.sec && (s.list.hidden || !s.rows.length)) s.sec.classList.add('pull-over');
       else if (s.zone) s.zone.classList.add('drop-on');
       else if (s.after) s.after.classList.add('drop-after');
@@ -2401,6 +2534,19 @@ export class Plan {
     const land = async (s, moved) => {
       root.querySelectorAll('.pull-over').forEach((x) => x.classList.remove('pull-over'));
       if (!s) return;
+      document.querySelectorAll('.zm-dropon').forEach((x) => x.classList.remove('zm-dropon'));
+      restOn(null);
+      if (s.drop) {
+        if (moved.startsWith('part:')) return this.refresh();
+        const t = parseKey(s.drop);
+        const i = this.item(moved);
+        if (!i || !t) return this.refresh();
+        const at = timeOf(i, this.today);
+        if (JSON.stringify(at) === JSON.stringify(t) && this.movingIds(moved).length === 1) return this.refresh();
+        return moveTo(this, this.movingIds(moved), t);
+      }
+      // A divider only moves inside its own day's list.
+      if (moved.startsWith('part:') && (s.zone || s.sec || s.carried || !s.list?.dataset.day || s.list.dataset.bucket)) return this.refresh();
       const ids = this.movingIds(moved);
       if (s.zone) {
         // A day of the week, or "Any day this week".
@@ -2425,10 +2571,12 @@ export class Plan {
       return this.settle(s.list, seq, moved);
     };
     this.touchDrags(root, { spot, show, clear, land, setId: (v) => { id = v; } });
+    if (root === this.sheet) this.dropHere = { spot, show, land };
     root.addEventListener('dragstart', (e) => {
       const row = e.target.closest?.('[data-task][draggable="true"]');
       if (!row) return;
       id = row.dataset.task;
+      Plan.dragging = id;
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', row.textContent.trim());
       requestAnimationFrame(() => { row.classList.add('dragging'); document.documentElement.classList.add('pl-dragging'); });
@@ -2437,12 +2585,14 @@ export class Plan {
     if (!Plan.dragEnds) {
       Plan.dragEnds = true;
       const end = () => document.documentElement.classList.remove('pl-dragging');
+      document.addEventListener('dragend', () => { Plan.dragging = null; }, true);
       document.addEventListener('drop', end, true);
       document.addEventListener('dragend', end, true);
       document.addEventListener('mousemove', (e) => { if (!e.buttons && document.documentElement.classList.contains('pl-dragging')) end(); }, true);
     }
     root.addEventListener('dragend', () => { id = null; clear(); document.documentElement.classList.remove('pl-dragging'); root.querySelectorAll('.dragging').forEach((x) => x.classList.remove('dragging')); });
     root.addEventListener('dragover', (e) => {
+      if (!id && Plan.dragging) id = Plan.dragging;
       if (!id) return;
       const s = spot(e);
       if (!s) return;
@@ -2451,6 +2601,7 @@ export class Plan {
       show(s);
     });
     root.addEventListener('drop', async (e) => {
+      if (!id && Plan.dragging) id = Plan.dragging;
       if (!id) return;
       const s = spot(e);
       const moved = id;
@@ -2581,6 +2732,8 @@ export class Plan {
         // Held still and let go: it settles back (a menu that came stays open).
         // A quick tap on the dots goes on to zoom in.
         if ((was.armed && !was.grip) || was.menued) e.preventDefault();
+        // In the zoom, a line held still and let go is picked: its small bar moves it.
+        if (was.armed && !was.grip && !was.menued && this.zpick?.active()) this.zpick.set(was.id, { scroll: false });
         return;
       }
       e.preventDefault(); // no tap on whatever is under the finger

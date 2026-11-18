@@ -403,7 +403,7 @@ export async function planSettings() {
   const f = row && !row.deleted ? row.fields || {} : {};
   // dayEnd: the hour your day ends (22 = 10 pm), for "left today".
   // areas: { area id: the hours a week you mean to give it }.
-  return { areas: f.areas && typeof f.areas === 'object' ? f.areas : {}, free: Number(f.free) > 0 ? Number(f.free) : FREE_HOURS, dayEnd: Number(f.dayEnd) > 0 && Number(f.dayEnd) <= 24 ? Number(f.dayEnd) : 22 };
+  return { parts: f.parts && typeof f.parts === 'object' ? f.parts : {}, areas: f.areas && typeof f.areas === 'object' ? f.areas : {}, free: Number(f.free) > 0 ? Number(f.free) : FREE_HOURS, dayEnd: Number(f.dayEnd) > 0 && Number(f.dayEnd) <= 24 ? Number(f.dayEnd) : 22 };
 }
 export async function savePlanSettings(next) {
   const prev = await getEntry(PLAN_ID);

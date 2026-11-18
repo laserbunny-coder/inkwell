@@ -72,6 +72,7 @@ let mic = null;
 let when = null;
 let glass = null;
 let more = null;
+let np = null;
 let lit = null;
 let needs = 0;
 
@@ -146,6 +147,14 @@ export async function zoomGo(place, way = 'rise') {
   return shown;
 }
 
+function dayWordOf(p) {
+  const d = p?.view === 'plan' && p.tab === 'day' ? p.day : null;
+  const today = isoOf();
+  if (!d || d === today) return 'Today';
+  if (d === addDays(today, 1)) return touch.matches ? 'Tmrw' : 'Tomorrow';
+  const dt = new Date(`${d}T12:00`);
+  return `${dt.toLocaleDateString('en-US', { weekday: 'short' })} ${dt.getDate()}`;
+}
 const onYear = (p = lastPlace) => p?.view === 'plan' && p.tab === 'year';
 // The Year, from the Month stop (or back to the four weeks with on false).
 export function toYear(on = true) {
@@ -170,7 +179,9 @@ export async function zoomOut() {
   const p = lastPlace;
   const s = stopOf(p);
   if (s === 'now') return toStop('today');
+  if (s === 'today' && p?.view === 'plan' && p.day) { const w = weekOf(p.day)[0]; return zoomGo({ view: 'plan', tab: 'week', ...(w === weekOf(isoOf())[0] ? {} : { week: w }) }, 'out'); }
   if (s === 'today') return toStop('week');
+  if (s === 'week' && p?.week && p.week > weekOf(isoOf())[0]) return zoomGo({ view: 'plan', tab: 'ahead', week: p.week }, 'out');
   if (s === 'week') return toStop('month');
   if (s === 'month') return onYear(p) ? null : toYear(true);
   if (s === 'project') {
@@ -203,6 +214,16 @@ function pan(dir) {
     const mon = weekOf(p.week || isoOf())[0];
     const next = addDays(mon, dir * 7);
     return zoomGo({ view: 'plan', tab: 'week', ...(next === weekOf(isoOf())[0] ? {} : { week: next }) }, dir > 0 ? 'next' : 'prev');
+  }
+  // A day on Today's stop: the day before or after (Part 3).
+  if (p?.view === 'plan' && p.tab === 'day') {
+    const d = addDays(p.day || isoOf(), dir);
+    return zoomGo({ view: 'plan', tab: 'day', ...(d === isoOf() ? {} : { day: d }) }, dir > 0 ? 'next' : 'prev');
+  }
+  // The four weeks: four weeks on (Part 3).
+  if (p?.view === 'plan' && p.tab === 'ahead') {
+    const from = addDays(weekOf(p.week || isoOf())[0], dir * 28);
+    return zoomGo({ view: 'plan', tab: 'ahead', ...(from === weekOf(isoOf())[0] ? {} : { week: from }) }, dir > 0 ? 'next' : 'prev');
   }
   return null;
 }
@@ -247,6 +268,11 @@ function build() {
   glass.title = 'Go: anywhere by name, jump back, every command (Ctrl + O, or / when you’re not typing)';
   glass.setAttribute('aria-label', 'Go');
   glass.innerHTML = glassIcon;
+  // Not planned · N (Part 3): opens the shelf of lines with no time yet.
+  np = make('button', 'zm-np', 'Not planned');
+  np.type = 'button';
+  np.title = 'Lines with no day and no time yet: drag one into the plan, or onto a ruler stop';
+  np.addEventListener('click', () => plan?.shelf?.toggle());
   more = make('button', 'zm-more', '⋯');
   more.type = 'button';
   more.title = 'More: notes beside the text, Beside, Focus, Look';
@@ -285,7 +311,7 @@ function place() {
   const bar = document.querySelector('.topbar');
   const left = bar?.querySelector(':scope > .tb-l');
   const right = bar?.querySelector(':scope > .tb-r');
-  if (left && right) { left.prepend(when); right.append(glass, more); } else if (bar) { bar.prepend(when); bar.append(glass, more); }
+  if (left && right) { left.prepend(when); right.append(np, glass, more); } else if (bar) { bar.prepend(when); bar.append(np, glass, more); }
 }
 
 function light(place) {
@@ -294,6 +320,9 @@ function light(place) {
   // On the Year the Month stop reads Year, and stays lit.
   const word = ruler.querySelector('[data-stop="month"] .zm-word');
   if (word) word.textContent = onYear(place) ? 'Year' : 'Month';
+  // Another day on Today's stop: the stop says which (Part 3).
+  const tw = ruler.querySelector('[data-stop="today"] .zm-word');
+  if (tw) tw.textContent = dayWordOf(place);
   for (const b of ruler.querySelectorAll('.zm-stop')) {
     if (b.dataset.stop === lit) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   }

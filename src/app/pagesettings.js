@@ -161,7 +161,7 @@ function setShown(name, on) {
   if (name === 'linkpics') resetLinkPics();
   if (name === 'panes') { if (!on) panes?.closeAll(); panes?.layout(); }
   if (name === 'closedtag' && deskPage?.showing() && deskPage.now) deskPage.render({ now: deskPage.now, failed: false });
-  if (['estimates', 'woven', 'planview', 'foldearlier', 'areahours', 'aheadhours', 'donetasks', 'nowgate', 'smallsgo', 'rowdetails', 'nowwhere'].includes(name)) { if (plan) { plan.peekDone = false; plan.just = null; plan.took = null; } plan?.refresh(); }
+  if (['estimates', 'woven', 'planview', 'foldearlier', 'areahours', 'aheadhours', 'donetasks', 'dayparts', 'nowgate', 'smallsgo', 'rowdetails', 'nowwhere'].includes(name)) { if (plan) { plan.peekDone = false; plan.just = null; plan.took = null; } plan?.refresh(); }
   if (name === 'nextstep') deskPage?.refresh();
   if (name.startsWith('now')) nowChanged();
   syncSwitches();
