@@ -141,6 +141,7 @@ export class StagePage {
     }
     body.append(top);
     if (this.walk) { await this.drawWalk(body); return; }
+    body.append(this.ideaBox());
 
     const list = show === 'open' ? open : show === 'filed' ? filed : [...open, ...filed, ...letgo];
     const ul = make('ul', 'st-cards');
@@ -209,8 +210,49 @@ export class StagePage {
     return [
       { label: 'Open where it was written', run: () => this.hooks.openEntry(row.id) },
       ...(row.fields?.filed || []).map((id) => ({ label: 'Take it back off a page…', run: async () => { const t = await getEntry(id); const ok = await this.hooks.ask({ title: `Take it off “${t?.title || 'that page'}”?`, body: 'The copy on that page goes; the line stays where it was written.', ok: 'Take it off' }); if (ok) { await this.changed(await unfile(row.id, id)); this.render(); } } })),
-      ...(it.drawer ? [{ label: 'Not for this world', run: async () => { await this.changed(await pullInto(row.id, this.owner.id, false)); this.render(); } }] : [])
+      ...(it.drawer ? [{ label: 'Not for this world', run: async () => { await this.changed(await pullInto(row.id, this.owner.id, false)); this.render(); } }] : []),
+      'sep',
+      { label: 'Delete', danger: true, run: () => this.deleteIdea(row.id) }
     ];
+  }
+
+  // "Add an idea…" at the top of Ideas: a line on today's page that links
+  // here, so it is in both places (as before, when written with [[ ).
+  ideaBox() {
+    const form = make('form', 'wo-idea st-idea');
+    form.noValidate = true;
+    const input = make('input');
+    input.type = 'text';
+    input.placeholder = 'Add an idea…';
+    input.setAttribute('aria-label', `Add an idea to ${this.owner.title || 'this project'}`);
+    input.setAttribute('enterkeyhint', 'enter');
+    input.autocomplete = 'off';
+    form.append(input);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      const { addLine } = await import('./capture.js');
+      const { rows } = await addLine([{ type: 'text', text: `${text} ` }, { type: 'entryRef', attrs: { id: this.owner.id, title: this.owner.title || 'Untitled' } }], {});
+      await this.changed(rows);
+      this.hooks.toast('Idea added (on today’s page too)');
+      this.stale = false;
+      await this.render();
+      this.el.querySelector('.st-idea input')?.focus();
+    });
+    return form;
+  }
+
+  // Delete an idea: the line goes to the Trash (from its day page too), with Undo.
+  async deleteIdea(id) {
+    const { trash, restore } = await import('./trash.js');
+    const row = await getEntry(id);
+    if (!row) return;
+    await trash(row);
+    await this.changed([await getEntry(id)]);
+    this.undoToast('Idea in the Trash', async () => { await restore(id); await this.changed([await getEntry(id)]); });
+    this.render();
   }
 
   async file(lineId, targetId) {

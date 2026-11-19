@@ -276,6 +276,28 @@ try {
     assert.equal((await placeOf(desk)).id, 'pr_reel2');
   });
 
+  await check('desktop: zoomed into Ideas, Add an idea is at the top; ⋯ Delete puts it in the Trash with Undo', async () => {
+    await home(desk);
+    await desk.keyboard.press('Alt+1');
+    await desk.waitForFunction(() => document.querySelector('.st-title')?.textContent === 'Ideas');
+    const input = desk.locator('.st-idea input');
+    await input.fill('Mom’s katana is a spatula');
+    await input.press('Enter');
+    await desk.waitForFunction(() => [...document.querySelectorAll('.st-card .st-text')].some((t) => /spatula/.test(t.textContent)));
+    assert.equal(await desk.evaluate(() => document.activeElement?.closest('.st-idea') !== null), true, 'the box keeps the cursor for the next one');
+    await shot(desk, 'ideas-add');
+    const card = desk.locator('.st-card', { hasText: 'spatula' });
+    await card.locator('.st-acts button').last().click();
+    await desk.getByRole('menuitem', { name: 'Delete' }).click();
+    await desk.waitForFunction(() => ![...document.querySelectorAll('.st-card .st-text')].some((t) => /spatula/.test(t.textContent)));
+    const gone = (await all(desk)).find((r) => r.kind === 'line' && /spatula/.test(r.text || ''));
+    assert.ok(gone.fields.trashed, 'in the Trash, not deleted');
+    await desk.locator('.toast button', { hasText: 'Undo' }).first().click();
+    await desk.waitForFunction(() => [...document.querySelectorAll('.st-card .st-text')].some((t) => /spatula/.test(t.textContent)));
+    await desk.keyboard.press('Alt+0');
+    await desk.waitForFunction(() => document.documentElement.dataset.view === 'world');
+  });
+
   await check('the old words still find the parts in Go (Ctrl + K)', async () => {
     await home(desk);
     await desk.keyboard.press('Control+k');
