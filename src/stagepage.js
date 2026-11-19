@@ -7,10 +7,11 @@ import { entry, newId, outline } from './model.js';
 import { GAP } from './order.js';
 import { nextLevel, worldOf, worldTree, worldStats, stats, hasManuscript, bookType, kindName, stageOf, isOut, isReady, ago, newPage, pagesIn, toolsOf } from './library.js';
 import { worldPromises } from './grid.js';
-import { elementsIn, ELEMENT_TYPES, typeOf, shootDays } from './production.js';
+import { elementsIn, ELEMENT_TYPES, typeOf, shootDays, newElement, setElement, plainPages, newShootDay } from './production.js';
 import { shareId, commentsOn } from './sharelink.js';
 import { isLife, hasLineDrag, lineDragId, lineWords, partOfPage, partName } from './pages.js';
-import { pieceLine } from './projectoutline.js';
+import { pieceLine, inIdeaOrder, setIdeaOrder, stepKeys } from './projectoutline.js';
+import { arrangeable, movableRow, refocus } from './listkit.js';
 import { make } from './dom.js';
 import {
   DEVELOP, MAKE_WORLD, SHAPE_PIECE, SHAPE_WORLD, askForm, charactersIn, drawerItems, eventsIn, fileInto, gatherItems, gone, hasDrawerTag, homesIn, intoDrawer, letGo, outOfDrawer, pageText, pieceText, plural, pref, pullInto, setPref, snip, tiesIn, unfile
@@ -123,7 +124,7 @@ export class StagePage {
   async drawGather(body) {
     const items = await gatherItems(this.owner);
     this.items = items;
-    const open = items.filter(({ row }) => !(row.fields?.filed || []).length && !row.fields?.letgo);
+    const open = inIdeaOrder(this.owner, items.filter(({ row }) => !(row.fields?.filed || []).length && !row.fields?.letgo));
     const filed = items.filter(({ row }) => (row.fields?.filed || []).length);
     const letgo = items.filter(({ row }) => row.fields?.letgo && !(row.fields?.filed || []).length);
     const show = this.sub([{ id: 'open' }, { id: 'filed' }, { id: 'all' }], 'open');
@@ -145,7 +146,14 @@ export class StagePage {
 
     const list = show === 'open' ? open : show === 'filed' ? filed : [...open, ...filed, ...letgo];
     const ul = make('ul', 'st-cards');
-    for (const it of list) ul.append(await this.card(it));
+    // To file is in your own order: drag a card (hold on a phone), or the keys.
+    const keys = show === 'open' ? list.map(({ row }) => row.id) : null;
+    for (const it of list) {
+      const li = await this.card(it, keys);
+      if (keys) movableRow(li, 'st-idea', it.row.id, { up: () => this.stepIdea(keys, it.row.id, -1), down: () => this.stepIdea(keys, it.row.id, 1), del: () => this.deleteIdea(it.row.id) });
+      ul.append(li);
+    }
+    if (keys) arrangeable(this.el, ul, 'st-idea', async (_key, order) => { await this.changed(await setIdeaOrder(this.owner.id, order)); this.owner = await getEntry(this.owner.id); this.render(); });
     body.append(ul);
     if (!list.length) {
       body.append(make('p', 'hint st-empty', show === 'open'
@@ -156,7 +164,16 @@ export class StagePage {
     if (this.scope === 'world') await this.drawFromDrawer(body);
   }
 
-  async card(it) {
+  async stepIdea(keys, id, how) {
+    const next = stepKeys(keys, id, how);
+    if (!next) return;
+    await this.changed(await setIdeaOrder(this.owner.id, next));
+    this.owner = await getEntry(this.owner.id);
+    await this.render();
+    refocus(this.el, id);
+  }
+
+  async card(it, keys = null) {
     const { row } = it;
     const li = make('li', 'st-card' + (row.fields?.letgo ? ' letgo' : ''));
     li.dataset.id = row.id;
@@ -185,7 +202,7 @@ export class StagePage {
       back.addEventListener('click', async () => { await this.changed(await letGo(row.id, false)); this.render(); });
       acts.append(back);
     }
-    acts.append(this.hooks.menuButton(() => this.cardMenu(it), 'More'));
+    acts.append(this.hooks.menuButton(() => this.cardMenu(it, keys), 'More'));
     li.append(where, acts);
     return li;
   }
@@ -205,19 +222,49 @@ export class StagePage {
     ];
   }
 
-  cardMenu(it) {
+  cardMenu(it, keys = null) {
     const { row } = it;
+    const i = keys ? keys.indexOf(row.id) : -1;
     return [
       { label: 'Open where it was written', run: () => this.hooks.openEntry(row.id) },
+      ...(keys && keys.length > 1 ? [
+        { label: 'Move up', keys: '⌥⇧↑', off: i === 0, run: () => this.stepIdea(keys, row.id, -1) },
+        { label: 'Move down', keys: '⌥⇧↓', off: i === keys.length - 1, run: () => this.stepIdea(keys, row.id, 1) },
+        { label: 'Move to the top', off: i === 0, run: () => this.stepIdea(keys, row.id, 'top') }
+      ] : []),
       ...(row.fields?.filed || []).map((id) => ({ label: 'Take it back off a page…', run: async () => { const t = await getEntry(id); const ok = await this.hooks.ask({ title: `Take it off “${t?.title || 'that page'}”?`, body: 'The copy on that page goes; the line stays where it was written.', ok: 'Take it off' }); if (ok) { await this.changed(await unfile(row.id, id)); this.render(); } } })),
       ...(it.drawer ? [{ label: 'Not for this world', run: async () => { await this.changed(await pullInto(row.id, this.owner.id, false)); this.render(); } }] : []),
       'sep',
-      { label: 'Delete', danger: true, run: () => this.deleteIdea(row.id) }
+      { label: 'Delete', keys: '⌘⇧⌫', danger: true, run: () => this.deleteIdea(row.id) }
     ];
   }
 
   // "Add an idea…" at the top of Ideas: a line on today's page that links
   // here, so it is in both places (as before, when written with [[ ).
+  // A line to add things with: type, Enter, and the cursor stays for the next.
+  addBox(placeholder, label, add) {
+    const form = make('form', 'wo-idea st-idea st-addbox');
+    form.noValidate = true;
+    const input = make('input');
+    input.type = 'text';
+    input.placeholder = placeholder;
+    input.setAttribute('aria-label', label);
+    input.setAttribute('enterkeyhint', 'enter');
+    input.autocomplete = 'off';
+    form.append(input);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      await add(text);
+      this.stale = false;
+      await this.render();
+      this.el.querySelector(`.st-addbox input[aria-label="${CSS.escape(label)}"]`)?.focus();
+    });
+    return form;
+  }
+
   ideaBox() {
     const form = make('form', 'wo-idea st-idea');
     form.noValidate = true;
@@ -434,10 +481,13 @@ export class StagePage {
     const { pages } = await worldTree(w.id);
     const head = make('div', 'ph-row');
     head.append(make('span', 'panel-label', label));
-    const add = make('button', 'ghost-btn', '+ Page');
-    add.addEventListener('click', () => this.hooks.newPage(w.id));
-    head.append(add);
     body.append(head);
+    // "Add a page…" leads the list: type its name, Enter, and the next one.
+    body.append(this.addBox(isLife(w) ? 'Add a page…' : 'Add a bible page…', `Add a page to ${w.title || 'this project'}`, async (title) => {
+      const page = await newPage(w.id, title);
+      await this.changed([page]);
+      this.hooks.toast(`“${title}” added`, { label: 'Open', run: () => this.hooks.go({ view: 'notebook', pageId: page.id }) });
+    }));
     const ul = make('ul', 'loose-list tree-list st-bible');
     // The project's own Steps page lives under Steps, not in the bible.
     for (const { row: p, depth } of pages.filter(({ row }) => row.id !== `steps-${w.id}`)) {
@@ -447,16 +497,18 @@ export class StagePage {
       const open = make('button', 'loose-title', p.title || 'Untitled page');
       open.addEventListener('click', () => this.hooks.go({ view: 'notebook', pageId: p.id }));
       const el = p.fields?.element;
-      li.append(open, make('span', 'when', el ? typeOf(el.type).label : ago(p.updated_at)));
+      li.append(open, make('span', 'when', el ? typeOf(el.type).label : ago(p.updated_at)), this.hooks.menuButton(() => this.hooks.pageMenu(p), `More for ${p.title || 'this page'}`));
+      this.hooks.arrange(li, 'st-page', p);
       // A line from the Today panel dropped on a page is filed there.
       li.addEventListener('dragover', (e) => { if (hasLineDrag(e)) { e.preventDefault(); li.classList.add('drop'); } });
       li.addEventListener('dragleave', () => li.classList.remove('drop'));
       li.addEventListener('drop', async (e) => { li.classList.remove('drop'); const id = lineDragId(e); if (!id) return; e.preventDefault(); await this.file(id, p.id); });
       ul.append(li);
     }
+    arrangeable(this.el, ul, 'st-page', (key, keys) => this.hooks.placeAmong(key, keys));
     body.append(ul);
     if (!pages.length) body.append(make('p', 'hint', isLife(w) ? 'A page for each thing you work out: the options, who to call, what was decided.' : 'Characters, places, rules, running gags: a page for each, and pages inside pages. This is canon.'));
-    else body.append(make('p', 'hint st-tip', 'Drag a line from the Today panel (Ctrl + Shift + J) onto a page to file it there.'));
+    else body.append(make('p', 'hint st-tip', 'Drag a page (hold it on a phone) to put it in order. Drag a line from the Today panel (Ctrl + Shift + J) onto a page to file it there.'));
   }
 
   async drawPromises(body) {
@@ -890,7 +942,8 @@ export class StagePage {
       const ul = make('ul', 'wo-kids st-write');
       ul.id = 'wh-pieces';
       const h = { open: (p) => this.hooks.go({ view: 'project', id: p.id }), stage: (p, st) => this.hooks.setStage(p, st), pop: (a, items) => this.hooks.menu(a, items), menu: (p) => this.hooks.pieceMenu(p), button: (fn, label) => this.hooks.menuButton(fn, label) };
-      for (const { row, depth } of pieces) ul.append(pieceLine(row, depth, w, h));
+      for (const { row, depth } of pieces) ul.append(this.hooks.arrange(pieceLine(row, depth, w, h), 'st-piece', row));
+      arrangeable(this.el, ul, 'st-piece', (key, keys) => this.hooks.placeAmong(key, keys));
       body.append(ul);
     }
     if (!pieces.length) body.append(make('p', 'hint', 'No pieces yet. A gag, a short, an episode, a novel: anything you make here.'));
@@ -1065,6 +1118,33 @@ export class StagePage {
     ta.addEventListener('blur', () => this.now('style'));
     style.append(ta);
     body.append(style);
+    // Add to the kit right here: a new character, place, prop or costume (a
+    // page in the bible), or a bible page that's already written.
+    const adds = make('div', 'st-kit-add');
+    for (const t of ELEMENT_TYPES.filter((x) => x.id !== 'other')) {
+      const b = make('button', 'wp-link', `+ ${t.id === 'location' ? 'Place' : t.label}`);
+      b.type = 'button';
+      b.addEventListener('click', async () => {
+        const title = await this.hooks.askText({ title: `Add ${t.id === 'location' ? 'a place' : t.id === 'wardrobe' ? 'a costume' : `a ${t.label.toLowerCase()}`} to the kit`, body: 'It becomes a page in the bible, with its own row on the look wall.', ok: 'Add' });
+        if (!title?.trim()) return;
+        const el = await newElement(w, t.id, title.trim());
+        await this.changed([el]);
+        this.hooks.toast(`“${el.title}” is in the kit`, { label: 'Open', run: () => this.hooks.go({ view: 'notebook', pageId: el.id }) });
+        this.render();
+      });
+      adds.append(b);
+    }
+    const plain = await plainPages(w);
+    if (plain.length) {
+      const b = make('button', 'wp-link', 'From a bible page…');
+      b.type = 'button';
+      b.addEventListener('click', () => this.hooks.menu(b, plain.map(({ page, guess }) => ({
+        label: page.title || 'Untitled',
+        sub: ELEMENT_TYPES.map((t) => ({ label: t.label, current: t.id === guess, run: async () => { await this.changed([await setElement(page.id, { type: t.id })]); this.render(); } }))
+      }))));
+      adds.append(b);
+    }
+    body.append(adds);
     for (const t of ELEMENT_TYPES) {
       const mine = els.filter((e) => (e.fields?.element?.type || 'other') === t.id);
       if (!mine.length) continue;
@@ -1075,12 +1155,22 @@ export class StagePage {
         const b = make('button', 'st-kit-el');
         b.append(make('span', 'st-kit-name', e.title || 'Untitled'), make('span', 'st-kit-look', snip(e.fields?.element?.look || e.fields?.element?.snippet || '', 120)));
         b.addEventListener('click', () => this.hooks.go({ view: 'notebook', pageId: e.id }));
-        li.append(b);
+        li.append(b, this.hooks.menuButton(() => [
+          { label: 'Open its page', run: () => this.hooks.go({ view: 'notebook', pageId: e.id }) },
+          { label: 'What it is', sub: ELEMENT_TYPES.map((x) => ({ label: x.label, current: x.id === (e.fields?.element?.type || 'other'), run: async () => { await this.changed([await setElement(e.id, { type: x.id })]); this.render(); } })) },
+          { label: 'Take it out of the kit (the page stays)', run: async () => {
+            await this.changed([await setElement(e.id, null)]);
+            this.undoToast(`“${e.title || 'It'}” is out of the kit`, async () => this.changed([await setElement(e.id, e.fields.element)]));
+            this.render();
+          } },
+          'sep',
+          { label: 'Move its page to Trash', danger: true, run: () => this.hooks.toTrash(e) }
+        ], `More for ${e.title || 'this'}`));
         ul.append(li);
       }
       body.append(ul);
     }
-    if (!els.length) body.append(make('p', 'hint', 'The kit is the bible pages that are characters, places, props and wardrobe. Open a piece’s Make page and add them from its Kit tab, or turn bible pages into elements there.'));
+    if (!els.length) body.append(make('p', 'hint', 'The kit is the bible pages that are characters, places, props and wardrobe. Add one above, or turn a bible page you’ve already written into one.'));
   }
 
   async drawDays(body) {
@@ -1089,6 +1179,16 @@ export class StagePage {
     for (const p of pieces) for (const d of await shootDays(p.id)) all.push({ d, p });
     all.sort((a, b) => String(a.d.fields?.date || '').localeCompare(String(b.d.fields?.date || '')));
     const today = new Date().toISOString().slice(0, 10);
+    // A new shoot day from here: pick the piece (straight on, if there's one).
+    const add = make('button', 'wp-link st-day-add', '+ Shoot day');
+    add.type = 'button';
+    const make1 = async (p) => {
+      const d = await newShootDay(p.id, new Date(Date.now() + 86400000).toISOString().slice(0, 10));
+      await this.changed([d]);
+      this.hooks.go({ view: 'production', id: p.id, day: d.id });
+    };
+    add.addEventListener('click', () => (pieces.length === 1 ? make1(pieces[0]) : this.hooks.menu(add, [{ note: 'For which piece?' }, ...pieces.map((p) => ({ label: p.title || 'Untitled', run: () => make1(p) }))])));
+    if (pieces.length) body.append(add);
     const ul = make('ul', 'ref-list st-days');
     for (const { d, p } of all) {
       const li = make('li', (d.fields?.date || '') < today ? 'past' : '');
@@ -1096,11 +1196,28 @@ export class StagePage {
       const date = d.fields?.date ? new Date(`${d.fields.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'No date yet';
       b.append(make('span', 'from', `${date}${d.fields?.call ? ` · call ${d.fields.call}` : ''}`), make('span', 'line', `${d.fields?.type === 'voice' ? 'Voices: ' : ''}${p.title || 'Untitled'}${d.fields?.place ? ` · ${d.fields.place}` : ''}`));
       b.addEventListener('click', () => this.hooks.go({ view: 'production', id: p.id, day: d.id }));
-      li.append(b);
+      li.append(b, this.hooks.menuButton(() => [
+        { label: 'Open the call sheet', run: () => this.hooks.go({ view: 'production', id: p.id, day: d.id }) },
+        ...(pieces.length > 1 ? [{ label: 'Move to another piece', sub: pieces.filter((x) => x.id !== p.id).map((x) => ({ label: x.title || 'Untitled', run: async () => {
+          const fresh = await getEntry(d.id);
+          const row = { ...fresh, parent_id: x.id, updated_at: Date.now() };
+          await putEntries([row]);
+          await this.changed([row]);
+          this.undoToast(`Moved to ${x.title || 'that piece'}`, async () => { const back = { ...(await getEntry(d.id)), parent_id: p.id, updated_at: Date.now() }; await putEntries([back]); await this.changed([back]); });
+          this.render();
+        } })) }] : []),
+        'sep',
+        { label: 'Delete the day', danger: true, run: async () => {
+          const fresh = await getEntry(d.id);
+          await putEntries([{ ...fresh, deleted: true, updated_at: Date.now() }]);
+          this.undoToast('Shoot day deleted', async () => putEntries([{ ...fresh, deleted: false, updated_at: Date.now() }]));
+          this.render();
+        } }
+      ], 'More for this day'));
       ul.append(li);
     }
     body.append(ul);
-    if (!all.length) body.append(make('p', 'hint', 'Shoot days for every piece in the world, in date order. Add one from a piece’s Make page.'));
+    if (!all.length) body.append(make('p', 'hint', 'Shoot days for every piece in the project, in date order.'));
   }
 
   // ---------- Deliver: the world ----------

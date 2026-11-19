@@ -93,7 +93,11 @@ export function drawYear(plan) {
       box.append(more);
     }
     if (m.weeks) box.append(make('span', 'yr-n', `${m.weeks} for some day in a week`));
-    if (!rows.length && !m.weeks) box.append(make('span', 'yr-n', 'Nothing yet'));
+    // "+ Add" in every month: a line for sometime that month.
+    const add = plan.addRow(`month:${m.ym}`, `Add for ${m.label}`);
+    add.classList.add('yr-add');
+    add.querySelector('input').setAttribute('aria-label', `Add for ${m.label} ${m.year}`);
+    box.append(add);
     grid.append(box);
   }
 

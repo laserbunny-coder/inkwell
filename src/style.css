@@ -875,6 +875,7 @@ html.line-holding .ProseMirror, html.line-holding .ProseMirror *, html.line-calm
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pop-item.danger, :root:not([data-theme="light"]) .ghost-btn.danger { color: #E07A62; } }
 .pop-back { color: var(--muted); font-size: 13px; }
 .pop-more { color: var(--faint); }
+.pop-keys { color: var(--faint); font-size: 12px; margin-left: 18px; white-space: nowrap; }
 .pop-sep { height: 1px; background: var(--line); margin: 4px 6px; }
 .pop-note { padding: 6px 10px 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
 .pop-note.plain { text-transform: none; letter-spacing: 0; font-size: 12px; max-width: 260px; line-height: 1.35; padding: 6px 10px; }

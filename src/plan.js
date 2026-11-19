@@ -1782,9 +1782,12 @@ export class Plan {
     if (!input.value.trim()) return;
     const { title, est, repeat } = parseAdd(input.value);
     const steps = input.dataset.add === 'steps' && this.world;
-    const day = steps || input.dataset.add === 'tray' ? null : input.dataset.add;
-    // Added under "Any day this week": loose in that week.
-    const loose = input.dataset.add === 'tray' ? { kind: 'week', start: weekOf(this.week || this.today)[0] } : null;
+    // Added under "Any day this week": loose in that week. From Month
+    // ("week:<monday>") or Year ("month:<yyyy-mm>"): loose in that week or month.
+    const [kind, at] = String(input.dataset.add).split(':');
+    const loose = input.dataset.add === 'tray' ? { kind: 'week', start: weekOf(this.week || this.today)[0] }
+      : kind === 'week' ? { kind: 'week', start: at } : kind === 'month' ? { kind: 'month', start: `${at}-01` } : null;
+    const day = steps || loose ? null : input.dataset.add;
     input.value = '';
     addTask({ text: title, day, est, repeat, span: loose, order: this.lastOrder(day), home: steps ? stepsHome(this.world) : null }).then(async (rows) => {
       await this.wrote(rows);
