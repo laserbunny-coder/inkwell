@@ -756,9 +756,9 @@ async function drawOutline(w, s, { life, days }) {
     if (part.id === 'ideas') {
       const items = await gatherItems(w);
       const loose = items.filter(({ row }) => !(row.fields?.filed || []).length && !row.fields?.letgo);
-      const kids = loose.slice(0, 8).map(({ row, from }) => kidLine(snipText(row.text) || 'A picture or recording', () => openEntry(row.id), { meta: from || '' }));
+      // The way to add one comes first, so it is there without scrolling.
+      const kids = [ideaAdder(w), ...loose.slice(0, 8).map(({ row, from }) => kidLine(snipText(row.text) || 'A picture or recording', () => openEntry(row.id), { meta: from || '' }))];
       if (loose.length > 8) kids.push(kidLine(`${loose.length - 8} more ›`, zoomTo('gather'), { cls: 'wo-more' }));
-      kids.push(ideaAdder(w));
       lines.push(partLine(w, part, on, { count: loose.length, meta: loose.length ? `to sort · newest: ${snipText(loose[0].row.text, 40)}` : 'nothing to sort', kids, zoom: zoomTo('gather') }));
     } else if (part.id === 'bible' || part.id === 'notes') {
       const kids = bible.map(({ row, depth }) => kidLine(row.title || 'Untitled page', () => go({ view: 'notebook', pageId: row.id }), { depth, cls: 'wo-page' }));

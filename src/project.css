@@ -162,6 +162,7 @@ span.wo-item { cursor: default; color: var(--muted); }
 .wo-idea { flex: 1 1 auto; display: flex; }
 .wo-idea input { flex: 1; min-width: 0; border: 0; border-bottom: 1px dashed var(--line); background: none; color: var(--ink); font: 16px var(--prose); padding: 6px 0; outline: none; }
 .wo-idea input:focus { border-bottom-color: var(--accent); }
+.st-idea { margin: 2px 0 14px; }
 .wo-about .wp-two { margin: 10px 0 0; }
 .wo-about .wp-part { margin-top: 24px; }
 
