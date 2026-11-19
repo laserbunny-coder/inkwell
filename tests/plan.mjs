@@ -293,6 +293,42 @@ try {
     assert.ok((await page.locator('.pw-day.today .pw-t').allInnerTexts()).includes('Headlamp for Arrow'));
   });
 
+  await check('Week: drag a task onto another day at a place, and up or down within its day', async () => {
+    const open = () => page.locator('.pw-day.today .pw-task[data-move] .pw-t').allInnerTexts();
+    assert.deepEqual(await open(), ['Headlamp for Arrow']);
+    await page.locator('.pw-task', { hasText: 'Film the tumbling class' }).dragTo(page.locator('.pw-task', { hasText: 'Headlamp for Arrow' }), { targetPosition: { x: 20, y: 2 } });
+    await sleep(500);
+    assert.deepEqual(await open(), ['Film the tumbling class', 'Headlamp for Arrow']);
+    await page.locator('.pw-task', { hasText: 'Headlamp for Arrow' }).dragTo(page.locator('.pw-task', { hasText: 'Film the tumbling class' }), { targetPosition: { x: 20, y: 2 } });
+    await sleep(500);
+    assert.deepEqual(await open(), ['Headlamp for Arrow', 'Film the tumbling class']);
+    assert.deepEqual((await tasks(page)).filter((r) => r.fields.task.day === '2026-11-09' && !r.fields.done).sort((x, y) => x.fields.task.order - y.fields.task.order).map((r) => r.text), ['Headlamp for Arrow', 'Film the tumbling class']);
+  });
+
+  await check('Week: Not planned sits beside the week; drag onto it and from it onto a day, at a place', async () => {
+    assert.ok(await page.locator('.pw-np').isVisible());
+    const box = await page.locator('.pw-np').boundingBox();
+    const grid = await page.locator('.pw-week').boundingBox();
+    assert.ok(box.x >= grid.x + grid.width - 1, 'beside the week, on the right');
+    await page.locator('.pw-task', { hasText: 'Film the tumbling class' }).dragTo(page.locator('.pw-np'));
+    await sleep(500);
+    assert.ok((await page.locator('.pw-np .pw-t').allInnerTexts()).includes('Film the tumbling class'));
+    const t = (await taskNamed(page, 'Film the tumbling class')).fields.task;
+    assert.equal(t.day, null);
+    assert.equal(t.span, null);
+    const h = await page.locator('.pw-task', { hasText: 'Headlamp for Arrow' }).boundingBox();
+    await page.locator('.pw-np .pw-task', { hasText: 'Film the tumbling class' }).dragTo(page.locator('.pw-task', { hasText: 'Headlamp for Arrow' }), { targetPosition: { x: 20, y: h.height - 2 } });
+    await sleep(500);
+    assert.deepEqual(await page.locator('.pw-day.today .pw-task[data-move] .pw-t').allInnerTexts(), ['Headlamp for Arrow', 'Film the tumbling class']);
+    assert.equal((await taskNamed(page, 'Film the tumbling class')).fields.task.day, '2026-11-09');
+    assert.equal(await page.locator('.pw-np .pw-task', { hasText: 'Film the tumbling class' }).count(), 0);
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/plan-week-np.png` });
+    // And back to Friday, where it was.
+    await page.locator('.pw-task', { hasText: 'Film the tumbling class' }).dragTo(page.locator('.pw-day[data-day="2026-11-13"]'), { targetPosition: { x: 40, y: 120 } });
+    await sleep(500);
+    assert.equal((await taskNamed(page, 'Film the tumbling class')).fields.task.day, '2026-11-13');
+  });
+
   await check('Week: the week after and back; a click on a date opens that day with its plan', async () => {
     await page.locator('#plan-sheet [data-act="week-next"]').click();
     await sleep(500);
@@ -445,15 +481,36 @@ try {
     await sleep(400);
     assert.equal((await taskNamed(phone, 'Order the storage drive')).fields.task.day, '2026-11-10');
   });
-  await check('phone: Week is a row a day on one screen, and nothing spills', async () => {
+  await check('phone: Week has every day open with its tasks, and nothing spills', async () => {
     await zoomTo(phone, 'Week');
     await still(phone);
     await sleep(300);
-    assert.equal(await phone.locator('.pw-rows .pw-day').count(), 7);
-    assert.equal(await phone.locator('.pw-day[data-day="2026-11-10"] .pw-rt').innerText(), 'Order the storage drive');
+    assert.equal(await phone.locator('.pw-week .pw-day').count(), 7);
+    assert.equal(await phone.locator('.pw-day[data-day="2026-11-10"] .pw-list .pw-t').first().innerText(), 'Order the storage drive');
     const w = await phone.evaluate(() => [document.documentElement.scrollWidth, innerWidth]);
     assert.ok(w[0] <= w[1], `no sideways scroll (${w[0]} in ${w[1]})`);
     if (SHOTS) await phone.screenshot({ path: `${SHOTS}/plan-phone-week.png` });
+    assert.deepEqual(phone.errors, []);
+  });
+  await check('phone: hold a task and slide it to Not planned, then from there onto a day', async () => {
+    const cdp = await phone.context().newCDPSession(phone);
+    const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+    const centre = async (loc) => { await loc.scrollIntoViewIfNeeded(); const b = await loc.boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
+    const slide = async (from, to) => {
+      const a = await centre(from);
+      await touch('touchStart', a.x, a.y);
+      await sleep(550); // held: it lifts
+      const b = await centre(to);
+      for (let k = 1; k <= 8; k++) { await touch('touchMove', a.x + ((b.x - a.x) * k) / 8, a.y + ((b.y - a.y) * k) / 8); await sleep(30); }
+      await touch('touchEnd', 0, 0);
+      await sleep(600);
+    };
+    assert.ok(await phone.locator('.pw-np').isVisible());
+    await slide(phone.locator('.pw-task', { hasText: 'Order the storage drive' }), phone.locator('.pw-np .pl-label'));
+    assert.equal((await taskNamed(phone, 'Order the storage drive')).fields.task.day, null);
+    assert.equal(await phone.locator('.pw-np .pw-task', { hasText: 'Order the storage drive' }).count(), 1);
+    await slide(phone.locator('.pw-np .pw-task', { hasText: 'Order the storage drive' }), phone.locator('.pw-day[data-day="2026-11-12"] .pw-h'));
+    assert.equal((await taskNamed(phone, 'Order the storage drive')).fields.task.day, '2026-11-12');
     assert.deepEqual(phone.errors, []);
   });
   await phone.context().close();

@@ -31,6 +31,7 @@ const at = async (p, stop) => {
 };
 const blur = (p) => p.evaluate(() => document.activeElement?.blur());
 const task = (p, re) => p.evaluate((src) => { const i = window.__plan.items.find((x) => new RegExp(src).test(x.row.text)); return i ? { id: i.row.id, day: i.task.day || null, span: i.task.span || null, done: !!i.row.fields?.done } : null; }, re);
+const SHOTS = process.env.SHOTS;
 const today = (p) => p.evaluate(() => window.__plan.today);
 const toast = (p) => p.evaluate(() => document.querySelector('.toast')?.textContent || '');
 const open = async (ctx) => {
@@ -228,6 +229,34 @@ try {
     assert.equal((await task(p, 'Color pass')).span?.kind, 'later', 'Sometime this year');
   });
 
+  await check('the Year: lines on a day show with their date and drag to another month; Not planned sits beside it', async () => {
+    const { id } = await task(p, 'Color pass');
+    const t0 = await today(p);
+    const day = `${t0.slice(0, 7)}-28`;
+    await p.evaluate(async ([id, day]) => { await window.__plan.applyWhen([id], { day }, 'day'); }, [id, day]);
+    await p.waitForFunction(() => /Color pass/.test(document.querySelector('.yr-month.yr-now')?.textContent || ''));
+    const line = p.locator('.yr-month.yr-now .yr-line', { hasText: 'Color pass' });
+    assert.match(await line.innerText(), /\d/, 'its date beside it');
+    // Onto its own month: it keeps its day.
+    await line.dragTo(p.locator('.yr-month.yr-now .yr-name'));
+    await sleep(700);
+    assert.equal((await task(p, 'Color pass')).day, day);
+    // Onto the next month: sometime then.
+    await line.dragTo(p.locator('.yr-month').nth(1));
+    await sleep(900);
+    assert.equal((await task(p, 'Color pass')).span?.kind, 'month');
+    assert.equal(await p.locator('.yr-month').nth(1).locator('.yr-line', { hasText: 'Color pass' }).count(), 1);
+    // Not planned beside the year: onto it, and from it back onto a month.
+    assert.ok(await p.locator('.yr-wrap .pw-np').isVisible());
+    if (SHOTS) await p.screenshot({ path: `${SHOTS}/year.png` });
+    await p.locator('.yr-month').nth(1).locator('.yr-line', { hasText: 'Color pass' }).dragTo(p.locator('.yr-wrap .pw-np'));
+    await sleep(900);
+    assert.equal((await task(p, 'Color pass')).span, null);
+    await p.locator('.pw-np .pw-task', { hasText: 'Color pass' }).dragTo(p.locator('.yr-month').nth(2));
+    await sleep(900);
+    assert.equal((await task(p, 'Color pass')).span?.kind, 'month');
+  });
+
   await p.close();
   await ctx.close();
 
@@ -280,6 +309,30 @@ try {
     await at(ph, 'month');
     await ph.waitForSelector('.mo-weeks');
     assert.ok(await ph.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+  });
+
+  await check('phone: on the Year a held line slides onto another month', async () => {
+    const { id } = await task(ph, 'Board scene 3');
+    await ph.evaluate(async (id) => { const t = window.__plan.today; await window.__plan.applyWhen([id], { span: { kind: 'month', start: `${t.slice(0, 7)}-01` } }, 'month'); }, id);
+    await ph.locator('.zm-stop[data-stop="month"]').tap();
+    // Month was the stop already: Month again is the Year.
+    await ph.waitForFunction(() => document.querySelector('#plan-sheet')?.dataset.tab === 'year' && document.querySelector('.yr-month .yr-line'));
+    await sleep(600);
+    assert.ok(await ph.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'no sideways scroll');
+    if (SHOTS) { await sleep(1500); await ph.screenshot({ path: `${SHOTS}/year-phone.png` }); }
+    const from = ph.locator('.yr-month.yr-now .yr-line', { hasText: 'Board scene 3' });
+    const a = await from.boundingBox();
+    const b = await ph.locator('.yr-month').nth(1).boundingBox();
+    const [x0, y0] = [a.x + a.width / 2, a.y + a.height / 2];
+    const [x1, y1] = [b.x + b.width / 2, b.y + 14];
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: y0 }] });
+    await sleep(550);
+    for (let k = 1; k <= 8; k++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + ((x1 - x0) * k) / 8, y: y0 + ((y1 - y0) * k) / 8 }] }); await sleep(30); }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await sleep(900);
+    const r = await task(ph, 'Board scene 3');
+    assert.equal(r.span?.kind, 'month');
+    assert.equal(await ph.locator('.yr-month').nth(1).locator('.yr-line', { hasText: 'Board scene 3' }).count(), 1);
   });
 
   await check('no page errors', async () => { assert.deepEqual(errors, []); });

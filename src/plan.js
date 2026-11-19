@@ -21,7 +21,7 @@ import { drawMonth } from './month.js';
 import { isLight, lineName } from './firstlight.js';
 import { zoomTo } from './nowpage.js';
 import { inPane } from './panes.js';
-import { Pick, Shelf, timeOf, parseKey, moveTo, stopKey, rulerDrops } from './zoomtime.js';
+import { Pick, Shelf, unplannedOf, timeOf, parseKey, moveTo, stopKey, rulerDrops } from './zoomtime.js';
 
 const ICON = {
   play: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4 2.5v11l9-5.500z" fill="currentColor"/></svg>',
@@ -1359,36 +1359,11 @@ export class Plan {
     side.append(nav, ...[this.pullButton()].filter(Boolean), this.switchRow('week'));
     head.append(left, side);
 
-    // On a phone the whole week fits one screen: a row a day (its first
-    // titles and how many), then Any day. Days gone by are dimmed and say
-    // what's left; a tap opens that day in Plan. Each row takes a drop.
-    if (!hover.matches) {
-      const rows = make('div', 'pw-rows');
-      const line = (cls, day, label, sub, list, n) => {
-        const r = make('section', `${cls} pw-row`);
-        r.dataset.day = day;
-        const b = make('button', 'pw-rb');
-        b.dataset.act = 'week-day';
-        b.append(make('b', 'pw-rd', label), make('span', 'pw-rs', sub), make('span', 'pw-rt', list.map((i) => lineName(i.row)).join(', ') || 'nothing'), make('span', 'pw-rn', n));
-        if (!list.length) b.querySelector('.pw-rt').classList.add('none');
-        r.append(b);
-        rows.append(r);
-      };
-      for (const d of w.days) {
-        const open = d.open.filter((i) => !i.ghost);
-        const past = d.iso < today;
-        line(`pw-day${d.today ? ' today' : ''}${past ? ' past' : ''}`, d.iso, String(dateOf(d.iso).getDate()), long(d.iso, { weekday: 'short' }), d.open, open.length ? (past ? `${open.length} left` : String(open.length)) : '');
-      }
-      line('pw-tray', '', 'Any', 'day', w.tray, w.tray.length ? String(w.tray.length) : '');
-      const parts = [head, rows];
-      if (w.late && thisWeek) {
-        const before = dayPlan(this.items, today, today).carried.filter((i) => i.task.day < first);
-        const el = this.earlyLine(before, { fold: false });
-        if (el) { el.el.classList.add('pw-late'); el.el.querySelector('.pl-early-n span:last-child').textContent = `${before.length} from before this week`; parts.push(el.el); }
-      }
-      this.sheet.replaceChildren(...parts);
-      return;
-    }
+    // Every day open with all its tasks (a column a day on a computer, one
+    // under another on a phone), then Any day, and beside them (under them on
+    // a phone) everything Not planned. Drag or hold any task onto a day, into
+    // its place in that day's order, or back to Not planned.
+    const list = (day) => { const l = make('div', 'pw-list'); l.dataset.day = day; return l; };
     const grid = make('div', 'pw-week');
     for (const d of w.days) {
       const col = make('section', `pw-day${d.today ? ' today' : ''}${d.iso < today ? ' past' : ''}`);
@@ -1396,22 +1371,30 @@ export class Plan {
       const h = make('button', 'pw-h');
       h.dataset.act = 'open-day';
       h.title = 'Open this day';
-      h.append(make('b', '', String(dateOf(d.iso).getDate())), make('span', '', long(d.iso, { weekday: 'short' })));
+      const open = d.open.filter((i) => !i.ghost).length;
+      h.append(make('b', '', String(dateOf(d.iso).getDate())), make('span', '', long(d.iso, { weekday: 'short' })), make('small', 'pw-n', open ? String(open) : ''));
       col.append(h);
       for (const e of this.cal.filter((x) => x.day === d.iso)) col.append(this.eventLine(e, 'pw-ev'));
-      for (const i of d.open) col.append(this.chip(i));
-      for (const i of d.done) col.append(this.chip(i));
-      col.append(this.addRow(d.iso, 'Add'));
+      const l = list(d.iso);
+      for (const i of d.open) l.append(this.chip(i));
+      for (const i of d.done) l.append(this.chip(i));
+      l.append(this.addRow(d.iso, 'Add'));
+      col.append(l);
       grid.append(col);
     }
     const tray = make('section', 'pw-tray');
     tray.dataset.day = '';
     tray.append(make('h2', 'pl-label', thisWeek ? 'Any day this week' : 'Any day that week'));
-    const chips = make('div', 'pw-chips');
+    const chips = list('');
+    chips.classList.add('pw-chips');
     for (const i of w.tray) chips.append(this.chip(i));
     chips.append(this.addRow(null, 'Add'));
     tray.append(chips);
-    const parts = [head, grid, tray];
+    const main = make('div', 'pw-main');
+    main.append(grid, tray);
+    const wrap = make('div', 'pw-wrap');
+    wrap.append(main, this.weekShelf());
+    const parts = [head, wrap];
     // Left from before this week: the same line as on today's plan, with its ways out.
     if (w.late && thisWeek) {
       const before = dayPlan(this.items, today, today).carried.filter((i) => i.task.day < first);
@@ -1421,6 +1404,31 @@ export class Plan {
     }
     this.sheet.replaceChildren(...parts);
     this.restore(this.sheet, held);
+  }
+
+  // Not planned, beside the week: every open line with no day and no time,
+  // by project, newest first within each. A drop here takes a line off the plan.
+  weekShelf() {
+    const box = make('section', 'pw-np');
+    box.dataset.day = 'none';
+    const all = unplannedOf(this);
+    box.append(make('h2', 'pl-label', `Not planned${all.length ? ` · ${all.length}` : ''}`));
+    const l = make('div', 'pw-list pw-np-list');
+    l.dataset.day = 'none';
+    const groups = new Map();
+    for (const i of all) {
+      const k = i.world?.title || '';
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(i);
+    }
+    const keys = [...groups.keys()].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || a.localeCompare(b));
+    for (const k of keys) {
+      l.append(make('div', 'pw-np-g', k || 'Not in a project'));
+      for (const i of groups.get(k)) l.append(this.chip(i));
+    }
+    if (!all.length) l.append(make('p', 'pw-np-empty', 'Nothing is waiting here.'));
+    box.append(l);
+    return box;
   }
 
   chip(i) {
@@ -1486,7 +1494,6 @@ export class Plan {
     if (act === 'day-today') return zoomTo({ stop: 'today' });
     if (act === 'open-plan') { if (el.dataset.bucket) this.planFold(el.dataset.bucket, true); return this.hooks.go({ view: 'plan', tab: 'day' }); }
     if (act === 'thru-carried') return this.hooks.goThrough?.();
-    if (act === 'week-day') { const day = el.closest('[data-day]').dataset.day; return day ? this.intoDay(day) : null; }
     if (act === 'open-today') return this.hooks.go({ view: 'notebook', pageId: `day-${this.today}` });
     if (act === 'early-fold') { this.earlyOpen = !this.earlyOpen; return this.redraw(); }
     if (act === 'early-today') return this.bringToday();
@@ -2012,8 +2019,15 @@ export class Plan {
       // Not planned shelf) or a stop on the ruler.
       const dz = target?.closest?.('[data-drop], .zm-ruler .zm-stop[data-stop]');
       if (dz) { const drop = dz.dataset.drop || stopKey(dz.dataset.stop, this.today); if (drop) return { drop, dz, stop: dz.dataset.stop || null }; }
-      const zone = target?.closest?.('.pw-day, .pw-tray');
-      if (zone) return { zone };
+      // Week: a day, Any day or Not planned, at a place among its tasks.
+      const zone = target?.closest?.('.pw-day, .pw-tray, .pw-np');
+      if (zone) {
+        const wl = zone.querySelector('.pw-list');
+        const rows = [...wl.querySelectorAll('.pw-task[data-move]')].filter((r) => r.dataset.task !== id);
+        let after = null;
+        for (const r of rows) { const b = r.getBoundingClientRect(); if (e.clientY > b.top + b.height / 2) after = r; }
+        return { zone, wl, rows, after };
+      }
       // What's when: over a heading (or a folded one), at the end of it.
       const sec = target?.closest?.('.ww-sec');
       let list = target?.closest?.('.pl-list');
@@ -2044,7 +2058,11 @@ export class Plan {
       if (!s) return;
       if (s.drop) { s.dz.classList.add('zm-dropon'); return; }
       if (s.sec && (s.list.hidden || !s.rows.length)) s.sec.classList.add('pull-over');
-      else if (s.zone) s.zone.classList.add('drop-on');
+      else if (s.wl && s.wl.dataset.day && s.wl.dataset.day !== 'none') {
+        if (s.after) s.after.classList.add('drop-after');
+        else if (s.rows[0]) s.rows[0].classList.add('drop-before');
+        else s.zone.classList.add('drop-on');
+      } else if (s.zone) s.zone.classList.add('drop-on');
       else if (s.after) s.after.classList.add('drop-after');
       else (s.rows[0] || s.list.querySelector('.pl-add'))?.classList.add('drop-before');
     };
@@ -2060,19 +2078,14 @@ export class Plan {
         if (!i || !t) return this.refresh();
         const at = timeOf(i, this.today);
         if (JSON.stringify(at) === JSON.stringify(t) && this.movingIds(moved).length === 1) return this.refresh();
+        // Onto the month it's already on a day in: it keeps its day.
+        if (t.g === 'month' && at.g === 'day' && at.d.slice(0, 7) === t.m && this.movingIds(moved).length === 1) return this.refresh();
         return moveTo(this, this.movingIds(moved), t);
       }
       // A divider only moves inside its own day's list.
       if (moved.startsWith('part:') && (s.zone || s.sec || s.carried || !s.list?.dataset.day || s.list.dataset.bucket)) return this.refresh();
       const ids = this.movingIds(moved);
-      if (s.zone) {
-        // A day of the week, or "Any day this week".
-        const day = s.zone.dataset.day || null;
-        const i = this.item(moved);
-        if (!i) return this.refresh();
-        if (ids.length === 1 && day && (i.task.day || null) === day) return this.refresh();
-        return this.pullDrop({ zone: s.zone }, ids);
-      }
+      if (s.zone) return this.weekDrop(s, ids, moved);
       // A heading of Plan: its time, at that place under it (a folded one opens).
       const bucket = s.list?.dataset.bucket || (s.sec && s.list?.hidden ? s.sec.dataset.bucket : null);
       if (bucket && !s.carried) {
@@ -2128,6 +2141,33 @@ export class Plan {
       e.preventDefault();
       return land(s, moved);
     });
+  }
+
+  // A drop on the Week: onto a day at its place in that day's order, onto
+  // Any day this week, or onto Not planned (off the plan).
+  async weekDrop(s, ids, moved) {
+    const i = this.item(moved);
+    if (!i) return this.refresh();
+    const day = s.wl?.dataset.day ?? s.zone.dataset.day ?? '';
+    if (day === 'none') {
+      if (ids.every((x) => unplannedOf(this).some((u) => u.row.id === x))) return this.refresh();
+      return this.applyWhen(ids, null, '');
+    }
+    if (!day) {
+      if (ids.length === 1 && spanOf(i.task)?.kind === 'week' && !i.task.day) return this.refresh();
+      return this.pullDrop({ zone: s.zone }, ids);
+    }
+    // Its place among the day's tasks: the ones already there keep their order around it.
+    const seq = s.rows.map((r) => r.dataset.task).filter((x) => !ids.includes(x));
+    seq.splice(s.after ? seq.indexOf(s.after.dataset.task) + 1 : 0, 0, ...ids);
+    const there = ids.filter((x) => this.item(x)?.task.day === day);
+    if (there.length === ids.length) {
+      const rows = await arrange(seq, day);
+      return rows.length ? this.wrote(rows) : this.refresh();
+    }
+    const rows = await this.applyWhen(ids, { day }, long(day, { weekday: 'long' }));
+    const ok = new Set([...there, ...rows.map((r) => r.id)]);
+    return this.wrote(await arrange(seq.filter((x) => !ids.includes(x) || ok.has(x)), day));
   }
 
   // On a touch screen, as in Workflowy (and as in the outline): press and hold

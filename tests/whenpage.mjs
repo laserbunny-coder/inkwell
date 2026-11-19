@@ -301,7 +301,7 @@ try {
   });
 
   await check('phone: the Week folds into seven days and “Any day this week” while a line slides up', async () => {
-    await phone.waitForSelector('.pw-rows');
+    await phone.waitForSelector('.pw-week');
     assert.ok(await phone.locator('.pull').isVisible());
     await phone.locator('.pu-line[data-id="st_2"]').scrollIntoViewIfNeeded();
     const g = await centre(phone.locator('.pu-line[data-id="st_2"] .pu-grip'));
@@ -312,7 +312,7 @@ try {
     const z = await centre(phone.locator('.pz[data-value="2026-11-15"]'));
     for (let k = 1; k <= 6; k++) { await touch('touchMove', g.x, g.y - 120 + ((z.y + 10 - (g.y - 120)) * k) / 6); await sleep(30); }
     await touch('touchEnd', 0, 0);
-    await phone.waitForFunction(() => /Board Reel 3/.test(document.querySelector('.pw-day[data-day="2026-11-15"] .pw-rt')?.textContent || ''));
+    await phone.waitForFunction(() => /Board Reel 3/.test(document.querySelector('.pw-day[data-day="2026-11-15"] .pw-list')?.textContent || ''));
     assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth <= 360), true, 'no sideways scroll at 360 px');
   });
 
