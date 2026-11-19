@@ -101,12 +101,12 @@ export const goToOpen = () => !!bg && !bg.hidden;
 
 // Opens it for the project you're in. Returns false when you're not in one.
 export async function openGoTo() {
-  const id = await currentWorldId();
-  if (!id) return false;
+  if (goToOpen()) { bg.querySelector('.gt-q').focus(); return true; }
   if (!bg) build();
   back = document.activeElement;
-  // Up and ready to type at once; what's in the project fills in a moment later
-  // (letters typed meanwhile are kept, and Enter waits for the list).
+  // Up and ready to type at once, before anything is looked up; what's in the
+  // project fills in a moment later (letters typed meanwhile are kept, and
+  // Enter waits for the list).
   const input = bg.querySelector('.gt-q');
   input.value = '';
   input.placeholder = 'Go to in this project…';
@@ -117,7 +117,11 @@ export async function openGoTo() {
   bg.hidden = false;
   document.body.classList.add('goto-on');
   input.focus();
-  const { w, list } = await (loading = gather(id));
+  let ready;
+  loading = new Promise((r) => { ready = r; });
+  const id = await currentWorldId();
+  const { w, list } = id ? await gather(id) : { w: null, list: [] };
+  ready();
   loading = null;
   if (!w) { closeGoTo(); return false; }
   all = list;
