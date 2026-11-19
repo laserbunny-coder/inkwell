@@ -374,21 +374,8 @@ html.zoom .library :is(#lib-areas, .lib-bar, #lib-books, .lib-jumps, #lib-done-b
 .zl-newarea { align-self: start; justify-self: start; font-size: 14px; letter-spacing: .04em; }
 .zl-areas > .chip-input { align-self: start; justify-self: start; max-width: 220px; }
 
-/* A project's Overview in the zoom: what it is and where its work is first;
-   its facts (north star, now, next date), crew and turns lower down. */
+/* A project's home in the zoom: what it is, the top block, then the outline. */
 html.zoom .wp-sheet { display: flex; flex-direction: column; }
-html.zoom .wp-sheet > .wp-eyebrow { order: 1; }
-html.zoom .wp-sheet > .wp-head { order: 2; }
-html.zoom .wp-sheet > #wh-logline { order: 3; }
-html.zoom .wp-sheet > #wh-finished { order: 4; }
-html.zoom .wp-sheet > #wh-calls { order: 5; }
-html.zoom .wp-sheet > #wh-stagebar { order: 6; }
-html.zoom .wp-sheet > #wh-steps { order: 7; }
-html.zoom .wp-sheet > #wh-pieces-box { order: 8; }
-html.zoom .wp-sheet > #wh-next-box { order: 9; }
-html.zoom .wp-sheet > #wh-facts { order: 10; margin-top: 18px; }
-html.zoom .wp-sheet > #wh-crew { order: 11; }
-html.zoom .wp-sheet > #wh-turns { order: 12; }
 html.zoom #wh-stagebar { height: auto; overflow: visible; display: block; margin: 16px 0 24px; max-width: none; }
 html.zoom #wh-stagebar[hidden] { display: none; }
 .zw-stand { display: flex; width: 100%; gap: 3px; border: 0; background: none; padding: 0; cursor: pointer; text-align: left; }

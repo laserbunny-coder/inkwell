@@ -90,6 +90,8 @@ const browser = withoutSync(await chromium.launch());
 async function open(viewport, { desk = true, ...extra } = {}) {
   const ctx = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Los_Angeles', viewport, ...extra });
   await ctx.addInitScript(() => { try { if (localStorage.getItem('planRest') === null) localStorage.setItem('planRest', '1'); } catch { /* no storage */ } }); // the rest of Plan shown, as before its line
+  // The home is one outline now: About (north star, now, crew, turns) is opened here, once.
+  await ctx.addInitScript(() => { try { for (const id of ['wd_nb', 'wd_camp']) if (localStorage.getItem(`wo:${id}`) === null) localStorage.setItem(`wo:${id}`, '["about"]'); } catch { /* no storage */ } });
   await ctx.exposeFunction('__db', (op, a, b) => {
     calls.push([op, a, b]);
     if (op === 'desk') return { needs: db.needs.filter((n) => !n.resolved_at).map((n) => ({ ...n })), updates: db.updates.filter((u) => u.created_at >= a).map((u) => ({ ...u })) };
@@ -141,6 +143,13 @@ const pick = async (p, label) => {
 const facts = (p) => p.evaluate(() => Object.fromEntries([...document.querySelectorAll('#wh-facts dt')].map((dt) => [dt.textContent, dt.nextElementSibling.innerText.trim()])));
 const steps = (p) => p.locator('#wh-steps .pl-task .pl-words').allInnerTexts();
 const step = (p, text) => p.locator('#wh-steps .pl-task', { hasText: text });
+// Its steps are in the Steps zoom (Next step · all N › on the home).
+const stepsOf = async (p, id = 'wd_nb') => {
+  await go(p, { view: 'world', id, part: 'steps' });
+  await p.waitForFunction(() => document.querySelector('.wp-sheet')?.dataset.part === 'steps' && document.querySelector('#wh-steps .pl-add'));
+  await still(p);
+  await sleep(300);
+};
 const world = async (p, id = 'wd_nb') => {
   await go(p, { view: 'world', id });
   await p.waitForFunction((t) => document.documentElement.dataset.view === 'world' && document.querySelector('#wh-seat')?.textContent && document.querySelector('#wh-title')?.dataset.id !== t, id);
@@ -165,7 +174,8 @@ try {
     assert.match(await page.locator('#wh-kind').innerText(), /^show$/i);
     assert.match(await page.locator('#wh-seat').innerText(), /^on stage$/i);
     assert.equal(await page.locator('#wh-title').innerText(), 'The Ninja Bunch');
-    assert.equal(await page.locator('#wh-continue').innerText(), 'Continue · Reel 2: Breakfast');
+    assert.match(await page.locator('#wh-continue').innerText(), /^Reel 2: Breakfast\s+2 h ago$/);
+    assert.equal(await page.locator('#wh-continue-row .wt-k').innerText().then((t) => t.toLowerCase()), 'continue');
     assert.match(await page.locator('#wh-logline').innerText(), /^A family bakery raises a troupe of hopeless ninjas\./);
     const dot = await page.locator('#wh-dot').evaluate((el) => getComputedStyle(el).backgroundColor);
     assert.equal(dot, 'rgb(31, 111, 100)', 'the area’s colour is only a dot');
@@ -217,7 +227,11 @@ try {
   });
 
   await check('Needs you: this project’s calls only, the decision first; Done takes one off here and beside Desk', async () => {
-    assert.match(await page.locator('#wh-calls .wp-sec').innerText(), /^needs you$/i);
+    assert.match(await page.locator('#wh-calls .wt-k').innerText(), /^needs you$/i);
+    // The first shows; "all 2 ›" shows the rest.
+    assert.equal(await page.locator('#wh-calls .dk-call:visible').count(), 1);
+    await page.locator('#wh-calls .wt-all').click();
+    await page.waitForFunction(() => document.querySelectorAll('#wh-calls .dk-call:not([hidden])').length === 2);
     const rows = await page.locator('#wh-calls .dk-call .dk-call-t').allInnerTexts();
     assert.equal(rows.length, 2);
     assert.match(rows[0], /decide\s*Pick Kenji’s final character sheet/i);
@@ -233,39 +247,35 @@ try {
     assert.equal(await viewOf(page), 'world', 'still on the project');
   });
 
-  await check('Pieces by where they stand: words under one hairline, the last column lit, a piece opens', async () => {
-    assert.match(await page.locator('#wh-pieces-box .wp-sec').innerText(), /^pieces\s+7 pieces · 142 words · 3 pages/i);
-    // The thin line of where they stand opens the board in the list's place.
-    await page.locator('#wh-stagebar .zw-stand').click();
-    await page.waitForSelector('#wh-board .sb-card', { state: 'visible' });
-    const cols = await page.locator('#wh-board .sb-col').evaluateAll((els) => els.map((c) => `${c.dataset.stage} ${c.querySelectorAll('.sb-card').length}`));
+  await check('Pieces (zoomed into from the home): by stage, the last column lit, → moves one on', async () => {
+    await page.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await page.waitForFunction(() => document.querySelector('.st-title')?.textContent === 'Pieces');
+    assert.match(await page.locator('.st-pieces-head .panel-label').innerText(), /^7 pieces · 142 words$/i);
+    await page.locator('.st-as').click();
+    await page.waitForSelector('#stage-view .sb-card', { state: 'visible' });
+    const cols = await page.locator('#stage-view .sb-col').evaluateAll((els) => els.map((c) => `${c.dataset.stage} ${c.querySelectorAll('.sb-card').length}`));
     assert.deepEqual(cols, ['New idea 2', 'Writing 2', 'Boarding 1', 'Generating 1', 'Editing 0', 'Posted 1']);
-    const card = page.locator('#wh-board .sb-card[data-id="pr_reel2"]');
-    const look = await card.evaluate((el) => { const s = getComputedStyle(el); return [s.backgroundColor, s.borderTopWidth]; });
-    assert.deepEqual(look, ['rgba(0, 0, 0, 0)', '0px'], 'no box around a piece');
-    assert.ok(await page.locator('#wh-pieces').isHidden(), 'the list is away');
+    const card = page.locator('#stage-view .sb-card[data-id="pr_reel2"]');
     assert.equal(await card.locator('.sb-kind').innerText(), 'Reel');
     await card.hover();
     assert.match(await card.locator('.sb-next').innerText(), /^Start generating/);
     await card.locator('.sb-next').click();
-    await page.waitForFunction(() => document.querySelector('#wh-board .sb-col[data-stage="Generating"]')?.querySelectorAll('.sb-card').length === 2);
+    await page.waitForFunction(() => document.querySelector('#stage-view .sb-col[data-stage="Generating"]')?.querySelectorAll('.sb-card').length === 2);
     assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Generating');
   });
 
-  await check('the line again shows how the pieces nest, and it’s remembered; once more brings the columns back', async () => {
-    await page.locator('#wh-stagebar .zw-stand').click();
-    await page.waitForSelector('#wh-pieces li', { state: 'visible' });
-    assert.ok(await page.locator('#wh-status').isHidden());
-    assert.equal(await page.locator('#wh-pieces li').count(), 7);
-    await world(page, 'wd_camp');
+  await check('as a list again (how the pieces nest), and it’s remembered', async () => {
+    await page.locator('.st-as').click();
+    await page.waitForSelector('#stage-view .st-write .wo-piece', { state: 'visible' });
+    assert.equal(await page.locator('#stage-view .st-write .wo-piece').count(), 7);
     await world(page);
-    assert.ok(await page.locator('#wh-pieces li').first().isVisible(), 'still a list after coming back');
-    await page.locator('#wh-stagebar .zw-stand').click();
-    await page.waitForSelector('#wh-board .sb-card', { state: 'visible' });
-    assert.ok(await page.locator('#wh-pieces').isHidden());
+    await page.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await page.waitForSelector('#stage-view .st-write .wo-piece', { state: 'visible' });
+    await world(page);
   });
 
   await check('Steps: the project’s own tasks, dated ones first, with where one is written when it isn’t the Steps page', async () => {
+    await stepsOf(page);
     assert.match(await page.locator('#wh-steps .wp-sec').innerText(), /^steps\s+1 of 4 done$/i);
     assert.deepEqual(await steps(page), ['Star the stills for shot 3', 'Board Reel 2', 'Write Kenji’s second verse', 'Pick the bakery’s colours']);
     // Plain rows: where it's written and its day are said in its ⋯.
@@ -296,10 +306,10 @@ try {
     await pick(page, 'Today');
     await page.waitForFunction(() => document.querySelector('#wh-steps .pl-task .pl-words')?.innerText === 'Record the bakery jingle');
     assert.equal((await all(page)).find((r) => r.text === 'Record the bakery jingle').fields.task.day, '2026-11-09');
-    await page.waitForFunction(() => /Today · Record the bakery jingle/.test(document.querySelector('#wh-facts')?.innerText || ''));
+    await page.waitForFunction(() => /Today · Record the bakery jingle/.test(document.querySelector('#wh-facts')?.textContent || ''));
     await step(page, 'Record the bakery jingle').locator('.pl-check').click();
     await page.waitForFunction(() => /2 of 5 done/.test(document.querySelector('#wh-steps .wp-sec')?.innerText || ''));
-    await page.waitForFunction(() => /Tomorrow · Star the stills/.test(document.querySelector('#wh-facts')?.innerText || ''));
+    await page.waitForFunction(() => /Tomorrow · Star the stills/.test(document.querySelector('#wh-facts')?.textContent || ''));
     assert.equal(await page.locator('#wh-steps .pl-took').count(), 0, 'no “how long” question on a project’s page');
   });
 
@@ -366,14 +376,15 @@ try {
     assert.ok(await page.locator('#wh-calls').isHidden());
     assert.ok(await page.locator('#wh-crew').isHidden());
     assert.ok(await page.locator('#wh-turns').isHidden());
-    assert.ok(await page.locator('#wh-pieces-box').isHidden());
-    assert.ok(await page.locator('#wh-status').isHidden());
+    assert.deepEqual(await page.locator('#wh-outline > li > .wo-row > .wo-name').allInnerTexts(), ['Ideas', 'Notes', 'About'], 'no Pieces, Make or Deliver');
+    await stepsOf(page, 'wd_camp');
     const input = page.locator('#wh-steps input[data-add]');
     await input.fill('Book the campsite for Friday night');
     await input.press('Enter');
     await page.waitForFunction(() => /0 of 1 done/.test(document.querySelector('#wh-steps .wp-sec')?.innerText || ''));
     assert.equal((await all(page)).find((r) => r.text === 'Book the campsite for Friday night').parent_id, 'steps-wd_camp');
     assert.equal(await page.locator('#wh-task-box').count(), 0, 'no Daybook box: Daybook is retired');
+    await world(page, 'wd_camp');
     // With no thread and no words of your own, a click on the line is where you write it.
     await page.locator('#wh-facts .wp-now').click({ position: { x: 4, y: 8 } });
     await page.waitForSelector('#wh-facts [data-field="now"]:focus');
@@ -381,13 +392,13 @@ try {
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => /Gear list is current\./.test(document.querySelector('#wh-facts .wp-now')?.innerText || ''));
     assert.equal((await get(page, 'wd_camp')).fields.now, 'Gear list is current.');
-    assert.equal(await page.locator('#wh-steps input[data-add]').getAttribute('placeholder'), 'Book the campsite for Friday night');
+    assert.match(await page.locator('#wh-next-step').innerText(), /Book the campsite for Friday night/);
   });
 
   await check('steps, crew and turns are always there; “Recently” went (Nov 17 2026)', async () => {
     await page.evaluate(() => document.documentElement.classList.add('hide-projsteps', 'hide-projcrew'));
     await world(page);
-    assert.ok(await page.locator('#wh-steps').isVisible());
+    assert.ok(await page.locator('#wh-next-row').isVisible());
     assert.ok(await page.locator('#wh-turns').isVisible());
     assert.equal(await page.locator('#wh-recent-box').count(), 0);
     assert.equal(await page.locator('[data-show="projsteps"], [data-show="projcrew"], [data-show="projrecent"]').count(), 0);
@@ -422,12 +433,13 @@ try {
     assert.ok(await solo.locator('#wh-crew').isHidden());
     assert.ok(await solo.locator('#wh-turns').isHidden());
     assert.match(await solo.locator('#wh-seat').innerText(), /^on stage$/i);
+    await stepsOf(solo);
     assert.equal((await steps(solo)).length, 4);
     assert.deepEqual(solo.errors, []);
     await solo.context().close();
   });
 
-  await check('on a phone it’s one column: facts stack, the columns swipe, nothing spills', async () => {
+  await check('on a phone it’s one column: facts stack, nothing spills', async () => {
     const phone = await open({ width: 390, height: 844 }, { hasTouch: true, isMobile: true });
     await world(phone);
     await phone.waitForSelector('#wh-calls .dk-call');
@@ -435,9 +447,10 @@ try {
     assert.equal(cols, 1);
     const wide = await phone.evaluate(() => document.documentElement.scrollWidth);
     assert.ok(wide <= 391, `page is ${wide} wide`);
-    assert.ok(await phone.locator('#wh-steps .pl-task').first().isVisible());
+    assert.ok(await phone.locator('#wh-next-row').isVisible());
     await shot(phone, 'project-phone');
-    await phone.evaluate(() => document.querySelector('#wh-steps').scrollIntoView({ block: 'start' }));
+    await stepsOf(phone);
+    assert.ok(await phone.locator('#wh-steps .pl-task').first().isVisible());
     await shot(phone, 'project-phone-steps');
     assert.deepEqual(phone.errors, []);
     await phone.context().close();

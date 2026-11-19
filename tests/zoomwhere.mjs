@@ -189,12 +189,10 @@ try {
     assert.equal(await stageOf(p, 'wd_tb'), 'wings');
   });
 
-  await check('a project’s Overview: one thin stage line, its seat word opens the bar', async () => {
+  await check('a project’s home: one outline, Pieces says where they stand; its seat word opens the bar', async () => {
     await p.evaluate(() => { history.pushState({ view: 'world', id: 'wd_nb' }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'world', id: 'wd_nb' } })); });
     await p.waitForFunction(() => document.querySelector('#wh-title')?.textContent === 'The Ninja Bunch');
-    await p.waitForSelector('#wh-stagebar:not([hidden]) .zw-stand');
-    assert.match(await p.locator('.zw-sg.has').first().innerText(), /2/);
-    assert.equal(await p.locator('#wh-status').isVisible(), false, 'the big board lives on Make');
+    await p.waitForFunction(() => /\d /.test(document.querySelector('#wh-outline [data-part="pieces"] .wo-meta')?.textContent || ''));
     await p.locator('#wh-seat').click();
     await p.waitForSelector('.zm-seatbar:not([hidden])');
     await p.keyboard.press('Escape');

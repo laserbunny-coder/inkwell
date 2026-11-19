@@ -222,35 +222,32 @@
         <span id="wh-kind"></span>
         <button type="button" id="wh-seat" class="wp-seat"></button>
       </div>
+      <button type="button" class="wh-back" id="wh-back" hidden></button>
       <div class="ph-head wp-head">
         <h1 id="wh-title" spellcheck="false"></h1>
-        <button type="button" class="pill" id="wh-continue" hidden>Continue writing</button>
         <span id="wh-more"></span>
       </div>
+      <h1 class="wh-zoom-title" id="wh-zoom-title" hidden></h1>
       <p id="wh-logline" class="wh-logline" spellcheck="true"></p>
       <p id="wh-finished" class="wh-finished" hidden></p>
-      <dl class="wp-two" id="wh-facts"></dl>
-      <section class="wp-part" id="wh-calls" hidden></section>
-      <div id="wh-stagebar" class="wh-stagebar" hidden></div>
-      <section class="wp-part" id="wh-pieces-box">
-        <h2 class="wp-sec">Pieces <span class="wp-more" id="wh-stats"></span>
-          <span class="wp-r">
-            <button type="button" class="wp-link" id="wh-as" hidden>As a list</button>
-            <button type="button" class="wp-link" id="wh-workflow">Workflow</button>
-            <button type="button" class="wp-link" id="wh-new-piece">+ Piece</button>
-          </span>
-        </h2>
-        <div id="wh-status" hidden><div id="wh-board" class="stage-board"></div></div>
-        <ul id="wh-pieces" class="loose-list tree-list"></ul>
-        <div class="hint" id="wh-pieces-empty">Anything you make in this world, at any size: a gag, a short, an episode, a novel, a film.</div>
+      <!-- The top block: carry on, the next step, what needs you. -->
+      <section class="wh-top" id="wh-top" aria-label="Where to start">
+        <div class="wt-row" id="wh-continue-row" hidden><span class="wt-k">Continue</span><button type="button" class="wt-v" id="wh-continue"></button></div>
+        <div class="wt-row" id="wh-next-row" hidden><span class="wt-k">Next step</span><span class="wt-v" id="wh-next-step"></span></div>
+        <div class="wt-row wt-calls" id="wh-calls" hidden></div>
       </section>
+      <!-- The project as one outline: Ideas, Bible, Pieces, Make, Deliver, About. -->
+      <ul class="wo" id="wh-outline" aria-label="The project">
+        <li class="wo-line wo-about" data-part="about" id="wh-about">
+          <div class="wo-row"><button type="button" class="wo-tog" aria-expanded="false" aria-label="Open About">▸</button><button type="button" class="wo-name">About</button><span class="wo-meta" id="wh-about-meta"></span></div>
+          <div class="wo-kids" hidden>
+            <dl class="wp-two" id="wh-facts"></dl>
+            <section class="wp-part" id="wh-crew" hidden></section>
+            <section class="wp-part" id="wh-turns" hidden></section>
+          </div>
+        </li>
+      </ul>
       <section class="wp-part" id="wh-steps"></section>
-      <section class="wp-part" id="wh-next-box" hidden>
-        <h2 class="wp-sec">Next <span class="wp-more">waiting in its pages</span></h2>
-        <ul id="wh-next" class="ref-list wh-next"></ul>
-      </section>
-      <section class="wp-part" id="wh-crew" hidden></section>
-      <section class="wp-part" id="wh-turns" hidden></section>
     </div>
   </main>
 
@@ -468,8 +465,9 @@
       <dt>⌘⇧F</dt><dd>Search inside all your writing</dd>
       <dt>⌘J</dt><dd>Today’s page, and back to writing</dd>
       <dt>⌘⇧J</dt><dd>Today panel: today’s lines beside whatever you’re doing</dd>
-      <dt>⌥1 – ⌥6</dt><dd>Pages: Gather, Shape, Write, Revise, Make, Deliver (hold ⌥ to see the numbers)</dd>
-      <dt>⌥0</dt><dd>Overview of the world or piece you’re in</dd>
+      <dt>⌥1 – ⌥5</dt><dd>In a project: zoom into Ideas, Bible, Pieces, Make, Deliver (⌥← back out). In a piece: its pages, Gather to Deliver</dd>
+      <dt>⌥0</dt><dd>The home of the project or piece you’re in</dd>
+      <dt>⌥G</dt><dd>Go to… a piece, bible page, look or step in the project you’re in</dd>
       <dt>⌥C</dt><dd>Talk: it lands where you are, in the draft, on the page or on today (again to keep it, Esc to throw it away)</dd>
       <dt>⌥T</dt><dd>Talk it through with Claude, beside where you are: about the project you’re in, or everything on stage. It answers with moves you tick and apply</dd>
       <dt>⌘⇧O</dt><dd>Library</dd>

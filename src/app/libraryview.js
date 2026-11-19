@@ -6,10 +6,11 @@ import { popMenu, menuButton, onContextMenu, ask, askText, toast } from '../menu
 import { outline } from '../model.js';
 import { titleOf } from '../notebook.js';
 import { PlotGrid, worldPromises } from '../grid.js';
-import { isLife, personalArea } from '../pages.js';
+import { isLife, personalArea, partsFor } from '../pages.js';
+import { openParts, setPartOpen, pieceLine } from '../projectoutline.js';
 import { gatherItems } from '../stages.js';
 import { dayWord } from '../tasks.js';
-import { isFinished, areas, bookType, hasManuscript, kindName, areaColor, newArea, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, worlds, worldOf, piecesIn, worldTree, worldStats, usedLabels, SHAPES, shapeOf, nextLevel, newShaped, editedAt, defaultLabel, stageOf, nextLabel, setForNew, typeForSet, stageSetOf, stagesOf, isReady } from '../library.js';
+import { isFinished, areas, bookType, hasManuscript, kindName, areaColor, newArea, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, worlds, worldOf, piecesIn, worldTree, worldStats, usedLabels, SHAPES, shapeOf, nextLevel, newShaped, editedAt, defaultLabel, stageOf, nextLabel, setForNew, typeForSet, stageSetOf, stagesOf, isReady, isOut } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday, isoOf } from '../dates.js';
 import { addCommands } from './commandlist.js';
@@ -18,6 +19,8 @@ import { go, openBook, openEntry } from './routing.js';
 import { areaPath, dot, renameable, renderCrumb, renderRail, subtree } from './rail.js';
 import { setLife, reopenWorld, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, moveBookToArea, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu } from './tidying.js';
 import { renderBoard } from './workpages.js';
+import { notebook } from './notebookview.js';
+import { applyRemote } from './syncwiring.js';
 import { askServer, canAskServer, deskPage, plan, projectPage } from './talking.js';
 import { seatMap, seatWord } from './seats.js';
 let worldDates = []; // the open project's dated things besides its steps (shoot days)
@@ -542,24 +545,8 @@ async function renderProject() {
 
 // Where the pieces stand, as one thin line: each stage and how many are
 // at it. A click opens the stage board (Make).
-function stageLine(w, pieces) {
-  const bar = $('#wh-stagebar');
-  const names = stagesOf(pieces[0].row, w);
-  const n = new Map(names.map((x) => [x, 0]));
-  for (const { row } of pieces) { const st = stageOf(row, w); n.set(st, (n.get(st) || 0) + 1); }
-  const b = make('button', 'zw-stand');
-  b.type = 'button';
-  const open = localStorage.getItem('piecesAs') === 'board';
-  b.title = open ? 'Where the pieces stand. Click to fold the stage board away' : 'Where the pieces stand. Click for the stage board';
-  b.setAttribute('aria-expanded', String(open));
-  for (const [st, k] of n) { const seg = make('span', `zw-sg${k ? ' has' : ''}`); seg.append(make('i'), make('b', '', k ? `${st} ${k}` : st)); b.append(seg); }
-  // The stage board opens under it, right here (Make has no board).
-  b.addEventListener('click', () => { localStorage.setItem('piecesAs', open ? 'list' : 'board'); renderWorld(); });
-  bar.replaceChildren(b);
-  bar.hidden = false;
-}
-
-// One piece in a list: its name, what it is and its stage.
+// One piece in a list: its name, what it is and its stage (a piece's own
+// pieces, on its page).
 function pieceRow(p, depth, world) {
   const li = make('li');
   li.style.setProperty('--depth', depth);
@@ -598,8 +585,6 @@ async function renderWorld() {
     back.addEventListener('click', () => reopenWorld(w));
     fin.replaceChildren(document.createTextNode(`✓ Finished ${finishedWord(w)}. It’s on the Finished shelf in the Library, with everything still in it. `), back);
   }
-  const n = (x, word) => `${x.toLocaleString()} ${word}${x === 1 ? '' : 's'}`;
-  $('#wh-stats').textContent = (isLife(w) ? [n(s.pieces.length, 'piece')] : [n(s.pieces.length, 'piece'), s.words && n(s.words, 'word'), n(s.pages.length, 'page')]).filter(Boolean).join(' · ');
   const areaSel = $('#wh-area');
   areaSel.replaceChildren(...(await areaOptions(allAreas)).map(([id, label]) => Object.assign(make('option', '', label), { value: id })));
   areaSel.value = w.area_id || '';
@@ -613,9 +598,11 @@ async function renderWorld() {
   const lastCh = last && (await getEntry(last));
   const lastPiece = lastCh && !gone(lastCh) ? await bookOf(lastCh) : null;
   const here = lastPiece && s.pieces.some((p) => p.row.id === lastPiece.id) ? lastPiece : s.pieces.filter((p) => hasManuscript(p.row)).sort((a, b) => editedAt(b.row) - editedAt(a.row))[0]?.row;
-  cont.hidden = !here;
+  $('#wh-continue-row').hidden = !here;
   if (here) {
-    cont.textContent = s.pieces.length > 1 ? `Continue · ${here.title || 'Untitled'}` : 'Continue writing';
+    const at = (lastPiece?.id === here.id && lastCh ? editedAt(lastCh) : 0) || editedAt(here);
+    cont.replaceChildren(make('span', 'wt-t', here.title || 'Untitled'), make('small', 'wt-when', at ? ago(at) : ''));
+    cont.title = 'Carry on where you were writing';
     cont.onclick = () => openBook(here.id);
   }
 
@@ -646,67 +633,33 @@ async function renderWorld() {
   };
   log.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); log.blur(); } if (e.key === 'Escape') { e.preventDefault(); log.textContent = w.fields?.logline || ''; log.blur(); } };
 
-  // Where every piece is, from new idea to out in the world: by status on
-  // one hairline, or as a list (how they nest) when you'd rather.
-  $('#wh-stagebar').hidden = true;
-  const status = $('#wh-status');
-  const canBoard = !life && s.pieces.length > 0;
-  // In the zoom: one thin line of how many pieces are at each stage, and the
-  // pieces as a list under it; the line opens the stage board in its place.
-  const thin = canBoard;
-  if (thin) stageLine(w, s.pieces);
-  const asList = !canBoard || localStorage.getItem('piecesAs') !== 'board';
-  status.hidden = asList;
-  if (canBoard) renderBoard(w, s.pieces);
-  $('#wh-workflow').onclick = () => openStages(w);
-  $('#wh-workflow').hidden = !canBoard;
-  const as = $('#wh-as');
-  as.hidden = !canBoard || thin;
-  as.textContent = asList ? 'By status' : 'As a list';
-  as.onclick = () => { localStorage.setItem('piecesAs', asList ? 'board' : 'list'); renderWorld(); };
-
-  $('#wh-pieces-box').hidden = life && !s.pieces.length;
-  $('#wh-pieces').hidden = !asList;
-  $('#wh-pieces').replaceChildren(...s.pieces.map(({ row, depth }) => pieceRow(row, depth, w)));
-  $('#wh-pieces-empty').hidden = s.pieces.length > 0;
-  $('#wh-new-piece').onclick = () => addPiece(w.id);
-  const nextHere = await nextLevel(w);
-  $('#wh-new-piece').textContent = `+ ${nextHere ? nextHere.label : 'Piece'}`;
-
-  // Steps: the project's own tasks, wherever in it they're written.
+  // Steps: the project's own tasks, wherever in it they're written. Drawn
+  // into the Steps zoom; the top block shows the next one.
   await plan?.showSteps(w);
+  drawNextStep(w);
 
-  // Next: what's waiting, from each page.
-  const next = [];
-  const items = await gatherItems(w);
-  const open = items.filter(({ row }) => !(row.fields?.filed || []).length && !row.fields?.letgo).length;
-  if (open) next.push({ from: 'Gather', text: `${plural(open, 'thing')} in to file`, run: () => go({ view: 'stage', id: w.id, page: 'gather' }) });
+  // The next date: the soonest shoot day (besides the project's dated steps).
   const dates = [];
+  const days = [];
   if (!life) {
-    const promises = await worldPromises(w);
-    const unpaid = promises.filter((p) => !p.paid).length;
-    if (unpaid) next.push({ from: 'Shape', text: `${plural(unpaid, 'promise')} not paid off yet`, run: () => go({ view: 'stage', id: w.id, page: 'shape', sub: 'promises' }) });
-    const days = [];
-    for (const { row } of s.pieces) for (const d of (await children(row.id)).filter((r) => r.kind === 'shootday' && (r.fields?.date || '') >= isoToday())) days.push({ d, p: row });
-    days.sort((a, b) => a.d.fields.date.localeCompare(b.d.fields.date));
-    if (days[0]) dates.push({ iso: days[0].d.fields.date, text: `Shoot day · ${days[0].p.title || 'Untitled'}`, run: () => go({ view: 'production', id: days[0].p.id, day: days[0].d.id }) });
-    if (days[0]) { const { d, p } = days[0]; next.push({ from: 'Make', text: `Shoot day ${new Date(`${d.fields.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${p.title || 'Untitled'}`, run: () => go({ view: 'production', id: p.id, day: d.id }) }); }
-    const written = s.pieces.filter(({ row }) => stageSetOf(row, w).id === 'ai' && stageOf(row, w) === stagesOf(row, w)[1] && bookType(row) === 'screenplay').map(({ row }) => row);
-    if (written[0]) next.push({ from: 'Make', text: `Board ${written[0].title || 'Untitled'}${written.length > 1 ? ` and ${plural(written.length - 1, 'other')}` : ''}`, run: () => go({ view: 'production', id: written[0].id }) });
-    const edited = s.pieces.filter(({ row }) => isReady(row, w)).map(({ row }) => row);
-    if (edited[0]) next.push({ from: 'Deliver', text: `Post ${edited[0].title || 'Untitled'}`, run: () => go({ view: 'deliver', id: edited[0].id, tab: 'post' }) });
+    for (const { row } of s.pieces) for (const d of (await children(row.id)).filter((r) => r.kind === 'shootday' && !r.deleted)) days.push({ d, p: row });
+    days.sort((a, b) => String(a.d.fields?.date || '').localeCompare(String(b.d.fields?.date || '')));
+    const soon = days.find(({ d }) => (d.fields?.date || '') >= isoToday());
+    if (soon) dates.push({ iso: soon.d.fields.date, text: `Shoot day · ${soon.p.title || 'Untitled'}`, run: () => go({ view: 'production', id: soon.p.id, day: soon.d.id }) });
   }
-  $('#wh-next').replaceChildren(...next.map((n) => {
-    const li = make('li');
-    const b = make('button');
-    b.append(make('span', 'from', n.from), make('span', 'line', n.text));
-    b.addEventListener('click', n.run);
-    li.append(b);
-    return li;
-  }));
-  $('#wh-next-box').hidden = !next.length;
 
+  // The zoom into Steps: the same page with only its steps, and the way back.
+  const part = state.worldPart === 'steps' ? 'steps' : null;
+  const sheet = $('.wp-sheet');
+  if (part) sheet.dataset.part = part; else delete sheet.dataset.part;
+  const back = $('#wh-back');
+  back.hidden = !part;
+  back.textContent = `‹ ${w.title || 'Untitled'}`;
+  back.onclick = () => go({ view: 'world', id: w.id });
+  $('#wh-zoom-title').hidden = !part;
+  $('#wh-zoom-title').textContent = part ? 'Steps' : '';
 
+  await drawOutline(w, s, { life, days });
   // From the Desk: where it sits, its north star, where it stands, what
   // needs you, the crew and the turns. The next date is the soonest dated
   // step or shoot day.
@@ -718,6 +671,208 @@ async function renderWorld() {
   // The same clock the Desk seats it by, so the two never disagree.
   await projectPage?.show(w, { color, edited: editedAt(w), last: lately, date: nextDate(w.id) });
 }
+// ---------- the home as one outline ----------
+
+// The top block's Next step: the first open step, as the Steps zoom lists
+// them, with a circle to tick it and "all N ›" into the Steps zoom.
+function drawNextStep(w = null) {
+  const row = $('#wh-next-row');
+  const box = $('#wh-steps');
+  const id = w?.id || state.worldId;
+  if (!row || !id) return;
+  const mine = (plan?.items || []).filter((i) => i.world?.id === id);
+  const open = mine.filter((i) => !i.row.fields?.done);
+  const firstId = box?.querySelector('.pl-task:not(.done)[data-task]')?.dataset.task;
+  const first = open.find((i) => i.row.id === firstId) || open[0];
+  row.hidden = false;
+  const v = $('#wh-next-step');
+  const kids = [];
+  if (first) {
+    const ring = make('button', 'wt-tick');
+    ring.type = 'button';
+    ring.setAttribute('aria-label', `Done: ${first.row.text || 'this step'}`);
+    ring.title = 'Done';
+    ring.addEventListener('click', async () => { ring.classList.add('on'); await plan.tick(first, true); drawNextStep(); });
+    const t = make('button', 'wt-t', first.row.text || 'Untitled');
+    t.type = 'button';
+    t.title = 'Open where it’s written';
+    t.addEventListener('click', () => openEntry(first.row.id));
+    kids.push(ring, t);
+  } else kids.push(make('span', 'wt-none', mine.length ? 'All done' : 'None yet'));
+  const all = make('button', 'wt-all', open.length ? `all ${open.length} ›` : 'Add a step ›');
+  all.type = 'button';
+  all.title = 'Every step in this project (zooms in)';
+  all.addEventListener('click', () => go({ view: 'world', id, part: 'steps' }));
+  kids.push(all);
+  v.replaceChildren(...kids);
+}
+
+// One part of the project as a line: ▸ opens it here, its name zooms in.
+function partLine(w, part, open, { count = '', meta = '', kids = null, zoom }) {
+  const li = make('li', 'wo-line');
+  li.dataset.part = part.id;
+  const row = make('div', 'wo-row');
+  const tog = make('button', 'wo-tog', open ? '▾' : '▸');
+  tog.type = 'button';
+  tog.setAttribute('aria-expanded', String(open));
+  tog.setAttribute('aria-label', `${open ? 'Close' : 'Open'} ${part.label}`);
+  tog.addEventListener('click', () => { setPartOpen(w.id, part.id, !open); renderWorld(); });
+  const name = make('button', 'wo-name', part.label);
+  name.type = 'button';
+  name.title = `${part.about} (zoom in${part.keys ? `, ${part.keys}` : ''})`;
+  name.addEventListener('click', zoom);
+  row.append(tog, name);
+  if (count !== '') row.append(make('span', 'wo-count', String(count)));
+  if (meta) row.append(make('span', 'wo-meta', meta));
+  li.append(row);
+  if (open && kids) {
+    const ul = make('ul', 'wo-kids');
+    ul.append(...kids);
+    li.append(ul);
+  }
+  return li;
+}
+
+const kidLine = (text, run, { meta = '', depth = 0, cls = '' } = {}) => {
+  const li = make('li', cls);
+  if (depth) li.style.setProperty('--depth', depth);
+  const b = make(run ? 'button' : 'span', 'wo-item', text);
+  if (run) { b.type = 'button'; b.addEventListener('click', run); }
+  li.append(b);
+  if (meta) li.append(make('span', 'wo-meta', meta));
+  return li;
+};
+const snipText = (t, n = 70) => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
+
+async function drawOutline(w, s, { life, days }) {
+  const open = openParts(w.id);
+  const zoomTo = (page, sub) => () => go({ view: 'stage', id: w.id, page, ...(sub ? { sub } : {}) });
+  const parts = partsFor(w).map((p, i) => ({ ...p, keys: `Alt + ${i + 1}` }));
+  const lines = [];
+  const { pages } = await worldTree(w.id);
+  const bible = pages.filter(({ row }) => row.id !== `steps-${w.id}` && !row.fields?.fixesFor);
+  for (const part of parts) {
+    const on = open.has(part.id);
+    if (part.id === 'ideas') {
+      const items = await gatherItems(w);
+      const loose = items.filter(({ row }) => !(row.fields?.filed || []).length && !row.fields?.letgo);
+      const kids = loose.slice(0, 8).map(({ row, from }) => kidLine(snipText(row.text) || 'A picture or recording', () => openEntry(row.id), { meta: from || '' }));
+      if (loose.length > 8) kids.push(kidLine(`${loose.length - 8} more ›`, zoomTo('gather'), { cls: 'wo-more' }));
+      kids.push(ideaAdder(w));
+      lines.push(partLine(w, part, on, { count: loose.length, meta: loose.length ? `to sort · newest: ${snipText(loose[0].row.text, 40)}` : 'nothing to sort', kids, zoom: zoomTo('gather') }));
+    } else if (part.id === 'bible' || part.id === 'notes') {
+      const kids = bible.map(({ row, depth }) => kidLine(row.title || 'Untitled page', () => go({ view: 'notebook', pageId: row.id }), { depth, cls: 'wo-page' }));
+      const more = make('li', 'wo-also');
+      const add = make('button', 'wo-add', '+ Page');
+      add.type = 'button';
+      add.addEventListener('click', async () => { await go({ view: 'notebook' }); await notebook.newPage(w.id); });
+      more.append(add);
+      if (part.id === 'bible') {
+        for (const [sub, label] of [['arcs', 'Arcs'], ['timeline', 'Timeline'], ['ties', 'Relationships'], ['promises', 'Promises']]) {
+          const b = make('button', 'wo-sub', label);
+          b.type = 'button';
+          b.addEventListener('click', sub === 'arcs' ? () => go({ view: 'grid', id: w.id }) : zoomTo('shape', sub));
+          more.append(b);
+        }
+      }
+      kids.push(more);
+      const top = bible.filter(({ depth }) => depth === 0).map(({ row }) => row.title || 'Untitled');
+      lines.push(partLine(w, part, on, { count: bible.length, meta: top.length ? snipText(top.slice(0, 4).join(', ') + (top.length > 4 ? '…' : ''), 60) : 'no pages yet', kids, zoom: zoomTo(part.page) }));
+    } else if (part.id === 'pieces') {
+      const h = { open: (p) => go({ view: 'project', id: p.id }), stage: (p, st) => setStage(p, st), pop: popMenu, menu: (p) => bookMenu(p), button: menuButton };
+      const kids = s.pieces.map(({ row, depth }) => pieceLine(row, depth, w, h));
+      const more = make('li', 'wo-also');
+      const add = make('button', 'wo-add', `+ ${(await nextLevel(w))?.label || 'Piece'}`);
+      add.type = 'button';
+      add.addEventListener('click', () => addPiece(w.id));
+      more.append(add);
+      kids.push(more);
+      const by = new Map();
+      // Counted in the order of the stages, idea first.
+      const order = [];
+      for (const { row } of s.pieces) { const st = stageOf(row, w); by.set(st, (by.get(st) || 0) + 1); for (const x of stagesOf(row, w)) if (!order.includes(x)) order.push(x); }
+      const counts = [...by].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
+      lines.push(partLine(w, part, on, { count: s.pieces.length, meta: counts.map(([st, k]) => `${k} ${st.toLowerCase()}`).join(' · ') || 'none yet', kids, zoom: zoomTo('write') }));
+    } else if (part.id === 'make') {
+      const { elementsIn, lookOf } = await import('../production.js');
+      const els = await elementsIn(w);
+      const looked = els.filter((e) => lookOf(e.fields?.element || {}).refs.length);
+      const kids = [];
+      const looks = kidLine('Looks', zoomTo('make', 'looks'), { meta: looked.length ? `${looked.length} with pictures` : 'none yet' });
+      if (looked.length) {
+        const ul = make('ul', 'wo-kids');
+        for (const e of looked) {
+          const l = lookOf(e.fields.element);
+          ul.append(kidLine(e.title || 'Untitled', zoomTo('make', 'looks'), { meta: `${l.kept.length}${l.pick ? ' · ★' : ''}` }));
+        }
+        looks.append(ul);
+      }
+      kids.push(looks, kidLine('Kit', zoomTo('make', 'kit'), { meta: els.length ? `${els.length} characters, places and props` : 'characters, places, props' }));
+      const ahead = days.filter(({ d }) => (d.fields?.date || '') >= isoToday());
+      for (const { d, p } of ahead.slice(0, 4)) {
+        const when = d.fields?.date ? new Date(`${d.fields.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'No date yet';
+        kids.push(kidLine(`Shoot day · ${p.title || 'Untitled'}${d.fields?.place ? ` · ${d.fields.place}` : ''}`, () => go({ view: 'production', id: p.id, day: d.id }), { meta: when }));
+      }
+      if (days.length) kids.push(kidLine('All shoot days', zoomTo('make', 'days'), { cls: 'wo-more' }));
+      const metaBits = [looked.length && `${plural(looked.length, 'look')}`, els.length && `${els.length} in the kit`, ahead.length && plural(ahead.length, 'shoot day')].filter(Boolean);
+      lines.push(partLine(w, part, on, { count: '', meta: metaBits.join(' · ') || 'looks, kit, shoot days', kids, zoom: zoomTo('make') }));
+    } else if (part.id === 'deliver') {
+      const ready = s.pieces.filter(({ row }) => isReady(row, w)).map(({ row }) => row);
+      const out = s.pieces.filter(({ row }) => isOut(row, w)).map(({ row }) => row);
+      const where = (p) => Object.entries(p.fields?.posting || {}).filter(([, v]) => v?.url).map(([k]) => (k === 'x' ? 'X' : k[0].toUpperCase() + k.slice(1))).join(', ');
+      const kids = [
+        ...ready.map((p) => kidLine(p.title || 'Untitled', () => go({ view: 'deliver', id: p.id, tab: 'post' }), { meta: 'Ready to post' })),
+        ...out.map((p) => kidLine(p.title || 'Untitled', () => go({ view: 'deliver', id: p.id }), { meta: where(p) ? `Out · ${where(p)}` : 'Out' }))
+      ];
+      if (!kids.length) kids.push(kidLine('Nothing ready or out yet', null, { cls: 'wo-none' }));
+      lines.push(partLine(w, part, on, { count: out.length || '', meta: [out.length && `${out.length} out`, ready.length && `${ready.length} ready to post`].filter(Boolean).join(' · ') || 'nothing out yet', kids, zoom: zoomTo('deliver') }));
+    }
+  }
+  const list = $('#wh-outline');
+  for (const el of [...list.querySelectorAll(':scope > li[data-part]:not(#wh-about)')]) el.remove();
+  $('#wh-about').before(...lines);
+  // About: folded under its own line, the facts the Desk keeps.
+  const about = $('#wh-about');
+  const aOpen = open.has('about');
+  about.querySelector('.wo-kids').hidden = !aOpen;
+  const tog = about.querySelector('.wo-tog');
+  tog.textContent = aOpen ? '▾' : '▸';
+  tog.setAttribute('aria-expanded', String(aOpen));
+  tog.setAttribute('aria-label', `${aOpen ? 'Close' : 'Open'} About`);
+  const flip = () => { setPartOpen(w.id, 'about', !aOpen); renderWorld(); };
+  tog.onclick = flip;
+  about.querySelector('.wo-name').onclick = flip;
+  $('#wh-about-meta').textContent = w.fields?.star ? snipText(w.fields.star, 60) : 'north star, now, crew, turns';
+}
+
+// "Add an idea…" at the end of Ideas: a line on today's page that links here.
+function ideaAdder(w) {
+  const li = make('li', 'wo-add-idea');
+  const form = make('form', 'wo-idea');
+  form.noValidate = true;
+  const input = make('input');
+  input.type = 'text';
+  input.placeholder = 'Add an idea…';
+  input.setAttribute('aria-label', `Add an idea to ${w.title || 'this project'}`);
+  input.setAttribute('enterkeyhint', 'enter');
+  input.autocomplete = 'off';
+  form.append(input);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    const { addLine } = await import('../capture.js');
+    const { rows } = await addLine([{ type: 'text', text: `${text} ` }, { type: 'entryRef', attrs: { id: w.id, title: w.title || 'Untitled' } }], {});
+    await applyRemote(rows);
+    toast(`Idea added to ${w.title || 'the project'} (on today’s page too)`);
+    await renderWorld();
+    document.querySelector('#wh-outline .wo-idea input')?.focus();
+  });
+  li.append(form);
+  return li;
+}
+
 // A project's next date: its soonest dated step, or its next shoot day.
 function nextDate(worldId) {
   const dates = [...worldDates];
@@ -800,4 +955,4 @@ function wireLibraryView() {
   window.__grid = grid;
 }
 
-export { areaOptions, grid, nextDate, nudgeBook, renderLibrary, renderProject, renderWorld, wireLibraryView };
+export { areaOptions, drawNextStep, grid, nextDate, nudgeBook, renderLibrary, renderProject, renderWorld, wireLibraryView };

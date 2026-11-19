@@ -199,13 +199,25 @@ export class ProjectPage {
     return h;
   }
 
+  // In the block at the top of the home: the first thing that needs you, and
+  // the rest a tap away ("all N").
   drawCalls(seat, now) {
     const el = this.els.calls;
     el.hidden = !seat.calls.length;
     if (el.hidden) { el.replaceChildren(); return; }
-    const box = make('div', 'wp-rows');
-    for (const c of seat.calls) box.append(this.hooks.call(c, now));
-    el.replaceChildren(this.head('Needs you'), box);
+    const box = make('div', 'wp-rows wt-v');
+    const open = el.classList.contains('all');
+    seat.calls.forEach((c, i) => { const row = this.hooks.call(c, now); if (i && !open) row.hidden = true; box.append(row); });
+    const k = make('span', 'wt-k', 'Needs you');
+    const kids = [k, box];
+    if (seat.calls.length > 1) {
+      const all = make('button', 'wt-all', open ? 'fewer' : `all ${seat.calls.length} ›`);
+      all.type = 'button';
+      all.setAttribute('aria-expanded', String(open));
+      all.addEventListener('click', () => { el.classList.toggle('all'); this.drawCalls(seat, Date.now()); });
+      kids.push(all);
+    }
+    el.replaceChildren(...kids);
   }
 
   drawCrew(seat, now) {

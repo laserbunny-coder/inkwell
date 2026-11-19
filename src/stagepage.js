@@ -5,11 +5,12 @@
 import { getEntry, children, putEntries, byKind } from './db.js';
 import { entry, newId, outline } from './model.js';
 import { GAP } from './order.js';
-import { worldOf, worldTree, worldStats, stats, hasManuscript, bookType, kindName, stageOf, isOut, isReady, ago, newPage, pagesIn, toolsOf } from './library.js';
+import { nextLevel, worldOf, worldTree, worldStats, stats, hasManuscript, bookType, kindName, stageOf, isOut, isReady, ago, newPage, pagesIn, toolsOf } from './library.js';
 import { worldPromises } from './grid.js';
 import { elementsIn, ELEMENT_TYPES, typeOf, shootDays } from './production.js';
 import { shareId, commentsOn } from './sharelink.js';
-import { isLife, hasLineDrag, lineDragId, lineWords } from './pages.js';
+import { isLife, hasLineDrag, lineDragId, lineWords, partOfPage, partName } from './pages.js';
+import { pieceLine } from './projectoutline.js';
 import { make } from './dom.js';
 import {
   DEVELOP, MAKE_WORLD, SHAPE_PIECE, SHAPE_WORLD, askForm, charactersIn, drawerItems, eventsIn, fileInto, gatherItems, gone, hasDrawerTag, homesIn, intoDrawer, letGo, outOfDrawer, pageText, pieceText, plural, pref, pullInto, setPref, snip, tiesIn, unfile
@@ -64,9 +65,22 @@ export class StagePage {
     this.scope = owner.kind === 'world' ? 'world' : 'piece';
     const page = p.page;
     const head = make('div', 'st-head');
-    const title = make('h1', 'st-title', owner.title || 'Untitled');
-    const where = make('span', 'st-page', { gather: 'Gather', shape: 'Shape', write: 'Write', revise: 'Revise', make: 'Make', deliver: 'Deliver', notes: 'Notes' }[page] || '');
-    head.append(where, title);
+    let title;
+    if (this.scope === 'world') {
+      // A part of the project, zoomed into from its home: its plain name, and
+      // the way back out (Alt + Left too). Continuity and comments sit under Pieces.
+      const up = page === 'revise' ? { label: 'Pieces', run: () => this.hooks.go({ view: 'stage', id: owner.id, page: 'write' }) } : { label: owner.title || 'Untitled', run: () => this.hooks.go({ view: 'world', id: owner.id }) };
+      const back = make('button', 'st-back', `‹ ${up.label}`);
+      back.type = 'button';
+      back.addEventListener('click', up.run);
+      title = make('h1', 'st-title', page === 'revise' ? 'Continuity and comments' : partName(partOfPage(page)) || owner.title || 'Untitled');
+      head.classList.add('st-zoom');
+      head.append(back, title);
+    } else {
+      title = make('h1', 'st-title', owner.title || 'Untitled');
+      const where = make('span', 'st-page', { gather: 'Gather', shape: 'Shape', write: 'Write', revise: 'Revise', make: 'Make', deliver: 'Deliver', notes: 'Notes' }[page] || '');
+      head.append(where, title);
+    }
     const body = make('div', 'st-body');
     body.dataset.page = page;
     this.el.replaceChildren(head, body);
@@ -383,7 +397,8 @@ export class StagePage {
     head.append(add);
     body.append(head);
     const ul = make('ul', 'loose-list tree-list st-bible');
-    for (const { row: p, depth } of pages) {
+    // The project's own Steps page lives under Steps, not in the bible.
+    for (const { row: p, depth } of pages.filter(({ row }) => row.id !== `steps-${w.id}`)) {
       const li = make('li');
       li.style.setProperty('--depth', depth);
       li.dataset.id = p.id;
@@ -794,26 +809,53 @@ export class StagePage {
 
   // ---------- Write: the world ----------
 
+  // Pieces (a world's Write page): every piece as a line with its stage, or
+  // the stage board; continuity and readers' comments are a tap below.
   async drawWriteWorld(body) {
-    const { pieces } = await worldStats(this.owner);
-    const ul = make('ul', 'st-write');
-    for (const { row: p, depth } of pieces) {
-      const li = make('li');
-      li.style.setProperty('--depth', depth);
-      const writable = hasManuscript(p) || bookType(p) === 'lines';
-      const s = writable && hasManuscript(p) ? await stats(p) : null;
-      const open = make('button', 'loose-title', p.title || 'Untitled');
-      open.addEventListener('click', () => (writable ? this.hooks.openBook(p.id) : this.hooks.go({ view: 'project', id: p.id })));
-      li.append(open, make('span', 'piece-kind', kindName(p)), make('span', 'when', s ? plural(s.words, 'word') : ''), make('span', 'stage', stageOf(p, this.owner)));
-      ul.append(li);
+    const w = this.owner;
+    const { pieces, words } = await worldStats(w);
+    const asBoard = pieces.length > 0 && pref('piecesAs', 'list') === 'board';
+    const head = make('div', 'ph-row st-pieces-head');
+    head.append(make('span', 'panel-label', [plural(pieces.length, 'piece'), words ? plural(words, 'word') : ''].filter(Boolean).join(' · ')));
+    const tools = make('span', 'st-pieces-tools');
+    if (pieces.length) {
+      const sw = make('button', 'wp-link st-as', asBoard ? 'As a list' : 'By stage');
+      sw.id = 'wh-as';
+      sw.type = 'button';
+      sw.title = asBoard ? 'The pieces as a list, as they nest' : 'The stage board: a column for each stage';
+      sw.addEventListener('click', () => { setPref('piecesAs', asBoard ? 'list' : 'board'); this.render(); });
+      const wf = make('button', 'wp-link', 'Workflow');
+      wf.id = 'wh-workflow';
+      wf.type = 'button';
+      wf.title = 'The stages pieces go through here';
+      wf.addEventListener('click', () => this.hooks.editStages(w));
+      tools.append(sw, wf);
     }
-    const head = make('div', 'ph-row');
-    head.append(make('span', 'panel-label', 'Pieces to write in'));
-    const add = make('button', 'ghost-btn', '+ Piece');
-    add.addEventListener('click', () => this.hooks.newPiece(this.owner.id));
-    head.append(add);
-    body.append(head, ul);
+    // The next size down in this world (+ Season, + Episode, + Book…).
+    const add = make('button', 'wp-link', `+ ${(await nextLevel(w))?.label || 'Piece'}`);
+    add.type = 'button';
+    add.id = 'wh-new-piece';
+    add.addEventListener('click', () => this.hooks.newPiece(w.id));
+    tools.append(add);
+    head.append(tools);
+    body.append(head);
+    if (asBoard) {
+      const board = make('div', 'stage-board');
+      board.id = 'wh-board';
+      body.append(board);
+      this.hooks.board(board, w, pieces);
+    } else {
+      const ul = make('ul', 'wo-kids st-write');
+      ul.id = 'wh-pieces';
+      const h = { open: (p) => this.hooks.go({ view: 'project', id: p.id }), stage: (p, st) => this.hooks.setStage(p, st), pop: (a, items) => this.hooks.menu(a, items), menu: (p) => this.hooks.pieceMenu(p), button: (fn, label) => this.hooks.menuButton(fn, label) };
+      for (const { row, depth } of pieces) ul.append(pieceLine(row, depth, w, h));
+      body.append(ul);
+    }
     if (!pieces.length) body.append(make('p', 'hint', 'No pieces yet. A gag, a short, an episode, a novel: anything you make here.'));
+    const more = make('button', 'st-more-link', 'Continuity and readers’ comments ›');
+    more.type = 'button';
+    more.addEventListener('click', () => this.hooks.go({ view: 'stage', id: w.id, page: 'revise' }));
+    body.append(more);
   }
 
   // ---------- Revise ----------

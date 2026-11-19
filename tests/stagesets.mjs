@@ -74,8 +74,9 @@ const board = (p) => p.evaluate(() => [...document.querySelectorAll('#wh-board .
   name: set.querySelector(':scope > .panel-label')?.textContent || '',
   cols: [...set.querySelectorAll('.sb-col')].map((c) => `${c.dataset.stage}:${c.querySelectorAll('.sb-card').length}`)
 })));
+// The board is in the project's Pieces zoom now (By stage).
 const openMake = async (p) => {
-  await go(p, { view: 'world', id: 'wd_nb' });
+  await go(p, { view: 'stage', id: 'wd_nb', page: 'write' });
   await p.waitForSelector('#wh-board .sb-card');
   await sleep(300);
 };
@@ -283,7 +284,7 @@ try {
   });
 
   await check('a world with nothing to film has no Shoot days in Make; one with scripts does', async () => {
-    await go(page, { view: 'world', id: 'wd_poems' });
+    await go(page, { view: 'stage', id: 'wd_poems', page: 'write' });
     await page.waitForSelector('#wh-board .sb-card');
     // The last world's board can still be up for a moment; wait for this one's.
     await page.waitForFunction(() => !!document.querySelector('#wh-board .sb-col[data-stage="Drafting"]'), null, { timeout: 5000 }).catch(() => {});

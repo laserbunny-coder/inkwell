@@ -66,11 +66,36 @@ export function personalArea(allAreas) {
   return allAreas.find((a) => a.id === 'area-personal' && !a.deleted) || allAreas.find((a) => /^(personal|life|home)$/i.test((a.title || '').trim()) && !a.deleted) || null;
 }
 
+// A project (world) is one outline now (Nov 2026): its parts are lines on its
+// home, in the order work goes from idea to posted, with plain names. Each
+// part zooms into the world page it was (Ideas is Gather's page, Bible is
+// Shape's, Pieces is Write's). Revise lives inside each piece; Steps sit in
+// the block at the top of the home.
+export const PARTS = [
+  { id: 'ideas', label: 'Ideas', page: 'gather', was: 'gather', about: 'Everything in, nothing decided: lines from your days, links, research' },
+  { id: 'bible', label: 'Bible', page: 'shape', was: 'shape', about: 'What’s true: characters, places, rules, arcs, the timeline, promises' },
+  { id: 'pieces', label: 'Pieces', page: 'write', was: 'write', about: 'Everything you make here, by stage' },
+  { id: 'make', label: 'Make', page: 'make', was: 'make', about: 'Looks, the kit and shoot days' },
+  { id: 'deliver', label: 'Deliver', page: 'deliver', was: 'deliver', about: 'Ready to post, and where it’s out' }
+];
+export const LIFE_PARTS = [
+  { id: 'ideas', label: 'Ideas', page: 'gather', was: 'gather', about: 'Everything in: research, links, pictures, lines from your days' },
+  { id: 'notes', label: 'Notes', page: 'notes', was: 'notes', about: 'What you’ve worked out, a page for each thing' }
+];
+export const partsFor = (world) => (isLife(world) ? LIFE_PARTS : PARTS);
+// A world page (gather, shape, write…) by its plain name, and back.
+export const partOfPage = (page) => [...PARTS, ...LIFE_PARTS].find((p) => p.page === page)?.id || null;
+export const pageOfPart = (id) => [...PARTS, ...LIFE_PARTS].find((p) => p.id === id)?.page || null;
+export const partName = (id) => [...PARTS, ...LIFE_PARTS].find((p) => p.id === id)?.label || '';
+
 // The tabs for where you are. ctx: { scope: 'desk' | 'world' | 'piece', life }.
+// A world's are its parts: they no longer show as a strip (the home is the
+// outline), but Alt + 0 to 5 and Go use them.
 export function tabsFor(ctx) {
   // The desk's places (Today, Drawer, Library, Tags) have their own fixed buttons,
   // so out on the desk the strip stays empty rather than repeat them.
   if (!ctx || ctx.scope === 'desk') return [];
+  if (ctx.scope === 'world') return [{ id: 'overview', label: 'Project home', about: 'The project’s home: the whole outline', n: 0 }, ...(ctx.life ? LIFE_PARTS : PARTS).map((t, i) => ({ ...t, n: i + 1 }))];
   const pages = ctx.life ? LIFE_PAGES : PAGES;
   return [{ id: 'overview', label: 'Overview', about: ctx.scope === 'world' ? 'The whole world at a glance' : 'This piece at a glance', n: 0 }, ...pages.map((t, i) => ({ ...t, n: i + 1 }))];
 }
@@ -91,7 +116,8 @@ export class PageStrip {
     const key = JSON.stringify([ctx?.scope, ctx?.life, ctx?.active]);
     if (key === this.key) return;
     this.key = key;
-    this.el.hidden = !ctx || !this.tabs.length;
+    // A world is one outline: no strip (its parts are lines on its home).
+    this.el.hidden = !ctx || !this.tabs.length || ctx.scope === 'world';
     this.el.dataset.scope = ctx?.scope || '';
     this.el.replaceChildren(...this.tabs.map((t) => {
       const b = make('button', 'pt-tab' + (t.id === ctx?.active ? ' on' : ''), t.label);
