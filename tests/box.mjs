@@ -289,6 +289,8 @@ try {
     await q.waitForFunction(() => document.querySelector('.palette')?.hidden !== false || !document.querySelector('.palette.box:not([hidden])'));
     await q.evaluate(() => { const pl = { view: 'desk' }; history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); });
     await q.waitForFunction(() => document.documentElement.dataset.view === 'desk');
+    await q.evaluate(() => document.activeElement?.blur());
+    await q.waitForFunction(() => !document.body.classList.contains('kb-up'));
     await sleep(300);
   });
 
