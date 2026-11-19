@@ -468,8 +468,8 @@ try {
     assert.match(items[0], /Paid off in Siege: Takes up the sword again/);
   });
 
-  await check('the status board (on Overview) shows every piece by status, and dragging a card moves it on', async () => {
-    await go(laptop, { view: 'world', id: 'wd_monks' });
+  await check('the status board (in Pieces, By stage) shows every piece by status, and dragging a card moves it on', async () => {
+    await go(laptop, { view: 'stage', id: 'wd_monks', page: 'write' });
     await laptop.waitForSelector('#wh-board .sb-card');
     const idea = await laptop.locator('.sb-col[data-stage="New idea"] .sb-title').allInnerTexts();
     assert.ok(['Monks vs. Zombies', 'Pilot', 'Season One', 'Pilot', 'The Hive', 'Siege'].every((t) => idea.includes(t)), idea.join(', '));

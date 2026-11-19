@@ -154,7 +154,8 @@ try {
     await nudge(phone);
     const w = await warnNow(phone, true);
     assert.equal(w?.text, 'Private lesson · 3:00 pm');
-    assert.ok(w.top < 80, `at the top (${w.top})`);
+    // A piece's pages take a row of their own under the top line (Nov 19 2026).
+    assert.ok(w.top < 100, `at the top (${w.top})`);
     // Just under the top line, never over the date (Nov 18 2026).
     const line = await phone.evaluate(() => [...document.querySelectorAll('.topbar, .zm-top')].map((e) => e.getBoundingClientRect()).find((r) => r.height > 0)?.bottom || 0);
     assert.ok(w.top >= line - 1, `under the top line (${w.top} < ${line})`);

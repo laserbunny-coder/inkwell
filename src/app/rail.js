@@ -15,6 +15,7 @@ import { go, lastPlace } from './routing.js';
 import { refreshWords } from './manuscript.js';
 import { actMenu, areaMenu, bookMenu, chapterMenu, pageMenu, worldMenu } from './tidying.js';
 import { PAGE_NAMES, frame, nav, renderStrip } from './workpages.js';
+import { partName, partOfPage } from '../pages.js';
 import { openPalette } from './quickinserts.js';
 import { nowStrip, plan, tagsPage } from './talking.js';
 import { openBeside, openProjectBeside, sideNotes } from './beside.js';
@@ -281,7 +282,9 @@ async function drawCrumb() {
     const g = await getEntry(state.stage.id);
     if (g?.kind === 'world') parts.push(lib, ...(await areaParts(g.area_id)), bookPart(g));
     else if (g) { const up = await within(g); parts.push(...(up ? up.out : [lib]), bookPart(g)); }
-    parts.push(link(PAGE_NAMES[state.stage.page] || '', () => {}, 'here'));
+    // A project's parts go by their plain names (Ideas, Bible, Pieces…).
+    const plain = g?.kind === 'world' ? (state.stage.page === 'revise' ? 'Continuity and comments' : partName(partOfPage(state.stage.page))) : '';
+    parts.push(link(plain || PAGE_NAMES[state.stage.page] || '', () => {}, 'here'));
   } else if (view() === 'drawer') {
     parts.push(lib, link('Drawer', () => {}, 'here'));
   } else if (view() === 'plan') {

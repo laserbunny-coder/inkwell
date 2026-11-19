@@ -34,7 +34,7 @@ import { $, editor, inNotebook, state, store, view } from '../main.js';
 import { currentEditor, notebook } from './notebookview.js';
 import { go, historyMode, lastPlace, openBook, openEntry, placeOf, setHistoryMode } from './routing.js';
 import { applyRemote, setCaretAfter, sync } from './syncwiring.js';
-import { nextDate, renderWorld } from './libraryview.js';
+import { drawNextStep, nextDate, renderWorld } from './libraryview.js';
 import { frame } from './workpages.js';
 import { hidden, setShown } from './pagesettings.js';
 import { writing } from './commands.js';
@@ -611,7 +611,7 @@ function wireTalking() {
       show: (name, on) => setShown(name, on),
       // Beside or on top: only where there's room for beside (a computer, 1100 px and wider).
       // A project's steps were drawn again: its next date may have moved.
-      steps: () => { if (view() === 'world' && state.worldId) projectPage?.setDate(nextDate(state.worldId)); },
+      steps: () => { if (view() === 'world' && state.worldId) { projectPage?.setDate(nextDate(state.worldId)); drawNextStep(); } },
       // Weeks ahead: the lanes as the Desk seats them, and shoot days.
       talk: () => (inPane || !paneHost() ? null : () => openTalk()),
       // Google Calendar, read-only, through the server's calendar function.

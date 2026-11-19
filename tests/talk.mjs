@@ -169,7 +169,7 @@ async function check(name, fn) {
 try {
   const page = await open({ width: 1440, height: 900 });
   const st = page.st;
-  await goMain(page, { view: 'world', id: 'wd_nb' });
+  await goMain(page, { view: 'world', id: 'wd_nb', part: 'steps' });
   await page.waitForSelector('#wh-steps .pl-task');
   let f;
 

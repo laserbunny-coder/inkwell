@@ -83,6 +83,8 @@ const get = async (p, id) => (await all(p)).find((r) => r.id === id);
 const go = (p, place) => p.evaluate((pl) => { history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); }, place);
 const viewOf = (p) => p.evaluate(() => document.documentElement.dataset.view || 'write');
 const tabs = (p) => p.locator('#page-tabs .pt-tab').evaluateAll((els) => els.map((e) => e.dataset.page + (e.classList.contains('on') ? '*' : '')));
+// A project is one outline (Nov 2026): no strip; a part zoomed into says its plain name.
+const partTitle = (p) => p.locator('#stage-view .st-title').innerText();
 const GATHER = '.st-cards:not(.st-drawer-cards) > .st-card';
 const pick = async (p, label) => { await p.locator('.pop-menu .pop-item', { hasText: label }).first().click(); await sleep(250); };
 const shown = (p) => p.evaluate(() => { const r = document.querySelector('.topbar').getBoundingClientRect(); return r.bottom > 2; });
@@ -120,24 +122,22 @@ try {
 
   // ---------- the strip ----------
 
-  await check('a world’s overview: its sentence, where its pieces are, and what’s next', async () => {
+  await check('a world’s home: its sentence and one outline that says what’s in each part', async () => {
     await go(page, { view: 'world', id: 'wd_nb' });
-    await page.waitForSelector('#wh-next li button');
+    await page.waitForSelector('#wh-outline [data-part="ideas"] .wo-meta');
     assert.equal(await page.locator('#wh-logline').innerText(), 'A family bakery raises a troupe of hopeless ninjas.');
-    // The overview has one thin line of where the pieces stand.
-    const stand = await page.locator('#wh-stagebar .zw-sg.has').allInnerTexts();
-    assert.deepEqual(stand, ['Writing 1', 'Posted 1']);
-    const next = await page.locator('#wh-next').innerText();
-    assert.match(next, /Gather\s*3 things in to file/i);
-    assert.match(next, /Shoot day Sat, Jan 16 · Reel 2: Breakfast/);
-    assert.match(next, /Board Reel 2: Breakfast/);
-    assert.ok(await page.locator('#wh-board-toggle').count() === 0);
+    assert.deepEqual(await page.locator('#wh-outline > li > .wo-row > .wo-name').allInnerTexts(), ['Ideas', 'Bible', 'Pieces', 'Make', 'Deliver', 'About']);
+    assert.match(await page.locator('#wh-outline [data-part="ideas"] .wo-row').innerText(), /Ideas\s*3\s*to sort/);
+    assert.match(await page.locator('#wh-outline [data-part="pieces"] .wo-meta').innerText(), /1 writing · 1 posted/i);
+    assert.match(await page.locator('#wh-outline [data-part="make"] .wo-meta').innerText(), /1 shoot day/);
+    assert.ok(await page.locator('#page-tabs').isHidden(), 'no page strip for a project');
   });
 
   await check('one button moves a piece on to its next status, on the board and on the piece; Undo takes it back', async () => {
-    // The line opens the stage board in place, worded as what is happening.
-    await page.locator('#wh-stagebar .zw-stand').click();
-    await page.waitForSelector('#wh-pieces', { state: 'hidden' }); // the board takes the list’s place
+    // Pieces, zoomed into: By stage shows the board, worded as what is happening.
+    await page.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await page.locator('#wh-as').click();
+    await page.waitForSelector('#wh-pieces', { state: 'detached' }); // the board takes the list’s place
     await page.waitForSelector('.stage-board:visible .sb-card');
     const cols = await page.locator('.stage-board:visible .sb-col').evaluateAll((els) => els.filter((c) => c.querySelector('.sb-card')).map((c) => `${c.dataset.stage} ${c.querySelectorAll('.sb-card').length}`));
     assert.deepEqual(cols, ['Writing 1', 'Posted 1']);
@@ -165,14 +165,16 @@ try {
     assert.equal(await page.locator('#ph-next').innerText(), 'Start generating');
     await page.locator('.toast button', { hasText: 'Undo' }).click();
     await page.waitForFunction(() => document.querySelector('#ph-stage').value === 'Writing');
-    await go(page, { view: 'world', id: 'wd_nb' });
+    await go(page, { view: 'stage', id: 'wd_nb', page: 'write' });
     await page.waitForSelector('.stage-board:visible .sb-card');
-    // The line folds it away again.
-    await page.locator('#wh-stagebar .zw-stand').click();
+    // As a list again.
+    await page.locator('#wh-as').click();
     await page.waitForSelector('#wh-pieces li');
   });
 
-  await check('the tabs sit at the top centre: Overview, then Gather to Deliver, with the pill on the one you are in', async () => {
+  await check('a piece’s tabs sit at the top centre: Overview, then Gather to Deliver, with the pill on the one you are in', async () => {
+    await go(page, { view: 'project', id: 'pr_reel2' });
+    await page.waitForSelector('#page-tabs .pt-tab');
     assert.deepEqual(await tabs(page), ['overview*', 'gather', 'shape', 'write', 'revise', 'make', 'deliver']);
     await page.mouse.move(700, 500);
     await sleep(500);
@@ -186,17 +188,14 @@ try {
     await shot(page, 'pages-overview');
   });
 
-  await check('holding Alt a moment shows each tab’s number, and Alt + 1 opens Gather', async () => {
-    await page.keyboard.down('Alt');
-    await sleep(600);
-    assert.ok(await page.locator('#page-tabs .pt-num').first().isVisible());
-    await shot(page, 'pages-alt');
-    await page.keyboard.press('Digit1');
-    await page.keyboard.up('Alt');
+  await check('in a project, Alt + 1 zooms into Ideas (Gather’s page, by its plain name)', async () => {
+    await go(page, { view: 'world', id: 'wd_nb' });
+    await page.waitForSelector('#wh-outline [data-part="ideas"]');
+    await page.keyboard.press('Alt+Digit1');
     await page.waitForSelector('.st-card');
     assert.equal(await viewOf(page), 'stage');
-    assert.deepEqual(await tabs(page), ['overview', 'gather*', 'shape', 'write', 'revise', 'make', 'deliver']);
-    assert.match(await page.locator('#crumb').innerText(), /The Ninja Bunch ▾\s*›\s*Gather/);
+    assert.equal(await partTitle(page), 'Ideas');
+    assert.match(await page.locator('#crumb').innerText(), /The Ninja Bunch ▾\s*›\s*Ideas/);
   });
 
   // ---------- Gather ----------
@@ -260,7 +259,7 @@ try {
   await check('Shape is canon: the bible, with a line from the Today panel dropped onto a page filed there', async () => {
     await page.keyboard.press('Alt+Digit2');
     await page.waitForSelector('.st-bible li');
-    assert.deepEqual(await tabs(page), ['overview', 'gather', 'shape*', 'write', 'revise', 'make', 'deliver']);
+    assert.equal(await partTitle(page), 'Bible');
     const bible = await page.locator('.st-bible').innerText();
     assert.match(bible, /Characters[\s\S]*Kenji[\s\S]*Mom[\s\S]*Music/);
     await page.keyboard.press('Control+Shift+J');
@@ -313,13 +312,15 @@ try {
     await page.locator('.st-chips .chip[data-sub="arcs"]').click();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'grid');
     await sleep(400);
-    assert.deepEqual(await tabs(page), ['overview', 'gather', 'shape*', 'write', 'revise', 'make', 'deliver']);
+    assert.match(await page.locator('#crumb').innerText(), /The Ninja Bunch/);
   });
 
   // ---------- Make, Deliver, Revise at the size of the world ----------
 
-  await check('Make for the world: tools only, the kit and every shoot day (the status board lives on Overview)', async () => {
-    await page.keyboard.press('Alt+Digit5');
+  await check('Make for the world: tools only, the kit and every shoot day (the status board lives in Pieces)', async () => {
+    await go(page, { view: 'world', id: 'wd_nb' });
+    await page.waitForSelector('#wh-outline [data-part="make"]');
+    await page.keyboard.press('Alt+Digit4');
     await page.waitForSelector('.st-chips .chip[data-sub="kit"]');
     assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['kit', 'looks', 'days']);
     assert.equal(await page.locator('#st-board').count(), 0);
@@ -334,14 +335,15 @@ try {
   });
 
   await check('Deliver for the world: what’s ready to post and what’s posted, with its links', async () => {
-    await page.keyboard.press('Alt+Digit6');
+    await page.keyboard.press('Alt+Digit5');
     await page.waitForSelector('.st-posted');
     const t = await page.locator('.st-body').innerText();
     assert.match(t, /Out in the world[\s\S]*Reel 1: The Audition[\s\S]*Youtube/i);
   });
 
-  await check('Revise for the world: continuity checked against canon, by Claude', async () => {
-    await page.keyboard.press('Alt+Digit4');
+  await check('Continuity for the world (under Pieces): checked against canon, by Claude', async () => {
+    await page.keyboard.press('Alt+Digit3');
+    await page.locator('.st-more-link', { hasText: 'Continuity' }).click();
     await page.waitForSelector('.st-continuity .pill');
     await page.locator('.st-continuity .pill').click();
     await page.waitForSelector('.st-issues li');
@@ -444,8 +446,9 @@ try {
     await page.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Kenji');
     assert.ok(await page.locator('#nb-today').isHidden());
     assert.ok(await page.locator('.nb-date').isHidden());
-    await page.waitForSelector('#page-tabs .pt-tab');
-    assert.deepEqual((await tabs(page))[0], 'overview');
+    // A bible page belongs to its project: no strip, the ruler's Project stop is lit.
+    assert.ok(await page.locator('#page-tabs').isHidden());
+    assert.equal(await page.locator('.zm-stop[data-stop="project"]').getAttribute('aria-current'), 'page');
   });
 
   // ---------- life projects ----------
@@ -462,14 +465,13 @@ try {
     await sleep(500);
     const w = (await all(page)).find((r) => r.kind === 'world' && r.title === 'Kitchen remodel');
     assert.equal(w.fields.life, true);
-    assert.deepEqual(await tabs(page), ['overview*', 'gather', 'notes']);
-    assert.ok(await page.locator('#wh-status').isHidden());
+    assert.deepEqual(await page.locator('#wh-outline > li > .wo-row > .wo-name').allInnerTexts(), ['Ideas', 'Notes', 'About']);
     assert.equal(await page.locator('#wh-task-box').count(), 0, 'no Daybook box: Daybook is retired');
-    assert.ok(await page.locator('#wh-steps').isVisible());
+    assert.ok(await page.locator('#wh-next-row').isVisible());
     await shot(page, 'pages-life');
     await page.keyboard.press('Alt+Digit2');
     await page.waitForSelector('.st-body[data-page="notes"]');
-    assert.match(await page.locator('.st-head').innerText(), /notes/i);
+    assert.equal(await partTitle(page), 'Notes');
     await go(page, { view: 'world', id: w.id });
     await sleep(400);
     await page.locator('#wh-more .more-btn').click();

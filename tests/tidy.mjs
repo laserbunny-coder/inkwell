@@ -110,11 +110,12 @@ try {
     // It opened on its Idea page; go to the world and change its piece.
     await lib(a);
     await openWorld(a, 'Research');
+    await a.locator('#wh-outline [data-part="pieces"] .wo-name').click();
     await a.locator('#wh-pieces li', { hasText: 'Research' }).locator('.more-btn').click();
     await menuPick(a, 'Written as', 'Outline');
     await sleep(400);
     assert.equal((await book(a, 'Research')).fields.type, 'lines');
-    await a.locator('#wh-pieces li .loose-title', { hasText: 'Research' }).click();
+    await a.locator('#wh-pieces li .wo-item', { hasText: 'Research' }).click();
     await a.waitForSelector('.project-home', { state: 'visible' });
     await a.locator('#ph-label').fill('Gag');
     await a.locator('#ph-label').press('Enter');
@@ -125,7 +126,8 @@ try {
   await check('writing a piece with words in it as an outline asks first and keeps the manuscript', async () => {
     await lib(a);
     await openWorld(a, 'Untitled novel');
-    await a.locator('#wh-pieces li .loose-title', { hasText: 'Untitled novel' }).click();
+    await a.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await a.locator('#wh-pieces li .wo-item', { hasText: 'Untitled novel' }).click();
     await a.waitForSelector('.project-home', { state: 'visible' });
     await a.locator('#ph-kind').selectOption('lines');
     await a.waitForSelector('.ask');

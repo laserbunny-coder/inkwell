@@ -76,7 +76,7 @@ try {
   });
 
   await check('on the project’s page: Nate’s step shows with his name', async () => {
-    await go(page, { view: 'world', id: 'wd_acro' });
+    await go(page, { view: 'world', id: 'wd_acro', part: 'steps' });
     await page.waitForFunction(() => document.documentElement.dataset.view === 'world' && document.querySelectorAll('#wh-steps .pl-task').length >= 1);
     await still(page);
     const nate = page.locator('#wh-steps .pl-task', { hasText: 'Film the class promo' });
@@ -93,7 +93,7 @@ try {
     await sleep(500);
     assert.equal((await get(page, 'li_q')).fields.task.owner, 'Nate');
     await page.waitForFunction(() => ![...document.querySelectorAll('#plan .pl-task .pl-words')].some((x) => x.textContent === 'QuickBooks catch-up'));
-    await go(page, { view: 'world', id: 'wd_acro' });
+    await go(page, { view: 'world', id: 'wd_acro', part: 'steps' });
     await page.waitForFunction(() => [...document.querySelectorAll('#wh-steps .pl-task')].some((x) => /QuickBooks/.test(x.textContent)));
     await page.locator('#wh-steps .pl-task', { hasText: 'QuickBooks' }).click({ button: 'right' });
     await page.locator('.pop-menu .pop-item', { hasText: 'Make it mine' }).first().click();

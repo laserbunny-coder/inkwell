@@ -32,6 +32,7 @@ import { KINDS, addPiece, bookMenu, refreshViews, setKind, setLife, worldMenu } 
 import { printCurrent, toggleCompare, toggleFreshEyes } from './revising.js';
 import { toggleGrid, toggleProduction } from './productionwiring.js';
 import { goPage, nav, strip, todayPanel } from './workpages.js';
+import { openGoTo } from './goto.js';
 import { closeHistory, hstrip, openHistory } from './historyview.js';
 import { currentSize, currentWidth, progressPanel, setPage, step, togglePageSettings, toggleReading, toggleSections, toggleShortcuts } from './pagesettings.js';
 import { box, commands, toggleTheme, writing } from './commands.js';
@@ -522,7 +523,8 @@ function wireQuickInserts() {
     if (cmd === 'beside') toggleBesidePane();
     if (cmd === 'talk') openTalk();
     if (cmd === 'drawer') go({ view: 'drawer' });
-    if (cmd === 'go') nav.toggle();
+    // On a phone, the search button in a project is Go to… for that project.
+    if (cmd === 'go') { if (touch.matches && ['world', 'piece'].includes(strip.ctx?.scope) && !nav.isOpen) openGoTo().then((ok) => { if (!ok) nav.toggle(); }); else nav.toggle(); }
     if (cmd === 'mic') captureHere({ start: true });
     if (cmd === 'gather-tag') gatherOntoPage(notebook.shownTag);
     if (cmd === 'tags') go({ view: 'tags' });
@@ -577,6 +579,8 @@ function wireQuickInserts() {
     else if (m && e.shiftKey && !e.altKey && k === 'x') { e.preventDefault(); toggleCompare(); }
     else if (m && !e.shiftKey && !e.altKey && k === 'p' && (writing() || view() === 'project' || view() === 'compare' || (inNotebook() && notebook.page?.kind === 'page'))) { e.preventDefault(); printCurrent(); }
     // Alt + 0 to 6: the pages (Overview, then Gather to Deliver).
+    // Alt + G: Go to… a piece, page, look or step in the project you're in.
+    else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyG' && ['world', 'piece'].includes(strip.ctx?.scope)) { e.preventDefault(); openGoTo(); }
     else if (e.altKey && !m && !e.shiftKey && /^Digit[0-6]$/.test(e.code) && strip.byNumber(Number(e.code.slice(5)))) { e.preventDefault(); goPage(strip.byNumber(Number(e.code.slice(5)))); }
     // Alt+C: Capture, recording at once; Alt+C again keeps it.
     // Alt + C talks, and lands where you are (Alt + V, the old draft key, does the same).

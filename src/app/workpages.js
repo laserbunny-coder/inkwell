@@ -9,7 +9,7 @@ import { outline, wordCount } from '../model.js';
 import { bookMarkdown, download } from '../export.js';
 import { toFountain } from '../script.js';
 import { dayId } from '../notebook.js';
-import { PageStrip, TodayPanel, isLife } from '../pages.js';
+import { PageStrip, TodayPanel, isLife, PARTS, LIFE_PARTS, pageOfPart, partOfPage } from '../pages.js';
 import { Nav } from '../nav.js';
 import { Frame, lookPicker } from '../frame.js';
 import { pieceDoc } from '../drafts.js';
@@ -79,7 +79,8 @@ async function pageContext() {
   const v = view();
   const at = async (row, active) => {
     if (gone(row)) return { scope: 'desk', active: null };
-    if (row.kind === 'world') return { scope: 'world', id: row.id, life: isLife(row), active };
+    // A world's places go by its parts' plain names (Ideas, Bible, Pieces…).
+    if (row.kind === 'world') return { scope: 'world', id: row.id, life: isLife(row), active: active === 'overview' ? (state.worldPart || 'overview') : partOfPage(active) || (active === 'revise' ? 'pieces' : active) };
     return { scope: 'piece', id: row.id, life: false, active };
   };
   if (v === 'library') return { scope: 'desk', active: 'library' };
@@ -115,6 +116,8 @@ async function renderStrip() {
   if (view() !== stripView) { stripView = view(); body.classList.remove('typing'); }
   body.classList.toggle('looking', LOOKING.includes(view()));
   $('.topbar').classList.toggle('has-tabs', !$('#page-tabs').hidden);
+  // In a project the phone keeps its top line (the search button is Go to… there).
+  $('.topbar').classList.toggle('in-project', ['world', 'piece'].includes(strip.ctx?.scope));
 }
 
 // A tab: the same page at the size you're at.
@@ -150,7 +153,15 @@ async function goPage(id) {
 async function openPage(row, id) {
   if (gone(row)) return;
   if (id === 'overview') return go(row.kind === 'world' ? { view: 'world', id: row.id } : { view: 'project', id: row.id });
-  if (row.kind === 'world') return go({ view: 'stage', id: row.id, page: id });
+  if (row.kind === 'world') {
+    // The project's own steps: a zoom of its home (they're drawn there).
+    if (id === 'steps') return go({ view: 'world', id: row.id, part: 'steps' });
+    // A part by its plain name, or by the page's old name (gather, shape…).
+    const page = pageOfPart(id) || (id === 'revise' ? 'revise' : id);
+    return go({ view: 'stage', id: row.id, page });
+  }
+  // A piece's own pages keep their names; the plain names lead to the same ones.
+  id = { ideas: 'gather', bible: 'shape', pieces: 'write' }[id] || id;
   if (id === 'write') return openBook(row.id);
   if (id === 'make') return go({ view: 'production', id: row.id });
   if (id === 'deliver') return go({ view: 'deliver', id: row.id });
@@ -227,6 +238,8 @@ const stageHooks = {
   remember: (place) => remember(place),
   board: (el, w, pieces) => renderBoard(w, pieces, el),
   editStages: (w) => openStages(w),
+  setStage: (p, st) => setStage(p, st),
+  pieceMenu: (p) => bookMenu(p),
   revise: (action, piece, note) => revisePiece(action, piece, note),
   newPage: async (parentId) => { await go({ view: 'notebook' }); await notebook.newPage(parentId); },
   newPiece: (parentId) => addPiece(parentId)
@@ -309,7 +322,12 @@ addCommands(() => [
   { group: 'go', label: 'Back to the last place', keys: '', words: ['recent', 'jump', 'switch'], run: () => nav.jumpBack(), when: () => nav.recent.length > 0 },
   { group: 'go', label: 'Catch-up: what your Claude threads did (bottom of the Desk)', keys: '', words: ['catch up', 'catch-up', 'catchup', 'threads', 'updates', 'claude'], run: () => goCatchup() },
   { group: 'go', label: 'Side panel with today’s lines, beside what you’re doing', keys: `${mod}⇧J`, words: ['panel', 'side'], run: () => todayPanel.toggle() },
-  ...['overview', 'gather', 'shape', 'write', 'revise', 'make', 'deliver', 'notes'].map((id, i) => ({ group: 'go', label: `Page: ${id === 'overview' ? 'Overview' : PAGE_NAMES[id]}`, keys: id === 'notes' ? '' : `⌥${i}`, words: ['tab', 'page'], run: () => goPage(id), when: () => strip.tabs.some((t) => t.id === id) }))
+  ...['overview', 'gather', 'shape', 'write', 'revise', 'make', 'deliver', 'notes'].map((id, i) => ({ group: 'go', label: `Page: ${id === 'overview' ? 'Overview' : PAGE_NAMES[id]}`, keys: id === 'notes' ? '' : `⌥${i}`, words: ['tab', 'page'], run: () => goPage(id), when: () => strip.ctx?.scope === 'piece' && strip.tabs.some((t) => t.id === id) })),
+  // In a project: its home and its parts by their plain names (the old words still find them).
+  { group: 'go', label: 'Project home: the whole outline', hint: 'The project’s home: one outline of its parts, with what to carry on with at the top.', keys: '⌥0', words: ['overview', 'home', 'project', 'outline'], run: () => goPage('overview'), when: () => strip.ctx?.scope === 'world' },
+  ...[...PARTS, ...LIFE_PARTS.filter((p) => p.id === 'notes')].map((p) => ({ group: 'go', label: `${p.label}: ${p.about.charAt(0).toLowerCase()}${p.about.slice(1)}`, hint: `Zooms into this project’s ${p.label}: ${p.about.charAt(0).toLowerCase()}${p.about.slice(1)}`, keys: strip.tabs.find((t) => t.id === p.id)?.n != null ? `⌥${strip.tabs.find((t) => t.id === p.id).n}` : '', words: [p.was, p.id === 'pieces' ? 'revise' : '', p.id === 'bible' ? 'characters places arcs timeline' : '', 'part', 'page'].filter(Boolean), run: () => goPage(p.id), when: () => strip.ctx?.scope === 'world' && strip.tabs.some((t) => t.id === p.id) })),
+  { group: 'go', label: 'Steps: every step in this project', hint: 'Zooms into every step of this project, open and done.', keys: '', words: ['tasks', 'todo', 'next step'], run: () => goPage('steps'), when: () => strip.ctx?.scope === 'world' },
+  { group: 'go', label: 'Go to… a piece, page, look or step in this project', hint: 'Type a few letters of any piece, bible page, look or step here, and Enter opens it.', keys: '⌥G', words: ['find', 'jump', 'search project'], run: () => import('./goto.js').then((m) => m.openGoTo()), when: () => strip.ctx?.scope === 'world' }
 ]);
 
 // Runs once at start-up, from main.js, in the place this code had there
@@ -364,4 +382,4 @@ function wireWorkPages() {
   window.__today = todayPanel;
 }
 
-export { PAGE_NAMES, filesOut, frame, goCatchup, goPage, loadStagePage, nav, pageOfPlace, projectOrder, railProjects, renderBoard, renderStrip, stagePage, strip, todayPanel, wireWorkPages };
+export { PAGE_NAMES, currentWorldId, filesOut, frame, goCatchup, goPage, loadStagePage, nav, pageOfPlace, projectOrder, railProjects, renderBoard, renderStrip, stagePage, strip, todayPanel, wireWorkPages };

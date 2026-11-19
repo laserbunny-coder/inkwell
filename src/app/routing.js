@@ -119,7 +119,7 @@ async function go(place) {
   else root.dataset.view = place.view;
   // Which project, in the same breath as the view: anything that looks in
   // between (the rail, the project page's Desk data) must see both.
-  if (place.view === 'world') state.worldId = place.id;
+  if (place.view === 'world') { state.worldId = place.id; state.worldPart = place.part || null; }
   body.classList.remove('show-outline');
   // Notes beside the text belong to a draft: elsewhere the button stays in its
   // place, dimmed.
@@ -196,6 +196,8 @@ async function go(place) {
     await (await loadProduction()).show(place.id, { ...place, mode: place.view === 'deliver' ? 'deliver' : 'make' });
   } else if (place.view === 'stage' || place.view === 'drawer') {
     state.stage = place;
+    // A part of a project (Ideas, Bible…): the Project stop and Go to… know which.
+    if (place.view === 'stage' && (await getEntry(place.id))?.kind === 'world') state.worldId = place.id;
     remember(place);
     await (await loadStagePage()).show(place);
   } else if (place.view === 'compare') {

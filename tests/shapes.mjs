@@ -47,6 +47,18 @@ const all = (p) => p.evaluate(() => new Promise((res) => {
 }));
 const get = async (p, id) => (await all(p)).find((r) => r.id === id);
 const go = (p, place) => p.evaluate((pl) => { history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); }, place);
+// A project's home is one outline (Nov 2026): + Season, + Book… is in its Pieces zoom.
+const newPiece = async (p) => {
+  if ((await p.evaluate(() => history.state?.view)) === 'world') {
+    await p.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await p.waitForSelector('#wh-new-piece');
+  }
+  return p.locator('#wh-new-piece');
+};
+const backHome = async (p) => {
+  const at = await p.evaluate(() => history.state);
+  if (at?.view === 'stage') { await go(p, { view: 'world', id: at.id }); await p.waitForSelector('#wh-more .more-btn'); await sleep(300); }
+};
 const pick = async (p, label) => { await p.locator('.pop-menu .pop-item', { hasText: label }).first().click(); await sleep(300); };
 const live = (rows) => rows.filter((r) => !r.deleted && !r.fields?.trashed);
 
@@ -108,7 +120,7 @@ try {
     assert.equal(ep.fields.label, 'Episode');
     assert.equal(ep.fields.type, 'screenplay');
     assert.match(await page.locator('#wh-kind').innerText(), /^Show$/i);
-    assert.equal(await page.locator('#wh-new-piece').innerText(), '+ Season');
+    assert.equal(await (await newPiece(page)).innerText(), '+ Season');
     await shot(page, 'shapes-show');
   });
 
@@ -143,8 +155,8 @@ try {
     const book = rows.find((r) => r.parent_id === w.id && r.kind === 'project');
     assert.equal(book.title, 'Book 1');
     assert.equal(book.fields.type, 'novel');
-    assert.equal(await page.locator('#wh-new-piece').innerText(), '+ Book');
-    await page.locator('#wh-new-piece').click();
+    assert.equal(await (await newPiece(page)).innerText(), '+ Book');
+    await (await newPiece(page)).click();
     await page.waitForSelector('.ask-piece');
     assert.equal(await page.locator('.ask-piece input[aria-label="Name"]').inputValue(), 'Book 2');
     await page.locator('.ask-piece .ghost-btn', { hasText: 'Cancel' }).click();
@@ -170,6 +182,7 @@ try {
     const before = JSON.stringify(live(await all(page)).filter((r) => r.kind === 'project').map((r) => [r.id, r.parent_id, r.title, r.fields.label || '']).sort());
     await go(page, { view: 'world', id: 'wd_nb' });
     await sleep(400);
+    await backHome(page);
     await page.locator('#wh-more .more-btn').click();
     await pick(page, 'Shape');
     await pick(page, 'Show:');
@@ -185,11 +198,12 @@ try {
     const after = JSON.stringify(live(await all(page)).filter((r) => r.kind === 'project').map((r) => [r.id, r.parent_id, r.title, r.fields.label || '']).sort());
     assert.equal(after, before);
     assert.match(await page.locator('#wh-kind').innerText(), /^Show$/i);
-    assert.equal(await page.locator('#wh-new-piece').innerText(), '+ Season');
+    assert.equal(await (await newPiece(page)).innerText(), '+ Season');
     await shot(page, 'shapes-change');
   });
 
   await check('rename a Show’s levels: new pieces start as Batches and Reels; old ones keep their names', async () => {
+    await backHome(page);
     await page.locator('#wh-more .more-btn').click();
     await pick(page, 'Shape');
     await pick(page, 'Rename levels');
@@ -199,10 +213,10 @@ try {
     await page.locator('.ask .pill').click();
     await sleep(400);
     assert.deepEqual((await get(page, 'wd_nb')).fields.levelNames, ['Batch', 'Reel']);
-    assert.equal(await page.locator('#wh-new-piece').innerText(), '+ Batch');
+    assert.equal(await (await newPiece(page)).innerText(), '+ Batch');
     assert.equal((await get(page, 'pr_reel1')).title, 'Reel 1: The Audition');
     // A Batch's next piece is a Reel.
-    await page.locator('#wh-new-piece').click();
+    await (await newPiece(page)).click();
     await page.waitForSelector('.ask-piece');
     assert.equal(await page.locator('.ask-piece input[aria-label="Name"]').inputValue(), 'Batch 1');
     await page.locator('.ask-piece .pill').click();
@@ -213,12 +227,13 @@ try {
   });
 
   await check('a Show inside a Universe gives its pieces Seasons', async () => {
+    await backHome(page);
     await page.locator('#wh-more .more-btn').click();
     await pick(page, 'Shape');
     await pick(page, 'Universe:');
     await sleep(300);
-    assert.equal(await page.locator('#wh-new-piece').innerText(), '+ Piece');
-    await page.locator('#wh-new-piece').click();
+    assert.equal(await (await newPiece(page)).innerText(), '+ Piece');
+    await (await newPiece(page)).click();
     await page.waitForSelector('.ask-piece');
     await page.fill('.ask-piece input[aria-label="Name"]', 'The Reels');
     await page.fill('.ask-piece input[aria-label="What it is"]', 'Show');
@@ -230,11 +245,13 @@ try {
   await check('a life project from Shape, and back, keeps everything', async () => {
     await go(page, { view: 'world', id: 'wd_nb' });
     await sleep(400);
+    await backHome(page);
     await page.locator('#wh-more .more-btn').click();
     await pick(page, 'Shape');
     await pick(page, 'Life project:');
     await sleep(300);
     assert.equal((await get(page, 'wd_nb')).fields.life, true);
+    await backHome(page);
     await page.locator('#wh-more .more-btn').click();
     await pick(page, 'Shape');
     await pick(page, 'Show:');
@@ -271,7 +288,10 @@ try {
     const w = live(await all(page)).find((r) => r.kind === 'world' && r.title === 'Camping trip 2027');
     assert.equal(w.area_id, 'area-personal');
     assert.equal(w.fields.life, true);
-    assert.equal(await page.locator('#wh-steps input[data-add]').getAttribute('placeholder'), 'Book the campsite for Friday night');
+    // Its steps are a zoom of the home ("Add a step ›" in the top block).
+    await page.locator('#wh-next-row .wt-all').click();
+    await page.waitForFunction(() => history.state?.part === 'steps' && document.querySelector('#wh-back')?.hidden === false);
+    await page.waitForFunction(() => document.querySelector('#wh-steps input[data-add]')?.placeholder === 'Book the campsite for Friday night');
     await shot(page, 'life-camping');
   });
 
@@ -284,6 +304,7 @@ try {
     const id = live(await all(page)).find((r) => r.kind === 'world' && r.title === 'Grandpa stories').id;
     const area = (await get(page, id)).area_id;
     assert.notEqual(area, 'area-personal');
+    await backHome(page);
     await page.locator('#wh-more .more-btn').click();
     await pick(page, 'Shape');
     await pick(page, 'Life project:');

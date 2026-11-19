@@ -98,3 +98,126 @@ a.wp-turn:hover { color: var(--ink); }
   .wp-turn { grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; }
   .wp-r { gap: 12px; }
 }
+
+/* ---------- the home as one outline (Nov 2026) ---------- */
+/* The top block: Continue, Next step, Needs you. Three quiet lines. */
+.wh-top { margin: 22px 0 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 6px 0; display: flex; flex-direction: column; }
+.wh-top:not(:has(> .wt-row:not([hidden]))) { display: none; }
+.wt-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; align-items: center; gap: 0 14px; min-height: 40px; }
+.wt-row[hidden] { display: none; }
+.wt-k { font: 500 10.5px var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); align-self: center; }
+.wt-v { min-width: 0; display: flex; align-items: center; gap: 10px; }
+button.wt-v, .wt-t { border: 0; background: none; padding: 4px 0; color: var(--ink); font: 17px/1.35 var(--prose); text-align: left; cursor: pointer; min-width: 0; }
+button.wt-v { grid-column: 2 / 4; }
+button.wt-v:hover .wt-t, .wt-t:hover { color: var(--accent); }
+.wt-v .wt-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wt-when { margin-left: 10px; font: 12px var(--ui); color: var(--faint); white-space: nowrap; }
+.wt-tick { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--muted); background: none; padding: 0; cursor: pointer; }
+.wt-tick:hover, .wt-tick.on { border-color: var(--accent); background: var(--tint); }
+.wt-none { color: var(--faint); font: 15px var(--prose); }
+.wt-all { margin-left: auto; border: 0; background: none; padding: 4px 0; color: var(--muted); font: 12.5px var(--ui); white-space: nowrap; cursor: pointer; }
+.wt-all:hover { color: var(--ink); }
+#wh-next-row .wt-v { grid-column: 2 / 4; }
+.wt-calls { align-items: start; }
+.wt-calls .wp-rows { margin: 0; flex-direction: column; align-items: stretch; gap: 0; }
+.wt-calls .wt-k { padding-top: 13px; }
+.wt-calls .wt-all { padding-top: 12px; }
+.wt-calls .dk-call[hidden] { display: none; }
+
+/* The outline: each part a line; ▸ opens it here, the name zooms in. */
+.wo { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-direction: column; }
+.wo-line { border-bottom: 1px solid var(--line); padding: 4px 0; }
+.wo-row { display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; min-height: 44px; align-content: center; }
+.wo-tog { flex: none; width: 24px; height: 32px; margin-left: -4px; border: 0; background: none; color: var(--muted); font-size: 13px; cursor: pointer; border-radius: 6px; align-self: center; }
+.wo-tog:hover { color: var(--ink); background: var(--tint); }
+.wo-name { border: 0; background: none; padding: 2px 0; color: var(--ink); font: 400 21px/1.2 var(--prose); cursor: pointer; text-align: left; }
+.wo-name:hover { color: var(--accent); }
+.wo-count { font: 12.5px var(--ui); color: var(--muted); font-variant-numeric: tabular-nums; }
+.wo-meta { font: 12.5px var(--ui); color: var(--faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 0; }
+.wo-row .wo-meta { flex-basis: 12ch; }
+.wo-line > .wo-kids, .wo-about > .wo-kids { margin: 2px 0 10px 9px; }
+.wo-kids { list-style: none; padding: 0 0 0 20px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 1px; }
+.wo-kids[hidden] { display: none; }
+.wo-kids > li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px; min-height: 34px; align-content: center; padding-left: calc(var(--depth, 0) * 20px); position: relative; }
+.wo-kids > li::before { content: '•'; color: var(--faint); position: absolute; left: calc(var(--depth, 0) * 20px - 13px); top: 50%; translate: 0 -55%; }
+.wo-kids > li:is(.wo-also, .wo-add-idea, .wo-more, .wo-none)::before { content: none; }
+.wo-kids > li > .wo-kids { flex-basis: 100%; margin: 0 0 4px 4px; }
+.wo-item { border: 0; background: none; padding: 3px 0; color: var(--ink); font: 16.5px/1.35 var(--prose); text-align: left; cursor: pointer; min-width: 0; }
+button.wo-item:hover { color: var(--accent); }
+span.wo-item { cursor: default; color: var(--muted); }
+.wo-kids > li > .wo-meta { flex: 0 1 auto; }
+.wo-more .wo-item { font: 13px var(--ui); color: var(--muted); }
+.wo-kind { font: 12px var(--ui); color: var(--faint); }
+.wo-stage { border: 0; background: none; padding: 2px 4px; margin: 0 -4px; border-radius: 6px; display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font: 12.5px var(--ui); cursor: pointer; }
+.wo-stage:hover { background: var(--tint); color: var(--ink); }
+.wo-dots { display: inline-flex; gap: 3px; }
+.wo-dots i { width: 6px; height: 6px; border-radius: 50%; border: 1px solid var(--faint); }
+.wo-dots i.on { background: var(--muted); border-color: var(--muted); }
+.wo-next { border: 0; background: none; padding: 2px 0; color: var(--accent); font: 12px var(--ui); cursor: pointer; opacity: .75; }
+.wo-next:hover { opacity: 1; text-decoration: underline; }
+.wo-piece .menu-btn, .wo-piece .more-btn { margin-left: auto; }
+.wo-also { gap: 4px 16px !important; }
+.wo-add, .wo-sub { border: 0; background: none; padding: 4px 0; color: var(--muted); font: 13px var(--ui); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.wo-add:hover, .wo-sub:hover { color: var(--ink); }
+.wo-idea { flex: 1 1 auto; display: flex; }
+.wo-idea input { flex: 1; min-width: 0; border: 0; border-bottom: 1px dashed var(--line); background: none; color: var(--ink); font: 16px var(--prose); padding: 6px 0; outline: none; }
+.wo-idea input:focus { border-bottom-color: var(--accent); }
+.wo-about .wp-two { margin: 10px 0 0; }
+.wo-about .wp-part { margin-top: 24px; }
+
+/* The Steps zoom: the same page, only its steps. */
+.wh-back, .st-back { border: 0; background: none; padding: 4px 0; margin: 0 0 8px; color: var(--muted); font: 13.5px var(--ui); cursor: pointer; align-self: flex-start; }
+.wh-back:hover, .st-back:hover { color: var(--ink); }
+.wh-back[hidden], .wh-zoom-title[hidden] { display: none; }
+.wh-zoom-title { font: 500 30px/1.15 var(--prose); margin: 0 0 6px; }
+.wp-sheet:not([data-part="steps"]) #wh-steps { display: none; }
+.wp-sheet[data-part="steps"] :is(.wp-eyebrow, .wp-head, .wh-logline, .wh-finished, .wh-top, .wo) { display: none; }
+.wp-sheet[data-part="steps"] #wh-steps { margin-top: 10px; }
+
+/* A part zoomed into (Ideas, Bible, Pieces…): its plain name, the way back. */
+.st-head.st-zoom { gap: 0; }
+.st-pieces-head { align-items: baseline; }
+.st-pieces-tools { display: flex; gap: 16px; margin-left: auto; }
+.st-write.wo-kids { border-left: 0; padding-left: 14px; margin: 8px 0 0; }
+.st-more-link { display: block; margin: 26px 0 0; border: 0; background: none; padding: 6px 0; color: var(--muted); font: 13.5px var(--ui); cursor: pointer; }
+.st-more-link:hover { color: var(--ink); }
+
+/* Go to… in a project (Alt + G; the search button on a phone). */
+.gt-bg { position: fixed; inset: 0; z-index: 90; background: rgba(0, 0, 0, .35); display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; }
+.gt-bg[hidden] { display: none; }
+.gt-sheet { width: min(560px, calc(100vw - 32px)); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, .35); overflow: hidden; display: flex; flex-direction: column; max-height: 70vh; font-family: var(--ui); }
+.gt-q { border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--ink); font: 17px var(--ui); padding: 15px 18px; outline: none; }
+.gt-q::-webkit-search-cancel-button { display: none; }
+.gt-res { overflow-y: auto; padding: 6px; display: flex; flex-direction: column; }
+.gt-hit { display: flex; align-items: baseline; gap: 12px; border: 0; background: none; text-align: left; padding: 10px 12px; border-radius: 8px; color: var(--ink); font: 15px var(--ui); cursor: pointer; min-height: 44px; }
+.gt-hit.sel { background: var(--tint); }
+.gt-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gt-kind { font-size: 12px; color: var(--faint); white-space: nowrap; }
+.gt-none { margin: 0; padding: 12px; color: var(--faint); font-size: 14px; }
+.gt-hit.gt-all { color: var(--faint); border-top: 1px solid var(--line, rgba(127,127,127,.2)); border-radius: 0 0 8px 8px; margin-top: 4px; }
+.gt-hit.gt-all .gt-kind { display: none; }
+.gt-hint { padding: 8px 18px 10px; font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); }
+@media (--touch) {
+  .gt-bg { align-items: flex-end; padding: 0; }
+  .gt-sheet { width: 100%; max-height: 80vh; border-radius: 18px 18px 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .gt-hint { display: none; }
+  .wo-next { opacity: 1; }
+}
+@media (--narrow) {
+  .wt-row { grid-template-columns: 78px minmax(0, 1fr) auto; gap: 0 10px; }
+  .wo-name { font-size: 20px; }
+  .wo-row .wo-meta { flex-basis: 100%; padding-left: 24px; margin-top: -6px; }
+  .wo-kids { padding-left: 16px; }
+}
+
+/* A piece's pages (Gather…Deliver at a piece's size) on a phone: the strip
+   gets a row of its own under the top line, so every tab is in reach. */
+@media (--touch) {
+  .topbar.has-tabs { flex-wrap: wrap; row-gap: 2px; }
+  .topbar.has-tabs .tb-do { order: 9; flex: 1 1 100%; }
+  .topbar.has-tabs .tb-where { margin-left: auto; }
+  .topbar.has-tabs .page-tabs { flex: 1 1 auto; justify-content: space-between; }
+}
+.st-more-link { text-align: left; margin-right: auto; }
+.wp-sheet .wp-head { flex-wrap: nowrap; align-items: center; }
+.wp-sheet .wp-head h1 { min-width: 0; }
