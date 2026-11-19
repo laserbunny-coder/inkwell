@@ -7,7 +7,7 @@ import { make } from '../dom.js';
 import { worldTree, worldStats, kindName, stageOf } from '../library.js';
 import { partsFor } from '../pages.js';
 import { go, openEntry } from './routing.js';
-import { currentWorldId } from './workpages.js';
+import { currentWorldId, nav } from './workpages.js';
 import { plan } from './talking.js';
 
 let bg = null;
@@ -74,21 +74,33 @@ function draw() {
   const q = bg.querySelector('.gt-q').value.trim().toLowerCase();
   const score = (x) => { const t = x.label.toLowerCase(); if (!q) return 1; if (t.startsWith(q)) return 3; if (t.split(/[^a-z0-9’']+/).some((wd) => wd.startsWith(q))) return 2; return t.includes(q) ? 1 : 0; };
   hits = all.map((x, i) => ({ x, s: score(x), i })).filter((h) => h.s > 0).sort((a, b) => b.s - a.s || a.i - b.i).slice(0, 12).map((h) => h.x);
+  const found = hits.length;
+  // Always last: the same letters in the whole of Inkwell (the box, Ctrl + K),
+  // so a phone in a project still reaches every command.
+  const text = bg.querySelector('.gt-q').value.trim();
+  hits.push({ label: text ? `Search all of Inkwell for “${text}”` : 'Search all of Inkwell and every command', kind: 'Go', all: true, run: () => openBox(text) });
   const res = bg.querySelector('.gt-res');
-  if (!hits.length) { res.replaceChildren(make('p', 'gt-none', 'Nothing by that name here.')); return; }
   res.replaceChildren(...hits.map((h, i) => {
     const b = make('button', 'gt-hit');
     b.setAttribute('role', 'option');
     b.append(make('span', 'gt-name', h.label), make('span', 'gt-kind', h.kind));
     b.addEventListener('click', () => pick(h));
     b.addEventListener('pointermove', () => { if (sel !== i) { sel = i; mark(); } });
+    if (h.all) b.classList.add('gt-all');
     return b;
   }));
+  if (!found) res.prepend(make('p', 'gt-none', 'Nothing by that name here.'));
   mark();
 }
 
 function mark() {
   bg.querySelectorAll('.gt-hit').forEach((b, i) => { b.classList.toggle('sel', i === sel); b.setAttribute('aria-selected', String(i === sel)); if (i === sel) b.scrollIntoView({ block: 'nearest' }); });
+}
+
+function openBox(text) {
+  if (!nav.isOpen) nav.toggle();
+  const input = document.querySelector('#palette-input');
+  if (text && input) { input.value = text; input.dispatchEvent(new Event('input', { bubbles: true })); }
 }
 
 async function pick(h) {

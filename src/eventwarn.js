@@ -63,5 +63,12 @@ export class EventWarn {
     this.el.textContent = text;
     this.el.setAttribute('aria-label', `Coming up: ${text}. Tap to put it away.`);
     this.el.title = 'Put it away';
+    // On a phone, just under the top line, which is taller where a piece's
+    // pages take a row of their own.
+    this.el.style.top = '';
+    if (matchMedia('(max-width: 640px)').matches) {
+      const line = [...document.querySelectorAll('.topbar, .zm-top')].map((e) => e.getBoundingClientRect()).find((r) => r.height > 0)?.bottom || 0;
+      if (line > this.el.getBoundingClientRect().top) this.el.style.top = `${Math.round(line) + 4}px`;
+    }
   }
 }

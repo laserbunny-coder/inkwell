@@ -277,6 +277,21 @@ try {
   await q.waitForFunction(() => !document.body.classList.contains('kb-up'));
   await sleep(200);
 
+  await check('on a phone in a project, the search button is Go to…, whose last row is the whole box', async () => {
+    // The phone opens on a piece: its glass is Go to… for that project.
+    await q.locator('.zm-go').tap();
+    await q.waitForSelector('.gt-bg:not([hidden]) .gt-all');
+    await q.locator('.gt-all').tap();
+    await q.waitForSelector('.palette.box:not([hidden])');
+    assert.equal(await q.locator('.gt-bg').isVisible(), false);
+    await q.evaluate(() => document.activeElement?.blur());
+    await q.keyboard.press('Escape');
+    await q.waitForFunction(() => document.querySelector('.palette')?.hidden !== false || !document.querySelector('.palette.box:not([hidden])'));
+    await q.evaluate(() => { const pl = { view: 'desk' }; history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); });
+    await q.waitForFunction(() => document.documentElement.dataset.view === 'desk');
+    await sleep(300);
+  });
+
   await check('on a phone the ruler’s Go opens the box as a sheet', async () => {
     await q.locator('.zm-go').tap();
     await q.waitForSelector('.palette.box:not([hidden])');

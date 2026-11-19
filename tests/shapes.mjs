@@ -290,6 +290,7 @@ try {
     assert.equal(w.fields.life, true);
     // Its steps are a zoom of the home ("Add a step ›" in the top block).
     await page.locator('#wh-next-row .wt-all').click();
+    await page.waitForFunction(() => history.state?.part === 'steps' && document.querySelector('#wh-back')?.hidden === false);
     await page.waitForFunction(() => document.querySelector('#wh-steps input[data-add]')?.placeholder === 'Book the campsite for Friday night');
     await shot(page, 'life-camping');
   });
