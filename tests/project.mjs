@@ -239,7 +239,7 @@ try {
     assert.match(await page.locator('#wh-calls .dk-call').first().locator('.dk-call-m').innerText(), /2 min · 1 day/);
     await page.locator('#wh-calls .dk-call').first().click();
     await page.waitForSelector('.pop-menu');
-    assert.deepEqual((await page.locator('.pop-menu .pop-item').allInnerTexts()).map((t) => t.trim()), ['Open the thread', 'Open the guide', 'Done: take it off the list', 'Later: back tomorrow morning']);
+    assert.deepEqual((await page.locator('.pop-menu .pop-item').allInnerTexts()).map((t) => t.trim()), ['Open the thread', 'Open the guide', 'Do today: put it on today’s tasks', 'Done: take it off the list', 'Later: back tomorrow morning']);
     await pick(page, 'Done: take it off');
     await page.waitForFunction(() => document.querySelectorAll('#wh-calls .dk-call').length === 1);
     assert.ok(calls.some(([op, id]) => op === 'done' && id === 'n1'));

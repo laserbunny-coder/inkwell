@@ -25,6 +25,7 @@ const db = {
   needs: [
     { id: 'n1', kind: 'review', title: 'Try the AI production tools on Reel 4', project: 'The Ninja Bunch', link: `${NB}?thread=tools`, project_link: NB, created_at: T('2026-11-03T22:53:00'), body: 'Your December 14 tests lean on this.\nGuide: https://claude.ai/artifact/abc' },
     { id: 'n2', kind: 'decision', title: 'Pick Kenji’s final character sheet', project: 'The Ninja Bunch', link: `${NB}?thread=sheet`, project_link: NB, created_at: T('2026-11-08T10:09:00'), body: 'Two sheets are starred. Reel 3 prompts wait on the pick.' },
+    { id: 'n4', kind: 'review', title: 'Look over the new title card', project: 'Inkwell', link: `${INK}?thread=card`, project_link: INK, created_at: T('2026-11-09T09:00:00'), body: '' },
     { id: 'n3', kind: 'blocked', title: 'Say “go” on moving tasks into Inkwell', project: 'Inkwell', link: `${INK}?thread=tasks`, project_link: INK, created_at: T('2026-11-07T09:00:00'), body: '' },
   ],
 };
@@ -283,16 +284,16 @@ try {
     await page.waitForSelector('.thru');
     await still(page);
     const c = await card(page);
-    assert.equal(c.count, 'Needs you · 1 of 3');
+    assert.equal(c.count, 'Needs you · 1 of 4');
     assert.equal(c.big, 'Pick Kenji’s final character sheet');
     assert.match(c.ctx, /DECIDE\s*The Ninja Bunch · about 2 min · waiting 1 day/i);
     assert.match(c.ctx, /Two sheets are starred/);
     assert.equal(c.lit, 'Open the thread');
-    assert.deepEqual(c.options, ['O Open the thread', 'D Done: take it off the list', 'L Later: ask me tomorrow morning', 'S Skip for now']);
+    assert.deepEqual(c.options, ['O Open the thread', 'T Do today: put it on today’s tasks', 'D Done: take it off the list', 'L Later: ask me tomorrow morning', 'S Skip for now']);
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/through-calls.png` });
   });
 
-  await check('O opens the thread in a new tab and the card stays; D and L answer in Daybook', async () => {
+  await check('O opens the thread in a new tab and the card stays; D, L and T answer', async () => {
     const [tab] = await Promise.all([page.context().waitForEvent('page'), page.keyboard.press('o')]);
     assert.equal(tab.url(), `${NB}?thread=sheet`);
     await tab.close();
@@ -308,6 +309,17 @@ try {
     assert.equal(new Date(later[2]).toISOString(), new Date('2026-11-10T07:00:00-08:00').toISOString());
     // The guide's address is left out of the reason.
     assert.match((await card(page)).ctx, /Your December 14 tests lean on this\.$/);
+    // T: a task on today's list, in its project's Steps, the thread under it; off Needs you.
+    await page.keyboard.press('t');
+    await cardIs(page, 'Look over the new title card');
+    assert.ok(calls.some(([op, id]) => op === 'done' && id === 'n1'));
+    const task = await lineNamed(page, 'Try the AI production tools on Reel 4');
+    assert.equal(task.fields.task.day, '2026-11-09');
+    const world = (await all(page)).find((r) => r.kind === 'world' && r.title === 'The Ninja Bunch');
+    assert.equal(task.parent_id, `steps-${world.id}`);
+    const under = (await all(page)).find((r) => r.parent_id === task.id);
+    assert.equal(under.text, `${NB}?thread=tools`);
+    assert.equal(under.content[0].marks[0].attrs.href, `${NB}?thread=tools`);
     await page.keyboard.press('s');
     await closed(page);
     await page.waitForFunction(() => /1 left for next time/.test(document.querySelector('.toast')?.textContent || ''));

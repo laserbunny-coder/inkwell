@@ -12,12 +12,13 @@ const root = document.documentElement;
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 // Which way a card leaves: up to a plan, down to wait, left into a project, right when skipped.
-const LEAVES = { notoday: [0, 44], delete: [56, 0], task: [0, -44], tray: [0, -44], done: [0, -44], file: [-56, 0], drawer: [0, 44], keep: [0, 44], later: [0, 44], skip: [56, 0] };
+const LEAVES = { notoday: [0, 44], delete: [56, 0], task: [0, -44], tray: [0, -44], done: [0, -44], file: [-56, 0], drawer: [0, 44], keep: [0, 44], today: [0, -44], later: [0, 44], skip: [56, 0] };
 
 export class Through {
   // toast(text); changed(rows) tells the open page a line was written;
   // worlds() → [{ id, title }] newest first; calls: { list() → [{ id, title,
-  // kind, project, mins, waited, link, why }], done(id), later(id) };
+  // kind, project, mins, waited, link, why, world }], done(id), later(id),
+  // today(item) };
   // onClose() hears when it shuts.
   constructor(hooks) {
     Object.assign(this, hooks);
@@ -98,6 +99,7 @@ export class Through {
     if (this.kind === 'calls') {
       return [
         ['O', 'Open the thread', 'open'],
+        ['T', 'Do today: put it on today’s tasks', 'today'],
         ['D', 'Done: take it off the list', 'done'],
         ['L', 'Later: ask me tomorrow morning', 'later'],
         ['S', 'Skip for now', 'skip']
@@ -230,7 +232,7 @@ export class Through {
         this.answered += 1;
         this.last = undo ? { it, undo, at: this.at } : null;
       } else if (this.kind === 'calls') {
-        await (how === 'done' ? this.calls.done(it.id) : this.calls.later(it.id));
+        await (how === 'done' ? this.calls.done(it.id) : how === 'today' ? this.calls.today(it) : this.calls.later(it.id));
         this.items.splice(this.at, 1);
         this.answered += 1;
         this.last = null;
