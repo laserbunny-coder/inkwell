@@ -264,7 +264,7 @@ let searchIdx = null;
 const KIND_LABEL = { para: 'text', heading: 'heading', line: 'line', note: 'note', scene: 'scene', project: 'book', chapter: 'chapter', page: 'page', area: 'area' };
 
 // A search result: open it where it lives, with the caret on it.
-async function openHit(row) {
+export async function openHit(row) {
   if (row.kind === 'note') { await openEntry(row.parent_id); if (!notes.visible) notes.setVisible(true); return; }
   if (row.kind === 'chapter') return go({ view: 'write', chapterId: row.id });
   return openEntry(row.id);

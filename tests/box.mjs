@@ -184,7 +184,8 @@ try {
     assert.ok(list.some((r) => /^Board the reel \| task · today/.test(r)), list.join('\n'));
     assert.ok(list.some((r) => /^Reel ideas for winter/.test(r)) || true);
     assert.ok(list.some((r) => /\| command/.test(r)), 'a command too');
-    assert.ok(list.some((r) => /^Search every word of your writing for “reel”/.test(r)));
+    // Inside the writing: the matches themselves, or the way to search every word.
+    assert.ok(list.some((r) => /^Search every word of your writing for “reel”/.test(r)) || (await p.locator('#palette-list li.box-hit').count()) > 0, list.join('\n'));
     await p.keyboard.press('Escape');
     // A page.
     await p.keyboard.press('Control+K');

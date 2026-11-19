@@ -205,6 +205,30 @@ try {
     assert.ok(all.some((l) => l.parent_id === top.id && /Stunt School/.test(l.text)));
   });
 
+  await check('the search box finds a saved link by its title, its write-up and its site, as you type', async () => {
+    const box = async (q) => {
+      await page.keyboard.press('Escape');
+      await sleep(200);
+      await page.keyboard.press('Control+k');
+      await page.waitForSelector('.palette.box[data-loaded]');
+      await page.keyboard.type(q);
+      await page.waitForSelector('#palette-list li.box-hit', { timeout: 5000 });
+      return page.locator('#palette-list li.box-hit').evaluateAll((els) => els.map((e) => `${e.querySelector('.box-name').textContent} | ${e.querySelector('.keys').textContent}`));
+    };
+    let hits = await box('fake ninja');
+    assert.ok(hits.some((h) => /How to fake a ninja fight/.test(h) && /\| link · /.test(h)), hits.join(' / '));
+    assert.equal(await page.locator('#palette-list li.box-sec', { hasText: 'In your writing' }).count(), 1);
+    hits = await box('stunt school');
+    assert.ok(hits.some((h) => /A video by Stunt School/.test(h)), hits.join(' / '));
+    hits = await box('youtube');
+    assert.ok(hits.some((h) => /How to fake a ninja fight/.test(h)), `found by its site: ${hits.join(' / ')}`);
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/box-finds-link.png` });
+    // Enter still adds a task when no name matches; a click opens the line.
+    await page.locator('#palette-list li.box-hit').first().click();
+    await page.waitForFunction(() => document.querySelector('.palette').hidden);
+    assert.match(await page.evaluate(() => window.__outline.state.selection.$from.parent.textContent), /fake a ninja fight/);
+  });
+
   await check('a shared picture lands with its words, and a page that can’t be read stays a plain link', async () => {
     await share({ title: '', text: 'Concept art for the bakery https://gone.example/x', url: '' }, 'bakery.png');
     await page.waitForFunction(() => /Concept art for the bakery/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''), null, { timeout: 8000 });

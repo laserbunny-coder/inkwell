@@ -18,13 +18,17 @@ let index = null;
 let building = null;
 let waiting = [];
 
-const slim = (r) => ({ id: r.id, kind: r.kind, parent_id: r.parent_id, title: r.title, updated_at: r.updated_at, mirror: !!r.fields?.mirror });
+const slim = (r) => ({ id: r.id, kind: r.kind, parent_id: r.parent_id, title: r.title, updated_at: r.updated_at, mirror: !!r.fields?.mirror, link: !!(r.fields?.url || r.fields?.snapshot) });
 
 function itemFor(r) {
   // A mirror's words are its original's, which is found already.
   if (r.deleted || isTrashed(r) || r.fields?.mirror) return null;
   const text = TEXT.includes(r.kind) ? (r.kind === 'scene' ? r.title : r.text) : NAMED.includes(r.kind) ? r.title : '';
-  return text && text.trim() ? { row: slim(r), text, key: fold(text), named: NAMED.includes(r.kind) } : null;
+  // A saved link is found by its page's real title and its address too
+  // ("youtube"), even once the line was reworded.
+  const snap = r.kind === 'line' ? r.fields?.snapshot : null;
+  const extra = snap ? ` ${snap.title || ''} ${snap.site || ''} ${r.fields?.url || ''}` : '';
+  return text && text.trim() ? { row: slim(r), text, key: fold(text + extra), named: NAMED.includes(r.kind) } : null;
 }
 
 // Rows written or received since the index was built.
