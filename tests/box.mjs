@@ -296,8 +296,10 @@ try {
     await q.locator('.zm-go').tap();
     await q.waitForSelector('.palette.box:not([hidden])');
     assert.notEqual(await q.evaluate(() => document.activeElement?.id), 'palette-input', 'the keyboard stays down');
+    // Once it has slid up (a slow machine may still be moving it).
+    await q.waitForFunction(() => { const r = document.querySelector('.palette').getBoundingClientRect(); return Math.abs(r.bottom - 915) < 2; }, null, { timeout: 3000 }).catch(() => {});
     const box = await q.locator('.palette').boundingBox();
-    assert.ok(Math.abs(box.y + box.height - 915) < 2, 'a sheet from the bottom');
+    assert.ok(Math.abs(box.y + box.height - 915) < 2, `a sheet from the bottom (${box.y + box.height})`);
     if (SHOTS) await q.screenshot({ path: `${SHOTS}/phone-go.png` });
   });
 
