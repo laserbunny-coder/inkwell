@@ -13,7 +13,7 @@
 // wings, backstage) is worked out from what's happening unless you say.
 
 import { getEntry, putEntries, byKind, children, isTrashed } from './db.js';
-import { taskOf, chipLabel, loadTasks, isoOf } from './tasks.js';
+import { taskOf, chipLabel, loadTasks, isoOf, addTask, stepsHome } from './tasks.js';
 import { entry } from './model.js';
 import { areas, areaColor, editedAt } from './library.js';
 import { popMenu, toast } from './menu.js';
@@ -177,7 +177,7 @@ export function seatsFor({ worlds, needs, updates, settings, now, keepDone = fal
   for (const n of needs) {
     if (n.resolved_at) continue;
     const seat = seatOf(n.project, n.project_link);
-    const call = { ...n, at: Date.parse(n.created_at) };
+    const call = { ...n, at: Date.parse(n.created_at), world: seat.world ? { id: seat.world.id, title: seat.world.title } : null };
     if (n.snoozed_until && Date.parse(n.snoozed_until) > now) seat.later.push(call);
     else seat.calls.push(call);
   }
@@ -438,11 +438,20 @@ export class DeskPage {
       .map(({ c, seat }) => {
         const w = waited(c.at, now);
         const why = String(c.body || '').replace(/https?:\/\/\S+/g, '').replace(/\b(Guide|Thread|Link)s?:\s*/gi, '').split('\n').map((x) => x.trim()).find(Boolean) || '';
-        return { id: c.id, title: c.title, kind: KIND[c.kind] || 'Look', project: seat.name, mins: MINUTES[c.kind] || 5, waited: w === 'today' ? 'since today' : w, link: web(c.link) !== '#' ? c.link : '', why: why.length > 180 ? `${why.slice(0, 178)}…` : why };
+        return { id: c.id, title: c.title, world: c.world, kind: KIND[c.kind] || 'Look', project: seat.name, mins: MINUTES[c.kind] || 5, waited: w === 'today' ? 'since today' : w, link: web(c.link) !== '#' ? c.link : '', why: why.length > 180 ? `${why.slice(0, 178)}…` : why };
       });
   }
   // An answer given in "Go through": off the list, or back tomorrow morning.
   async callDone(id) { await this.done(id); if (this.showing()) this.load({ quiet: true }); }
+  // Do today: a task on today's list (in its project's Steps when it has
+  // one), with the thread's link under it, and off the Needs you list.
+  async callToday(c) {
+    const rows = await addTask({ text: c.title, day: isoOf(), order: Date.now() / 1000, home: c.world ? stepsHome(c.world) : null, link: web(c.link) !== '#' ? c.link : null });
+    await this.changed?.(rows);
+    await this.done(c.id);
+    if (this.showing()) this.load({ quiet: true });
+    return rows;
+  }
   async callLater(id) { await this.later(id, new Date(tomorrowMorning(Date.now())).toISOString()); if (this.showing()) this.load({ quiet: true }); }
 
   // ---- The Desk in the zoom (Part 4) ----
@@ -657,6 +666,7 @@ export class DeskPage {
         { label: 'Open the thread', run: open(c.link) },
         ...linksIn(c.body).filter((u) => u !== c.link).slice(0, 4).map((u) => ({ label: `Open ${placeName(u) === 'Guide' ? 'the guide' : placeName(u)}`, run: this.inkwellId(u) ? () => this.open(this.inkwellId(u)) : open(u) })),
         'sep',
+        { label: 'Do today: put it on today’s tasks', run: () => this.act(a, () => this.callToday(c), 'On today’s tasks') },
         { label: 'Done: take it off the list', run: () => this.act(a, () => this.done(c.id), 'Off your list') },
         { label: 'Later: back tomorrow morning', run: () => this.act(a, () => this.later(c.id, new Date(tomorrowMorning(now)).toISOString()), 'Back tomorrow morning') }
       ], { left: e.clientX, top: e.clientY });

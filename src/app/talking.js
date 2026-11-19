@@ -576,7 +576,7 @@ function wireTalking() {
     toast,
     changed: (rows) => applyRemote(rows),
     worlds: async () => (await byKind('world')).filter((w) => !w.deleted && !isTrashed(w) && !w.fields?.finished).sort((a, b) => b.updated_at - a.updated_at).map((w) => ({ id: w.id, title: w.title || 'Untitled' })),
-    calls: { list: () => deskPage.waiting(), done: (id) => deskPage.callDone(id), later: (id) => deskPage.callLater(id) },
+    calls: { list: () => deskPage.waiting(), done: (id) => deskPage.callDone(id), later: (id) => deskPage.callLater(id), today: (it) => deskPage.callToday(it) },
     // Tasks left on today from earlier days: keep, take off the day, or delete.
     carried: { list: () => plan.carriedList(), answer: (it, how) => plan.carriedAnswer(it, how) },
     onClose: () => { plan?.soon(); }

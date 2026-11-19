@@ -788,7 +788,7 @@ export const stopTimer = (id, now = Date.now()) => change(id, (r) => { withTask(
 // A step added on a project's page lives on that project's Steps page (home).
 export const stepsPage = (worldId) => `steps-${worldId}`;
 export const stepsHome = (world) => ({ id: stepsPage(world.id), title: 'Steps', parent_id: world.id });
-export async function addTask({ text, day = null, est = null, order = 0, home = null, until = null, mark = null, repeat = null, span: loose = null, for: forId = null }) {
+export async function addTask({ text, day = null, est = null, order = 0, home = null, until = null, mark = null, repeat = null, span: loose = null, for: forId = null, link = null }) {
   const now = Date.now();
   if (repeat) {
     const base = day && day > isoOf(now) ? day : isoOf(now);
@@ -812,6 +812,8 @@ export async function addTask({ text, day = null, est = null, order = 0, home = 
     fields: { done: false, gather: null, gathered: null, mirror: null, box: true, task: { ...blank(), day, est, order, ...(until ? { until } : {}), ...(mark ? { mark } : {}), ...(repeat ? { repeat } : {}), ...(loose && !day ? { span: loose } : {}), ...(forId ? { for: forId } : {}) } }
   });
   rows.push(line);
+  // Where it came from (a Claude thread…), as a line under it to tap through.
+  if (link) rows.push(entry('line', { id: newId('li'), parent_id: line.id, sort: GAP, text: link, content: [{ type: 'text', text: link, marks: [{ type: 'link', attrs: { href: link } }] }], tags: [], links: [], fields: { done: false } }));
   await putEntries(rows);
   return rows;
 }
