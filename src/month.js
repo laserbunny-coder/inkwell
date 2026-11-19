@@ -107,7 +107,11 @@ export function drawMonth(plan) {
     const list = make('div', 'mo-lines');
     for (const i of wk.marks) list.append(lineEl(plan, i, { date: md(i.task.day) }));
     for (const i of wk.loose) list.append(lineEl(plan, i));
-    if (!list.childElementCount) list.append(make('span', 'mo-none', hover.matches ? 'Nothing for any day yet' : ''));
+    // "+ Add" in every week: a line for some day that week.
+    const add = plan.addRow(`week:${wk.w}`, 'Add for this week');
+    add.classList.add('mo-add');
+    add.querySelector('input').setAttribute('aria-label', `Add for ${weekName(wk.w, today).toLowerCase()}`);
+    list.append(add);
     const dots = make('div', 'mo-days');
     for (const d of wk.days) {
       const c = make('button', `mo-day${d.iso === today ? ' today' : ''}${d.iso < today ? ' past' : ''}`);

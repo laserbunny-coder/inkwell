@@ -23,7 +23,8 @@ import { currentEditor, notebook } from './notebookview.js';
 import { go, openBook, openEntry, remember } from './routing.js';
 import { applyRemote } from './syncwiring.js';
 import { renderRail } from './rail.js';
-import { addPiece, bookMenu, openStages, setStage } from './tidying.js';
+import { addPiece, bookMenu, openStages, setStage, pageMenu, placeAmong, toTrash } from './tidying.js';
+import { arrangeRow } from './libraryview.js';
 import { accountName, askClaudeNotes, newDraft, newDraftFrom, toggleFreshEyes, toggleTalk } from './revising.js';
 import { printLater } from './sharing.js';
 import { hidden, lookPanel, setShown, togglePageSettings } from './pagesettings.js';
@@ -240,6 +241,10 @@ const stageHooks = {
   editStages: (w) => openStages(w),
   setStage: (p, st) => setStage(p, st),
   pieceMenu: (p) => bookMenu(p),
+  pageMenu: (p) => pageMenu(p),
+  arrange: (li, kind, row) => arrangeRow(li, kind, row),
+  placeAmong: (key, keys) => placeAmong(key, keys),
+  toTrash: (row) => toTrash(row),
   revise: (action, piece, note) => revisePiece(action, piece, note),
   newPage: async (parentId) => { await go({ view: 'notebook' }); await notebook.newPage(parentId); },
   newPiece: (parentId) => addPiece(parentId)

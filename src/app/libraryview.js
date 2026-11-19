@@ -7,17 +7,18 @@ import { outline } from '../model.js';
 import { titleOf } from '../notebook.js';
 import { PlotGrid, worldPromises } from '../grid.js';
 import { isLife, personalArea, partsFor } from '../pages.js';
-import { openParts, setPartOpen, pieceLine } from '../projectoutline.js';
+import { openParts, setPartOpen, pieceLine, inIdeaOrder, setIdeaOrder, stepKeys } from '../projectoutline.js';
+import { arrangeable, movableRow, refocus } from '../listkit.js';
 import { gatherItems } from '../stages.js';
 import { dayWord } from '../tasks.js';
-import { isFinished, areas, bookType, hasManuscript, kindName, areaColor, newArea, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, worlds, worldOf, piecesIn, worldTree, worldStats, usedLabels, SHAPES, shapeOf, nextLevel, newShaped, editedAt, defaultLabel, stageOf, nextLabel, setForNew, typeForSet, stageSetOf, stagesOf, isReady, isOut } from '../library.js';
+import { newPage as pagesNew, isFinished, areas, bookType, hasManuscript, kindName, areaColor, newArea, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, worlds, worldOf, piecesIn, worldTree, worldStats, usedLabels, SHAPES, shapeOf, nextLevel, newShaped, editedAt, defaultLabel, stageOf, nextLabel, setForNew, typeForSet, stageSetOf, stagesOf, isReady, isOut } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday, isoOf } from '../dates.js';
 import { addCommands } from './commandlist.js';
 import { $, editor, gone, notes, setGridTouched, state, store, view } from '../main.js';
 import { go, openBook, openEntry } from './routing.js';
 import { areaPath, dot, renameable, renderCrumb, renderRail, subtree } from './rail.js';
-import { setLife, reopenWorld, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, moveBookToArea, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu } from './tidying.js';
+import { placeAmong, stepAmong, toTrash, setLife, reopenWorld, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, moveBookToArea, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu } from './tidying.js';
 import { renderBoard } from './workpages.js';
 import { notebook } from './notebookview.js';
 import { applyRemote } from './syncwiring.js';
@@ -232,8 +233,14 @@ async function renderZoomLibrary(allAreas, allBooks) {
     const sec = make('section', 'zl-area');
     const h = make('div', 'zl-h');
     h.append(dot(areaColor(area)), document.createTextNode(area?.title || 'No area'));
-    if (area) onContextMenu(h, () => areaMenu(area));
+    // Its ⋯: rename, Move up / Move down among the areas, Move inside, Trash.
     sec.append(h);
+    if (area) {
+      onContextMenu(h, () => areaMenu(area));
+      const more = menuButton(() => areaMenu(area), `More for ${area.title}`);
+      more.classList.add('zl-area-more');
+      sec.append(more);
+    }
     for (const w of list) {
       const row = make('div', 'zl-row');
       row.dataset.pid = w.id;
@@ -246,7 +253,7 @@ async function renderZoomLibrary(allAreas, allBooks) {
       word.type = 'button';
       word.dataset.seatfor = w.id;
       word.title = 'Where it sits (Alt + S)';
-      row.append(name, word);
+      row.append(name, word, menuButton(() => worldMenu(w), `More for ${w.title || 'this project'}`));
       sec.append(row);
     }
     if (area) {
@@ -505,8 +512,11 @@ async function renderProject() {
         c.addEventListener('click', () => go({ view: 'write', chapterId: ch.id }));
         onContextMenu(c, () => chapterMenu(ch));
         row.append(c, menuButton(() => chapterMenu(ch), `More for ${ch.title}`));
-        box.append(row);
+        box.append(arrangeRow(row, 'ms-ch', ch));
       }
+      // Chapters drag into order within their act (hold on a phone); ⋯ › Move
+      // up / down also crosses into the next act.
+      arrangeable(ms, box, 'ms-ch', (key, keys) => placeAmong(key, keys));
       ms.append(box);
     }
   }
@@ -528,8 +538,9 @@ async function renderProject() {
     open.addEventListener('click', () => go({ view: 'notebook', pageId: p.id }));
     onContextMenu(open, () => pageMenu(p));
     li.append(open, make('span', 'when', ago(p.updated_at)), menuButton(() => pageMenu(p), `More for ${p.title || 'this page'}`));
-    return li;
+    return arrangeRow(li, 'ph-page', p);
   }));
+  arrangeable($('#ph-pages'), $('#ph-pages'), 'ph-page', (key, keys) => placeAmong(key, keys));
 
   const mentions = await dailyMentions(b);
   $('#ph-daily').replaceChildren(...mentions.map(({ row, day }) => {
@@ -755,18 +766,16 @@ async function drawOutline(w, s, { life, days }) {
     const on = open.has(part.id);
     if (part.id === 'ideas') {
       const items = await gatherItems(w);
-      const loose = items.filter(({ row }) => !(row.fields?.filed || []).length && !row.fields?.letgo);
+      const loose = inIdeaOrder(w, items.filter(({ row }) => !(row.fields?.filed || []).length && !row.fields?.letgo));
+      const shown = loose.slice(0, 8);
+      const keys = shown.map(({ row }) => row.id);
       // The way to add one comes first, so it is there without scrolling.
-      const kids = [ideaAdder(w), ...loose.slice(0, 8).map(({ row, from }) => kidLine(snipText(row.text) || 'A picture or recording', () => openEntry(row.id), { meta: from || '' }))];
+      const kids = [ideaAdder(w), ...shown.map(({ row, from }) => ideaLine(w, row, from, keys))];
       if (loose.length > 8) kids.push(kidLine(`${loose.length - 8} more ›`, zoomTo('gather'), { cls: 'wo-more' }));
       lines.push(partLine(w, part, on, { count: loose.length, meta: loose.length ? `to sort · newest: ${snipText(loose[0].row.text, 40)}` : 'nothing to sort', kids, zoom: zoomTo('gather') }));
     } else if (part.id === 'bible' || part.id === 'notes') {
-      const kids = bible.map(({ row, depth }) => kidLine(row.title || 'Untitled page', () => go({ view: 'notebook', pageId: row.id }), { depth, cls: 'wo-page' }));
+      const kids = [pageAdder(w, part.id === 'notes'), ...bible.map(({ row, depth }) => pageLine(row, depth))];
       const more = make('li', 'wo-also');
-      const add = make('button', 'wo-add', '+ Page');
-      add.type = 'button';
-      add.addEventListener('click', async () => { await go({ view: 'notebook' }); await notebook.newPage(w.id); });
-      more.append(add);
       if (part.id === 'bible') {
         for (const [sub, label] of [['arcs', 'Arcs'], ['timeline', 'Timeline'], ['ties', 'Relationships'], ['promises', 'Promises']]) {
           const b = make('button', 'wo-sub', label);
@@ -780,7 +789,7 @@ async function drawOutline(w, s, { life, days }) {
       lines.push(partLine(w, part, on, { count: bible.length, meta: top.length ? snipText(top.slice(0, 4).join(', ') + (top.length > 4 ? '…' : ''), 60) : 'no pages yet', kids, zoom: zoomTo(part.page) }));
     } else if (part.id === 'pieces') {
       const h = { open: (p) => go({ view: 'project', id: p.id }), stage: (p, st) => setStage(p, st), pop: popMenu, menu: (p) => bookMenu(p), button: menuButton };
-      const kids = s.pieces.map(({ row, depth }) => pieceLine(row, depth, w, h));
+      const kids = s.pieces.map(({ row, depth }) => movePiece(pieceLine(row, depth, w, h), row));
       const more = make('li', 'wo-also');
       const add = make('button', 'wo-add', `+ ${(await nextLevel(w))?.label || 'Piece'}`);
       add.type = 'button';
@@ -831,6 +840,11 @@ async function drawOutline(w, s, { life, days }) {
   const list = $('#wh-outline');
   for (const el of [...list.querySelectorAll(':scope > li[data-part]:not(#wh-about)')]) el.remove();
   $('#wh-about').before(...lines);
+  // Each open list can be rearranged: drag (hold on a phone), or the keys.
+  const ul = (part) => list.querySelector(`:scope > li[data-part="${part}"] > .wo-kids`);
+  if (ul('ideas')) arrangeable(list, ul('ideas'), 'wo-idea', async (_key, keys) => { await applyRemote(await setIdeaOrder(w.id, keys)); await renderWorld(); });
+  for (const part of ['bible', 'notes']) if (ul(part)) arrangeable(list, ul(part), 'wo-page', (key, keys) => placeAmong(key, keys));
+  if (ul('pieces')) arrangeable(list, ul('pieces'), 'wo-piece', (key, keys) => placeAmong(key, keys));
   // About: folded under its own line, the facts the Desk keeps.
   const about = $('#wh-about');
   const aOpen = open.has('about');
@@ -843,6 +857,72 @@ async function drawOutline(w, s, { life, days }) {
   tog.onclick = flip;
   about.querySelector('.wo-name').onclick = flip;
   $('#wh-about-meta').textContent = w.fields?.star ? snipText(w.fields.star, 60) : 'north star, now, crew, turns';
+}
+
+// An idea on the home: open it where it was written; ⋯ to move it or let it
+// go to the Trash; drag it (hold on a phone) into your own order.
+function ideaLine(w, row, from, keys) {
+  const li = kidLine(snipText(row.text) || 'A picture or recording', () => openEntry(row.id), { meta: from || '' });
+  const step = async (how) => {
+    const next = stepKeys(keys, row.id, how);
+    if (!next) return;
+    await applyRemote(await setIdeaOrder(w.id, next));
+    await renderWorld();
+    refocus($('#wh-outline'), row.id);
+  };
+  const del = async () => { await toTrash(row); await renderWorld(); };
+  const i = keys.indexOf(row.id);
+  li.append(menuButton(() => [
+    { label: 'Open where it was written', run: () => openEntry(row.id) },
+    { label: 'Move up', keys: '⌥⇧↑', off: i === 0, run: () => step(-1) },
+    { label: 'Move down', keys: '⌥⇧↓', off: i === keys.length - 1, run: () => step(1) },
+    { label: 'Move to the top', off: i === 0, run: () => step('top') },
+    { label: 'File it into a page…', run: () => go({ view: 'stage', id: w.id, page: 'gather' }) },
+    'sep',
+    { label: 'Delete', keys: '⌘⇧⌫', danger: true, run: del }
+  ], `More for this idea`));
+  return movableRow(li, 'wo-idea', row.id, { up: () => step(-1), down: () => step(1), del });
+}
+
+// A bible page on the home: its name opens it; ⋯ is the page's own menu.
+function pageLine(row, depth) {
+  const li = kidLine(row.title || 'Untitled page', () => go({ view: 'notebook', pageId: row.id }), { depth, cls: 'wo-page' });
+  li.append(menuButton(() => pageMenu(row), `More for ${row.title || 'this page'}`));
+  onContextMenu(li.querySelector('.wo-item'), () => pageMenu(row));
+  return arrangeRow(li, 'wo-page', row);
+}
+function movePiece(li, row) { return arrangeRow(li, 'wo-piece', row); }
+// The keys for a page, piece or area row: a step among its siblings, or the Trash.
+function arrangeRow(li, kind, row) {
+  const step = async (how) => { await stepAmong(row, how); refocus(document, row.id); };
+  return movableRow(li, kind, row.id, { up: () => step(-1), down: () => step(1), del: () => toTrash(row) });
+}
+
+// "Add a page…" at the top of the Bible (or Notes): type its name, Enter.
+function pageAdder(w, notesToo) {
+  const li = make('li', 'wo-add-idea wo-add-page');
+  const form = make('form', 'wo-idea');
+  form.noValidate = true;
+  const input = make('input');
+  input.type = 'text';
+  input.placeholder = notesToo ? 'Add a page…' : 'Add a bible page…';
+  input.setAttribute('aria-label', `Add a page to ${w.title || 'this project'}`);
+  input.setAttribute('enterkeyhint', 'enter');
+  input.autocomplete = 'off';
+  form.append(input);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = input.value.trim();
+    if (!title) return;
+    input.value = '';
+    const page = await pagesNew(w.id, title);
+    await applyRemote([page]);
+    toast(`“${title}” added`, { label: 'Open', run: () => go({ view: 'notebook', pageId: page.id }) });
+    await renderWorld();
+    document.querySelector('#wh-outline .wo-add-page input')?.focus();
+  });
+  li.append(form);
+  return li;
 }
 
 // "Add an idea…" at the end of Ideas: a line on today's page that links here.
@@ -955,4 +1035,4 @@ function wireLibraryView() {
   window.__grid = grid;
 }
 
-export { areaOptions, drawNextStep, grid, nextDate, nudgeBook, renderLibrary, renderProject, renderWorld, wireLibraryView };
+export { arrangeRow, areaOptions, drawNextStep, grid, nextDate, nudgeBook, renderLibrary, renderProject, renderWorld, wireLibraryView };

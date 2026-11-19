@@ -222,3 +222,31 @@ span.wo-item { cursor: default; color: var(--muted); }
 .st-more-link { text-align: left; margin-right: auto; }
 .wp-sheet .wp-head { flex-wrap: nowrap; align-items: center; }
 .wp-sheet .wp-head h1 { min-width: 0; }
+
+/* Add, move and delete everywhere (Nov 19 2026): the six dots on anything
+   that moves. They show on hover with a mouse (in place of the bullet) and
+   faintly all the time on a phone, where a hold lifts the line. */
+.lk-row { position: relative; }
+.lk-dots { position: absolute; left: -17px; top: 50%; translate: 0 -50%; font-size: 13px; line-height: 1; color: var(--faint); opacity: 0; cursor: grab; padding: 4px 2px; -webkit-user-select: none; user-select: none; }
+.lk-row:hover > .lk-dots, .lk-row:focus-within > .lk-dots { opacity: .9; }
+.wo-kids > li.lk-row > .lk-dots { left: calc(var(--depth, 0) * 20px - 17px); }
+.wo-kids > li.lk-row:is(:hover, :focus-within)::before { content: none; }
+.st-bible li.lk-row > .lk-dots { left: calc(var(--depth, 0) * 18px - 16px); }
+.st-card.lk-row > .lk-dots { left: 2px; top: 16px; translate: none; }
+.st-card.lk-row { padding-left: 18px; }
+@media (hover: none) {
+  .lk-dots { opacity: .4; }
+  .wo-kids > li.lk-row::before { content: none; }
+}
+.wo-kids > li > .more-btn { margin-left: auto; align-self: center; opacity: .0; }
+.wo-kids > li:is(:hover, :focus-within) > .more-btn { opacity: .8; }
+@media (hover: none) { .wo-kids > li > .more-btn { opacity: .6; } }
+.st-bible .more-btn { margin-left: 4px; }
+.st-kit > li { display: flex; align-items: center; gap: 4px; }
+.st-kit > li > .st-kit-el { flex: 1; min-width: 0; }
+.st-days > li { display: flex; align-items: center; gap: 4px; }
+.st-days > li > button:first-child { flex: 1; min-width: 0; }
+.st-kit-add { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 14px 0 4px; }
+.st-day-add { margin: 4px 0 10px; }
+.st-addbox { margin: 2px 0 10px; }
+.st-days .more-btn { width: 30px; margin: 0; padding: 0; display: inline-grid; place-items: center; }

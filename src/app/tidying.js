@@ -32,7 +32,12 @@ import { openTalk } from './beside.js';
 // ---------- tidying up: rename, move, change kind, the Trash ----------
 
 const plural = (n, word, many = `${word}s`) => `${n.toLocaleString()} ${n === 1 ? word : many}`;
-const nameOf = (row) => (row.kind === 'day' ? titleOf(row) : row.title || (row.kind === 'page' ? 'Untitled page' : 'Untitled'));
+const nameOf = (row) => {
+  if (row.kind === 'day') return titleOf(row);
+  // A line (an idea, a task) goes by its words, cut short.
+  if (row.kind === 'line') { const t = String(row.text || '').replace(/\s+/g, ' ').trim(); return t ? (t.length > 50 ? `${t.slice(0, 49)}…` : t) : 'The line'; }
+  return row.title || (row.kind === 'page' ? 'Untitled page' : 'Untitled');
+};
 const KINDS = FORMATS;
 
 async function refreshViews() {
@@ -202,6 +207,50 @@ async function reorder(list, extra = {}) {
   await putEntries(rows);
 }
 
+// ---------- order among siblings (Nov 19 2026: add, move, delete everywhere) ----------
+// The things it sits among: pages among pages, pieces among pieces, areas among
+// areas. The project's own Steps page and fix pages aren't in the list.
+async function siblingsOf(r) {
+  if (r.kind === 'area') return (await areas()).filter((a) => (a.parent_id || null) === (r.parent_id || null));
+  if (!r.parent_id) return [];
+  return (await children(r.parent_id)).filter((k) => k.kind === r.kind && !k.id.startsWith('steps-') && !k.fields?.fixesFor);
+}
+// Put one thing where a drag left it: `keys` is the order of the list it was
+// dropped in. Only its own siblings change; a drop among another page's pages
+// keeps it where it lives (Move to… is for that).
+async function placeAmong(id, keys) {
+  const r = await getEntry(id);
+  if (!r) return;
+  const sibs = await siblingsOf(r);
+  const at = new Map(keys.map((k, i) => [k, i]));
+  const order = sibs.slice().sort((a, b) => (at.has(a.id) ? at.get(a.id) : 1e6) - (at.has(b.id) ? at.get(b.id) : 1e6));
+  await reorder(order);
+  await refreshViews();
+}
+// One step up or down, or to the top.
+async function stepAmong(row, how) {
+  const r = await getEntry(row.id);
+  const list = await siblingsOf(r);
+  const i = list.findIndex((x) => x.id === r.id);
+  const j = how === 'top' ? 0 : i + how;
+  if (i < 0 || j < 0 || j >= list.length || i === j) return;
+  const [x] = list.splice(i, 1);
+  list.splice(j, 0, x);
+  await reorder(list);
+  await refreshViews();
+}
+async function stepItems(row) {
+  const r = await getEntry(row.id);
+  const list = await siblingsOf(r);
+  const i = list.findIndex((x) => x.id === r.id);
+  if (list.length < 2 || i < 0) return [];
+  return [
+    { label: 'Move up', keys: '⌥⇧↑', off: i === 0, run: () => stepAmong(r, -1) },
+    { label: 'Move down', keys: '⌥⇧↓', off: i === list.length - 1, run: () => stepAmong(r, 1) },
+    { label: 'Move to the top', off: i === 0, run: () => stepAmong(r, 'top') }
+  ];
+}
+
 // A chapter one step up or down; past the end of its act it moves into the next one.
 async function moveChapter(ch, dir) {
   const book = await bookOf(ch);
@@ -274,9 +323,10 @@ async function bookMenu(book) {
     { label: 'New piece inside (an episode in a season…)', run: () => addPiece(b.id) },
     { label: 'New page in it', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(b.id); } },
     { label: 'What Claude knows about this piece…', run: () => showClaudeKnows(b) },
+    ...(await stepItems(b)),
     { label: 'Move to', sub: (await homesFor(b)).map((h) => ({ label: h.label, current: b.parent_id === h.id, run: () => movePiece(b, h.id) })) },
     'sep',
-    { label: 'Move to Trash…', danger: true, run: () => toTrash(b) }
+    { label: 'Move to Trash…', keys: '⌘⇧⌫', danger: true, run: () => toTrash(b) }
   ];
 }
 
@@ -298,7 +348,7 @@ async function worldMenu(world) {
       ...(shapeOf(w, top.length).levels.length ? ['sep', { label: `Rename levels (${levelsOf(w, shapeOf(w, top.length)).map((l) => l.label).join(' › ')})…`, run: () => renameLevels(w) }] : [])
     ] },
     ...(isLife(w) ? [{ label: 'Meeting notes go here', sub: [['business', 'Business meetings'], ['filmmaking', 'Filmmaking meetings'], ['other', 'Other meetings']].map(([k, label]) => ({ label, current: (w.fields?.meetings || []).includes(k), run: () => setMeetings(w, k) })) }] : []),
-    ...(view() === 'library' ? [
+    ...(view() === 'library' && !document.documentElement.classList.contains('zoom') ? [
       { label: 'Move earlier in my order', run: () => nudgeBook(w, -1) },
       { label: 'Move later in my order', run: () => nudgeBook(w, 1) }
     ] : []),
@@ -538,9 +588,10 @@ async function pageMenu(page) {
     { label: 'History', run: async () => { if (!(inNotebook() && notebook.page?.id === p.id)) await go({ view: 'notebook', pageId: p.id }); await hstrip.open(); } },
     { label: 'Share a link to read and comment…', run: () => openShare(p) },
     { label: 'What Claude knows about this page…', run: () => showClaudeKnows(p) },
+    ...(await stepItems(p)),
     { label: 'Move to', sub: [{ label: 'Loose pages (no world)', current: !p.parent_id, run: () => movePage(p, null) }, ...(await homesFor(p)).map((h) => ({ label: h.label, current: p.parent_id === h.id, run: () => movePage(p, h.id) }))] },
     'sep',
-    { label: 'Move to Trash', danger: true, run: () => toTrash(p) }
+    { label: 'Move to Trash', keys: '⌘⇧⌫', danger: true, run: () => toTrash(p) }
   ];
 }
 
@@ -633,6 +684,7 @@ async function areaMenu(area) {
     { label: 'Open', run: () => go({ view: 'library', area: a.id }) },
     { label: 'Rename…', run: () => rename(a) },
     { label: 'New area inside', run: async () => { const t = await askText({ title: `New area inside ${a.title}`, ok: 'Add' }); if (t) { const n = await newArea(t, a.id); await go({ view: 'library', area: n.id }); } } },
+    ...(await stepItems(a)),
     { label: 'Move inside', sub: [{ label: 'Top level', current: !a.parent_id, run: () => moveArea(a, null) }, ...(await areaOptions(all)).filter(([id]) => !mine.has(id)).map(([id, label]) => ({ label: label.trim(), current: a.parent_id === id, run: () => moveArea(a, id) }))] },
     'sep',
     { label: 'Move to Trash…', danger: true, run: () => toTrash(a) }
@@ -676,4 +728,4 @@ addCommands(() => [
   { group: 'tidy', label: 'This area: rename, move or trash…', keys: '', run: async () => popMenu(null, await areaMenu({ id: state.libArea }), menuSpot()), when: () => view() === 'library' && !!state.libArea }
 ]);
 
-export { finishWorld, reopenWorld, setFinished, setLife, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, leaveChapter, moveBookToArea, nameOf, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu };
+export { placeAmong, stepAmong, toTrash, finishWorld, reopenWorld, setFinished, setLife, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, leaveChapter, moveBookToArea, nameOf, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu };

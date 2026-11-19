@@ -26,9 +26,12 @@ export function popMenu(anchor, items, at) {
       if (it.note) { menu.append(make('div', 'pop-note' + (it.plain ? ' plain' : ''), it.note)); continue; }
       // Something drawn by whoever opened the menu (a habit's last weeks).
       if (it.el) { menu.append(it.el); continue; }
+      // Something that can't happen from here (Move up on the top one) isn't offered.
+      if (it.off) continue;
       const b = make('button', 'pop-item' + (it.danger ? ' danger' : '') + (it.current ? ' current' : ''), it.label);
       b.setAttribute('role', 'menuitem');
       if (it.sub) b.append(make('span', 'pop-more', '›'));
+      else if (it.keys && matchMedia('(hover: hover)').matches) b.append(make('span', 'pop-keys', it.keys));
       b.addEventListener('click', (e) => {
         e.stopPropagation();
         if (it.sub) return fill(it.sub, { label: it.label, items: list });

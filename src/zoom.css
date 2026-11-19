@@ -396,3 +396,10 @@ html.zoom #wh-stagebar[hidden] { display: none; }
 .zp-dot.here { background: var(--accent); }
 .zp-dot:hover { border-color: var(--ink); }
 .zp-word { font: 12.5px var(--ui); color: var(--muted); margin-left: 6px; }
+/* Add, move and delete everywhere: each area and project has its ⋯ */
+.zl-row > .more-btn { margin-left: auto; align-self: center; opacity: 0; }
+.zl-row:is(:hover, :focus-within) > .more-btn { opacity: .8; }
+.zl-area { position: relative; }
+.zl-area-more { position: absolute; top: -6px; right: 0; width: 26px; height: 26px; font-size: 15px; opacity: 0; }
+.zl-area:is(:hover, :focus-within) > .zl-area-more { opacity: .8; }
+@media (hover: none) { .zl-row > .more-btn, .zl-area-more { opacity: .55; } }

@@ -2,6 +2,8 @@
 // Pieces, Make, Deliver, About) are lines. ▸ opens a line in place; its name
 // zooms into it. What's open is kept per project, per device.
 import { make } from './dom.js';
+import { getEntry, putEntries } from './db.js';
+import { inOrder, mergeOrder } from './deskdrag.js';
 import { stageOf, stagesOf, nextLabel, kindName } from './library.js';
 
 const KEY = (worldId) => `wo:${worldId}`;
@@ -52,4 +54,28 @@ export function pieceLine(p, depth, w, h) {
   }
   if (h.button) li.append(h.button(() => h.menu(p), `More for ${p.title || 'this piece'}`));
   return li;
+}
+
+// Ideas in your own order (Nov 19 2026): newest first until you move one; new
+// ones still come in at the top, so nothing new is tucked out of sight. The
+// order is kept on the project (fields.ideaOrder), so it's the same on every device.
+export function inIdeaOrder(w, items) {
+  return inOrder(items, (x) => x.row.id, w.fields?.ideaOrder);
+}
+export async function setIdeaOrder(worldId, keys) {
+  const w = await getEntry(worldId);
+  if (!w) return [];
+  const row = { ...w, fields: { ...w.fields, ideaOrder: mergeOrder(keys, w.fields?.ideaOrder || []).slice(0, 400) }, updated_at: Date.now() };
+  await putEntries([row]);
+  return [row];
+}
+// One idea a step up, down or to the top, in the list as it's shown.
+export function stepKeys(keys, key, how) {
+  const i = keys.indexOf(key);
+  const j = how === 'top' ? 0 : i + how;
+  if (i < 0 || j < 0 || j >= keys.length || i === j) return null;
+  const out = keys.slice();
+  out.splice(i, 1);
+  out.splice(j, 0, key);
+  return out;
 }

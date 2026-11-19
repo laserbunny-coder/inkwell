@@ -720,3 +720,7 @@ html.has-rail .pl-switches { flex-direction: row; align-items: center; }
 .pu-fold:hover, .pu-fold:focus-visible { color: var(--muted); background: var(--hover, rgba(127,127,127,.12)); }
 .pu-whenis + .pu-fold { margin-left: 6px; }
 @media (--touch) { .pu-fold { min-width: 44px; min-height: 32px; justify-content: center; font-size: 13px; } }
+/* Month and Year: an Add line in every week and month (Nov 19 2026). */
+.mo-add, .yr-add { margin: 2px 0 0; min-height: 28px; padding: 2px 8px; }
+.mo-add input, .yr-add input { font-size: 14px; }
+.mo-add .pl-check, .yr-add .pl-check { transform: scale(.8); }
