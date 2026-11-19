@@ -80,12 +80,8 @@ html.zoom body:is(.typing, .kb-up, .script-bar-on, .outline-bar-on, .go-on) .zm-
 .yr-month { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 10px 0 12px; border-top: 1px solid var(--line); min-width: 0; }
 .yr-name { border: 0; background: none; padding: 0; color: var(--ink); font: 400 19px var(--title, var(--prose)); cursor: pointer; text-align: left; }
 .yr-name:hover { color: var(--accent); }
-.yr-month.now .yr-name::after { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: 8px; vertical-align: 3px; }
+.yr-month.yr-now .yr-name::after { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: 8px; vertical-align: 3px; }
 .yr-n { color: var(--muted); font-size: 12.5px; min-height: 1.3em; }
-.yr-date { display: flex; align-items: baseline; gap: 7px; border: 0; background: none; padding: 1px 0; color: var(--soft); font: 13px var(--ui); cursor: pointer; text-align: left; max-width: 100%; }
-.yr-date i { flex: none; width: 7px; height: 7px; transform: rotate(45deg); border-radius: 1px; background: var(--muted); }
-.yr-date.hard i { background: var(--signal); }
-.yr-date:hover .yr-text { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 .yr-day { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
 .yr-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .yr-more { color: var(--faint); font-size: 12px; }
@@ -286,7 +282,13 @@ html.zoom .zm-np:hover, html.zoom .zm-np[aria-expanded="true"] { color: var(--in
 .mo-months { display: flex; flex-direction: column; gap: 4px; margin-top: 22px; }
 .mo-month { padding: 10px 0; border-bottom: 1px solid var(--line); }
 .mo-month .pl-label { margin: 0 0 6px; }
-.yr-month .yr-line.in { display: block; margin-top: 2px; }
+.yr-month .yr-line.in { display: flex; align-items: baseline; gap: 7px; max-width: 100%; margin-top: 1px; padding: 3px 0; font: 13.5px/1.35 var(--ui); color: var(--soft); }
+.yr-month .yr-line.in:hover { color: var(--ink); }
+.yr-line.mark .yr-day::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 5px; transform: rotate(45deg); background: var(--muted); vertical-align: 1px; }
+.yr-line.hard .yr-day::before { background: var(--signal); }
+.yr-line.dragging { opacity: .35; }
+button.yr-more { border: 0; background: none; padding: 2px 0; cursor: pointer; }
+button.yr-more:hover { color: var(--accent); }
 @media (max-width: 720px) {
   .mo-week { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .mo-days { max-width: 100%; }

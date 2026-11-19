@@ -465,7 +465,7 @@ function gestures() {
     if (e.touches.length !== 1) { swipe = null; return; }
     pinch = null;
     const el = e.target;
-    if (el.closest?.('.zm-ruler, .topbar, .ah-wrap, .page-tabs, input, textarea, .pop-menu, .palette, .pl-pickbar, .pl-zoom, .lw-strip, .hstrip, [contenteditable="true"]')) { swipe = null; return; }
+    if (el.closest?.('.zm-ruler, .topbar, .ah-wrap, .page-tabs, input:focus, textarea:focus, .pop-menu, .palette, .pl-pickbar, .pl-zoom, .lw-strip, .hstrip, [contenteditable="true"]')) { swipe = null; return; }
     swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
   }, { passive: true });
   document.addEventListener('touchmove', (e) => {
