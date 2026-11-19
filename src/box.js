@@ -7,7 +7,9 @@
 // Typing: one list, best match first, of places, pages, pieces, tasks,
 // commands and Catch-up lines, each saying what it is; then "+ Add task"
 // (Ctrl + Enter; a word at the end sets the day), "+ Add a line to today's
-// page" (Shift + Enter), and the deep search of every word (Ctrl + Shift + F).
+// page" (Shift + Enter); then "In your writing": the lines, paragraphs, notes
+// and saved links (with their write-ups) holding every word typed, and "See
+// all" for the full search of every word (Ctrl + Shift + F).
 // All commands: every command in groups, each with one line on what it does.
 // On a computer two columns (groups, then the group's commands); on a phone a
 // full-height sheet whose groups fold open in place. A command that can't
@@ -21,6 +23,9 @@ import { make } from './dom.js';
 const USED = 'boxUsed';
 const KEEP_USED = 8;
 const HERE_MAX = 4;
+// Matches inside the writing shown in the box before "See all".
+const WRITING_MAX = 6;
+const NAMED = new Set(['world', 'project', 'chapter', 'page', 'area']);
 
 // Straight and curly apostrophes are the same thing here ("what's when").
 export const norm = (t) => String(t || '').toLowerCase().replace(/[’‘']/g, '').replace(/\s+/g, ' ').trim();
@@ -87,6 +92,7 @@ export class Box {
   // here() → the room tags for where you are, places() → Promise [{ label, what, run }],
   // tasks() → Promise [{ label, what, run }], catchup() → [{ label, what, run }],
   // addTask(title, choice, text), addLine(text), search(text), isTouch(), keyLabel(text),
+  // writing() → Promise of the search index (search.js), openHit(row),
   // closed(refocus), toast(text)
   constructor(el, hooks) {
     this.el = el;
@@ -163,6 +169,10 @@ export class Box {
     places.then((list) => { if (turn === this.turn) { this.places = list; if (this.input.value.trim() && !this.all) this.draw(); } });
     tasks.then((list) => { if (turn === this.turn) { this.tasks = list; if (this.input.value.trim() && !this.all) this.draw(); } });
     this.ready = Promise.all([places, tasks]);
+    // Everything written, for "In your writing" (read once, then kept up to date).
+    if (!this.index_) {
+      Promise.resolve().then(() => this.hooks.writing?.()).then((idx) => { this.index_ = idx; if (turn === this.turn && this.input.value.trim() && !this.all) { const at = this.index; this.draw(); this.index = at; this.mark(false); } }).catch(() => {});
+    }
     // Marked once everything has been read and drawn (the tests wait on it).
     Promise.all([projects, this.ready]).then(() => { if (turn === this.turn) this.el.dataset.loaded = ''; });
   }
@@ -424,8 +434,23 @@ export class Box {
       this.row({ label: `+ Add task for ${day}: “${title}”`, cls: 'box-add', side: this.hooks.isTouch() ? '' : this.hooks.keyLabel(hits.length ? 'Ctrl+Enter' : 'Enter'), add: true, run: () => this.hooks.addTask(title, choice, raw) });
       this.row({ label: `+ Add a line to today’s page: “${raw}”`, cls: 'box-add line', side: this.hooks.isTouch() ? '' : this.hooks.keyLabel('Shift+Enter'), run: () => this.hooks.addLine(raw) });
     }
-    if (hits.length < 3) this.row({ label: 'Not finding it? Browse all commands', cls: 'box-allrow', side: '›', stay: true, run: () => this.setAll(true) });
-    this.row({ label: `Search every word of your writing for “${raw}”`, cls: 'box-deep', side: this.hooks.isTouch() ? '' : this.hooks.keyLabel('⌘⇧F'), stay: true, run: () => this.hooks.search(raw) });
+    // Inside what's written: lines, paragraphs, notes, saved links and their write-ups.
+    const touch = this.hooks.isTouch();
+    // Names (pages, projects, chapters) and tasks are listed above already.
+    const listed = new Set((this.tasks || []).map((t) => t.id).filter(Boolean));
+    const inside = raw.length >= 2 && this.index_ ? this.index_.find(raw, 80).filter((h) => !NAMED.has(h.row.kind) && !listed.has(h.row.id)).slice(0, 51) : [];
+    if (inside.length) {
+      this.section('In your writing', 'box-in-writing');
+      for (const h of inside.slice(0, WRITING_MAX)) {
+        const what = h.row.link ? `link · ${h.where}` : h.where;
+        // A phone has no room at the right: where it is goes under it.
+        this.row({ label: h.snippet.trim(), cls: 'box-hit', hint: touch ? what : '', side: touch ? '' : what, run: () => this.hooks.openHit(h.row) });
+      }
+    }
+    const more = inside.length > WRITING_MAX;
+    if (more) this.row({ label: `See all ${inside.length > 50 ? '50+' : inside.length} in your writing`, cls: 'box-deep', side: touch ? '›' : this.hooks.keyLabel('⌘⇧F'), stay: true, run: () => this.hooks.search(raw) });
+    if (hits.length + inside.length < 3) this.row({ label: 'Not finding it? Browse all commands', cls: 'box-allrow', side: '›', stay: true, run: () => this.setAll(true) });
+    if (!more && !inside.length) this.row({ label: `Search every word of your writing for “${raw}”`, cls: 'box-deep', side: touch ? '' : this.hooks.keyLabel('⌘⇧F'), stay: true, run: () => this.hooks.search(raw) });
     this.index = 0;
   }
 

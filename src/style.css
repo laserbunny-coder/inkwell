@@ -1983,6 +1983,9 @@ html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
 .box-chip[aria-current="page"] .keys { color: inherit; opacity: .8; }
 .palette li.box-row { align-items: center; }
 .palette li.box-row .box-name { overflow-wrap: anywhere; }
+/* A match inside the writing: two lines of it at most. */
+.palette li.box-hit .box-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.palette li.box-hit .keys { max-width: 38%; color: var(--muted); }
 .palette li.box-row .keys { white-space: nowrap; text-align: right; flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
 .palette li.box-row.dim .box-name { color: var(--faint); }
 .palette li.box-row.dim .hint { color: var(--faint); font-style: italic; }

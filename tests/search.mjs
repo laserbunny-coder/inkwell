@@ -80,17 +80,20 @@ try {
     assert.match(para, /Mara wrote the letter/);
   });
 
-  await check('Ctrl+O offers to search inside the writing when no title matches', async () => {
+  await check('Ctrl+O shows matches inside the writing as you type, and one opens where it lives', async () => {
     await p.keyboard.press('Control+O');
     await sleep(300);
     await p.keyboard.type('keeper');
     await sleep(300);
     const r = await results();
-    assert.match(r.at(-1), /Search every word of your writing for “keeper”/, r.join(' | '));
-    await p.locator('#palette-list li').last().click(); // Enter would add it as a task: the last row searches
-    await sleep(500);
-    assert.match((await results())[0], /lighthouse keeper/);
-    await p.keyboard.press('Escape');
+    // The match inside the writing shows right in the box, under "In your writing".
+    assert.ok(r.some((x) => /^in your writing$/i.test(x)), r.join(' | '));
+    const hit = p.locator('#palette-list li.box-hit', { hasText: 'lighthouse keeper' });
+    assert.equal(await hit.count(), 1, r.join(' | '));
+    assert.match(await hit.innerText(), /Chapter 1/);
+    await hit.click(); // Enter would add it as a task: a click opens it
+    await sleep(600);
+    assert.match(await p.evaluate(() => window.__editor.state.selection.$from.parent.textContent), /lighthouse keeper/);
   });
 
   await check('the Trash is left out of search', async () => {

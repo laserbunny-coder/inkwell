@@ -34,7 +34,8 @@ import { openChapter } from './manuscript.js';
 import { plural, refreshViews } from './tidying.js';
 import { goCatchup, goPage, nav, projectOrder, railProjects, strip } from './workpages.js';
 import { hidden, lookTab, setShown, toggleFocus, togglePageSettings } from './pagesettings.js';
-import { closePalette, openPalette } from './quickinserts.js';
+import { closePalette, openHit, openPalette } from './quickinserts.js';
+import { searchIndex } from '../search.js';
 import { deskPage, plan } from './talking.js';
 // The one box (box.js), made once the commands are listed.
 let box = null;
@@ -165,7 +166,7 @@ async function boxTasks() {
   const list = (await loadTasks(today)).filter((i) => !i.row.fields?.done && i.mine);
   return list.map((i) => {
     const day = i.task.day ? (i.task.day < today ? 'from earlier' : dayWord(i.task.day, today).toLowerCase()) : '';
-    return { label: i.row.text || 'Untitled task', what: ['task', day, i.world?.title].filter(Boolean).join(' · '), run: () => openEntry(i.row.id) };
+    return { id: i.row.id, label: i.row.text || 'Untitled task', what: ['task', day, i.world?.title].filter(Boolean).join(' · '), run: () => openEntry(i.row.id) };
   });
 }
 // The Desk's Catch-up lines, once the Desk has read them.
@@ -269,6 +270,8 @@ function wireCommands() {
     addTask: (title, choice) => boxAddTask(title, choice),
     addLine: (text) => boxAddLine(text),
     search: (text) => openPalette('search', text),
+    writing: () => searchIndex(),
+    openHit: (row) => openHit(row),
     runCommand: (c) => c.run(),
     focusOn: () => root.classList.contains('focus'),
     toggleFocus: () => { toggleFocus(); toast(root.classList.contains('focus') ? 'Focus on' : 'Focus off'); },
