@@ -815,7 +815,8 @@ try {
     await ph.waitForSelector('html.script:not(.woven) #editor p[data-el="scene"]');
     await ph.locator('#editor p[data-el="scene"]').tap();
     await ph.waitForSelector('.script-bar', { state: 'visible' });
-    assert.equal(await ph.locator('.script-bar button.current').innerText(), 'Scene');
+    // The bar may already be up from the Woven start (on the action line): wait for it to follow the tap.
+    await until('the bar lights Scene', () => document.querySelector('.script-bar button.current')?.innerText === 'Scene');
     await ph.keyboard.type('Mara');
     await ph.locator('.script-bar button[data-el="character"]').tap();
     await ph.waitForSelector('#editor p[data-el="character"]');
