@@ -108,7 +108,6 @@ async function setWoven(on) {
   const next = { ...fresh, fields: { ...fresh.fields, woven: on }, updated_at: Date.now() };
   await putEntries([next]);
   if (state.project?.id === b.id) state.project = next;
-  try { localStorage.setItem('scriptView', on ? 'woven' : 'classic'); } catch { /* private window */ }
   await syncWoven(next);
   if (on) guessAll(editor); else redrawWoven(editor);
   notes.layout();
@@ -154,7 +153,7 @@ function wovenPick() {
 
 let scenePop; // set in wireManuscript()
 
-// The card for the scene the caret is in (the same one the margin dot opens).
+// The card for the scene the caret is in (the same one a tap on the scene line opens).
 function sceneDetails() {
   const s = sceneAt(editor.state.doc, editor.state.selection.from);
   if (!s) return;
