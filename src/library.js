@@ -256,9 +256,10 @@ export async function newPiece(parentId, type, title, lines, label) {
   const world = await worldOf({ parent_id: parentId });
   // A script brought in with its scene numbers stays numbered.
   const numbered = lines?.some((l) => l.code);
-  // A new script starts in the view you last picked (Woven or Classic).
-  let woven = false;
-  try { woven = type === 'screenplay' && !lines?.length && localStorage.getItem('scriptView') === 'woven'; } catch { /* no storage */ }
+  // A new script starts in Woven on every device (Michael, Nov 20 2026);
+  // Classic stays one pick away on each script. A script brought in from
+  // Fountain keeps the standard page it came with.
+  const woven = type === 'screenplay' && !lines?.length;
   const project = entry('project', {
     title, parent_id: parentId, area_id: world?.area_id || null, sort: (siblings.at(-1)?.sort || 0) + 1,
     fields: { type, ...(levels ? { levels } : {}), ...(label ? { label } : {}), ...(numbered ? { numbered: true } : {}), ...(woven ? { woven: true } : {}) }
@@ -388,6 +389,8 @@ export async function changeType(project, type) {
   const from = bookType(project);
   if (type === from) return project;
   const fields = { ...project.fields, type };
+  // A piece turned into a script reads as Woven, like a new one.
+  if (type === 'screenplay' && fields.woven === undefined) fields.woven = true;
   // Level names follow the kind unless they were renamed by hand.
   if (LEVELS[type] && (!fields.levels || JSON.stringify(fields.levels) === JSON.stringify(LEVELS[from]))) fields.levels = LEVELS[type];
   const rows = [{ ...project, fields, updated_at: now }];

@@ -1409,7 +1409,8 @@ async function newPiece(args: Record<string, unknown>, db: Db) {
   const world = parent.kind === "world" ? parent : shape.worldOf(parent);
   const siblings = shape.under(parent.id, "project");
   const levels = type === "novel" ? ["Act", "Chapter", "Scene"] : type === "screenplay" ? ["Act", "Script", "Scene"] : null;
-  const fields: Record<string, unknown> = { type, ...(levels ? { levels } : {}) };
+  // A new script reads as Woven (flowing, scene headings hidden), as in the app.
+  const fields: Record<string, unknown> = { type, ...(levels ? { levels } : {}), ...(type === "screenplay" ? { woven: true } : {}) };
   if (typeof args.label === "string" && args.label.trim() && args.label.trim() !== LABEL[type]) fields.label = args.label.trim().slice(0, 60);
   if (typeof args.stage === "string" && args.stage) fields.stage = args.stage;
   const piece = row("project", { id: newId("pr"), parent_id: parent.id, title, area_id: world?.area_id ?? null, sort: (siblings.at(-1)?.sort ?? 0) + 1, fields });

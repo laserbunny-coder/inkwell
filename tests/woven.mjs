@@ -89,7 +89,7 @@ try {
   await p.waitForSelector('#editor .ProseMirror');
   await sleep(500);
 
-  await check('a script switches to Woven: the writing font, no INT./EXT. lines', async () => {
+  await check('a new script opens in Woven; Classic and back: the writing font, no INT./EXT. lines', async () => {
     await run('New screenplay');
     await p.waitForSelector('#lib-new', { state: 'visible' });
     await p.fill('#lib-new-title', 'Rent Day');
@@ -100,10 +100,15 @@ try {
     await p.keyboard.type('Script · Rent Day');
     await p.waitForFunction(() => document.querySelector('.palette[data-loaded]') && /^Script\s*chapter · Rent Day/.test(document.querySelector('#palette-list li.box-row')?.textContent || ''));
     await p.keyboard.press('Enter');
-    await p.waitForSelector('html.script #editor p[data-el="scene"]');
+    // A new script opens in Woven; Classic shows the heading to type into.
+    await p.waitForFunction(() => document.documentElement.classList.contains('woven'));
+    await sleep(300);
+    await run('Script view: Classic');
+    await p.waitForSelector('html.script:not(.woven) #editor p[data-el="scene"]');
     await p.locator('#editor p[data-el="scene"]').click();
     await p.keyboard.type('int. bakery - morning');
-    await p.keyboard.press('Enter');
+    // A Woven script already has its first action line under the heading.
+    await p.keyboard.press('ArrowDown');
     await p.keyboard.type('A letter slaps down beside the till.');
     await sleep(300);
     await run('Script view: Woven');
@@ -260,7 +265,8 @@ try {
     assert.deepEqual(rows, ['EXT. ALLEY - NIGHT', 'INT. BAKERY - MORNING']);
   });
 
-  await check('a new script starts in Woven when that is what you used last, ready to type in', async () => {
+  await check('a new script starts in Woven on any device, even one that last picked Classic, ready to type in', async () => {
+    await p.evaluate(() => localStorage.setItem('scriptView', 'classic'));
     await run('New screenplay');
     await p.waitForSelector('#lib-new', { state: 'visible' });
     await p.fill('#lib-new-title', 'Reel Five');

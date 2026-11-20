@@ -108,7 +108,6 @@ async function setWoven(on) {
   const next = { ...fresh, fields: { ...fresh.fields, woven: on }, updated_at: Date.now() };
   await putEntries([next]);
   if (state.project?.id === b.id) state.project = next;
-  try { localStorage.setItem('scriptView', on ? 'woven' : 'classic'); } catch { /* private window */ }
   await syncWoven(next);
   if (on) guessAll(editor); else redrawWoven(editor);
   notes.layout();
