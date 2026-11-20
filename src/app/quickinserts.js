@@ -34,7 +34,7 @@ import { toggleGrid, toggleProduction } from './productionwiring.js';
 import { goPage, nav, strip, todayPanel } from './workpages.js';
 import { openGoTo } from './goto.js';
 import { closeHistory, hstrip, openHistory } from './historyview.js';
-import { currentSize, currentWidth, progressPanel, setPage, step, togglePageSettings, toggleReading, toggleSections, toggleShortcuts } from './pagesettings.js';
+import { currentSize, currentWidth, lookHere, progressPanel, setPage, step, togglePageSettings, toggleReading, toggleSections, toggleShortcuts } from './pagesettings.js';
 import { box, commands, toggleTheme, writing } from './commands.js';
 import { askServer, canAskServer, capture, captureHere, openToday, plan } from './talking.js';
 import { openTalk, paneKeys, pull, toggleBesidePane, whenHere } from './beside.js';
@@ -500,7 +500,7 @@ function wireQuickInserts() {
     const cmd = b.dataset.cmd;
     if (cmd === 'palette') openPalette();
     if (cmd === 'notes' && writing()) toggleNotes();
-    if (cmd === 'page') togglePageSettings();
+    if (cmd === 'page') lookHere();
     if (cmd === 'history') hstrip.toggle();
     if (cmd === 'history-list') openHistory();
     if (cmd === 'new-chapter') newChapter();
@@ -548,6 +548,8 @@ function wireQuickInserts() {
     else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyT') { e.preventDefault(); openTalk(); }
     // Alt + Shift + T: everything left from earlier days onto today.
     else if (e.altKey && !m && e.shiftKey && e.code === 'KeyT') { e.preventDefault(); plan.bringToday(); }
+    // Alt + L: Look (the Aa button), in text too.
+    else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyL') { e.preventDefault(); lookHere(); }
     // Alt + W: When (today, this week, next week, later…) for the line or lines here.
     else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyW') { e.preventDefault(); whenHere(); }
     // Alt + Left / Right: Back and Forward, everywhere (in a line too), so a task

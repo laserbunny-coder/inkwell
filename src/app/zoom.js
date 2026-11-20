@@ -32,7 +32,7 @@ import { body, gone, root, state } from '../main.js';
 import { go, lastPlace } from './routing.js';
 import { frame } from './workpages.js';
 import { plan, deskPage } from './talking.js';
-import { togglePageSettings, hidden } from './pagesettings.js';
+import { lookHere, hidden } from './pagesettings.js';
 
 const roomy = media('roomy');
 const touch = media('touch');
@@ -71,6 +71,7 @@ let mic = null;
 let when = null;
 let glass = null;
 let more = null;
+let aa = null;
 let np = null;
 let lit = null;
 let needs = 0;
@@ -301,9 +302,18 @@ function build() {
   np.type = 'button';
   np.title = 'Lines with no day and no time yet: drag one into the plan, or onto a ruler stop';
   np.addEventListener('click', () => plan?.shelf?.toggle());
+  // Aa: Look, on its own beside More (Nov 20 2026), at full strength.
+  aa = make('button', 'zm-aa', 'Aa');
+  aa.type = 'button';
+  aa.title = 'Look: colours, fonts, what shows (Alt + L)';
+  aa.setAttribute('aria-label', 'Look');
+  aa.setAttribute('aria-expanded', 'false');
+  aa.addEventListener('click', () => lookHere());
+  const ps = document.querySelector('.page-settings');
+  if (ps) new MutationObserver(() => aa.setAttribute('aria-expanded', String(!ps.hidden))).observe(ps, { attributes: true, attributeFilter: ['hidden'] });
   more = make('button', 'zm-more', '⋯');
   more.type = 'button';
-  more.title = 'More: notes beside the text, Beside, Focus, Look';
+  more.title = 'More: notes beside the text, Beside, every command';
   more.setAttribute('aria-label', 'More');
   more.addEventListener('click', () => moreMenu());
   document.body.append(ruler, mic);
@@ -315,7 +325,6 @@ function moreMenu() {
   const items = [
     ...(writingNow ? [{ label: 'Notes beside the text (Ctrl + 2)', run: click('#notes-toggle') }] : []),
     { label: 'Beside: a pane next to this (Ctrl + \\)', run: click('#beside-toggle') },
-    { label: 'Look: colours, text, what shows (Aa)', run: () => togglePageSettings() },
     'sep',
     { label: 'Every command (Ctrl + K)', run: () => { closeMenu(); document.querySelector('#palette-toggle')?.click(); } }
   ];
@@ -338,7 +347,7 @@ function place() {
   const bar = document.querySelector('.topbar');
   const left = bar?.querySelector(':scope > .tb-l');
   const right = bar?.querySelector(':scope > .tb-r');
-  if (left && right) { left.prepend(when); right.append(np, glass, more); } else if (bar) { bar.prepend(when); bar.append(np, glass, more); }
+  if (left && right) { left.prepend(when); right.append(np, glass, aa, more); } else if (bar) { bar.prepend(when); bar.append(np, glass, aa, more); }
 }
 
 function light(place) {

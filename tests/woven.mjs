@@ -252,8 +252,10 @@ try {
   await check('name colour: a chip in Woven, its own in Classic (plain until picked), and Custom takes any colour', async () => {
     const nameC = () => p.$eval('#editor p[data-el="character"]', (x) => getComputedStyle(x).color);
     const ink = await p.evaluate(() => { const d = document.createElement('i'); d.style.color = 'var(--ink)'; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; });
-    await run('this script’s look');
+    // The Aa button beside ⋯ opens straight on this script's Text tab.
+    await p.locator('.zm-aa').click();
     await p.waitForSelector('.woven-names .wv-swatch', { state: 'visible' });
+    assert.equal(await p.evaluate(() => document.querySelector('.page-settings').dataset.tab), 'text');
     await p.locator('.woven-names .wv-swatch', { hasText: 'Green' }).click();
     await p.waitForFunction(() => getComputedStyle(document.querySelector('#editor p[data-el="character"]')).color === 'rgb(90, 163, 107)');
     await p.locator('.woven-names .wv-swatch', { hasText: 'Plain' }).click();

@@ -3,7 +3,7 @@
    layout" (Look) takes html.zoom away and the rail and the phone's bar are
    back as they were. */
 
-.zm-ruler, .zm-mic, .zm-when, .zm-go, .zm-more, .zm-np { display: none; }
+.zm-ruler, .zm-mic, .zm-when, .zm-go, .zm-aa, .zm-more, .zm-np { display: none; }
 
 /* ---------- what the ruler takes the place of ---------- */
 html.zoom.has-rail { --rail-w: 0px; }
@@ -45,6 +45,12 @@ html.zoom :is(.zm-go, .zm-more) {
   border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: 17px/1 var(--ui); cursor: pointer;
 }
 html.zoom :is(.zm-go, .zm-more):hover { color: var(--ink); background: var(--raise); }
+/* Aa: Look on its own, beside More, at full strength (not faint like ⋯). */
+html.zoom .zm-aa {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 34px; height: 30px; padding: 0 6px;
+  border: 0; border-radius: 7px; background: transparent; color: var(--ink); font: 600 15px/1 var(--ui); letter-spacing: .01em; cursor: pointer;
+}
+html.zoom .zm-aa:hover, html.zoom .zm-aa[aria-expanded="true"] { background: var(--raise); }
 .zm-go svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
 html.zoom .topbar { view-transition-name: zm-top; }
 
@@ -118,7 +124,7 @@ html.zoom body.typing.in-piece.peek-top .topbar, html.zoom.has-rail body.typing.
   /* The top line is always there on the phone: the date, this place's pages, the glass and More. */
   html.zoom .topbar { display: flex !important; transform: none !important; opacity: 1 !important; align-items: center; gap: 6px; padding: 6px 8px 6px 12px; }
   html.zoom .topbar > .zm-when { order: 0; }
-  html.zoom .topbar > :is(.zm-np, .zm-go, .zm-more) { order: 3; }
+  html.zoom .topbar > :is(.zm-np, .zm-go, .zm-aa, .zm-more) { order: 3; }
   html.zoom body.kb-up .topbar { opacity: 0 !important; pointer-events: none; }
   html.zoom body:not(.looking) :is(.notebook, .page) { padding-top: calc(var(--topbar-h, 44px) + 18px); }
 }
