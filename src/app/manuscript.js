@@ -7,7 +7,7 @@ import { freshenRefs } from '../links.js';
 import { scriptPages, assignCodes } from '../script.js';
 import { renderLinkedFrom } from '../notebook.js';
 import { ScenePop, guessAll, redraw as redrawWoven, placeList, sceneAt, scenesOf, ensureHeading, setMarker, KINDS as SCENE_KINDS } from '../woven.js';
-import { applyLook, renderLook, cleanLook, DEFAULT_LOOK } from '../wovenlook.js';
+import { applyLook, renderLook, renderNames, nameColour, cleanLook, DEFAULT_LOOK } from '../wovenlook.js';
 import { elementsIn, plainPages, newElement } from '../production.js';
 import { threadsOf } from '../grid.js';
 import { bookType, bookOf, worldOf } from '../library.js';
@@ -83,6 +83,7 @@ async function syncWoven(book) {
   const on = isScript() && !!book?.fields?.woven;
   root.classList.toggle('woven', on);
   applyLook(root, on ? (book.fields.look || DEFAULT_LOOK) : null);
+  classicNames(isScript() && !on ? book?.fields?.classicNames : null);
   if (on) await loadPlaces(book);
   if (!on) scenePop?.close();
   wovenPick();
@@ -114,6 +115,27 @@ async function setWoven(on) {
   toast(on ? 'Woven: the scene headings are hidden as faint lines. Classic shows them again.' : 'Classic: the standard screenplay page. Your Woven titles stay as sections.');
 }
 
+// Classic's name colour: plain ink unless picked (its own, so Woven's blue
+// names don't come along). Only the screen: the PDF and Fountain stay black.
+function classicNames(c) {
+  if (c && c !== 'ink') root.style.setProperty('--classic-name-c', nameColour(c));
+  else root.style.removeProperty('--classic-name-c');
+}
+
+async function saveNames(c) {
+  const b = await currentBook();
+  if (!b) return;
+  const fresh = await getEntry(b.id);
+  const fields = isWoven()
+    ? { ...fresh.fields, look: { ...cleanLook(fresh.fields?.look || DEFAULT_LOOK), names: c } }
+    : { ...fresh.fields, classicNames: c };
+  const next = { ...fresh, fields, updated_at: Date.now() };
+  await putEntries([next]);
+  if (state.project?.id === b.id) state.project = next;
+  if (isWoven()) applyLook(root, next.fields.look); else classicNames(c);
+  wovenPick();
+}
+
 async function saveLook(look) {
   const b = await currentBook();
   if (!b) return;
@@ -136,6 +158,9 @@ function wovenPick() {
     b.classList.toggle('current', cur);
     b.setAttribute('aria-checked', String(cur));
   });
+  const names = box.querySelector('.woven-names');
+  names.dataset.prop = isWoven() ? '--wv-name-c' : '--classic-name-c';
+  renderNames(names, isWoven() ? cleanLook(state.project?.fields?.look || DEFAULT_LOOK).names : (state.project?.fields?.classicNames || 'ink'), (c) => saveNames(c));
   const look = box.querySelector('.woven-look');
   look.hidden = !isWoven();
   if (isWoven()) renderLook(look, {
