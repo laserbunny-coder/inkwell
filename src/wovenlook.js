@@ -58,7 +58,7 @@ export const OPTIONS = [
   { key: 'lineFade', label: 'Fade', items: [['faint', 'Faint'], ['soft', 'Soft'], ['clear', 'Clear']] },
   { key: 'lineColor', label: 'Line colour', items: [['ink', 'Ink'], ['accent', 'Copper'], ['title', 'Like the titles']] },
   { key: 'lineLen', label: 'Length', items: [['full', 'Full'], ['short', 'Short']] },
-  { key: 'names', label: 'Names', items: [['blue', 'Blue'], ['copper', 'Copper'], ['ink', 'Ink']] },
+  { key: 'names', label: 'Names', items: [['ink', 'Plain'], ['copper', 'Theme'], ['blue', 'Blue'], ['#d8432f', 'Red'], ['#b8963e', 'Gold'], ['#5aa36b', 'Green'], ['#9a7bd6', 'Purple']] },
   { key: 'dialogue', label: 'Dialogue', items: [['center', 'Centred'], ['left', 'Indented']] },
   { key: 'titlePos', label: 'Titles', items: [['center', 'Centre'], ['left', 'Left']] },
   { key: 'titleColor', label: 'Title colour', items: [['muted', 'Grey'], ['accent', 'Copper'], ['ink', 'Ink'], ['#d8432f', 'Red'], ['#b8963e', 'Gold'], ['#3f7fd6', 'Blue']] },
@@ -107,6 +107,47 @@ export function applyLook(root, look) {
 }
 
 
+// The colour of the names (character lines), as one row of chips with a
+// swatch each, plus Custom (any colour). "Plain" is the page's own ink: white
+// on a dark look, black on a light one. "Theme" is the look's accent. Used by
+// Woven (the script's look) and Classic (its own pick, plain by default).
+export const NAME_COLOURS = OPTIONS.find((o) => o.key === 'names').items;
+export const nameColour = (v, fallback = 'var(--ink)') => colour(v, fallback);
+export function renderNames(box, current, save) {
+  box.replaceChildren();
+  const row = make('div', 'wv-tune-row wv-names');
+  row.append(make('span', 'wv-tune-label', 'Name colour'));
+  const chips = make('div', 'wv-chips');
+  chips.setAttribute('role', 'radiogroup');
+  chips.setAttribute('aria-label', 'Name colour');
+  const known = NAME_COLOURS.some(([id]) => id === current);
+  for (const [id, label] of NAME_COLOURS) {
+    const b = make('button', 'wv-chip wv-swatch', label);
+    b.type = 'button';
+    b.dataset.c = id;
+    b.style.setProperty('--sw', colour(id, 'var(--ink)'));
+    const cur = current === id;
+    b.classList.toggle('current', cur);
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(cur));
+    b.addEventListener('click', () => save(id));
+    chips.append(b);
+  }
+  const own = make('label', `wv-chip wv-swatch wv-custom${known ? '' : ' current'}`, 'Custom');
+  const pick = make('input');
+  pick.type = 'color';
+  pick.setAttribute('aria-label', 'Custom name colour');
+  pick.value = HEX.test(current || '') ? current : '#e8e2d6';
+  own.style.setProperty('--sw', known ? 'conic-gradient(#d8432f, #b8963e, #5aa36b, #3f7fd6, #9a7bd6, #d8432f)' : current);
+  // Live while the picker is open, saved when it closes.
+  pick.addEventListener('input', () => { own.style.setProperty('--sw', pick.value); document.documentElement.style.setProperty(box.dataset.prop || '--wv-name-c', pick.value); });
+  pick.addEventListener('change', () => save(pick.value.toLowerCase()));
+  own.prepend(pick);
+  chips.append(own);
+  row.append(chips);
+  box.append(row);
+}
+
 // The "Look" part of the Aa panel for a Woven script.
 // hooks: { look(), save(look), ask(text) → Promise<look|null>, canAsk() }
 export function renderLook(box, hooks) {
@@ -141,6 +182,7 @@ export function renderLook(box, hooks) {
   more.append(sum);
   const set = (k, v) => { hooks.save({ ...cleanLook(hooks.look()), [k]: v, preset: 'own', name: 'Your own' }); renderLook(box, hooks); box.querySelector('.wv-tune').open = true; };
   for (const o of OPTIONS) {
+    if (o.key === 'names') continue; // its own row, always in view (renderNames)
     const row = make('div', 'wv-tune-row');
     row.append(make('span', 'wv-tune-label', o.label));
     const chips = make('div', 'wv-chips');

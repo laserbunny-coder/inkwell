@@ -121,7 +121,7 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 :root.script #editor .ProseMirror p { margin: 0 0 1em -8px; }
 :root.script #editor p[data-el="scene"] { text-transform: uppercase; font-weight: 700; margin-top: 1.6em; }
 :root.script #editor .ProseMirror > p[data-el="scene"]:first-child { margin-top: 0; }
-:root.script #editor p[data-el="character"] { text-transform: uppercase; margin: 0 0 0 37%; }
+:root.script #editor p[data-el="character"] { text-transform: uppercase; margin: 0 0 0 37%; color: var(--classic-name-c, inherit); }
 :root.script #editor p[data-el="paren"] { margin: 0 25% 0 calc(28% - 8px); }
 :root.script #editor p[data-el="dialogue"] { margin: 0 18% 1em calc(17% - 8px); }
 :root.script #editor p[data-el="dialogue"]:has(+ p[data-el="paren"]) { margin-bottom: 0; }
@@ -249,6 +249,13 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 .wv-tune[open] summary { margin-bottom: 6px; }
 .wv-tune-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
 .wv-font { font-size: 14px; }
+/* Name colour: chips with a swatch; Custom opens the system colour picker. */
+.wv-swatch { display: inline-flex; align-items: center; gap: 6px; position: relative; }
+.wv-swatch::before { content: ''; width: 11px; height: 11px; border-radius: 50%; background: var(--sw); box-shadow: 0 0 0 1px var(--line); flex: none; }
+.page-settings label.wv-custom { display: inline-flex; flex-direction: row; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.wv-custom.current { color: var(--accent); }
+.wv-custom input[type="color"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+@media (--narrow) { .wv-swatch { padding: 7px 12px; font-size: 13.5px; } }
 .wv-ask { display: flex; gap: 6px; }
 .wv-ask input { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 12.5px; }
 /* Prepare for shoot. */
@@ -1528,6 +1535,9 @@ body.beside-on .page, body.talk-on .page { padding-right: calc(min(44vw, 620px) 
 .pt-num { display: none; position: absolute; top: -5px; right: -3px; font-size: 10px; line-height: 1.4; padding: 0 4px; border-radius: 4px; background: var(--accent); color: var(--bg); font-weight: 600; }
 body.alt-held .pt-num { display: block; }
 :root.focus :is(.page-tabs, .tabs-pill) { display: none !important; }
+/* While you write (typing, or Focus on), the page's scroll bar goes clear: the wheel still
+   scrolls, and the bar keeps its room so the words don't shift when it comes back. */
+:root:is(.focus, :has(> body.typing)) { scrollbar-color: transparent transparent; }
 /* Faint on the pages you look at; full at the top edge or while Alt is held; never while typing or in focus. */
 body.looking:not(.typing) .topbar { transform: none; opacity: .55; transition: transform .2s ease, opacity .15s ease; }
 body.looking .topbar:hover, body.looking .topbar:focus-within, body.show-top .topbar, body.alt-held .topbar { transform: none; opacity: 1; }

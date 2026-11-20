@@ -66,9 +66,12 @@ const all = () => p.evaluate(() => new Promise((res) => {
 }));
 const els = () => p.$$eval('#editor .ProseMirror > p', (ps) => ps.map((x) => `${x.dataset.el || 'action'}:${x.dataset.el === 'scene' ? x.textContent.toUpperCase() : x.textContent}`));
 // Clicks a line and waits for the editor to have the caret there.
+// On a busy machine a click can land while the editor is still redrawing
+// (a scene card just closed); click once more if the caret didn't follow.
 const clickOn = async (text) => {
+  const there = (timeout) => p.waitForFunction((t) => window.__editor.state.selection.$from.parent.textContent.includes(t), text, { timeout });
   await p.locator('#editor p', { hasText: text }).click();
-  await p.waitForFunction((t) => window.__editor.state.selection.$from.parent.textContent.includes(t), text);
+  try { await there(5000); } catch { await p.locator('#editor p', { hasText: text }).click(); await there(30000); }
 };
 const run = async (label) => {
   // Wait for the palette to have focus and fill it whole, so no typed letters
@@ -131,6 +134,17 @@ try {
     const rows = await els();
     assert.deepEqual(rows, ['scene:INT. BAKERY - MORNING', 'action:A letter slaps down beside the till.', 'scene:EXT. ALLEY - NIGHT', 'action:Night. Out in the alley, Kenji counts the coins.']);
     assert.equal(await p.locator('.wv-line').nth(1).getAttribute('data-status'), 'guess');
+  });
+
+  await check('while you write, the scroll bar goes clear (the wheel still scrolls); moving the mouse brings it back', async () => {
+    const bar = () => p.evaluate(() => getComputedStyle(document.documentElement).scrollbarColor);
+    await p.keyboard.type(' ');
+    await p.waitForFunction(() => document.body.classList.contains('typing'));
+    assert.equal(await bar(), 'rgba(0, 0, 0, 0) rgba(0, 0, 0, 0)');
+    await p.mouse.move(200, 200); await p.mouse.move(400, 400); await p.mouse.move(600, 500);
+    await p.waitForFunction(() => !document.body.classList.contains('typing'));
+    assert.notEqual(await bar(), 'rgba(0, 0, 0, 0) rgba(0, 0, 0, 0)');
+    await p.keyboard.press('Backspace');
   });
 
   await check('Enter after dialogue goes to the next name, then action; Tab makes a parenthetical', async () => {
@@ -232,6 +246,32 @@ try {
     const look = (await all()).find((e) => e.kind === 'project' && e.title === 'Rent Day').fields.look;
     assert.equal(look.preset, 'kungfu');
     assert.equal(look.titleColor, '#d8432f');
+    await p.locator('#page-done').click();
+  });
+
+  await check('name colour: a chip in Woven, its own in Classic (plain until picked), and Custom takes any colour', async () => {
+    const nameC = () => p.$eval('#editor p[data-el="character"]', (x) => getComputedStyle(x).color);
+    const ink = await p.evaluate(() => { const d = document.createElement('i'); d.style.color = 'var(--ink)'; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; });
+    await run('this script’s look');
+    await p.waitForSelector('.woven-names .wv-swatch', { state: 'visible' });
+    await p.locator('.woven-names .wv-swatch', { hasText: 'Green' }).click();
+    await p.waitForFunction(() => getComputedStyle(document.querySelector('#editor p[data-el="character"]')).color === 'rgb(90, 163, 107)');
+    await p.locator('.woven-names .wv-swatch', { hasText: 'Plain' }).click();
+    await p.waitForFunction((c) => getComputedStyle(document.querySelector('#editor p[data-el="character"]')).color === c, ink);
+    // Classic: plain to start with (Woven's pick stays Woven's).
+    await p.locator('[data-sv="classic"]').click();
+    await p.waitForFunction(() => !document.documentElement.classList.contains('woven'));
+    assert.equal(await nameC(), ink);
+    await p.locator('.woven-names .wv-custom input').evaluate((i) => { i.value = '#ff8800'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new Event('change')); });
+    await p.waitForFunction(() => getComputedStyle(document.querySelector('#editor p[data-el="character"]')).color === 'rgb(255, 136, 0)');
+    assert.equal(await p.locator('.woven-names .wv-custom').evaluate((x) => x.classList.contains('current')), true);
+    await sleep(800);
+    const f = (await all()).find((e) => e.kind === 'project' && e.title === 'Rent Day').fields;
+    assert.equal(f.classicNames, '#ff8800');
+    assert.equal(f.look.names, 'ink');
+    await p.locator('[data-sv="woven"]').click();
+    await p.waitForFunction(() => document.documentElement.classList.contains('woven'));
+    assert.equal(await nameC(), ink);
     await p.locator('#page-done').click();
   });
 
