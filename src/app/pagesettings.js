@@ -102,6 +102,10 @@ function togglePageSettings(tab = 'look') {
   panel.hidden = false;
   if (!touch.matches) panel.querySelector('.ps-tab[aria-selected="true"]')?.focus();
 }
+// The Aa button and Alt + L (Nov 20 2026): Look, opening where it helps most.
+// In a script, its Text tab (name colour, fonts, Woven look); elsewhere Look.
+// Again closes it.
+const lookHere = () => togglePageSettings(writing() && isScript() ? 'text' : 'look');
 
 // Display switches, per device: anything beyond the text can be turned off.
 const hidden = () => { try { return new Set(JSON.parse(localStorage.getItem('hide') || '[]')); } catch { return new Set(); } };
@@ -219,7 +223,7 @@ addCommands(() => [
   { group: 'view', label: 'Show or hide pictures on shared links', keys: '', run: () => setShown('linkpics', hidden().has('linkpics')) },
   { group: 'view', label: 'Progress: words and pages over time (stats)', keys: `${mod}⇧P`, run: () => progressPanel.open() },
   { group: 'view', label: 'Keyboard shortcuts (all the keys)', keys: `${mod}/`, run: toggleShortcuts },
-  { group: 'page', label: 'Look, page and text settings (Aa)', keys: '', words: ['look', 'looks', 'theme', 'themes', 'colour', 'colours', 'color', 'colors', 'dark', 'light', 'appearance', 'aa', 'settings', 'midnight', 'lamplight', 'ember', 'candle', 'night shift', 'graphite', 'typewriter', 'paper', 'motion', 'text size', 'font'], run: togglePageSettings },
+  { group: 'page', label: 'Look, page and text settings (Aa)', keys: 'Alt+L', words: ['look', 'looks', 'theme', 'themes', 'colour', 'colours', 'color', 'colors', 'dark', 'light', 'appearance', 'aa', 'settings', 'midnight', 'lamplight', 'ember', 'candle', 'night shift', 'graphite', 'typewriter', 'paper', 'motion', 'text size', 'font'], run: lookHere },
   { group: 'page', label: 'Wider page', keys: 'Alt+]', run: () => setPage(currentWidth() + 40, currentSize()) },
   { group: 'page', label: 'Narrower page', keys: 'Alt+[', run: () => setPage(currentWidth() - 40, currentSize()) },
   { group: 'page', label: 'Larger text', keys: 'Alt+=', run: () => setPage(currentWidth(), currentSize() + 1) },
@@ -257,4 +261,4 @@ function wirePageSettings() {
   $('#page-done').addEventListener('click', () => togglePageSettings());
 }
 
-export { currentSize, currentWidth, edgesQuietUntil, hidden, lookPanel, lookTab, progressPanel, setPage, setShown, step, toggleFocus, togglePageSettings, toggleReading, toggleSections, toggleShortcuts, wirePageSettings };
+export { currentSize, currentWidth, edgesQuietUntil, hidden, lookHere, lookPanel, lookTab, progressPanel, setPage, setShown, step, toggleFocus, togglePageSettings, toggleReading, toggleSections, toggleShortcuts, wirePageSettings };

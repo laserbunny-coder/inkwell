@@ -29,10 +29,9 @@ const settle = async (p) => {
   await p.waitForFunction(() => { document.activeElement?.blur(); return !document.body.classList.contains('kb-up') && !document.querySelector('.outline-bar')?.offsetParent && !document.querySelector('.script-bar')?.offsetParent; });
   await sleep(200);
 };
-// The Aa panel: the ruler's ⋯ > Look.
+// The Aa panel: the Aa button beside ⋯ (Look left the ⋯ menu Nov 20 2026).
 const look = async (p) => {
-  await p.locator('.zm-more').click();
-  await p.locator('.pop-menu .pop-item', { hasText: /^Look/ }).first().click();
+  await p.locator('.zm-aa').click();
   await p.waitForSelector('.page-settings', { state: 'visible' });
 };
 const toToday = async (p) => {

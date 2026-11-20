@@ -220,10 +220,30 @@ try {
     assert.equal(await p.locator('.zm-stop[data-stop="desk"].need').count(), 0);
   });
 
-  await check('More holds Look and every command (Focus went with the old layout)', async () => {
+  await check('More holds every command; Look has its own Aa button beside it, and Alt + L', async () => {
     await p.locator('.zm-more').click();
     const items = await p.locator('.pop-menu .pop-item').allInnerTexts();
-    assert.ok(!items.some((t) => /^Focus/.test(t)) && items.some((t) => /^Look/.test(t)) && items.some((t) => /command/.test(t)), items.join(' | '));
+    assert.ok(!items.some((t) => /^Focus/.test(t)) && !items.some((t) => /^Look/.test(t)) && items.some((t) => /command/.test(t)), items.join(' | '));
+    await p.keyboard.press('Escape');
+    // Aa sits right before ⋯, at full strength, and opens and closes the panel.
+    assert.equal(await p.evaluate(() => document.querySelector('.zm-aa')?.nextElementSibling?.classList.contains('zm-more')), true);
+    await p.locator('.zm-aa').click();
+    await p.waitForSelector('.page-settings', { state: 'visible' });
+    assert.equal(await p.locator('.zm-aa').getAttribute('aria-expanded'), 'true');
+    assert.equal(await p.evaluate(() => document.querySelector('.page-settings').dataset.tab), 'look');
+    await p.locator('.zm-aa').click();
+    await p.waitForSelector('.page-settings', { state: 'hidden' });
+    await p.keyboard.press('Alt+L');
+    await p.waitForSelector('.page-settings', { state: 'visible' });
+    await p.keyboard.press('Alt+L');
+    await p.waitForSelector('.page-settings', { state: 'hidden' });
+    // Ctrl + K still finds it, with its key.
+    await p.keyboard.press('Control+K');
+    await p.waitForFunction(() => document.activeElement?.id === 'palette-input');
+    await p.locator('#palette-input').fill('Look, page');
+    const row = p.locator('#palette-list li', { hasText: 'Look, page' }).first();
+    await row.waitFor();
+    assert.match(await row.innerText(), /Alt\s*\+?\s*L/);
     await p.keyboard.press('Escape');
   });
 
@@ -249,6 +269,7 @@ try {
     const n = await ph.locator('.zm-stop[data-stop="now"]').boundingBox();
     assert.ok(Math.abs(n.x + n.width / 2 - 412 / 2) <= 2, 'Now in the middle');
     assert.equal(await ph.locator('.topbar .zm-go').isVisible(), true);
+    assert.equal(await ph.locator('.topbar .zm-aa').isVisible(), true);
     const w = await ph.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
     assert.ok(w, 'no sideways scroll');
   });
