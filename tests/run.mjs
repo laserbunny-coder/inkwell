@@ -729,10 +729,18 @@ try {
     await p.keyboard.type('Script · The Harbour');
     await p.waitForFunction(() => document.querySelector('.palette[data-loaded]') && /^Script\s*chapter · The Harbour/.test(document.querySelector('#palette-list li.box-row')?.textContent || ''));
     await p.keyboard.press('Enter');
-    await p.waitForSelector('html.script #editor p[data-el="scene"]');
+    // New scripts open in Woven; this check is about the standard page, so switch it to Classic.
+    await p.waitForSelector('html.script.woven');
+    await sleep(300);
+    await p.keyboard.press('Control+K');
+    await p.waitForFunction(() => document.activeElement?.id === 'palette-input');
+    await p.locator('#palette-input').fill('Script view: Classic');
+    await p.locator('#palette-list li', { hasText: 'Script view: Classic' }).first().click();
+    await p.waitForSelector('html.script:not(.woven) #editor p[data-el="scene"]');
     await p.locator('#editor p[data-el="scene"]').click();
     await p.keyboard.type('int. lighthouse - night');
-    await p.keyboard.press('Enter');
+    // The script came with its first action line under the heading (made in Woven).
+    await p.keyboard.press('ArrowDown');
     await p.keyboard.type('Rain hits the glass.');
     await p.keyboard.press('Enter');
     await p.keyboard.type('MARA');
@@ -797,7 +805,14 @@ try {
     await ph.keyboard.type('Script · Pocket');
     await until('the list shows Script · Pocket', () => document.querySelector('.palette[data-loaded]') && /^Script\s*chapter · Pocket/.test(document.querySelector('#palette-list li.box-row')?.textContent || ''));
     await ph.locator('#palette-list li.box-row').first().click();
-    await ph.waitForSelector('html.script #editor p[data-el="scene"]');
+    // New scripts open in Woven; the element buttons are checked on the standard page.
+    await until('the new script opens in Woven', () => document.documentElement.classList.contains('woven'));
+    await sleep(300);
+    await ph.keyboard.press('Control+K');
+    await until('the box has the keys', () => document.activeElement?.id === 'palette-input');
+    await ph.locator('#palette-input').fill('Script view: Classic');
+    await ph.locator('#palette-list li', { hasText: 'Script view: Classic' }).first().click();
+    await ph.waitForSelector('html.script:not(.woven) #editor p[data-el="scene"]');
     await ph.locator('#editor p[data-el="scene"]').tap();
     await ph.waitForSelector('.script-bar', { state: 'visible' });
     assert.equal(await ph.locator('.script-bar button.current').innerText(), 'Scene');
