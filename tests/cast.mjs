@@ -107,6 +107,19 @@ try {
     await p.waitForFunction(() => window.__editor.state.selection.$from.parent.attrs.el === 'dialogue');
     await p.keyboard.type('Then sell the van.');
     assert.equal((await els()).at(-2), 'character:MOM (V.O.)');
+    // MOM just spoke, so on a new name line KENJI (who spoke before her) comes first.
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('KAITO');
+    await p.keyboard.press('Escape');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('He means it.');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('K');
+    await p.waitForFunction(() => !document.querySelector('.suggest').hidden);
+    assert.deepEqual(await shown(), ['KENJI', 'KAITO']);
+    await p.keyboard.press('Escape');
+    await p.keyboard.press('Backspace');
+    await p.keyboard.press('Enter');
   });
 
   await check('a name typed in capitals on an action line is offered too; Esc leaves what you typed', async () => {

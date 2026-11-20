@@ -177,12 +177,13 @@ async function namesFor(q, here) {
   const count = new Map(cast.count);
   for (const n of here) count.set(n, Math.max(count.get(n) || 0, 0) + 1);
   for (const n of cast.bible) if (!count.has(n)) count.set(n, 0);
-  // The one who spoke before the last speaker usually answers next.
+  // The one who spoke before the last speaker usually answers next, and the
+  // last speaker rarely speaks twice in a row.
   const last = here.at(-1);
   const answer = [...here].reverse().find((n) => n !== last);
   const all = [...count.keys()].filter((n) => n.startsWith(query) || n.split(/\s+/).some((w) => w.startsWith(query)));
   if (all.length === 1 && all[0] === query) return [];
-  all.sort((a, b) => (b.startsWith(query) - a.startsWith(query)) || ((b === answer) - (a === answer)) || (count.get(b) - count.get(a)) || a.localeCompare(b));
+  all.sort((a, b) => (b.startsWith(query) - a.startsWith(query)) || ((b === answer) - (a === answer)) || ((a === last) - (b === last)) || (count.get(b) - count.get(a)) || a.localeCompare(b));
   return all.filter((n) => n !== query).slice(0, 8).map((n) => ({ label: n, hint: count.get(n) ? '' : 'in the bible', insert: { name: n } }));
 }
 
