@@ -1,5 +1,5 @@
 import { Extension } from '@tiptap/core';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { byKind, topTags, putEntries, children } from './db.js';
 import { entry, newId } from './model.js';
 import { titleOf } from './notebook.js';
@@ -11,6 +11,10 @@ import { guessType } from './production.js';
 //        its project faintly, so two "Episode 1"s can be told apart);
 //  @     the characters and places of the project he is in (bible pages);
 //        outside a project, characters only.
+// And in a script, on a character line (Nov 20 2026): the names already
+// spoken in this project's scripts and its bible's characters, as screenplay
+// software does. Only this project's: never names from elsewhere in Inkwell.
+// Enter takes the name and goes on to the dialogue, Tab takes it and stays.
 // The caret never leaves the text (like the / menu). Up and Down move, Enter
 // or Tab takes, Esc closes and leaves what he typed. A space ends a # or @
 // word, so typing on always makes a new tag or plain words. On a phone the
@@ -77,7 +81,8 @@ async function biblePages(world) {
   return out;
 }
 
-async function itemsFor(kind, q) {
+async function itemsFor(kind, q, here) {
+  if (kind === 'cue') return namesFor(q, here || []);
   const c = await fresh(!q);
   const query = norm(q);
   const hit = (s) => !query || norm(s).includes(query);
@@ -133,6 +138,54 @@ document.body.append(box);
 // { host, items, index, kind, query, pick(item), anchor() → {left, top, bottom} }
 let shown = null;
 let turn = 0;
+// The names of one project (world): every character cue in its scripts, how
+// often each speaks, and its bible's characters. Kept a few seconds.
+const casts = new Map();
+const CONT = /\s*\((?:V\.?\s*O\.?|O\.?\s*S\.?|O\.?\s*C\.?|CONT['’]?D|CONTINUED|PRE-?LAP|FILTERED|ON PHONE|INTO PHONE|[^)]*)\)\s*$/i;
+export const cueName = (t) => {
+  let n = String(t || '').trim().replace(/^@/, '').replace(/\s*\^\s*$/, '');
+  for (let i = 0; i < 3 && CONT.test(n); i++) n = n.replace(CONT, '');
+  return n.trim().toUpperCase();
+};
+async function castOf(world) {
+  const had = casts.get(world.id);
+  if (had && Date.now() - had.at < 4000) return had;
+  const count = new Map();
+  const walk = async (pid, depth) => {
+    if (depth > 12) return;
+    for (const r of await children(pid)) {
+      if (r.deleted) continue;
+      if (r.kind === 'para') {
+        if (r.fields?.el === 'character') { const n = cueName(r.text); if (n) count.set(n, (count.get(n) || 0) + 1); }
+      } else if (['project', 'act', 'chapter'].includes(r.kind)) await walk(r.id, depth + 1);
+    }
+  };
+  await walk(world.id, 0);
+  const bible = (await biblePages(world)).filter((p) => p.type === 'character').map((p) => cueName(p.row.title)).filter(Boolean);
+  const cast = { at: Date.now(), count, bible };
+  casts.set(world.id, cast);
+  return cast;
+}
+
+// What a character line offers. `here`: the cues in the open script, in
+// order, without the line being typed (so a name not yet saved counts too).
+async function namesFor(q, here) {
+  const query = cueName(q);
+  if (!query) return [];
+  const world = await worldNow().catch(() => null);
+  const cast = world ? await castOf(world) : { count: new Map(), bible: [] };
+  const count = new Map(cast.count);
+  for (const n of here) count.set(n, Math.max(count.get(n) || 0, 0) + 1);
+  for (const n of cast.bible) if (!count.has(n)) count.set(n, 0);
+  // The one who spoke before the last speaker usually answers next.
+  const last = here.at(-1);
+  const answer = [...here].reverse().find((n) => n !== last);
+  const all = [...count.keys()].filter((n) => n.startsWith(query) || n.split(/\s+/).some((w) => w.startsWith(query)));
+  if (all.length === 1 && all[0] === query) return [];
+  all.sort((a, b) => (b.startsWith(query) - a.startsWith(query)) || ((b === answer) - (a === answer)) || (count.get(b) - count.get(a)) || a.localeCompare(b));
+  return all.filter((n) => n !== query).slice(0, 8).map((n) => ({ label: n, hint: count.get(n) ? '' : 'in the bible', insert: { name: n } }));
+}
+
 export const suggestOpen = (host) => !!shown && (!host || shown.host === host) && !box.hidden;
 
 function render() {
@@ -177,18 +230,18 @@ function hide() {
   turn++;
 }
 
-function take(i) {
+function take(i, how = 'click') {
   const s = shown;
   const it = s?.items[i];
   if (!it) return;
   hide();
-  s.pick(it);
+  s.pick(it, how);
 }
 
 // Shows what fits `kind`/`query` for `host`, unless something newer came first.
-async function offer(host, kind, query, pick, anchor) {
+async function offer(host, kind, query, pick, anchor, here) {
   const mine = ++turn;
-  const items = await itemsFor(kind, query).catch(() => []);
+  const items = await itemsFor(kind, query, here).catch(() => []);
   if (mine !== turn) return;
   if (!items.length) { if (shown?.host === host) hide(); return; }
   const same = shown?.host === host && shown.kind === kind && shown.query === query;
@@ -206,7 +259,7 @@ function keyed(e) {
     render();
     return true;
   }
-  if (e.key === 'Enter' || e.key === 'Tab') { take(shown.index); return true; }
+  if (e.key === 'Enter' || e.key === 'Tab') { take(shown.index, e.key); return true; }
   if (e.key === 'Escape') { hide(); return true; }
   return false;
 }
@@ -237,9 +290,19 @@ export const Suggest = Extension.create({
           const { $from, empty } = state.selection;
           if (!empty || !$from.parent.isTextblock) return { from: null, kind: null, query: '', dismissed: null };
           const before = $from.parent.textBetween(0, $from.parentOffset, null, '￼');
+          const el = $from.parent.attrs?.el;
+          // A character line in a script: the names of this project, as he types.
+          // An action line typed in capitals may be a name too (two letters on).
+          const capsAction = el === 'action' && /^[A-Z][A-Z0-9 .'’-]+$/.test(before) && $from.parentOffset === $from.parent.content.size;
+          if (isScript() && (el === 'character' || capsAction) && !/^\s*$/.test(before) && !/[#[]/.test(before)) {
+            const from = $from.start();
+            const dismissed = tr.getMeta(suggestKey) === 'dismiss' ? from : prev.dismissed === from ? from : null;
+            const typed = tr.docChanged && !tr.getMeta('preventUpdate');
+            const open = dismissed == null && (typed || (prev.from === from && prev.kind === 'cue' && !tr.selectionSet));
+            return { from: open ? from : null, kind: 'cue', query: before, dismissed };
+          }
           const m = triggerIn(before);
           if (!m) return { from: null, kind: null, query: '', dismissed: null };
-          const el = $from.parent.attrs?.el;
           // A script's scene heading takes #3# for its number; a line that starts
           // with @ in a script is Fountain's forced character name.
           if (isScript() && ((m.kind === 'tag' && el === 'scene') || (m.kind === 'who' && /^@/.test(before)))) return { from: null, kind: null, query: '', dismissed: null };
@@ -259,6 +322,31 @@ export const Suggest = Extension.create({
           if (st.from == null || !v.hasFocus()) { if (shown?.host === v) hide(); return; }
           const from = st.from;
           const to = v.state.selection.from;
+          if (st.kind === 'cue') {
+            // The cues already in this script, in order, leaving out this line.
+            const here = [];
+            const at = v.state.selection.$from.before();
+            v.state.doc.forEach((n, pos) => { if (pos !== at && n.attrs?.el === 'character' && n.textContent.trim()) here.push(cueName(n.textContent)); });
+            offer(v, 'cue', st.query, (it, how) => {
+              const { $from } = editor.state.selection;
+              const line = $from.parent;
+              if (!['character', 'action'].includes(line.attrs?.el)) return;
+              const at = $from.before();
+              const { state, view } = editor;
+              const tr = state.tr.setNodeMarkup(at, undefined, { ...line.attrs, el: 'character' });
+              tr.insertText(it.insert.name, $from.start(), $from.end());
+              const end = at + tr.doc.nodeAt(at).nodeSize;
+              if (how === 'Tab') tr.setSelection(TextSelection.create(tr.doc, end - 1));
+              else {
+                // Enter (or a tap) goes on to the words; Tab stays on the name, for a (V.O.).
+                tr.insert(end, state.schema.nodes.paragraph.create({ el: 'dialogue' }));
+                tr.setSelection(TextSelection.create(tr.doc, end + 1));
+              }
+              view.dispatch(tr.scrollIntoView());
+              view.focus();
+            }, () => v.coordsAtPos(from), here);
+            return;
+          }
           offer(v, st.kind, st.query, (it) => {
             const chain = editor.chain().focus().deleteRange({ from, to });
             if (it.insert.text) chain.insertContent(`${it.insert.text} `).run();
