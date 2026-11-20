@@ -153,7 +153,7 @@ function wovenPick() {
 
 let scenePop; // set in wireManuscript()
 
-// The card for the scene the caret is in (the same one the margin dot opens).
+// The card for the scene the caret is in (the same one a tap on the scene line opens).
 function sceneDetails() {
   const s = sceneAt(editor.state.doc, editor.state.selection.from);
   if (!s) return;

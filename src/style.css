@@ -203,14 +203,11 @@ body.notes-on .sheet { max-width: calc(var(--page-width, 660px) + 300px); paddin
 .wv-line.wv-top.untitled:hover .wv-title { visibility: visible; }
 :root.wv-tleft .wv-line { justify-content: flex-start; }
 :root.wv-tleft .wv-title { padding-left: 0; margin-left: 0; }
-.wv-dot { position: absolute; left: -30px; top: 50%; width: 9px; height: 9px; margin-top: -4.5px; padding: 0; border: 1.5px solid transparent; border-radius: 50%; background: var(--faint); opacity: .55; cursor: pointer; }
-.wv-dot::after { content: ''; position: absolute; inset: -8px; }
-.wv-dot:hover { opacity: 1; transform: scale(1.25); }
-.wv-line[data-status="guess"] .wv-dot { background: transparent; border-color: var(--faint); }
-.wv-line[data-status="missing"] .wv-dot { background: #d9a441; opacity: .9; }
-@media (--narrow) { .wv-dot { left: -16px; } }
-/* Quiet: Focus keeps the line only (titles too with Ctrl + Shift + .), and no dots. */
-:root.focus .wv-dot, :root.reading .wv-dot { display: none; }
+.wv-dot { position: absolute; left: 0; right: 0; top: 50%; height: 1.8em; margin-top: -.9em; padding: 0; border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
+.wv-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:root.script.woven .wv-line:hover::before { opacity: calc(var(--wv-line-o, .18) * 2); }
+/* Quiet: Focus keeps the line only (titles too with Ctrl + Shift + .); the line still opens its card. */
+:root.reading .wv-dot { display: none; }
 :root.focus:not(.focus-sections) .wv-title, :root.reading .wv-title, :root.hide-sections:not(.focus) .wv-title { visibility: hidden; }
 :root.focus.focus-sections .wv-line.untitled:not(:hover) .wv-title { opacity: .45; }
 /* A title is the section just above the hidden heading: drawn on the line, so the section itself hides. */

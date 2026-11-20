@@ -14,7 +14,7 @@ import { plain as make } from './dom.js';
 // The hidden heading is guessed from your words while you write ("Night. The
 // bakery is dark…" → INT. BAKERY - NIGHT), from the places in the world's
 // bible and the ones the script already uses. A guess is only ever a guess:
-// once you set a scene by hand (the dot in the margin, a slash mark, or by
+// once you set a scene by hand (the scene card, a slash mark, or by
 // typing the heading in Classic), it is yours and is never guessed again.
 //
 // Titles are the script's own lowest sections (a "Scene" section, level 3,
@@ -349,7 +349,8 @@ export function setMarker(editor, scenePos, marker) {
 
 const statusOf = (s, places) => (!s.node || !s.node.textContent.trim() ? 'missing' : missing(s.marker, places).length ? 'missing' : s.node.attrs.guess ? 'guess' : 'set');
 
-// The faint line, the title on it, and the dot in the margin.
+// The faint line and the title on it. A tap anywhere on the line opens the
+// scene card (Michael, Nov 20 2026: no dot in the margin, it was a distraction).
 function lineWidget(s, places, opts) {
   const status = statusOf(s, places);
   const code = s.node?.attrs.code || '';
@@ -609,7 +610,7 @@ export function redraw(editor) {
   editor.view.dispatch(editor.state.tr.setMeta(WOVEN, { redraw: true }).setMeta('addToHistory', false));
 }
 
-// ---------- the dot's card: place, time, kind, title ----------
+// ---------- the scene card (tap the line): place, time, kind, title ----------
 
 const titleCase = (s) => s.toLowerCase().replace(/(^|[\s\-/])(\p{L})/gu, (_m, a, b) => a + b.toUpperCase());
 

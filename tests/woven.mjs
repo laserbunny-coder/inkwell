@@ -162,8 +162,14 @@ try {
     assert.equal(where, 'A letter slaps down beside the till.');
   });
 
-  await check('the dot opens the scene card; picks stay open and write the heading', async () => {
-    await p.locator('.wv-line').nth(1).locator('.wv-dot').click();
+  await check('a tap on the scene line opens the scene card (no dot in the margin); picks stay open and write the heading', async () => {
+    // Nothing sits out in the margin any more: the line itself is what you tap.
+    const dot = await p.locator('.wv-line').nth(1).locator('.wv-dot').evaluate((d) => {
+      const r = d.getBoundingClientRect(), l = d.parentElement.getBoundingClientRect(), cs = getComputedStyle(d);
+      return { inside: r.left >= l.left - 1 && r.right <= l.right + 1, bg: cs.backgroundColor, border: cs.borderTopWidth };
+    });
+    assert.deepEqual(dot, { inside: true, bg: 'rgba(0, 0, 0, 0)', border: '0px' });
+    await p.locator('.wv-line').nth(1).click({ position: { x: 30, y: 10 } });
     await p.waitForSelector('.wv-pop', { state: 'visible' });
     await p.locator('.wv-pop .wv-chip', { hasText: 'Dusk' }).click();
     assert.equal(await p.locator('.wv-pop').isVisible(), true);
