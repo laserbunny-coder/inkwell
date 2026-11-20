@@ -324,6 +324,7 @@ function moreMenu() {
   const click = (sel) => () => document.querySelector(sel)?.click();
   const items = [
     ...(writingNow ? [{ label: 'Notes beside the text (Ctrl + 2)', run: click('#notes-toggle') }] : []),
+    ...(writingNow && root.classList.contains('woven') ? [{ label: 'Plan under every scene (Ctrl + Shift + Comma)', run: click('.pv-plan') }] : []),
     { label: 'Beside: a pane next to this (Ctrl + \\)', run: click('#beside-toggle') },
     'sep',
     { label: 'Every command (Ctrl + K)', run: () => { closeMenu(); document.querySelector('#palette-toggle')?.click(); } }

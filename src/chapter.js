@@ -119,12 +119,14 @@ export class ChapterStore {
       const claude = versions && node.attrs.pclaude?.length ? node.attrs.pclaude : null;
       const code = node.attrs.code || null;
       const guess = node.attrs.el === 'scene' && node.attrs.guess ? true : null;
+      // A Woven scene's summary lives on its heading paragraph.
+      const psyn = kind === 'para' && node.attrs.el === 'scene' && node.attrs.synopsis ? node.attrs.synopsis : null;
       // A section's depth (act, sequence, scene…) and its summary.
       const level = kind === 'scene' && node.attrs.level > 1 ? node.attrs.level : null;
       const synopsis = kind === 'scene' && node.attrs.synopsis ? node.attrs.synopsis : null;
       const same = (kind !== 'scene' || ((prev?.fields?.level || null) === level && (prev?.fields?.synopsis || null) === synopsis)) && prev && !prev.deleted && prev.sort === index && prev.kind === kind && prev.title === title && (prev.fields?.el || null) === el &&
         JSON.stringify(prev.fields?.versions || null) === JSON.stringify(versions) && (prev.fields?.pvi || 0) === pvi &&
-        JSON.stringify(prev.fields?.claude || null) === JSON.stringify(claude) && (prev.fields?.code || null) === code && (prev.fields?.guess || null) === guess &&
+        JSON.stringify(prev.fields?.claude || null) === JSON.stringify(claude) && (prev.fields?.code || null) === code && (prev.fields?.guess || null) === guess && (kind !== 'para' || el !== 'scene' || (prev.fields?.synopsis || null) === psyn) &&
         JSON.stringify(prev.content) === JSON.stringify(content) && prev.parent_id === chapter.id;
       if (same) return;
       const row = {
@@ -143,7 +145,13 @@ export class ChapterStore {
       delete row._by;
       if (kind === 'heading') row.fields = { ...row.fields, level: node.attrs.level };
       if (kind === 'scene') { const { level: _l, synopsis: _s, ...rest } = row.fields || {}; row.fields = { ...rest, ...(level ? { level } : {}), ...(synopsis ? { synopsis } : {}) }; }
-      if (kind === 'para') { const { el: _old, code: _c, guess: _g, ...rest } = row.fields || {}; row.fields = { ...rest, ...(el ? { el } : {}), ...(code ? { code } : {}), ...(guess ? { guess } : {}) }; }
+      if (kind === 'para') {
+        const { el: _old, code: _c, guess: _g, ...rest } = row.fields || {};
+        // Only a heading's summary is the editor's; any other paragraph's (the
+        // grid's opening rows) is kept as it was.
+        if (el === 'scene') delete rest.synopsis;
+        row.fields = { ...rest, ...(el ? { el } : {}), ...(code ? { code } : {}), ...(guess ? { guess } : {}), ...(psyn ? { synopsis: psyn } : {}) };
+      }
       // Other versions of this paragraph, kept with it but not part of the text.
       if (kind !== 'scene') { const { versions: _v, pvi: _i, claude: _cl, ...rest } = row.fields || {}; row.fields = versions ? { ...rest, versions, pvi, ...(claude ? { claude } : {}) } : rest; }
       // Showing a rewrite Claude suggested: these are Claude's words.
@@ -208,7 +216,7 @@ function toDoc(rows) {
     if (r.kind === 'scene') return { type: 'sceneBreak', attrs: { eid: r.id, title: r.title || '', level: r.fields?.level || 1, synopsis: r.fields?.synopsis || '' } };
     const versions = r.fields?.versions ? { versions: r.fields.versions, pvi: r.fields.pvi || 0, ...(r.fields.claude ? { pclaude: r.fields.claude } : {}) } : {};
     if (r.kind === 'heading') return { type: 'heading', attrs: { eid: r.id, level: r.fields?.level || 2, ...versions }, ...(r.content ? { content: r.content } : {}) };
-    return { type: 'paragraph', attrs: { eid: r.id, ...(r.fields?.el ? { el: r.fields.el } : {}), ...(r.fields?.code ? { code: r.fields.code } : {}), ...(r.fields?.guess ? { guess: true } : {}), ...versions }, ...(r.content ? { content: r.content } : {}) };
+    return { type: 'paragraph', attrs: { eid: r.id, ...(r.fields?.el ? { el: r.fields.el } : {}), ...(r.fields?.code ? { code: r.fields.code } : {}), ...(r.fields?.guess ? { guess: true } : {}), ...(r.fields?.el === 'scene' && r.fields?.synopsis ? { synopsis: r.fields.synopsis } : {}), ...versions }, ...(r.content ? { content: r.content } : {}) };
   });
   return { type: 'doc', content: content.length ? content : [{ type: 'paragraph' }] };
 }

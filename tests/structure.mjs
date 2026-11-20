@@ -175,7 +175,7 @@ try {
     await shot(laptop, 'script-sections');
   });
 
-  await check('## then space starts a sequence, ### a scene, and Tab in the name goes a level deeper', async () => {
+  await check('## then space starts a sequence (# a scene, ### an act), and Tab in the name goes a level deeper', async () => {
     await laptop.locator('#editor p[data-eid="pp_6"]').click();
     await laptop.keyboard.press('End');
     await laptop.keyboard.press('Enter');

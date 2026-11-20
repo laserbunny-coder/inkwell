@@ -1,5 +1,5 @@
 import { Extension } from '@tiptap/core';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 
 // Screenplays. A script is a chapter whose paragraphs each carry an element:
 // scene heading, action, character, parenthetical, dialogue or transition.
@@ -41,7 +41,7 @@ export function detect(text) {
 
 export const ScriptElements = Extension.create({
   name: 'scriptElements',
-  addOptions() { return { isScript: () => false }; },
+  addOptions() { return { isScript: () => false, isWoven: () => false, newScene: null }; },
   addGlobalAttributes() {
     return [{
       types: ['paragraph'],
@@ -87,6 +87,7 @@ export const ScriptElements = Extension.create({
   },
   addProseMirrorPlugins() {
     const isScript = () => this.options.isScript();
+    const options = this.options;
     return [new Plugin({
       key: new PluginKey('scriptElements'),
       props: {
@@ -95,12 +96,23 @@ export const ScriptElements = Extension.create({
           const { $from } = view.state.selection;
           const p = $from.parent;
           // "# " at the start of a line starts a section: your own name for a
-          // stretch of story, which can hold several INT./EXT. scenes. "## "
-          // starts one a level down (a sequence in an act), "### " further.
+          // stretch of story. Typing goes from the smallest up (Michael, Nov 20
+          // 2026): "# " a scene, "## " a sequence, "### " an act; four or more
+          // marks are levels below a scene. Fountain keeps its own marks.
           if (text === ' ' && p.type.name === 'paragraph' && /^#{1,6}$/.test(p.textContent) && $from.depth === 1) {
             const at = $from.before();
             const schema = view.state.schema;
-            const tr = view.state.tr.replaceWith(at, at + p.nodeSize, [schema.nodes.sceneBreak.create({ level: p.textContent.length }), schema.nodes.paragraph.create({ el: 'scene' })]);
+            const count = p.textContent.length;
+            const level = count === 1 ? 3 : count === 3 ? 1 : count;
+            // Woven: "# " is a new scene, its title waiting in the plan under its line.
+            if (level === 3 && options.isWoven()) {
+              const tr = view.state.tr.replaceWith(at, at + p.nodeSize, [schema.nodes.paragraph.create({ el: 'scene', guess: true }), schema.nodes.paragraph.create({ el: 'action' })]);
+              tr.setSelection(TextSelection.create(tr.doc, at + 3));
+              view.dispatch(tr.scrollIntoView());
+              options.newScene?.(at);
+              return true;
+            }
+            const tr = view.state.tr.replaceWith(at, at + p.nodeSize, [schema.nodes.sceneBreak.create({ level }), schema.nodes.paragraph.create({ el: 'scene' })]);
             view.dispatch(tr);
             requestAnimationFrame(() => view.nodeDOM(at)?.querySelector?.('input')?.focus());
             return true;

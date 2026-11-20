@@ -175,6 +175,14 @@ export function guessScene(text, prev, places) {
 
 // ---------- the scenes in a chapter ----------
 
+// A scene's summary: its heading's, and an older one on its title section
+// (from before Nov 20 2026, or typed in Classic). Both are kept: joined.
+export function summaryOf(heading, section) {
+  const a = (heading?.attrs.synopsis || '').trim();
+  const b = (section?.attrs.synopsis || '').trim();
+  return { synopsis: a && b && a !== b ? `${a} ${b}` : a || b, oldSynopsis: !!b };
+}
+
 // Each scene: where its hidden heading is (pos, node; null for the opening
 // stretch of a chapter that has none yet), its title section, its first words.
 export function scenesOf(doc) {
@@ -190,14 +198,14 @@ export function scenesOf(doc) {
     const para = node.type.name === 'paragraph';
     if (para && node.attrs.el === 'scene') {
       const t = titleBefore(k);
-      cur = { pos, node, eid: node.attrs.eid, at: pos, title: t?.node.attrs.title || '', titlePos: t ? t.pos : null, first: '', names: [], size: 0, text: '' };
+      cur = { pos, node, eid: node.attrs.eid, at: pos, title: t?.node.attrs.title || '', titlePos: t ? t.pos : null, first: '', names: [], size: 0, text: '', ...summaryOf(node, t?.node) };
       out.push(cur);
       return;
     }
     if (!cur) {
       if (!para || !node.textContent.trim()) return;
       const t = titleBefore(k);
-      cur = { pos: null, node: null, eid: null, at: pos, title: t?.node.attrs.title || '', titlePos: t ? t.pos : null, first: '', names: [], size: 0, text: '' };
+      cur = { pos: null, node: null, eid: null, at: pos, title: t?.node.attrs.title || '', titlePos: t ? t.pos : null, first: '', names: [], size: 0, text: '', ...summaryOf(null, t?.node) };
       out.push(cur);
     }
     if (!para) return;
@@ -341,6 +349,21 @@ export function setTitle(editor, scenePos, title) {
   editor.view.dispatch(tr);
 }
 
+// Writes a scene's summary on its heading and clears the title section's
+// copy (it was joined into what's shown, so nothing is lost).
+export function setSummary(editor, scenePos, text) {
+  const { state } = editor;
+  const t = (text || '').trim();
+  const node = state.doc.nodeAt(scenePos);
+  if (!isPara(node)) return;
+  const before = scenePos > 0 ? state.doc.resolve(scenePos).nodeBefore : null;
+  const sec = before?.type.name === 'sceneBreak' && (before.attrs.level || 1) >= TITLE_LEVEL ? before : null;
+  if ((node.attrs.synopsis || '') === t && !sec?.attrs.synopsis) return;
+  const tr = state.tr.setNodeMarkup(scenePos, undefined, { ...node.attrs, synopsis: t || null });
+  if (sec?.attrs.synopsis) tr.setNodeMarkup(scenePos - sec.nodeSize, undefined, { ...sec.attrs, synopsis: '' });
+  editor.view.dispatch(tr);
+}
+
 export function setMarker(editor, scenePos, marker) {
   const tr = writeSlug(editor.state.tr, scenePos, buildSlug(marker), false);
   tr.setMeta(WOVEN, { set: true });
@@ -349,37 +372,62 @@ export function setMarker(editor, scenePos, marker) {
 
 const statusOf = (s, places) => (!s.node || !s.node.textContent.trim() ? 'missing' : missing(s.marker, places).length ? 'missing' : s.node.attrs.guess ? 'guess' : 'set');
 
-// The faint line and the title on it. A tap anywhere on the line opens the
-// scene card (Michael, Nov 20 2026: no dot in the margin, it was a distraction).
+// The faint line, with three touch points on it (Michael, Nov 20 2026):
+// the left quarter turns titles on and off for the whole script, the middle
+// unfolds the scene's plan (title, summary, threads) and the right quarter
+// its notes (place and time, shots, directing notes, feedback). The line is
+// the same height with or without a title, so nothing jumps.
+// opts.plan (src/sceneplan.js) knows what's open and draws what unfolds.
+export const lineKey = (s) => s.eid || 'top';
 function lineWidget(s, places, opts) {
   const status = statusOf(s, places);
   const code = s.node?.attrs.code || '';
   const slug = s.node?.textContent || '';
-  const label = s.title ? `${code || s.n} · ${s.title}` : `${code || s.n} · name it`;
-  const key = `wv:${s.eid || `top${s.at}`}:${slug}:${s.title}:${s.n}:${status}:${code}:${s.marker.kind}`;
+  const plan = typeof opts.plan === 'function' ? opts.plan() : opts.plan;
+  const k = lineKey(s);
+  const open = !!plan?.isOpen(k);
+  const noted = !!plan?.notesOpen(k);
+  const titles = plan ? plan.titles() : true;
+  const n = code || s.n;
+  // Open: only the number (the title is in the plan). Titles off: a bare rule.
+  const label = open ? `${n}` : !titles ? '' : s.title ? `${n} · ${s.title}` : `${n} · name it`;
+  const key = `wv:${k}:${slug}:${open ? '' : s.title}:${s.n}:${status}:${code}:${s.marker.kind}:${open ? 1 : 0}${noted ? 1 : 0}${titles ? 1 : 0}:${open || noted ? plan.version(k) : ''}`;
   const make = () => {
     const dom = document.createElement('div');
-    dom.className = `wv-line${s.node ? '' : ' wv-top'}${s.title ? '' : ' untitled'}`;
+    dom.className = `wv-line${s.node ? '' : ' wv-top'}${s.title ? '' : ' untitled'}${open ? ' open' : ''}${noted ? ' noted' : ''}${label ? '' : ' bare'}`;
     dom.contentEditable = 'false';
     dom.dataset.status = status;
     dom.dataset.kind = s.marker.kind;
+    dom.dataset.key = k;
     if (s.eid) dom.dataset.eid = s.eid;
-    const dot = document.createElement('button');
-    dot.type = 'button';
-    dot.className = 'wv-dot';
-    dot.tabIndex = -1;
-    dot.setAttribute('aria-label', `Scene ${code || s.n}: ${slug || 'place and time not set'}. Change it`);
-    dot.title = slug || 'Place and time not set yet';
-    const title = document.createElement('button');
-    title.type = 'button';
+    const bar = document.createElement('div');
+    bar.className = 'wv-bar';
+    const zone = (cls, aria, tip, run) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `wv-zone ${cls}`;
+      b.tabIndex = -1;
+      b.setAttribute('aria-label', aria);
+      if (tip && !opts.touch?.()) b.title = tip;
+      b.addEventListener('mousedown', (e) => e.preventDefault());
+      b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); run(b); });
+      return b;
+    };
+    const ref = { eid: s.eid, at: s.at, key: k };
+    const mid = zone('m', `Scene ${n}${s.title ? `: ${s.title}` : ''}. ${open ? 'Fold its plan' : 'Open its plan'}`, open ? 'Fold the plan' : 'The plan for this scene: title, summary, threads', () => plan?.toggle(ref));
+    mid.setAttribute('aria-expanded', String(open));
+    const title = document.createElement('span');
     title.className = 'wv-title';
-    title.tabIndex = -1;
     title.textContent = label;
-    title.setAttribute('aria-label', s.title ? `Scene title: ${s.title}. Rename it` : 'Name this scene');
-    for (const b of [dot, title]) b.addEventListener('mousedown', (e) => e.preventDefault());
-    dot.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); opts.onDot?.({ eid: s.eid, at: s.at }, dot, false); });
-    title.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); opts.onDot?.({ eid: s.eid, at: s.at }, title, true); });
-    dom.append(dot, title);
+    mid.append(title);
+    bar.append(
+      mid,
+      zone('l', 'Scene titles on or off', 'Scene titles on or off (Ctrl + Shift + Period)', () => plan?.titlesFrom(ref)),
+      zone('r', `Notes for scene ${n}`, 'Notes for this scene: place and time, shots, directing notes, feedback', () => plan?.toggleNotes(ref))
+    );
+    dom.append(bar);
+    if (open && plan) dom.append(plan.planBlock(s));
+    if (noted && plan) dom.append(plan.notesBlock(s));
     return dom;
   };
   return Decoration.widget(s.node ? s.pos : s.at, make, { side: -1, key, ignoreSelection: true, stopEvent: () => true });
@@ -398,7 +446,7 @@ export const Woven = Extension.create({
   name: 'woven',
   priority: 110,
   addOptions() {
-    return { isWoven: () => false, busy: () => false, places: () => [], onDot: null, onBlocked: null };
+    return { isWoven: () => false, busy: () => false, places: () => [], onDot: null, onBlocked: null, plan: null, touch: null };
   },
   addGlobalAttributes() {
     return [{
@@ -409,6 +457,14 @@ export const Woven = Extension.create({
           keepOnSplit: false,
           parseHTML: (el) => (el.getAttribute('data-guess') ? true : null),
           renderHTML: (a) => (a.guess && a.el === 'scene' ? { 'data-guess': '1' } : {})
+        },
+        // A Woven scene's summary (the plan under its line) lives on its
+        // hidden heading, the scene's one anchor (Nov 20 2026).
+        synopsis: {
+          default: null,
+          keepOnSplit: false,
+          parseHTML: (el) => el.getAttribute('data-synopsis') || null,
+          renderHTML: (a) => (a.synopsis && a.el === 'scene' ? { 'data-synopsis': a.synopsis } : {})
         }
       }
     }];
@@ -625,7 +681,7 @@ export class ScenePop {
     this.el.hidden = true;
     document.body.append(this.el);
     this.ref = null;
-    document.addEventListener('mousedown', (e) => { if (!this.el.hidden && e.target.isConnected && !this.el.contains(e.target) && !e.target.closest?.('.wv-line')) this.close(); }, true);
+    document.addEventListener('mousedown', (e) => { if (!this.el.hidden && e.target.isConnected && !this.el.contains(e.target) && !e.target.closest?.('.wv-slug')) this.close(); }, true);
     this.el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); this.close(true); } });
   }
 
@@ -634,15 +690,14 @@ export class ScenePop {
 
   scene() { return this.ref ? findScene(this.editor.state.doc, this.ref) : null; }
 
-  open(ref, anchor, focusTitle = false) {
+  open(ref, anchor) {
     this.ref = ref;
     this.anchor = anchor;
     this.render();
     this.el.hidden = false;
     this.place();
     requestAnimationFrame(() => {
-      const f = focusTitle ? this.el.querySelector('.wv-pop-title') : this.el.querySelector('.wv-pop-place');
-      f?.focus(); if (focusTitle) f?.select();
+      if (!this.hooks.touch?.()) this.el.querySelector('.wv-pop-place')?.focus();
     });
   }
 
@@ -701,17 +756,11 @@ export class ScenePop {
     const el = this.el;
     el.replaceChildren();
     const head = make('div', 'wv-pop-head');
-    head.append(make('span', 'wv-pop-n', `Scene ${s.node?.attrs.code || s.n}`), make('span', 'wv-pop-slug', s.node?.textContent || 'Place and time not set yet'));
+    head.append(make('span', 'wv-pop-n', `Scene ${s.node?.attrs.code || s.n}${s.title ? ` · ${s.title}` : ''}`), make('span', 'wv-pop-slug', s.node?.textContent || 'Place and time not set yet'));
     if (s.node?.attrs.guess) head.append(make('span', 'wv-pop-guess', 'guessed from your words'));
     el.append(head);
 
-    const title = make('input', 'wv-pop-title');
-    title.placeholder = 'Title (only you see it)';
-    title.setAttribute('aria-label', 'Scene title');
-    title.value = s.title;
-    title.addEventListener('change', () => { if (title.value.trim() === (this.scene()?.title || '')) return; const p = this.pos(); if (p !== null) setTitle(this.editor, p, title.value); });
-    title.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); title.dispatchEvent(new Event('change')); this.close(true); } });
-    el.append(title);
+    // The title moved to the plan under the line (Nov 20 2026).
 
     const chips = (label, items, cur, pick) => {
       const row = make('div', 'wv-pop-row');
