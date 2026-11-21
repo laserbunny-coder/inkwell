@@ -6,7 +6,7 @@ import { onContextMenu } from '../menu.js';
 import { outline } from '../model.js';
 import { titleOf, dayId } from '../notebook.js';
 import { inPane, PANE_ID, host as paneHost } from '../panes.js';
-import { areas, books, hasManuscript, areaColor, pagesIn, loosePages, bookOf, worlds, worldOf, worldTree } from '../library.js';
+import { areas, books, bookType, hasManuscript, areaColor, pagesIn, loosePages, bookOf, worlds, worldOf, worldTree } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday } from '../dates.js';
 import { $, editor, inNotebook, isScript, root, sectionNames, state, view } from '../main.js';
@@ -383,7 +383,9 @@ async function pieceCrumb(link) {
   const v = view();
   const here = v === 'stage' ? { gather: 'Ideas for this', revise: 'Drafts and notes', shape: 'Develop' }[state.stage?.page] || PAGE_NAMES[state.stage?.page] || ''
     : v === 'production' ? 'Shots' : v === 'deliver' ? 'Share and post' : v === 'compare' ? 'Compare'
-    : inNotebook() && notebook.page?.kind === 'page' ? notebook.page.title || 'Untitled page' : '';
+    : inNotebook() && notebook.page?.kind === 'page' ? notebook.page.title || 'Untitled page'
+    // A novel's chapter names where you are in it (a script's one chapter needn't).
+    : v === 'write' && bookType(at.piece) !== 'screenplay' && state.chapterId ? (await getEntry(state.chapterId))?.title || '' : '';
   return here ? [back, link(here, () => {}, 'here')] : [back];
 }
 
