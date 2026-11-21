@@ -41,7 +41,13 @@ export function levelsFor(owner, info) {
     const names = owner.fields?.levels || ['Act', 'Chapter', 'Scene'];
     out.push({ id: 'act', label: plural(names[0] || 'Act') }, { id: 'chapter', label: plural(names[1] || 'Chapter') }, { id: 'scene', label: plural(names[2] || 'Scene') });
   }
-  if (type === 'screenplay' && info.hasManuscript) {
+  if (type === 'screenplay' && info.hasManuscript && owner.fields?.woven) {
+    // Woven (Nov 20 2026): one row per scene, anchored on its hidden heading,
+    // named by its title; acts and sequences can be rows too.
+    const names = owner.fields?.sections || SECTION_NAMES;
+    for (const l of [1, 2]) if (info.sectionLevels?.has(l)) out.push({ id: `s${l}`, label: plural(sectionName(l, names)) });
+    out.push({ id: 'wscene', label: plural(sectionName(3, names)) });
+  } else if (type === 'screenplay' && info.hasManuscript) {
     const names = owner.fields?.sections || SECTION_NAMES;
     for (let l = 1; l <= Math.max(1, info.deepest); l++) out.push({ id: `s${l}`, label: plural(sectionName(l, names)) });
     out.push({ id: 'slug', label: 'Scene headings' });
@@ -59,13 +65,15 @@ export async function loadStructure(owner) {
   // What's inside each piece, so notes anywhere in an episode show in its row.
   for (const p of pieces) p.inside = await descendants(p.id);
   let deepest = 0;
-  for (const act of acts) for (const ch of act.chapters) for (const r of ch.rows) if (r.kind === 'scene') deepest = Math.max(deepest, r.fields?.level || 1);
+  const sectionLevels = new Set();
+  for (const act of acts) for (const ch of act.chapters) for (const r of ch.rows) if (r.kind === 'scene') { deepest = Math.max(deepest, r.fields?.level || 1); sectionLevels.add(r.fields?.level || 1); }
   const labels = [...new Set(pieces.map((p) => kindName(p)))];
   return {
     acts,
     pieces,
     hasManuscript: acts.some((a) => a.chapters.length),
     deepest,
+    sectionLevels,
     pieceLabel: pieces.length && labels.length === 1 ? plural(labels[0]) : 'Pieces'
   };
 }
@@ -147,6 +155,7 @@ export function rowsAt(level, st, owner) {
     }
     return out;
   }
+  if (level === 'wscene') { wovenRows(st, owner, row, group); return out; }
   // A script: its sections at one depth are the rows, shallower ones head
   // groups of them, deeper ones are inside a row.
   const names = owner.fields?.sections || SECTION_NAMES;
@@ -177,6 +186,48 @@ export function rowsAt(level, st, owner) {
     cur.span.push(r.id);
   }
   return out;
+}
+
+// A Woven script's scenes: each hidden scene heading starts a row (its one
+// anchor: summary and thread lines live there), named by the title section
+// just above it, or its number and first words. Acts and sequences head
+// groups. The title section moves with its scene.
+function wovenRows(st, owner, row, group) {
+  const names = owner.fields?.sections || SECTION_NAMES;
+  const rows = [];
+  let cur = null;
+  let title = null; // a scene's title section, waiting for its heading
+  let n = 0;
+  const words = (t) => { const w = (t || '').trim().split(/\s+/).slice(0, 6).join(' '); return w.length > 48 ? `${w.slice(0, 47)}…` : w; };
+  for (const act of st.acts) for (const ch of act.chapters) for (const r of ch.rows) {
+    const sec = r.kind === 'scene' ? r.fields?.level || 1 : 0;
+    if (sec && sec < 3) {
+      group({ id: r.id, kind: 'section', depth: sec, title: r.title || `Untitled ${sectionName(sec, names).toLowerCase()}`, entry: r, chapterId: ch.id });
+      cur = null;
+      title = null;
+      continue;
+    }
+    if (sec) { title = r; continue; }
+    if (r.kind === 'para' && r.fields?.el === 'scene') {
+      n += 1;
+      const a = (r.fields?.synopsis || '').trim();
+      const b = (title?.fields?.synopsis || '').trim();
+      cur = row({ id: r.id, kind: 'scene', entry: r, n, title: title?.title || '', untitled: !title?.title, code: r.fields?.code || null, synopsis: a && b && a !== b ? `${a} ${b}` : a || b, ...(b ? { clearSynopsis: title.id } : {}), chapterId: ch.id, members: [...(title ? [title.id] : []), r.id], span: [...(title ? [title.id] : []), r.id] });
+      rows.push(cur);
+      title = null;
+      continue;
+    }
+    if (title && cur) { cur.members.push(title.id); cur.span.push(title.id); }
+    title = null;
+    if (!cur) {
+      if (!(r.text || '').trim()) continue;
+      cur = row({ id: r.id, kind: 'opening', entry: r, title: words(r.text) || 'Opening', opening: true, movable: false, synopsis: r.fields?.synopsis || '', chapterId: ch.id, members: [], span: [] });
+    }
+    if (cur.untitled && !cur.first && r.kind === 'para' && (r.text || '').trim()) cur.first = words(r.text);
+    cur.members.push(r.id);
+    cur.span.push(r.id);
+  }
+  for (const r of rows) r.title = `${r.code ? '' : `${r.n} · `}${r.title || r.first || 'name it'}`;
 }
 
 // ---------- reading a thread down its column ----------
@@ -343,7 +394,7 @@ export class PlotGrid {
     const st = await loadStructure(owner);
     const levels = levelsFor(owner, st);
     const wanted = pref(LEVEL_KEY(owner.id), null);
-    const fallback = levels.find((l) => l.id === 'chapter') || levels.filter((l) => /^s\d$/.test(l.id)).at(-1) || levels[0];
+    const fallback = levels.find((l) => l.id === 'chapter' || l.id === 'wscene') || levels.filter((l) => /^s\d$/.test(l.id)).at(-1) || levels[0];
     this.level = levels.some((l) => l.id === wanted) ? wanted : fallback?.id || null;
     this.world = owner.kind === 'world' ? owner : await worldOf(owner);
     const allThreads = await threadsOf(this.world);
@@ -745,7 +796,11 @@ export class PlotGrid {
     const fresh = await getEntry(r.id);
     if (!fresh) return;
     const { synopsis: _s, ...fields } = fresh.fields || {};
-    await putEntries([{ ...fresh, fields: text ? { ...fields, synopsis: text } : fields, updated_at: Date.now() }]);
+    const rows = [{ ...fresh, fields: text ? { ...fields, synopsis: text } : fields, updated_at: Date.now() }];
+    // A Woven scene's older summary on its title section was joined into this one.
+    const old = r.clearSynopsis && (await getEntry(r.clearSynopsis));
+    if (old?.fields?.synopsis) { const { synopsis: _o, ...f } = old.fields; rows.push({ ...old, fields: f, updated_at: Date.now() }); r.clearSynopsis = null; }
+    await putEntries(rows);
     r.synopsis = text;
     this.hooks.changed([fresh]);
     if (this.stale) this.render();

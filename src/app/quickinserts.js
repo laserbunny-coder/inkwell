@@ -27,7 +27,7 @@ import { touch } from './scriptbar.js';
 import { currentEditor, notebook } from './notebookview.js';
 import { go, newPageHere, openEntry, paneStep, setBesideUntil } from './routing.js';
 import { applyRemote, conflicts, sync } from './syncwiring.js';
-import { markScene, newAct, newChapter, sceneDetails, toggleNumbering } from './manuscript.js';
+import { markScene, newAct, newChapter, sceneDetails, scenePlan, steadyTitles, toggleNumbering } from './manuscript.js';
 import { KINDS, addPiece, bookMenu, refreshViews, setKind, setLife, worldMenu } from './tidying.js';
 import { printCurrent, toggleCompare, toggleFreshEyes } from './revising.js';
 import { toggleGrid, toggleProduction } from './productionwiring.js';
@@ -542,7 +542,9 @@ function wireQuickInserts() {
     if (paneKeys(e, m)) return;
     // Ctrl + K: the box; again while it's open and empty, All commands.
     if (m && !e.shiftKey && k === 'k') { e.preventDefault(); if ($('.palette').hidden) openBox({ find: true }); else if (boxOpen() && !box.all && !$('#palette-input').value) box.setAll(true); else closePalette(); }
-    else if (m && e.shiftKey && !e.altKey && e.code === 'Period') { e.preventDefault(); toggleSections(); }
+    else if (m && e.shiftKey && !e.altKey && e.code === 'Period') { e.preventDefault(); if (writing() && isWoven()) steadyTitles(); else toggleSections(); }
+    // Ctrl + Shift + Comma: the plan under every scene, open or folded.
+    else if (m && e.shiftKey && !e.altKey && e.code === 'Comma' && writing() && isWoven()) { e.preventDefault(); scenePlan.toggleAll(); }
     else if (m && !e.shiftKey && !e.altKey && e.code === 'Backslash') { e.preventDefault(); toggleBesidePane(); }
     // Alt + T: talk it through with Claude, beside where you are.
     else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyT') { e.preventDefault(); openTalk(); }

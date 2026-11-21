@@ -409,3 +409,29 @@ html.zoom #wh-stagebar[hidden] { display: none; }
 .zl-area-more { position: absolute; top: -6px; right: 0; width: 26px; height: 26px; font-size: 15px; opacity: 0; }
 .zl-area:is(:hover, :focus-within) > .zl-area-more { opacity: .8; }
 @media (hover: none) { .zl-row > .more-btn, .zl-area-more { opacity: .55; } }
+
+/* ---------- the top of a piece: Write · Grid, and Plan (app/pieceswitch.js) ---------- */
+.pv-switch { display: inline-flex; align-items: center; gap: 6px; flex: none; margin-right: 4px; }
+.pv-switch[hidden] { display: none; }
+.pv-seg { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 2px; gap: 2px; }
+.pv-seg button { border: 0; background: transparent; color: var(--muted); font: 13px var(--ui); padding: 4px 10px; border-radius: 7px; cursor: pointer; }
+.pv-seg button:hover { color: var(--ink); }
+.pv-seg button[aria-pressed="true"] { background: var(--raise); color: var(--ink); }
+.pv-plan { border: 1px solid var(--line); background: transparent; color: var(--muted); font: 13px var(--ui); padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+.pv-plan:hover { color: var(--ink); }
+.pv-plan[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--tint); }
+.pv-plan[hidden] { display: none; }
+@media (--narrow), (--touch) {
+  /* On the phone the switch takes the date's place in a piece. */
+  html.zoom .topbar.has-switch > .zm-when { display: none; }
+  html.zoom .topbar > .pv-switch { order: 1; margin-right: auto; }
+  .pv-seg button, .pv-plan { padding: 6px 10px; }
+}
+
+/* ---------- stepping aside while reading: scroll down and the bars slide away ---------- */
+html.zoom body.scroll-away.in-piece:not(.peek-top) .topbar, html.zoom.has-rail body.scroll-away.in-piece:not(.peek-top) .topbar { transform: translateY(-105%) !important; pointer-events: none; transition: transform .2s ease; }
+html.zoom body.in-piece .topbar { transition: transform .2s ease, opacity var(--t2, .24s) ease; }
+html.zoom body.scroll-away.in-piece:not(.peek-bottom) .zm-ruler { transform: translateY(105%); pointer-events: none; }
+html.zoom .zm-ruler { transition: transform .2s ease, opacity var(--t2, .24s) ease; }
+html.zoom body.scroll-away.in-piece .zm-mic { opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { html.zoom body.in-piece .topbar, html.zoom .zm-ruler { transition: none; } }

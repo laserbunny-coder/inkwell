@@ -168,6 +168,7 @@ export const INFO = [
   { l: 'Hide done tasks (or show them again, where they were)', g: 'plan', h: 'Ticked tasks stay where they were in your order; this puts them out of sight, under a faint “3 done” line.', w: ['done', 'completed', 'checked', 'ticked', 'finished', 'hide', 'clean', 'minimal', 'declutter'], at: ['today', 'plan', 'world'] },
   { l: 'Show or hide pictures on shared links', g: 'view', h: 'The preview pictures on links you’ve saved.', w: ['previews', 'images', 'thumbnails', 'links'] },
   { l: 'Show or hide scene numbers', g: 'view', h: 'The production numbers beside scenes.', w: ['scene numbers', 'codes'], n: N.script },
+  { l: 'Plan under every scene (open or fold them all)', g: 'view', h: 'Each scene’s title, summary and story threads, under its line (Woven).', w: ['plan', 'summary', 'threads', 'outline', 'scenes', 'fold'], n: N.script },
   { l: 'Show or hide section titles', g: 'view', h: 'Your own section headings in a script, and their summaries.', w: ['sections', 'headings', 'acts'], n: N.script },
   { l: 'Show or hide Claude’s notes in the margin', g: 'view', h: 'Claude’s notes beside the text.', w: ['claude', 'notes', 'margin', 'feedback'] },
   { l: 'Show or hide readers’ comments in the margin', g: 'view', h: 'Comments from people you shared a link with.', w: ['comments', 'readers', 'feedback', 'margin'] },

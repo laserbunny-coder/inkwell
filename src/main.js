@@ -93,7 +93,8 @@ import { wireScriptBar } from './app/scriptbar.js';
 import { notebook, wireNotebook } from './app/notebookview.js';
 import { go, lastChapterAnywhere, openEntry, phoneAway, setHistoryMode, wireRouting } from './app/routing.js';
 import { applyRemote, conflicts, migrateOnce, seedIfEmpty, seedNow, sync, wireSync } from './app/syncwiring.js';
-import { biblePlaces, connectScribe, numbering, refreshWords, scenePop, wireManuscript } from './app/manuscript.js';
+import { wirePieceSwitch } from './app/pieceswitch.js';
+import { biblePlaces, connectScribe, numbering, refreshWords, scenePlan, scenePop, wireManuscript } from './app/manuscript.js';
 import { scheduleScenes, wireRail } from './app/rail.js';
 import './app/tidying.js';
 import { wireLibraryView } from './app/libraryview.js';
@@ -123,9 +124,9 @@ const extensions = [
   StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false, bulletList: false, orderedList: false, listItem: false, listKeymap: false, blockquote: false }), EntryIds, SceneBreak.configure({ names: () => sectionNames() }), AltMark, ParagraphVersions,
   EntryRef.configure({ onPick: openPicker, onOpen: openEntry }),
   TagMarks.configure({ onTag: (t) => notebook.showTag(t) }),
-  ScriptElements.configure({ isScript: () => isScript() }),
+  ScriptElements.configure({ isScript: () => isScript(), isWoven: () => isWoven(), newScene: (at) => scenePlan?.openTitle(at) }),
   SceneCodes.configure({ numbering: () => (isScript() && state.project?.fields?.numbered ? numbering : null) }),
-  Woven.configure({ isWoven: () => isWoven(), busy: (v) => slashOpen(v) || suggestOpen(v), places: (doc) => placeList(biblePlaces, doc), onDot: (ref, anchor, title) => scenePop.open(ref, anchor, title), onBlocked: (m) => toast(m) }),
+  Woven.configure({ isWoven: () => isWoven(), busy: (v) => slashOpen(v) || suggestOpen(v), places: (doc) => placeList(biblePlaces, doc), onDot: (ref, anchor) => scenePop.open(ref, anchor), onBlocked: (m) => toast(m), plan: () => scenePlan, touch: () => matchMedia('(pointer: coarse)').matches }),
   FileEmbed.configure({ onTooBig: tooBig }), SlashMenu, Suggest.configure({ isScript: () => isScript() })
 ];
 const isScript = () => root.classList.contains('script');
@@ -255,6 +256,7 @@ wireRouting();
 wireSync();
 
 wireManuscript();
+  wirePieceSwitch();
 
 wireRail();
 

@@ -112,7 +112,14 @@ export class NotesLayer {
     this.layout();
   }
 
-  hides(note) { return !!note.fields?.resolved || this.skip(note); }
+  hides(note) { return !!note.fields?.resolved || this.skip(note) || this.underLine(note); }
+
+  // A thread line on a Woven scene's hidden heading lives in the plan under
+  // the scene line (src/sceneplan.js), not in the margin.
+  underLine(note) {
+    if (!note.fields?.thread || !document.documentElement.classList.contains('woven')) return false;
+    return this.editor.view.dom.querySelector(`p[data-eid="${CSS.escape(note.parent_id)}"]`)?.dataset.el === 'scene';
+  }
 
   // A reader's comment from a share link: their words (not editable), the
   // replies, and a way to answer or resolve it.

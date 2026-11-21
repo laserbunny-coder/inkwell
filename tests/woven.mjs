@@ -176,24 +176,38 @@ try {
     assert.equal(where, 'A letter slaps down beside the till.');
   });
 
-  await check('a tap on the scene line opens the scene card (no dot in the margin); picks stay open and write the heading', async () => {
-    // Nothing sits out in the margin any more: the line itself is what you tap.
-    const dot = await p.locator('.wv-line').nth(1).locator('.wv-dot').evaluate((d) => {
-      const r = d.getBoundingClientRect(), l = d.parentElement.getBoundingClientRect(), cs = getComputedStyle(d);
-      return { inside: r.left >= l.left - 1 && r.right <= l.right + 1, bg: cs.backgroundColor, border: cs.borderTopWidth };
+  await check('the scene line has three touch points: the right end’s place and time open the scene card; the middle names the scene', async () => {
+    // Nothing sits out in the margin: the line itself is what you tap, in three parts.
+    const zones = await p.locator('.wv-line').nth(1).evaluate((l) => {
+      const bar = l.querySelector('.wv-bar').getBoundingClientRect();
+      return ['l', 'm', 'r'].map((k) => { const r = l.querySelector(`.wv-zone.${k}`).getBoundingClientRect(); return Math.round(((r.left - bar.left) / bar.width) * 100) + ':' + Math.round((r.width / bar.width) * 100); });
     });
-    assert.deepEqual(dot, { inside: true, bg: 'rgba(0, 0, 0, 0)', border: '0px' });
-    await p.locator('.wv-line').nth(1).click({ position: { x: 30, y: 10 } });
+    assert.deepEqual(zones, ['0:25', '25:50', '75:25']);
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.r').click();
+    await p.waitForSelector('.wv-notes .wv-slug');
+    await p.locator('.wv-notes .wv-slug').click();
     await p.waitForSelector('.wv-pop', { state: 'visible' });
     await p.locator('.wv-pop .wv-chip', { hasText: 'Dusk' }).click();
     assert.equal(await p.locator('.wv-pop').isVisible(), true);
     await p.locator('.wv-pop .wv-chip', { hasText: 'Continuous' }).click();
     await p.locator('.wv-pop').getByRole('button', { name: 'Cut', exact: true }).click();
     await p.locator('.wv-pop .wv-chip', { hasText: 'Night' }).click();
-    await p.locator('.wv-pop-title').fill('Counting the coins');
+    assert.equal(await p.locator('.wv-pop-title').count(), 0, 'the title lives in the plan now');
     await p.locator('.wv-pop-done').click();
     await p.waitForFunction(() => document.querySelector('.wv-pop').hidden);
     assert.equal((await els())[2], 'scene:EXT. ALLEY - NIGHT');
+    assert.match(await p.locator('.wv-notes .wv-slug').innerText(), /EXT\. ALLEY - NIGHT/i);
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.r').click();
+    await p.waitForFunction(() => !document.querySelector('.wv-notes'));
+    // The middle: the plan, with the title in it.
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.m').click();
+    await p.waitForSelector('.wv-plan .wv-p-title');
+    await p.locator('.wv-plan .wv-p-title').fill('Counting the coins');
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => document.activeElement?.classList.contains('wv-p-sum'));
+    await p.keyboard.press('Escape');
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.m').click();
+    await p.waitForFunction(() => !document.querySelector('.wv-plan'));
     await p.waitForFunction(() => document.querySelectorAll('.wv-line')[1]?.textContent.includes('Counting the coins'));
     assert.equal(await p.locator('.wv-line').nth(1).getAttribute('data-status'), 'set');
     // Set by hand: rewriting the first words no longer moves it.
@@ -275,6 +289,158 @@ try {
     await p.waitForFunction(() => document.documentElement.classList.contains('woven'));
     assert.equal(await nameC(), ink);
     await p.locator('#page-done').click();
+  });
+
+  await check('the plan under the line: a summary on the heading, an old one joined, threads made and marked, not in the margin', async () => {
+    // An older summary on the title section (from the grid, or Classic) shows, joined with the heading's.
+    const sec = (await all()).find((e) => e.kind === 'scene' && e.title === 'Counting the coins');
+    await p.evaluate((id) => {
+      const ed = window.__editor;
+      let at = null;
+      ed.state.doc.forEach((n, pos) => { if (n.attrs.eid === id) at = pos; });
+      ed.view.dispatch(ed.state.tr.setNodeMarkup(at, undefined, { ...ed.state.doc.nodeAt(at).attrs, synopsis: 'Kenji counts.' }));
+    }, sec.id);
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.m').click();
+    await p.waitForSelector('.wv-plan .wv-p-sum');
+    assert.equal(await p.locator('.wv-plan .wv-p-sum').inputValue(), 'Kenji counts.');
+    // While open, the line shows only the number.
+    assert.equal((await p.locator('.wv-line').nth(1).locator('.wv-title').innerText()).trim(), '2');
+    await p.locator('.wv-plan .wv-p-sum').fill('Kenji counts the coins. It is not enough.');
+    await p.keyboard.press('Enter');
+    await sleep(900);
+    const heading = (await all()).find((e) => e.kind === 'para' && e.fields?.el === 'scene' && /ALLEY/i.test(e.text) && !e.deleted);
+    assert.equal(heading.fields.synopsis, 'Kenji counts the coins. It is not enough.');
+    assert.ok(!(await all()).find((e) => e.id === sec.id).fields.synopsis, 'the title section’s copy was cleared');
+    // + thread, + New thread: a thread is made and its line added here, caret in it.
+    await p.locator('.wv-plan .wv-addb', { hasText: '+ thread' }).click();
+    await p.locator('.wv-plan .wv-tchip.new').click();
+    await p.keyboard.type('Saving the bakery');
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => document.activeElement?.classList.contains('wv-bt'));
+    await p.keyboard.type('He decides to raise it himself');
+    await p.locator('.wv-plan .wv-beat .wv-mk').click();
+    assert.equal(await p.locator('.wv-plan .wv-beat .wv-mk').innerText(), '◇');
+    await sleep(900);
+    const rows = await all();
+    const thread = rows.find((e) => e.kind === 'thread' && e.title === 'Saving the bakery');
+    assert.ok(thread, 'the thread was made in the world');
+    const line = rows.find((e) => e.kind === 'note' && e.fields?.thread === thread.id && !e.deleted);
+    assert.equal(line.parent_id, heading.id);
+    assert.equal(line.fields.beat, 'promise');
+    assert.equal(line.text, 'He decides to raise it himself');
+    // Not drawn in the margin as well.
+    await p.keyboard.press('Control+2');
+    await sleep(300);
+    assert.equal(await p.locator(`.note[data-note="${line.id}"]`).count(), 0);
+    await p.keyboard.press('Control+2');
+    // × takes it away, with Undo.
+    await p.locator('.wv-plan .wv-beat .wv-x').click();
+    await p.waitForFunction(() => !document.querySelector('.wv-plan .wv-beat'));
+    await p.locator('.toast button', { hasText: 'Undo' }).click();
+    await p.waitForSelector('.wv-plan .wv-beat');
+    // An existing thread is a chip.
+    await p.locator('.wv-plan .wv-addb', { hasText: '+ thread' }).click();
+    assert.deepEqual(await p.locator('.wv-plan .wv-tchip:not(.new)').allInnerTexts(), ['Saving the bakery']);
+    await p.locator('.wv-plan .wv-addb', { hasText: 'Done' }).click();
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.m').click();
+    await p.waitForFunction(() => !document.querySelector('.wv-plan'));
+  });
+
+  await check('the right end: notes for the scene, + note in your own category', async () => {
+    await p.locator('.wv-line').nth(0).locator('.wv-zone.r').click();
+    await p.waitForSelector('.wv-notes');
+    assert.match(await p.locator('.wv-notes .wv-slug').innerText(), /INT\. BAKERY - MORNING/i);
+    await p.locator('.wv-notes .wv-addb').click();
+    await p.waitForFunction(() => document.activeElement?.closest('.wv-note'));
+    await p.keyboard.type('Hold on the red stamp');
+    await sleep(900);
+    const n = (await all()).find((e) => e.kind === 'note' && e.text === 'Hold on the red stamp');
+    assert.ok(n && !['comment', 'claude'].includes(n.type) && !n.fields?.thread);
+    await p.locator('.wv-line').nth(0).locator('.wv-zone.r').click();
+    await p.waitForFunction(() => !document.querySelector('.wv-notes'));
+  });
+
+  await check('the left end turns titles on and off, and the line you tapped does not move', async () => {
+    // An act above, so something comes and goes over the line.
+    await p.evaluate(() => { const ed = window.__editor; ed.view.dispatch(ed.state.tr.insert(0, ed.state.schema.nodes.sceneBreak.create({ level: 1, title: 'The rent' }))); window.scrollTo(0, 0); });
+    await p.waitForSelector('.scene-break[data-level="1"]');
+    await sleep(200);
+    const y = async () => (await p.locator('.wv-line').nth(1).boundingBox()).y;
+    const before = await y();
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.l').click();
+    await p.waitForFunction(() => document.documentElement.classList.contains('hide-sections'));
+    assert.equal((await p.locator('.wv-line').nth(1).locator('.wv-title').innerText()).trim(), '', 'a bare rule');
+    assert.ok(Math.abs((await y()) - before) < 2, `moved ${(await y()) - before}px`);
+    await p.keyboard.press('Control+Shift+Period');
+    await p.waitForFunction(() => !document.documentElement.classList.contains('hide-sections'));
+    assert.ok(Math.abs((await y()) - before) < 2);
+    assert.match(await p.locator('.wv-line').nth(1).innerText(), /Counting the coins/i);
+    // Mid-page too, with the key: the line under the pointer stays.
+    await p.evaluate(() => window.scrollTo(0, 120));
+    const box = await p.locator('.wv-line').nth(1).boundingBox();
+    await p.mouse.move(box.x + 20, box.y + 5);
+    const mid = await y();
+    await p.keyboard.press('Control+Shift+Period');
+    await p.waitForFunction(() => document.documentElement.classList.contains('hide-sections'));
+    assert.ok(Math.abs((await y()) - mid) < 2, `moved ${(await y()) - mid}px`);
+    await p.keyboard.press('Control+Shift+Period');
+    await p.waitForFunction(() => !document.documentElement.classList.contains('hide-sections'));
+    assert.ok(Math.abs((await y()) - mid) < 2);
+  });
+
+  await check('Ctrl + Shift + Comma and the Plan button open every scene’s plan; Write · Grid sits in the top bar', async () => {
+    await p.keyboard.press('Control+Shift+Comma');
+    await p.waitForFunction(() => document.querySelectorAll('.wv-plan').length === 2);
+    assert.equal(await p.locator('.pv-plan').getAttribute('aria-pressed'), 'true');
+    await p.locator('.pv-plan').click();
+    await p.waitForFunction(() => document.querySelectorAll('.wv-plan').length === 0);
+    assert.deepEqual(await p.locator('.pv-seg button').allInnerTexts(), ['Write', 'Grid']);
+    // The grid: one row per scene, named by its title.
+    await p.locator('.pv-seg button', { hasText: 'Grid' }).click();
+    await p.waitForSelector('.gv-table');
+    await p.waitForFunction(() => [...document.querySelectorAll('.gv-row .gv-name')].map((x) => x.textContent).join('|').includes('2 · Counting the coins'));
+    assert.equal(await p.locator('.gv-row').count(), 2);
+    assert.match(await p.locator('.gv-row').nth(1).innerText(), /Kenji counts the coins/);
+    await p.locator('.pv-seg button', { hasText: 'Write' }).click();
+    await p.waitForFunction(() => !document.documentElement.dataset.view && document.querySelector('.wv-line'));
+  });
+
+  await check('# then space starts a new scene, its title waiting in the plan', async () => {
+    await clickOn('He sets the table.');
+    await p.keyboard.press('End');
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('# ');
+    await p.waitForFunction(() => document.activeElement?.classList.contains('wv-p-title'));
+    await p.keyboard.type('Plates');
+    await p.keyboard.press('Enter');
+    await p.keyboard.press('Escape');
+    await p.waitForFunction(() => document.querySelectorAll('.wv-line').length === 3);
+    await sleep(900);
+    assert.ok((await all()).some((e) => e.kind === 'scene' && e.title === 'Plates' && !e.deleted && e.fields.level === 3));
+    // Fold it again and take the scene away, so the checks after see two.
+    await p.locator('.wv-line').nth(2).locator('.wv-zone.m').click();
+    await p.waitForFunction(() => !document.querySelector('.wv-plan'));
+    await p.keyboard.press('Control+Z'); await p.keyboard.press('Control+Z'); await p.keyboard.press('Control+Z');
+    await p.waitForFunction(() => document.querySelectorAll('.wv-line').length === 2);
+  });
+
+  await check('reading: scrolling down slides the top bar and the ruler away; a little back up brings them back', async () => {
+    await p.evaluate(() => { const ed = window.__editor; const sc = ed.state.schema; ed.view.dispatch(ed.state.tr.insert(ed.state.doc.content.size, Array.from({ length: 30 }, () => sc.nodes.paragraph.create({ el: 'action' }, sc.text('The till rings again and again, all morning long.'))))); document.activeElement?.blur(); window.scrollTo(0, 0); });
+    await p.evaluate(() => document.body.classList.remove('typing'));
+    await sleep(300);
+    await p.mouse.move(640, 400);
+    await p.mouse.wheel(0, 700);
+    await p.waitForFunction(() => document.body.classList.contains('scroll-away'));
+    await sleep(300);
+    assert.ok((await p.locator('.topbar').boundingBox()).y < -10, 'the top bar slid up out of view');
+    await p.mouse.wheel(0, -120);
+    await p.waitForFunction(() => !document.body.classList.contains('scroll-away'));
+    await p.mouse.wheel(0, 700);
+    await p.waitForFunction(() => document.body.classList.contains('scroll-away'));
+    // On Windows the mouse at the top edge brings it back too.
+    await p.mouse.move(640, 20);
+    await p.waitForFunction(() => !document.body.classList.contains('scroll-away'));
+    await p.evaluate(() => window.scrollTo(0, 0));
   });
 
   await check('Prepare for shoot fills what it can and asks the rest, without touching the words', async () => {

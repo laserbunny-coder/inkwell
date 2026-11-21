@@ -6,7 +6,9 @@ import { loadDoc } from '../outline.js';
 import { freshenRefs } from '../links.js';
 import { scriptPages, assignCodes } from '../script.js';
 import { renderLinkedFrom } from '../notebook.js';
-import { ScenePop, guessAll, redraw as redrawWoven, placeList, sceneAt, scenesOf, ensureHeading, setMarker, KINDS as SCENE_KINDS } from '../woven.js';
+import { ScenePop, guessAll, redraw as redrawWoven, placeList, sceneAt, scenesOf, ensureHeading, setMarker, lineKey, KINDS as SCENE_KINDS } from '../woven.js';
+import { ScenePlan } from '../sceneplan.js';
+import { shotsUnder } from '../production.js';
 import { applyLook, renderLook, renderNames, nameColour, cleanLook, DEFAULT_LOOK } from '../wovenlook.js';
 import { elementsIn, plainPages, newElement } from '../production.js';
 import { threadsOf } from '../grid.js';
@@ -14,7 +16,8 @@ import { bookType, bookOf, worldOf } from '../library.js';
 import { addCommands } from './commandlist.js';
 import { $, editor, isScript, isWoven, notes, root, state, statusEl, store, view } from '../main.js';
 import { placeScriptBar } from './scriptbar.js';
-import { openEntry, remember } from './routing.js';
+import { toggleSections } from './pagesettings.js';
+import { go, openEntry, remember } from './routing.js';
 import { sync } from './syncwiring.js';
 import { renderCrumb, renderRail, renderScenes } from './rail.js';
 import { nameOf, refreshViews } from './tidying.js';
@@ -41,6 +44,8 @@ async function openChapter(id) {
   await syncWoven(book);
   numbering = book?.fields?.numbered ? await numberingAround(book, id) : { before: null, after: null, used: [] };
   requestAnimationFrame(placeScriptBar);
+  scenePlan?.load(book?.id);
+  steadyPad(0);
   loadDoc(editor, doc);
   if (isWoven()) guessAll(editor);
   if (recovered) store.change(editor.state.doc);
@@ -49,6 +54,8 @@ async function openChapter(id) {
   if (state.project) state.acts = await outline(state.project.id);
   notes.threads = await threadsOf(book && (await worldOf(book)));
   await notes.load(id);
+  // The threads and notes under the scene lines are known now.
+  if (isWoven()) redrawWoven(editor);
   await renderChapterLinks();
   await setMeta('lastChapter', id);
   if (state.project) await setMeta(`lastChapter:${state.project.id}`, id);
@@ -177,12 +184,56 @@ function wovenPick() {
 }
 
 let scenePop; // set in wireManuscript()
+let scenePlan; // the plan under the scene line, set in wireManuscript()
+
+// ---------- keeping a line still (Michael, Nov 20 2026) ----------
+
+// "I don't want the screen jumping around on me and things moving underneath
+// my mouse": when titles or plans come and go, the line you tapped (or the
+// one under the pointer, or the caret's scene) stays at the same height on
+// the screen. The scroll follows it, with room added at the very top when the
+// page can't scroll up far enough.
+let pad = 0;
+let pointerY = null;
+function steadyPad(px) {
+  pad = Math.max(0, px);
+  editor.view.dom.style.marginTop = pad ? `${pad}px` : '';
+}
+const lineEl = (k) => editor.view.dom.querySelector(`.wv-line[data-key="${CSS.escape(k)}"]`);
+function anchorKey() {
+  const lines = [...editor.view.dom.querySelectorAll('.wv-line')].filter((l) => { const r = l.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; });
+  if (pointerY !== null && lines.length) return lines.sort((a, b) => Math.abs(a.getBoundingClientRect().top - pointerY) - Math.abs(b.getBoundingClientRect().top - pointerY))[0].dataset.key;
+  const s = sceneAt(editor.state.doc, editor.state.selection.from);
+  const k = s ? lineKey(s) : null;
+  if (k && lines.some((l) => l.dataset.key === k)) return k;
+  return lines[0]?.dataset.key || k;
+}
+function steady(change, key) {
+  const k = key || anchorKey();
+  const before = k && lineEl(k)?.getBoundingClientRect().top;
+  change();
+  const el = k && lineEl(k);
+  if (before == null || !el) return;
+  document.dispatchEvent(new CustomEvent('inkwell:calm-scroll'));
+  const off = () => lineEl(k).getBoundingClientRect().top - before;
+  let d = off();
+  if (Math.abs(d) < 0.5) return;
+  window.scrollBy(0, d);
+  d = off();
+  // Above where it was and the page is at its top: room at the top.
+  if (d < -0.5) { steadyPad(pad - d); window.scrollBy(0, off()); }
+  // Below where it was with room at the top to give back.
+  else if (d > 0.5 && pad > 0) { steadyPad(pad - Math.min(pad, d)); window.scrollBy(0, off()); }
+}
+// Titles on or off, the line under the pointer (or the caret's scene) kept still.
+function steadyTitles() { scenePlan.titlesFrom({ key: null }); }
+const titlesShowing = () => (root.classList.contains('focus') ? root.classList.contains('focus-sections') : !root.classList.contains('hide-sections'));
 
 // The card for the scene the caret is in (the same one a tap on the scene line opens).
 function sceneDetails() {
   const s = sceneAt(editor.state.doc, editor.state.selection.from);
   if (!s) return;
-  const dom = s.eid ? editor.view.dom.querySelector(`.wv-line[data-eid="${s.eid}"] .wv-dot`) : editor.view.dom.querySelector('.wv-line.wv-top .wv-dot');
+  const dom = s.eid ? editor.view.dom.querySelector(`.wv-line[data-eid="${s.eid}"] .wv-bar`) : editor.view.dom.querySelector('.wv-line.wv-top .wv-bar');
   scenePop.open({ eid: s.eid, at: s.at }, dom);
 }
 
@@ -361,6 +412,7 @@ addCommands(() => [
   { group: 'write', label: 'Script view: Woven (flowing, scene headings hidden)', keys: '', words: ['woven', 'flowing', 'prose', 'quiet', 'view'], run: () => setWoven(true), when: () => writing() && isScript() && !isWoven() },
   { group: 'write', label: 'Script view: Classic (the standard screenplay page)', keys: '', words: ['woven', 'classic', 'standard', 'view', 'courier'], run: () => setWoven(false), when: () => writing() && isWoven() },
   { group: 'write', label: 'Woven: this scene’s place, time and title…', keys: '/scene', words: ['scene', 'place', 'time', 'slug', 'heading', 'title'], run: sceneDetails, when: () => writing() && isWoven() },
+  { group: 'write', label: 'Plan under every scene (open or fold them all)', keys: '⌘⇧,', words: ['plan', 'summary', 'summaries', 'threads', 'outline', 'unfold', 'fold', 'beats'], run: () => scenePlan.toggleAll(), when: () => writing() && isWoven() },
   { group: 'write', label: 'Woven: prepare for shoot (fill in every scene’s place and time)', keys: '', words: ['shoot', 'production', 'slug', 'headings', 'breakdown', 'claude'], run: prepareShoot, when: () => writing() && isWoven() },
   { group: 'write', label: 'Scene numbers: turn off', keys: '', run: async () => toggleNumbering(await currentBook()), when: () => writing() && isScript() && !!state.project?.fields?.numbered },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
@@ -371,8 +423,23 @@ addCommands(() => [
 // (what it sets up depends on what came before it).
 function wireManuscript() {
   document.querySelectorAll('.woven-pick [data-sv]').forEach((b) => b.addEventListener('click', () => setWoven(b.dataset.sv === 'woven')));
-  scenePop = new ScenePop({ editor: () => editor, places: () => placeList(biblePlaces, editor.state.doc), toast: (m, a) => toast(m, a) });
+  scenePop = new ScenePop({ editor: () => editor, places: () => placeList(biblePlaces, editor.state.doc), toast: (m, a) => toast(m, a), touch: () => matchMedia('(pointer: coarse)').matches });
+  scenePlan = new ScenePlan({
+    editor: () => editor,
+    notes,
+    project: () => state.project,
+    world: async () => (state.project ? worldOf(state.project) : null),
+    toast: (m, a) => toast(m, a),
+    scenePop,
+    touch: () => matchMedia('(pointer: coarse)').matches,
+    titles: titlesShowing,
+    toggleTitles: () => toggleSections(),
+    openShots: async (eid) => { const list = await shotsUnder(eid); if (state.project) go({ view: 'production', id: state.project.id, tab: 'shots', ...(list[0] ? { shot: list[0].id } : {}) }); },
+    steady
+  });
+  editor.view.dom.addEventListener('mousemove', (e) => { pointerY = e.clientY; });
+  editor.view.dom.addEventListener('mouseleave', () => { pointerY = null; });
   $('#chapter-links-chip').addEventListener('click', () => $('.chapter-links').scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
 
-export { biblePlaces, connectScribe, markScene, newAct, newChapter, numbering, openChapter, refreshWords, renderChapterLinks, sceneDetails, scenePop, syncWoven, toggleNumbering, wireManuscript, wovenPick };
+export { biblePlaces, scenePlan, steadyTitles, connectScribe, markScene, newAct, newChapter, numbering, openChapter, refreshWords, renderChapterLinks, sceneDetails, scenePop, syncWoven, toggleNumbering, wireManuscript, wovenPick };

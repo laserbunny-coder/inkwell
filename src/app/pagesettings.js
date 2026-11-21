@@ -15,7 +15,7 @@ import { $, body, inNotebook, isScript, notes, root, state } from '../main.js';
 import { placeScriptBar, touch } from './scriptbar.js';
 import { currentEditor, notebook, placeOutlineBar, toggleTypewriter } from './notebookview.js';
 import { go } from './routing.js';
-import { wovenPick } from './manuscript.js';
+import { steadyTitles, wovenPick } from './manuscript.js';
 import { box, writing } from './commands.js';
 import { deskPage, plan } from './talking.js';
 import { panes, syncBeside } from './beside.js';
@@ -152,7 +152,8 @@ function toggleFocusSections(on = !root.classList.contains('focus-sections')) {
 function toggleSections() {
   const showing = root.classList.contains('focus') ? root.classList.contains('focus-sections') : !hidden().has('sections');
   if (root.classList.contains('focus')) toggleFocusSections(!showing); else setShown('sections', !showing);
-  if (writing() && isScript()) toast(showing ? 'Section titles hidden' : 'Section titles showing');
+  const what = root.classList.contains('woven') ? 'Scene titles' : 'Section titles';
+  if (writing() && isScript()) toast(showing ? `${what} hidden` : `${what} showing`);
 }
 // The bar rests as a tab while reading a script through (Focus underneath).
 function syncQuiet() {
@@ -229,7 +230,7 @@ addCommands(() => [
   { group: 'page', label: 'Larger text', keys: 'Alt+=', run: () => setPage(currentWidth(), currentSize() + 1) },
   { group: 'page', label: 'Smaller text', keys: 'Alt+−', run: () => setPage(currentWidth(), currentSize() - 1) },
   { group: 'view', label: 'Show or hide scene numbers', keys: '', run: () => setShown('codes', hidden().has('codes')), when: () => writing() && isScript() },
-  { group: 'view', label: 'Show or hide section titles', keys: '⌘⇧.', run: () => toggleSections(), when: () => writing() && isScript() },
+  { group: 'view', label: 'Show or hide section titles', keys: '⌘⇧.', run: () => (root.classList.contains('woven') ? steadyTitles() : toggleSections()), when: () => writing() && isScript() },
   { group: 'view', label: 'Show or hide Claude’s notes in the margin', keys: '', run: () => setShown('claude', hidden().has('claude')) },
   { group: 'view', label: 'Show or hide readers’ comments in the margin', keys: '', run: () => setShown('comments', hidden().has('comments')) }
 ]);

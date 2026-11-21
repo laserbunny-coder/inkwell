@@ -28,6 +28,7 @@ import { arrangeRow } from './libraryview.js';
 import { accountName, askClaudeNotes, newDraft, newDraftFrom, toggleFreshEyes, toggleTalk } from './revising.js';
 import { printLater } from './sharing.js';
 import { hidden, lookPanel, setShown, togglePageSettings } from './pagesettings.js';
+import { syncPieceSwitch } from './pieceswitch.js';
 import { writing } from './commands.js';
 import { boxOpen, closePalette, filterPalette, openBox, openPalette } from './quickinserts.js';
 import { askServer, canAskServer, captureHere, deskPage, plan } from './talking.js';
@@ -119,6 +120,7 @@ async function renderStrip() {
   $('.topbar').classList.toggle('has-tabs', !$('#page-tabs').hidden);
   // In a project the phone keeps its top line (the search button is Go to… there).
   $('.topbar').classList.toggle('in-project', ['world', 'piece'].includes(strip.ctx?.scope));
+  await syncPieceSwitch();
 }
 
 // A tab: the same page at the size you're at.
