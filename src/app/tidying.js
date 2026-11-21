@@ -19,8 +19,8 @@ import { notebook } from './notebookview.js';
 import { go, openBook } from './routing.js';
 import { refreshWords, syncWoven, toggleNumbering } from './manuscript.js';
 import { renderCrumb, renderRail, subtree } from './rail.js';
-import { areaOptions, nudgeBook, renderLibrary, renderProject, renderWorld } from './libraryview.js';
-import { newDraft, newDraftFrom, printCurrent } from './revising.js';
+import { areaOptions, grid, nudgeBook, renderLibrary, renderProject, renderWorld } from './libraryview.js';
+import { newDraft, newDraftFrom, printCurrent, toggleFreshEyes } from './revising.js';
 import { openShare, sharing } from './sharing.js';
 import { production } from './productionwiring.js';
 import { stagePage } from './workpages.js';
@@ -49,6 +49,7 @@ async function refreshViews() {
   if (view() === 'library') await renderLibrary();
   if (view() === 'project') await renderProject();
   if (view() === 'world') await renderWorld();
+  if (view() === 'grid') await grid?.refresh();
   if (stagePage?.isOpen) await stagePage.refresh();
   if (view() === 'production' || view() === 'deliver') await production?.refresh();
   if (inNotebook() && notebook.page && !notebook.isDay) {
@@ -303,23 +304,35 @@ async function bookMenu(book) {
   const world = await worldOf(b);
   const writable = hasManuscript(b) || bookType(b) === 'lines';
   const script = bookType(b) === 'screenplay';
+  const ms = hasManuscript(b);
+  // One home (Nov 20 2026): the piece's places first, then what it is, then the rest.
+  const inText = writing() && state.project?.id === b.id;
   return [
-    { label: writable ? (bookType(b) === 'lines' ? 'Open the outline' : 'Open the manuscript') : 'Open', run: () => (writable ? openBook(b.id) : go({ view: 'project', id: b.id })) },
-    ...(view() !== 'project' || state.bookId !== b.id ? [{ label: 'Its page', run: () => go({ view: 'project', id: b.id }) }] : []),
-    { label: 'Rename…', run: () => rename(b) },
+    ...(writable && !inText ? [{ label: bookType(b) === 'lines' ? 'Open the outline' : 'Open the text', run: () => openBook(b.id) }] : []),
+    ...(ms ? [{ label: 'Outline', run: () => go({ view: 'grid', id: b.id, mode: 'outline' }) }] : []),
+    ...(!writable ? [{ label: 'Open', run: () => go({ view: 'project', id: b.id }) }] : []),
+    { label: 'Ideas for this', run: () => go({ view: 'stage', id: b.id, page: 'gather' }) },
+    ...(ms ? [
+      { label: 'Drafts and notes', run: () => go({ view: 'stage', id: b.id, page: 'revise' }) },
+      { label: 'Fresh eyes', keys: '⌘⇧Y', run: async () => { await openBook(b.id); if (writing()) toggleFreshEyes(true); } },
+      { label: 'Shots', run: () => go({ view: 'production', id: b.id }) },
+      { label: 'Share and post', run: () => go({ view: 'deliver', id: b.id }) }
+    ] : []),
+    'sep',
     { label: 'What it is (Gag, Episode…)…', run: () => setLabel(b) },
     { label: 'Written as', sub: KINDS.map(([id, label]) => ({ label, current: bookType(b) === id, run: () => setKind(b, id) })) },
     { label: 'Stage', sub: stagesOf(b, world).map((st) => ({ label: st, current: stageOf(b, world) === st, run: () => setStage(b, st) })) },
     { label: `Stages: ${stageSetOf(b, world).name}`, sub: allSets().map((set) => ({ label: `${set.name}: ${set.about.toLowerCase()}`, current: stageSetOf(b, world).id === set.id, run: () => setPieceStages(b, set.id) })) },
     ...(script ? [{ label: b.fields?.numbered ? 'Scene numbers: turn off' : 'Number the scenes (for production)…', run: () => toggleNumbering(b) }] : []),
-    ...(hasManuscript(b) ? [{ label: 'Production (shots, kit, shoot days)', run: () => go({ view: 'production', id: b.id }) }] : []),
-    ...(hasManuscript(b) ? [{ label: 'Revise', sub: [
+    'sep',
+    { label: 'Rename…', run: () => rename(b) },
+    ...(ms ? [{ label: 'Revise', sub: [
       { label: 'Compare drafts or dates', run: () => go({ view: 'compare', id: b.id }) },
       { label: 'New draft from this one (keep a copy of this draft)…', run: () => newDraftFrom(b) },
       { label: 'Start a new draft from scratch…', run: () => newDraft(b) },
-      { label: 'Print, or save as PDF', run: async () => { await go({ view: 'project', id: b.id }); await printCurrent(); } }
+      { label: 'Print, or save as PDF', keys: '⌘P', run: async () => { await openBook(b.id); await printCurrent(); } }
     ] }] : []),
-    ...(hasManuscript(b) ? [{ label: 'Share a link to read and comment…', run: () => openShare(b) }] : []),
+    ...(ms ? [{ label: 'Share a link to read and comment…', run: () => openShare(b) }] : []),
     { label: 'New piece inside (an episode in a season…)', run: () => addPiece(b.id) },
     { label: 'New page in it', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(b.id); } },
     { label: 'What Claude knows about this piece…', run: () => showClaudeKnows(b) },
@@ -329,6 +342,9 @@ async function bookMenu(book) {
     { label: 'Move to Trash…', keys: '⌘⇧⌫', danger: true, run: () => toTrash(b) }
   ];
 }
+
+// For the tests: the piece's ⋯ menu as it would open.
+window.__bookMenu = (b) => bookMenu(b);
 
 async function worldMenu(world) {
   const w = await getEntry(world.id);
@@ -728,4 +744,4 @@ addCommands(() => [
   { group: 'tidy', label: 'This area: rename, move or trash…', keys: '', run: async () => popMenu(null, await areaMenu({ id: state.libArea }), menuSpot()), when: () => view() === 'library' && !!state.libArea }
 ]);
 
-export { placeAmong, stepAmong, toTrash, finishWorld, reopenWorld, setFinished, setLife, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, leaveChapter, moveBookToArea, nameOf, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setStage, worldMenu };
+export { placeAmong, stepAmong, toTrash, finishWorld, reopenWorld, setFinished, setLife, KINDS, actMenu, addPiece, areaMenu, bookMenu, chapterMenu, deleteOwn, keepOwn, leaveChapter, moveBookToArea, nameOf, openStages, ownUsedBy, pageMenu, personalAreaId, plural, refreshViews, renderTrash, setKind, setLabel, setStage, worldMenu };

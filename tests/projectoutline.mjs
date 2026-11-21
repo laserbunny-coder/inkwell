@@ -187,10 +187,11 @@ try {
     assert.equal(await phone.locator('.gt-bg').isVisible(), false);
   });
 
-  await check('a piece keeps its pages, on their own row on a phone', async () => {
+  await check('a piece on a phone: ‹ its project and Outline · Write · Grid, all in reach', async () => {
     await go(phone, { view: 'project', id: 'pr_reel2' });
-    await phone.waitForSelector('#page-tabs:not([hidden]) .pt-tab');
-    for (const t of await phone.locator('#page-tabs .pt-tab').all()) {
+    await phone.waitForSelector('#piece-back:not([hidden])');
+    assert.ok(await phone.locator('#page-tabs').isHidden(), 'no row of tabs in a piece (One home)');
+    for (const t of [phone.locator('#piece-back'), ...(await phone.locator('.pv-seg button').all())]) {
       const b = await t.boundingBox();
       assert.ok(b.x >= 0 && b.x + b.width <= 412, `${await t.innerText()} is in reach`);
     }
@@ -272,8 +273,9 @@ try {
     await desk.keyboard.type('breakf');
     await shot(desk, 'goto-desk');
     await desk.keyboard.press('Enter');
-    await desk.waitForFunction(() => history.state?.view === 'project');
-    assert.equal((await placeOf(desk)).id, 'pr_reel2');
+    // A script opens on its text (One home): there is no Overview to land on.
+    await desk.waitForFunction(() => history.state?.view === 'write');
+    assert.equal(await desk.evaluate(() => window.__editor.getText().length > 0), true);
   });
 
   await check('desktop: zoomed into Ideas, Add an idea is at the top; ⋯ Delete puts it in the Trash with Undo', async () => {

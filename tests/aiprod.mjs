@@ -445,7 +445,8 @@ try {
   });
 
   await check('Deliver: the rough cut for Resolve, and the hand-off with every take named by its code', async () => {
-    await laptop.keyboard.press('Alt+Digit6');
+    // The piece's Share and post (One home: Alt + 6 no longer leads there; its ⋯ does).
+    await go(laptop, { view: 'deliver', id: 'pr_reel' });
     await laptop.waitForFunction(() => document.documentElement.dataset.view === 'deliver');
     await laptop.locator('.prod-view .gv-levels .chip[data-tab="files"]').click();
     await laptop.waitForSelector('.pd-file');
@@ -474,7 +475,8 @@ try {
   });
 
   await check('the cost and generation details can be hidden, and come back', async () => {
-    await laptop.keyboard.press('Alt+Digit5');
+    // The piece's Shots (One home: Alt + 5 is the project's Deliver now; the piece's ⋯ leads here).
+    await go(laptop, { view: 'production', id: 'pr_reel' });
     await laptop.waitForFunction(() => document.documentElement.dataset.view === 'production');
     await laptop.locator('.gv-levels .chip[data-tab="shots"]').click();
     await laptop.waitForSelector('.pd-cost');

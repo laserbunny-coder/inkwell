@@ -90,6 +90,13 @@ async function go(place) {
   if (place.view === 'project' && gone(await getEntry(place.id))) place = { view: 'library' };
   // A book saved as a place before worlds: if it became a world, show that.
   if (place.view === 'project' && (await getEntry(place.id))?.kind === 'world') place = { view: 'world', id: place.id };
+  // One home (Nov 20 2026): a script, a novel or an outline piece has no
+  // Overview any more; it opens on its text, where you left off. Only a
+  // piece with no other screen (a collection of pages) keeps view 'project'.
+  if (place.view === 'project' && !place.stay) {
+    const b = await getEntry(place.id);
+    if (b && (hasManuscript(b) || bookType(b) === 'lines')) return go(await bookPlace(b.id));
+  }
   if (place.view === 'world' && gone(await getEntry(place.id))) place = { view: 'library' };
   if (place.view === 'grid' && gone(await getEntry(place.id))) place = { view: 'library' };
   if (place.view === 'production' && gone(await getEntry(place.id))) place = { view: 'library' };
@@ -189,7 +196,8 @@ async function go(place) {
     await deskPage?.show(place);
   } else if (place.view === 'grid') {
     state.gridId = place.id;
-    remember(place);
+    if (place.mode) grid.mode = place.mode;
+    remember({ view: 'grid', id: place.id });
     await grid.show(place.id);
   } else if (place.view === 'production' || place.view === 'deliver') {
     state.prodId = place.id;
@@ -217,16 +225,18 @@ async function go(place) {
   if (place.view === 'world' && place.id) { try { localStorage.setItem('lastWorld', place.id); } catch { /* full */ } }
 }
 
-async function openBook(projectId) {
+async function openBook(projectId) { return go(await bookPlace(projectId)); }
+// Where opening a piece lands: its text where you left off.
+async function bookPlace(projectId) {
   const book = await getEntry(projectId);
-  if (book && bookType(book) === 'lines') return go({ view: 'notebook', pageId: book.id });
-  if (!book || !hasManuscript(book)) return go({ view: 'project', id: projectId });
+  if (book && bookType(book) === 'lines') return { view: 'notebook', pageId: book.id };
+  if (!book || !hasManuscript(book)) return { view: 'project', id: projectId, stay: true };
   const acts = await outline(projectId);
   const chapters = acts.flatMap((a) => a.chapters);
   const last = await getMeta(`lastChapter:${projectId}`);
   const id = chapters.some((c) => c.id === last) ? last : chapters[0]?.id;
-  if (id) return go({ view: 'write', chapterId: id });
-  return go({ view: 'project', id: projectId });
+  if (id) return { view: 'write', chapterId: id };
+  return { view: 'project', id: projectId, stay: true };
 }
 
 async function lastChapterAnywhere() {
@@ -323,6 +333,8 @@ addCommands(() => [
 // (what it sets up depends on what came before it).
 function wireRouting() {
   PHONE = media('phone');
+  // For the tests: go somewhere, as a tap would.
+  window.__go = (place) => go(place);
   // The app left open in the background counts too: it comes back on Today.
   if (!inPane) {
     document.addEventListener('visibilitychange', () => {
@@ -341,4 +353,4 @@ function wireRouting() {
   });
 }
 
-export { besideUntil, go, historyMode, lastChapterAnywhere, lastPlace, newPageHere, openBook, openEntry, paneStep, phoneAway, placeOf, remember, setBesideUntil, setHistoryMode, wireRouting };
+export { besideUntil, bookPlace, go, historyMode, lastChapterAnywhere, lastPlace, newPageHere, openBook, openEntry, paneStep, phoneAway, placeOf, remember, setBesideUntil, setHistoryMode, wireRouting };

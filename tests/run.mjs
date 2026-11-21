@@ -310,7 +310,7 @@ try {
     await sleep(300);
     await p.keyboard.type('Snow on the harbour wall.');
     await sleep(700);
-    assert.match(await p.locator('#crumb').innerText(), /Winter Harbour\s*▾\s*›\s*Chapter 1/);
+    assert.match(await p.locator('#crumb').innerText(), /‹\s*Winter Harbour\s*›\s*Chapter 1/);
 
     await p.keyboard.press('Control+O');
     await p.keyboard.type('Chapter 2 · Untitled');

@@ -6,7 +6,7 @@ import { onContextMenu } from '../menu.js';
 import { outline } from '../model.js';
 import { titleOf, dayId } from '../notebook.js';
 import { inPane, PANE_ID, host as paneHost } from '../panes.js';
-import { areas, books, hasManuscript, areaColor, pagesIn, loosePages, bookOf, worlds, worldOf, worldTree } from '../library.js';
+import { areas, books, bookType, hasManuscript, areaColor, pagesIn, loosePages, bookOf, worlds, worldOf, worldTree } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday } from '../dates.js';
 import { $, editor, inNotebook, isScript, root, sectionNames, state, view } from '../main.js';
@@ -334,9 +334,12 @@ async function drawCrumb() {
       parts.push(link(p.title || 'Untitled page', () => {}, 'here'));
     }
   }
+  // Inside a piece (One home, Nov 20 2026) the crumb is the way back to its
+  // project, and names the piece's own page when it's one of them.
+  const shown = (await pieceCrumb(link)) || parts;
   const crumb = $('#crumb');
   crumb.replaceChildren();
-  parts.forEach((p, i) => { if (i) crumb.append(make('span', 'sep', '›')); crumb.append(p); });
+  shown.forEach((p, i) => { if (i) crumb.append(make('span', 'sep', '›')); crumb.append(p); });
   refreshWords();
   await renderStrip();
   const isToday = lastPlace?.view === 'notebook' && lastPlace.pageId === dayId(isoToday());
@@ -355,6 +358,37 @@ async function drawCrumb() {
   nowStrip?.soon();
 }
 
+// The piece you're in and its project, if you're inside one.
+async function pieceHere() {
+  const v = view();
+  let id = null;
+  if (v === 'write') id = state.project?.id;
+  else if (v === 'grid') id = state.gridId;
+  else if (v === 'production' || v === 'deliver') id = state.prodId;
+  else if (v === 'stage') id = state.stage?.id;
+  else if (v === 'compare') id = state.compareId;
+  else if (v === 'project') id = state.bookId;
+  else if (inNotebook() && notebook.page && notebook.page.kind !== 'day') id = notebook.page.kind === 'project' ? notebook.page.id : (await bookOf(notebook.page))?.id;
+  const piece = id && (await getEntry(id));
+  if (!piece || piece.kind !== 'project') return null;
+  const world = await worldOf(piece);
+  return world ? { piece, world } : null;
+}
+async function pieceCrumb(link) {
+  if (inPane) return null;
+  const at = await pieceHere();
+  if (!at) return null;
+  const back = link(`‹ ${at.world.title || 'Untitled'}`, () => go({ view: 'world', id: at.world.id }), 'back');
+  back.title = 'Back to the project page (Alt + 0)';
+  const v = view();
+  const here = v === 'stage' ? { gather: 'Ideas for this', revise: 'Drafts and notes', shape: 'Develop' }[state.stage?.page] || PAGE_NAMES[state.stage?.page] || ''
+    : v === 'production' ? 'Shots' : v === 'deliver' ? 'Share and post' : v === 'compare' ? 'Compare'
+    : inNotebook() && notebook.page?.kind === 'page' ? notebook.page.title || 'Untitled page'
+    // A novel's chapter names where you are in it (a script's one chapter needn't).
+    : v === 'write' && bookType(at.piece) !== 'screenplay' && state.chapterId ? (await getEntry(state.chapterId))?.title || '' : '';
+  return here ? [back, link(here, () => {}, 'here')] : [back];
+}
+
 // Runs once at start-up, from main.js, in the place this code had there
 // (what it sets up depends on what came before it).
 function wireRail() {
@@ -362,4 +396,4 @@ function wireRail() {
   crumbBusy = Promise.resolve();
 }
 
-export { areaPath, dot, renameable, renderCrumb, renderRail, renderScenes, scheduleScenes, subtree, wireRail };
+export { areaPath, dot, pieceHere, renameable, renderCrumb, renderRail, renderScenes, scheduleScenes, subtree, wireRail };

@@ -80,17 +80,13 @@ const openMake = async (p) => {
   await p.waitForSelector('#wh-board .sb-card');
   await sleep(300);
 };
+// The piece's ⋯ menu (One home: the same menu on its line and inside it).
 const pieceSet = async (p, name) => {
-  await go(p, { view: 'project', id: 'pr_reel2' });
-  await p.waitForSelector('html[data-view="project"] #ph-more .more-btn');
-  await sleep(400);
-  // Clicked from the page itself: on the test machines Playwright's scroll
-  // into view could wait on this button for the whole timeout.
-  await p.evaluate(() => document.querySelector('#ph-more .more-btn').click());
-  await p.waitForSelector('.pop-menu');
-  await pick(p, 'Stages:');
-  await pick(p, name);
-  await sleep(400);
+  await p.evaluate(async (n) => {
+    const items = await window.__bookMenu({ id: 'pr_reel2' });
+    items.find((x) => x?.label?.startsWith('Stages:')).sub.find((x) => x.label.startsWith(n)).run();
+  }, name);
+  await sleep(600);
 };
 const openStages = async (p) => {
   await p.locator('#wh-workflow').click();
@@ -180,13 +176,13 @@ try {
 
   await check('one piece can go through another set, from its menu', async () => {
     // The piece page holds still once drawn (nothing redraws it over and over).
-    await go(page, { view: 'project', id: 'pr_reel2' });
-    await page.waitForSelector('html[data-view="project"] #ph-more .more-btn');
+    await go(page, { view: 'grid', id: 'pr_reel2', mode: 'outline' });
+    await page.waitForSelector('.ph1');
     await sleep(500);
     const redraws = await page.evaluate(() => new Promise((res) => {
       let n = 0;
       const o = new MutationObserver(() => { n += 1; });
-      o.observe(document.querySelector('#ph-more'), { childList: true });
+      o.observe(document.querySelector('#grid-view'), { childList: true });
       setTimeout(() => { o.disconnect(); res(n); }, 1500);
     }));
     assert.equal(redraws, 0, `the piece page redrew ${redraws} times while idle`);
@@ -194,7 +190,7 @@ try {
     const p = await get(page, 'pr_reel2');
     assert.equal(p.fields.stageSet, 'live');
     assert.equal(p.fields.stage, 'Prepping');
-    assert.equal(await page.locator('#ph-stage').inputValue(), 'Prepping');
+    await page.waitForFunction(() => document.querySelector('.ph1-word')?.textContent === 'Prepping');
     await openMake(page);
     const b = await board(page);
     assert.deepEqual(b.map((x) => x.name), ['AI video', 'Live action', 'Book']);

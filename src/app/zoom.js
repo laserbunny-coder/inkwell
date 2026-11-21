@@ -29,7 +29,7 @@ import { todayFace, facePlace, faceTo } from '../plan.js';
 import { addDays, weekOf } from '../tasks.js';
 import { addCommands } from './commandlist.js';
 import { body, gone, root, state } from '../main.js';
-import { go, lastPlace } from './routing.js';
+import { bookPlace, go, lastPlace } from './routing.js';
 import { frame } from './workpages.js';
 import { plan, deskPage } from './talking.js';
 import { lookHere, hidden } from './pagesettings.js';
@@ -239,12 +239,24 @@ async function panPlace(p, dir) {
     const to = step(ids, p.id);
     return to ? zoomGo({ view: 'world', id: to }, way) : null;
   }
-  if (p?.view === 'project' && p.id) {
-    const w = await worldOf(await getEntry(p.id)).catch(() => null);
+  // A piece (One home): the next piece's text, or its Outline from an Outline.
+  const pieceId = p?.view === 'project' ? p.id : p?.view === 'grid' ? p.id : p?.view === 'write' ? state.project?.id : null;
+  if (pieceId) {
+    const here = await getEntry(pieceId);
+    const w = here?.kind === 'project' ? await worldOf(here).catch(() => null) : null;
     if (!w) return null;
     const ids = (await worldStats(w)).pieces.map((x) => x.row.id);
-    const to = step(ids, p.id);
-    return to ? zoomGo({ view: 'project', id: to }, way) : null;
+    const to = step(ids, pieceId);
+    if (!to) return null;
+    if (p.view === 'grid') return zoomGo({ view: 'grid', id: to }, way);
+    return zoomGo(await bookPlace(to), way);
+  }
+  if (p?.view === 'notebook' && p.pageId && !p.pageId.startsWith('day-') && (await getEntry(p.pageId))?.kind === 'project') {
+    const here = await getEntry(p.pageId);
+    const w = await worldOf(here).catch(() => null);
+    const ids = w ? (await worldStats(w)).pieces.map((x) => x.row.id) : [];
+    const to = step(ids, here.id);
+    return to ? zoomGo(await bookPlace(to), way) : null;
   }
   if (p?.view === 'notebook' && p.pageId && !p.pageId.startsWith('day-')) {
     const pg = await getEntry(p.pageId);

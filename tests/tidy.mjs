@@ -79,6 +79,7 @@ const openWorld = async (p, title) => {
 // A project's own ⋯ (on its page).
 const worldMore = async (p, title, ...labels) => { await lib(p); await openWorld(p, title); await p.locator('#wh-more .more-btn').click(); await menuPick(p, ...labels); };
 const areaNames = (p) => p.locator('#lib-zoom .zl-area .zl-h').allTextContents();
+const go = (p, place) => p.evaluate((pl) => window.__go(pl), place);
 const book = async (p, title) => (await all(p)).find((e) => e.kind === 'project' && e.title === title && !e.deleted);
 const world = async (p, title) => (await all(p)).find((e) => e.kind === 'world' && e.title === title && !e.deleted);
 
@@ -115,10 +116,12 @@ try {
     await menuPick(a, 'Written as', 'Outline');
     await sleep(400);
     assert.equal((await book(a, 'Research')).fields.type, 'lines');
-    await a.locator('#wh-pieces li .wo-item', { hasText: 'Research' }).click();
-    await a.waitForSelector('.project-home', { state: 'visible' });
-    await a.locator('#ph-label').fill('Gag');
-    await a.locator('#ph-label').press('Enter');
+    // What it is, from the same ⋯ (One home: the piece has no Overview).
+    await a.locator('#wh-pieces li', { hasText: 'Research' }).locator('.more-btn').click();
+    await menuPick(a, 'What it is');
+    await a.waitForSelector('.ask input');
+    await a.locator('.ask input').fill('Gag');
+    await a.locator('.ask input').press('Enter');
     await sleep(400);
     assert.equal((await book(a, 'Research')).fields.label, 'Gag');
   });
@@ -127,20 +130,22 @@ try {
     await lib(a);
     await openWorld(a, 'Untitled novel');
     await a.locator('#wh-outline [data-part="pieces"] .wo-name').click();
-    await a.locator('#wh-pieces li .wo-item', { hasText: 'Untitled novel' }).click();
-    await a.waitForSelector('.project-home', { state: 'visible' });
-    await a.locator('#ph-kind').selectOption('lines');
+    const asOutline = async () => { await a.locator('#wh-pieces li', { hasText: 'Untitled novel' }).locator('.more-btn').click(); await menuPick(a, 'Written as', 'Outline'); };
+    await asOutline();
     await a.waitForSelector('.ask');
     assert.match(await a.locator('.ask').innerText(), /stays exactly as it is/);
     await a.locator('.ask .ghost-btn', { hasText: 'Cancel' }).click();
     await sleep(300);
     assert.equal((await book(a, 'Untitled novel')).fields.type || 'novel', 'novel');
-    await a.locator('#ph-kind').selectOption('lines');
+    await asOutline();
     await a.locator('.ask .pill', { hasText: 'Change it' }).click();
     await sleep(500);
     assert.equal((await book(a, 'Untitled novel')).fields.type, 'lines');
-    assert.match(await a.locator('#ph-manuscript').innerText(), /Chapter 1/);
-    await a.locator('#ph-kind').selectOption('novel');
+    { const nv = await book(a, 'Untitled novel'); const acts = (await all(a)).filter((e) => e.kind === 'act' && e.parent_id === nv.id && !e.deleted).map((x) => x.id); assert.ok((await all(a)).some((e) => e.kind === 'chapter' && acts.includes(e.parent_id) && e.title === 'Chapter 1' && !e.deleted), 'the manuscript is kept'); }
+    await go(a, { view: 'world', id: (await world(a, 'Untitled novel')).id });
+    await a.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await a.locator('#wh-pieces li', { hasText: 'Untitled novel' }).locator('.more-btn').click();
+    await menuPick(a, 'Written as', 'Prose');
     await sleep(500);
     assert.equal((await book(a, 'Untitled novel')).fields.type, 'novel');
     const novel = await book(a, 'Untitled novel');
@@ -197,24 +202,22 @@ try {
     await a.keyboard.type('Second chapter words.');
     await sleep(700);
     const novel = await book(a, 'Untitled novel');
-    await a.evaluate((id) => window.dispatchEvent(new PopStateEvent('popstate', { state: { view: 'project', id } })), novel.id);
+    // The novel's Outline holds its chapters now (One home), each with its ⋯.
+    await go(a, { view: 'grid', id: novel.id, mode: 'outline' });
+    await a.waitForSelector('.ph1');
     await sleep(500);
-    const rows = () => a.locator('#ph-manuscript .ms-chapter span:first-child').allInnerTexts();
+    const rows = () => a.locator('.ol-row > .ol-head .ol-title').allTextContents();
+    const more = (t) => a.locator('.ol-row', { hasText: t }).locator('> .ol-head .more-btn');
     assert.deepEqual(await rows(), ['Chapter 1', 'Chapter 2']);
-    await a.locator('.ms-row', { hasText: 'Chapter 2' }).hover();
-    await a.locator('.ms-row', { hasText: 'Chapter 2' }).locator('.more-btn').click();
+    await more('Chapter 2').click();
     await menuPick(a, 'Move up');
-    await sleep(300);
-    assert.deepEqual(await rows(), ['Chapter 2', 'Chapter 1']);
-    await a.locator('.ms-row', { hasText: 'Chapter 2' }).hover();
-    await a.locator('.ms-row', { hasText: 'Chapter 2' }).locator('.more-btn').click();
+    await a.waitForFunction(() => [...document.querySelectorAll('.ol-row > .ol-head .ol-title')].map((x) => x.textContent).join() === 'Chapter 2,Chapter 1');
+    await more('Chapter 2').click();
     await menuPick(a, 'Move to Trash');
     await a.locator('.ask .pill', { hasText: 'Move to Trash' }).click();
-    await sleep(500);
-    assert.deepEqual(await rows(), ['Chapter 1']);
+    await a.waitForFunction(() => [...document.querySelectorAll('.ol-row > .ol-head .ol-title')].map((x) => x.textContent).join() === 'Chapter 1');
     await a.locator('.toast-action').click();
-    await sleep(500);
-    assert.deepEqual(await rows(), ['Chapter 2', 'Chapter 1']);
+    await a.waitForFunction(() => [...document.querySelectorAll('.ol-row > .ol-head .ol-title')].map((x) => x.textContent).join() === 'Chapter 2,Chapter 1');
   });
 
   await check('a page moves to another world, and goes to the Trash from its own ⋯', async () => {

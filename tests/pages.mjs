@@ -155,16 +155,17 @@ try {
     await page.locator('.toast button', { hasText: 'Undo' }).click();
     await page.waitForSelector('.stage-board:visible .sb-col[data-stage="Writing"] .sb-card[data-id="pr_reel2"]');
     assert.equal((await get(page, 'pr_reel2')).fields.stage, 'Written');
-    await go(page, { view: 'project', id: 'pr_reel2' });
-    await page.waitForSelector('html[data-view="project"] #ph-next:not([hidden])');
-    assert.equal(await page.locator('#ph-stage').inputValue(), 'Writing');
-    assert.equal(await page.locator('#ph-next').innerText(), 'Start boarding');
+    // On the piece (One home): the top of its Outline.
+    await go(page, { view: 'grid', id: 'pr_reel2', mode: 'outline' });
+    await page.waitForSelector('.ph1-next');
+    assert.equal(await page.locator('.ph1-word').innerText(), 'Writing');
+    assert.equal(await page.locator('.ph1-next').innerText(), '→ Start boarding');
     await shot(page, 'status-piece');
-    await page.locator('#ph-next').click();
-    await page.waitForFunction(() => document.querySelector('#ph-stage').value === 'Boarding');
-    assert.equal(await page.locator('#ph-next').innerText(), 'Start generating');
+    await page.locator('.ph1-next').click();
+    await page.waitForFunction(() => document.querySelector('.ph1-word')?.textContent === 'Boarding');
+    assert.equal(await page.locator('.ph1-next').innerText(), '→ Start generating');
     await page.locator('.toast button', { hasText: 'Undo' }).click();
-    await page.waitForFunction(() => document.querySelector('#ph-stage').value === 'Writing');
+    await page.waitForFunction(() => document.querySelector('.ph1-word')?.textContent === 'Writing');
     await go(page, { view: 'stage', id: 'wd_nb', page: 'write' });
     await page.waitForSelector('.stage-board:visible .sb-card');
     // As a list again.
@@ -172,19 +173,12 @@ try {
     await page.waitForSelector('#wh-pieces li');
   });
 
-  await check('a piece’s tabs sit at the top centre: Overview, then Gather to Deliver, with the pill on the one you are in', async () => {
+  await check('a piece has no row of tabs: it opens on its text, with ‹ its project at the top', async () => {
     await go(page, { view: 'project', id: 'pr_reel2' });
-    await page.waitForSelector('#page-tabs .pt-tab');
-    assert.deepEqual(await tabs(page), ['overview*', 'gather', 'shape', 'write', 'revise', 'make', 'deliver']);
-    await page.mouse.move(700, 500);
-    await sleep(500);
-    assert.ok(await shown(page));
-    assert.ok(await page.evaluate(() => document.body.classList.contains('looking')));
-    // The bar stays put and readable; the tabs are in its middle, between the path and the status.
-    const bar = await page.evaluate(() => { const x = (q) => document.querySelector(q).getBoundingClientRect(); return { opacity: getComputedStyle(document.querySelector('.topbar')).opacity, crumb: x('#crumb').right, tabs: x('#page-tabs').left, tabsEnd: x('#page-tabs').right, right: x('.tb-r').left }; });
-    assert.equal(bar.opacity, '1');
-    assert.ok(bar.crumb <= bar.tabs && bar.tabsEnd <= bar.right, JSON.stringify(bar));
-    await page.waitForFunction(() => { const a = document.querySelector('.tabs-pill')?.getBoundingClientRect(); const b = document.querySelector('#page-tabs .pt-tab.on')?.getBoundingClientRect(); return a && b && a.width > 0 && Math.abs(a.left - b.left) < 2; });
+    await page.waitForFunction(() => !document.documentElement.dataset.view);
+    await page.mouse.move(700, 4);
+    await page.waitForFunction(() => /‹\s*The Ninja Bunch/.test(document.querySelector('#crumb')?.textContent || ''));
+    assert.ok(await page.locator('#page-tabs').isHidden(), 'no strip in a piece');
     await shot(page, 'pages-overview');
   });
 
@@ -357,10 +351,8 @@ try {
   // ---------- a piece ----------
 
   await check('a piece has the same tabs; Shape is its Develop page, small to big, with Claude growing a step', async () => {
-    await go(page, { view: 'project', id: 'pr_reel2' });
-    await sleep(500);
-    assert.deepEqual(await tabs(page), ['overview*', 'gather', 'shape', 'write', 'revise', 'make', 'deliver']);
-    await page.keyboard.press('Alt+Digit2');
+    // The Develop page lives on behind the Outline head's "Grow it with Claude".
+    await go(page, { view: 'stage', id: 'pr_reel2', page: 'shape' });
     await page.waitForSelector('.st-dev');
     const ta = page.locator('.st-dev[data-step="sentence"] textarea');
     await ta.fill('Mom cooks breakfast with a sword.');
@@ -377,11 +369,11 @@ try {
   });
 
   await check('Make for a piece is production without Posting; Deliver has Files, Share and Posting', async () => {
-    await page.keyboard.press('Alt+Digit5');
+    await go(page, { view: 'production', id: 'pr_reel2' });
     await page.waitForFunction(() => document.documentElement.dataset.view === 'production');
     await page.waitForSelector('.prod-view .gv-levels .chip');
     { const t = await page.locator('.prod-view .gv-levels .chip').allInnerTexts(); assert.deepEqual(t, ['Shots', 'Storyboard', 'Kit', 'Shoot days'], JSON.stringify(t)); }
-    await page.keyboard.press('Alt+Digit6');
+    await go(page, { view: 'deliver', id: 'pr_reel2' });
     await page.waitForFunction(() => document.documentElement.dataset.view === 'deliver');
     await page.waitForSelector('.prod-view .gv-levels .chip[data-tab="files"]');
     assert.deepEqual(await page.locator('.prod-view .gv-levels .chip').allInnerTexts(), ['Files', 'Share', 'Posting']);
@@ -389,11 +381,11 @@ try {
     await shot(page, 'pages-deliver');
     await page.locator('.prod-view .gv-levels .chip[data-tab="post"]').click();
     await page.waitForSelector('.pd-post-card');
-    assert.match(await page.locator('#crumb').innerText(), /Deliver/);
+    assert.match(await page.locator('#crumb').innerText(), /Share and post/);
   });
 
   await check('new draft from this one: a copy is kept as the draft, the text you carry on in keeps its ids', async () => {
-    await page.keyboard.press('Alt+Digit4');
+    await go(page, { view: 'stage', id: 'pr_reel2', page: 'revise' });
     await page.waitForSelector('.st-tool[data-action="draft-from"]');
     await shot(page, 'pages-revise');
     await page.locator('.st-tool[data-action="draft-from"]').click();
@@ -416,8 +408,8 @@ try {
     await page.mouse.move(700, 500);
     await sleep(400);
     assert.ok(await shown(page), 'the bar stays while writing');
-    assert.ok(await page.locator('#page-tabs').isVisible());
-    assert.deepEqual(await tabs(page), ['overview', 'gather', 'shape', 'write*', 'revise', 'make', 'deliver']);
+    assert.ok(await page.locator('#page-tabs').isHidden(), 'no row of tabs in a piece (One home)');
+    assert.ok(await page.locator('.pv-seg').isVisible(), 'Outline · Write · Grid instead');
   });
 
   // ---------- the desk ----------

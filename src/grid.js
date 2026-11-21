@@ -504,7 +504,7 @@ export class PlotGrid {
     back.addEventListener('click', () => this.hooks.leave(owner));
     tools.append(back, this.hooks.menuButton(() => this.moreMenu(), 'More for the grid'));
     head.append(title, tools);
-    if (this.level && this.rows.length) {
+    if (this.level && (this.rows.length || owner.kind === 'project')) {
       const sw = make('div', 'gv-mode');
       sw.setAttribute('role', 'group');
       sw.setAttribute('aria-label', 'Outline or grid');
@@ -517,7 +517,9 @@ export class PlotGrid {
       }
       sub.prepend(sw);
     }
-    if (this.mode === 'outline' && this.level && this.rows.length) { this.paintOutline(head, sub); return; }
+    // A piece's Outline is its home (One home): drawn even before it has scenes.
+    const home = owner.kind === 'project' && !!this.hooks.pieceHead;
+    if (this.mode === 'outline' && this.level && (this.rows.length || home)) { this.paintOutline(head, sub); return; }
     // Columns: a note category can sit beside the threads (per device).
     const shownTypes = this.typeCols();
     const offered = this.level ? this.usedTypes(shownTypes) : [];
@@ -841,6 +843,11 @@ export class PlotGrid {
 
   paintOutline(head, sub) {
     const page = make('div', 'ol-page');
+    // The piece's home: what it is, its name, stage and sentence (One home).
+    if (this.owner.kind === 'project' && this.hooks.pieceHead) {
+      head.querySelector('.gv-title')?.replaceWith(this.hooks.pieceHead(this.owner, this.world));
+      head.classList.add('ph1-head');
+    }
     const cat = typeof this.follow === 'string' && this.follow.startsWith('type:') && this.usedTypes().some((t) => `type:${t.id}` === this.follow) ? this.follow.slice(5) : '';
     const f = this.threads.some((t) => t.id === this.follow) ? this.follow : cat ? this.follow : '';
     // Follow: Everything, then a chip per thread, then + New thread.
@@ -883,6 +890,7 @@ export class PlotGrid {
     const word = this.level === 'chapter' ? 'chapters' : 'scenes';
     const followed = cat ? this.types.find((t) => t.id === cat) : f ? this.threads.find((t) => t.id === f) : null;
     const has = (i) => (cat ? (this.typed.get(`${i}:${cat}`) || []).length > 0 : (this.cells.get(`${i}:${f}`)?.notes || []).some((n) => (n.text || '').trim()));
+    if (!this.rows.length) page.append(make('p', 'ol-none', this.level === 'wscene' ? 'No scenes yet. Type “# ” and a name below to start the first one.' : 'Nothing here yet. Type “# ” and a name below to start.'));
     if (followed && !this.rows.some((_r, i) => has(i))) page.append(make('p', 'ol-none', `Nothing here yet for ${followed.title || followed.name || 'this thread'}.`));
     let i = 0;
     let run = 0;
@@ -977,6 +985,13 @@ export class PlotGrid {
     tool('↑', 'Move up (Alt + Up)', () => this.nudge(r, i, -1), r.movable && i > 0);
     tool('↓', 'Move down (Alt + Down)', () => this.nudge(r, i, 1), r.movable && i < this.rows.length - 1);
     tool('Open', 'Open it in the text (Enter)', () => this.hooks.open(r));
+    // A novel's chapter keeps its own menu (rename, move, Trash…), as the
+    // piece's old Overview had it (One home).
+    if (r.kind === 'chapter' && this.hooks.rowMenu && this.owner.kind === 'project') {
+      const items = () => this.hooks.rowMenu(r);
+      tools.append(this.hooks.menuButton(items, `More for ${r.title || 'this chapter'}`));
+      head.addEventListener('contextmenu', async (e) => { if (e.target.isContentEditable) return; e.preventDefault(); this.hooks.menu(head, await items()); });
+    }
     head.append(tools);
     box.append(head);
     box.addEventListener('keydown', (e) => {
@@ -1172,7 +1187,8 @@ export class PlotGrid {
 
   async addAtEnd(count, name) {
     const last = this.rows.at(-1);
-    const chId = last?.chapterId;
+    // An empty script: the first scene goes in its first chapter.
+    const chId = last?.chapterId || this.st?.acts?.[0]?.chapters?.[0]?.id;
     if (!chId) return;
     const sibs = await children(chId);
     let sort = (sibs.at(-1)?.sort || 0) + 1024;
