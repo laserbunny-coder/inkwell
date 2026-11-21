@@ -252,6 +252,10 @@ button.wv-mk:hover { background: var(--tint); }
 .wv-sub { padding: 1px 0 3px 23px; }
 .wv-sumi > .wv-sub { padding-left: 1.1em; }
 .wv-lines .ProseMirror { outline: none; font: 14.5px/1.5 var(--prose); color: var(--ink); caret-color: var(--accent); white-space: pre-wrap; }
+/* The plan's lines sit inside the script's own editor: keep the script's sizes, margins and empty-line hints off them. */
+:root #editor .wv-lines .ProseMirror, :root.script.woven #editor .wv-lines .ProseMirror { font: 14.5px/1.5 var(--prose); padding: 0; min-height: 0; }
+:root.script #editor .wv-lines .ProseMirror p { margin: 0; font-size: inherit; text-align: left; }
+:root.script #editor .wv-lines .ProseMirror p:has(> br:only-child)::before { content: none; }
 .wv-lines ul { list-style: none; margin: 0; padding-left: 1.3em; }
 .wv-lines .ProseMirror > ul { padding-left: .1em; }
 .wv-lines li { position: relative; }
@@ -1178,7 +1182,9 @@ html.typewriter #editor, html.typewriter #outline-editor { padding-bottom: 50vh;
 .gv-sum { width: 230px; min-width: 230px; max-width: 230px; }
 /* The Outline (grid.js paintOutline): the same rows, one under another. */
 .gv-mode { display: inline-flex; gap: 4px; margin-right: 10px; }
-.ol-page { max-width: var(--page-width, 680px); padding: 4px 0 30vh; }
+/* A piece already has Write · Outline · Grid in its top bar: no second switch on the page. */
+body:has(.topbar.has-switch) .gv-mode { display: none; }
+.ol-page { max-width: var(--page-width, 680px); margin: 0 auto; padding: 4px 0 30vh; }
 .ol-follow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 18px; }
 .ol-flabel { font: 11px var(--ui); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); margin-right: 4px; }
 .ol-chip { font: 12.5px var(--ui); color: var(--h, var(--muted)); border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; cursor: pointer; }
@@ -1275,6 +1281,7 @@ body.gv-resizing { cursor: col-resize; user-select: none; }
 @media (--narrow) {
   .grid-view { padding: 56px 0 12vh; }
   .gv-head, .gv-sub { padding: 0 16px; }
+  .ol-page { padding-left: 16px; padding-right: 16px; }
   .gv-title { font-size: 24px; }
   .gv-scroll { border-left: 0; border-right: 0; border-radius: 0; max-height: calc(100vh - 170px); }
   .gv-rtitle { width: 128px; min-width: 128px; max-width: 128px; }

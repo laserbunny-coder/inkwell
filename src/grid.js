@@ -842,7 +842,7 @@ export class PlotGrid {
       } else run = 0;
       if (f && !has(k)) {
         const q = make('div', 'ol-row quiet');
-        q.append(make('span', 'ol-n', this.olNum(r, k)), make('span', 'ol-title', r.title || 'Untitled'));
+        q.append(make('span', 'ol-n', this.olNum(r, k)), make('span', 'ol-title', (r.name ?? r.title) || 'Untitled'));
         page.append(q);
         continue;
       }
