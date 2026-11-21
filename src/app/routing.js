@@ -102,6 +102,18 @@ async function go(place) {
   if (place.view === 'production' && gone(await getEntry(place.id))) place = { view: 'library' };
   if (place.view === 'compare' && gone(await getEntry(place.id))) place = { view: 'library' };
   if ((place.view === 'stage' || place.view === 'deliver') && gone(await getEntry(place.id))) place = { view: 'library' };
+  // One Ideas list (One home Part 3): a piece's Ideas are the project's, with
+  // that piece's chip picked. The piece-size Gather page is retired.
+  if (place.view === 'stage' && place.page === 'gather') {
+    const b = await getEntry(place.id);
+    const w = b?.kind === 'project' ? await worldOf(b) : null;
+    if (w) {
+      const { pieceIndex, setPick } = await import('../ideapieces.js');
+      const idx = await pieceIndex(w);
+      setPick(w.id, idx.many && idx.pieces.some((p) => p.id === b.id) ? b.id : 'all');
+      place = { view: 'stage', id: w.id, page: 'gather' };
+    }
+  }
   // A chapter of a kept draft reads beside the draft you're writing, rather than opening to write in.
   if (place.view === 'write' && place.chapterId) {
     const ch = await getEntry(place.chapterId);

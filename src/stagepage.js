@@ -10,6 +10,7 @@ import { worldPromises } from './grid.js';
 import { elementsIn, ELEMENT_TYPES, typeOf, shootDays, newElement, setElement, plainPages, newShootDay } from './production.js';
 import { shareId, commentsOn } from './sharelink.js';
 import { isLife, hasLineDrag, lineDragId, lineWords, partOfPage, partName } from './pages.js';
+import { pieceIndex, pickOf, setPick, fits, chipList, lineFor } from './ideapieces.js';
 import { pieceLine, inIdeaOrder, setIdeaOrder, stepKeys } from './projectoutline.js';
 import { arrangeable, movableRow, refocus } from './listkit.js';
 import { make } from './dom.js';
@@ -122,7 +123,16 @@ export class StagePage {
   // ---------- Gather ----------
 
   async drawGather(body) {
-    const items = await gatherItems(this.owner);
+    // One Ideas list (One home Part 3): with several pieces, chips pick whose.
+    this.idx = this.scope === 'world' ? await pieceIndex(this.owner) : null;
+    const pick = this.idx ? pickOf(this.idx) : 'all';
+    this.pick = pick;
+    if (this.idx?.many) {
+      const row = this.chips(chipList(this.idx), pick, (id) => { setPick(this.owner.id, id); this.walk = null; this.render(); });
+      row.classList.add('st-picks');
+      body.append(row);
+    }
+    const items = (await gatherItems(this.owner)).filter(({ row }) => !this.idx || fits(pick, this.idx.ofLine(row)));
     this.items = items;
     const open = inIdeaOrder(this.owner, items.filter(({ row }) => !(row.fields?.filed || []).length && !row.fields?.letgo));
     const filed = items.filter(({ row }) => (row.fields?.filed || []).length);
@@ -180,6 +190,8 @@ export class StagePage {
     const from = make('button', 'st-from', it.from);
     from.title = 'Open where it was written';
     from.addEventListener('click', () => this.hooks.openEntry(row.id));
+    const pid = this.idx?.many ? this.idx.ofLine(row) : null;
+    if (pid) from.append(make('span', 'st-for', ` · ${this.idx.name(pid)}`));
     const text = make('div', 'st-text');
     text.append(lineWords(row));
     li.append(from, text);
@@ -233,6 +245,7 @@ export class StagePage {
         { label: 'Move to the top', off: i === 0, run: () => this.stepIdea(keys, row.id, 'top') }
       ] : []),
       ...(row.fields?.filed || []).map((id) => ({ label: 'Take it back off a page…', run: async () => { const t = await getEntry(id); const ok = await this.hooks.ask({ title: `Take it off “${t?.title || 'that page'}”?`, body: 'The copy on that page goes; the line stays where it was written.', ok: 'Take it off' }); if (ok) { await this.changed(await unfile(row.id, id)); this.render(); } } })),
+      ...(this.idx?.many ? [this.forItem(row)] : []),
       ...(it.drawer ? [{ label: 'Not for this world', run: async () => { await this.changed(await pullInto(row.id, this.owner.id, false)); this.render(); } }] : []),
       'sep',
       { label: 'Delete', keys: '⌘⇧⌫', danger: true, run: () => this.deleteIdea(row.id) }
@@ -270,8 +283,10 @@ export class StagePage {
     form.noValidate = true;
     const input = make('input');
     input.type = 'text';
-    input.placeholder = 'Add an idea…';
-    input.setAttribute('aria-label', `Add an idea to ${this.owner.title || 'this project'}`);
+    const into = this.pickedPiece();
+    const to = into || this.owner;
+    input.placeholder = into ? `Add an idea for ${into.title || 'this piece'}…` : 'Add an idea…';
+    input.setAttribute('aria-label', `Add an idea to ${to.title || 'this project'}`);
     input.setAttribute('enterkeyhint', 'enter');
     input.autocomplete = 'off';
     form.append(input);
@@ -281,7 +296,7 @@ export class StagePage {
       if (!text) return;
       input.value = '';
       const { addLine } = await import('./capture.js');
-      const { rows } = await addLine([{ type: 'text', text: `${text} ` }, { type: 'entryRef', attrs: { id: this.owner.id, title: this.owner.title || 'Untitled' } }], {});
+      const { rows } = await addLine([{ type: 'text', text: `${text} ` }, { type: 'entryRef', attrs: { id: to.id, title: to.title || 'Untitled' } }], {});
       await this.changed(rows);
       this.hooks.toast('Idea added (on today’s page too)');
       this.stale = false;
@@ -289,6 +304,29 @@ export class StagePage {
       this.el.querySelector('.st-idea input')?.focus();
     });
     return form;
+  }
+
+  // "For…": the whole project, or one piece; only the link that tied it here changes.
+  forItem(row) {
+    const idx = this.idx;
+    const cur = idx.ofLine(row);
+    const to = async (id) => {
+      const [next, was] = await lineFor(row, idx, id);
+      if (!next) return;
+      await putEntries([next]);
+      await this.changed([next]);
+      this.undoToast(`Now for ${id === idx.world.id ? 'the whole project' : idx.name(id)}`, async () => { const back = { ...was, updated_at: Date.now() }; await putEntries([back]); await this.changed([back]); });
+      this.render();
+    };
+    return { label: 'For…', sub: [
+      { label: 'Whole project', current: !cur, run: () => to(idx.world.id) },
+      ...idx.pieces.map((p) => ({ label: `${'  '.repeat(p.depth)}${p.title}`, current: cur === p.id, run: () => to(p.id) }))
+    ] };
+  }
+
+  // The piece picked on the chips, if one is (new ideas and pages go there).
+  pickedPiece() {
+    return this.idx?.many && this.pick !== 'all' && this.pick !== 'whole' ? this.idx.pieces.find((p) => p.id === this.pick)?.row || null : null;
   }
 
   // Delete an idea: the line goes to the Trash (from its day page too), with Undo.
@@ -478,13 +516,25 @@ export class StagePage {
 
   async drawBible(body, label = 'Bible') {
     const w = this.owner;
-    const { pages } = await worldTree(w.id);
+    const tree = await worldTree(w.id);
+    // One Bible (One home Part 3): the project's pages and those made inside a
+    // piece; with several pieces, chips pick whose, and the piece is named.
+    this.idx = await pieceIndex(w);
+    this.pick = pickOf(this.idx);
+    const idx = this.idx;
+    const pages = [...tree.pages, ...tree.piecePages].filter(({ row }) => fits(this.pick, idx.ofPage(row)));
     const head = make('div', 'ph-row');
     head.append(make('span', 'panel-label', label));
     body.append(head);
+    if (idx.many) {
+      const row = this.chips(chipList(idx), this.pick, (id) => { setPick(w.id, id); this.render(); });
+      row.classList.add('st-picks');
+      body.append(row);
+    }
+    const into = this.pickedPiece();
     // "Add a page…" leads the list: type its name, Enter, and the next one.
-    body.append(this.addBox(isLife(w) ? 'Add a page…' : 'Add a bible page…', `Add a page to ${w.title || 'this project'}`, async (title) => {
-      const page = await newPage(w.id, title);
+    body.append(this.addBox(into ? `Add a page for ${into.title || 'this piece'}…` : isLife(w) ? 'Add a page…' : 'Add a bible page…', `Add a page to ${(into || w).title || 'this project'}`, async (title) => {
+      const page = await newPage((into || w).id, title);
       await this.changed([page]);
       this.hooks.toast(`“${title}” added`, { label: 'Open', run: () => this.hooks.go({ view: 'notebook', pageId: page.id }) });
     }));
@@ -497,7 +547,8 @@ export class StagePage {
       const open = make('button', 'loose-title', p.title || 'Untitled page');
       open.addEventListener('click', () => this.hooks.go({ view: 'notebook', pageId: p.id }));
       const el = p.fields?.element;
-      li.append(open, make('span', 'when', el ? typeOf(el.type).label : ago(p.updated_at)), this.hooks.menuButton(() => this.hooks.pageMenu(p), `More for ${p.title || 'this page'}`));
+      const pid = idx.many ? idx.ofPage(p) : null;
+      li.append(open, ...(pid ? [make('span', 'st-for', idx.name(pid))] : []), make('span', 'when', el ? typeOf(el.type).label : ago(p.updated_at)), this.hooks.menuButton(() => this.hooks.pageMenu(p), `More for ${p.title || 'this page'}`));
       this.hooks.arrange(li, 'st-page', p);
       // A line from the Today panel dropped on a page is filed there.
       li.addEventListener('dragover', (e) => { if (hasLineDrag(e)) { e.preventDefault(); li.classList.add('drop'); } });

@@ -273,3 +273,10 @@ span.wo-item { cursor: default; color: var(--muted); }
 .st-day-add { margin: 4px 0 10px; }
 .st-addbox { margin: 2px 0 10px; }
 .st-days .more-btn { width: 30px; margin: 0; padding: 0; display: inline-grid; place-items: center; }
+
+/* One home Part 3: one Ideas list and one Bible; each thing knows its piece. */
+.wo-picks { gap: 6px !important; padding: 2px 0 4px; }
+.wo-picks .chip { min-height: 32px; }
+.wo-for, .st-for { font: 12px var(--ui); color: var(--muted); white-space: nowrap; }
+.st-picks { flex-wrap: wrap; margin: 0 0 10px; }
+.st-bible .st-for { margin-left: 8px; }
