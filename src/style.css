@@ -292,6 +292,25 @@ button.wv-mk:hover { background: var(--tint); }
 .wv-slug.unset { color: var(--signal); opacity: .8; text-transform: none; letter-spacing: .02em; font-size: 11.5px; }
 .wv-shots { text-transform: none; letter-spacing: 0; font-size: 12px; }
 /* Thread colours, by the thread's place in the world's list. */
+/* A novel's plan (novelplan.js): the chapter's name at the top of the
+   chapter (part of the book, always shown) opens the chapter's plan; a scene
+   break opens its own. */
+.nv-head { margin: 0 0 1.4em; text-align: center; }
+.nv-head[hidden] { display: none; }
+.nv-ch { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; border: 0; background: transparent; color: var(--ink); padding: 6px 16px; border-radius: 10px; cursor: pointer; font: inherit; max-width: 100%; }
+.nv-ch:hover, .nv-ch:focus-visible { background: var(--tint); }
+.nv-cn { font: 600 11px/1.2 var(--ui); letter-spacing: .16em; text-transform: uppercase; color: var(--faint); }
+.nv-ct { font: 500 26px/1.25 var(--prose); overflow-wrap: anywhere; }
+.nv-head .wv-plan { margin: .4em 0 0; }
+.nv-plan { margin: -.8em 0 1.6em; }
+:root:not(.script) .scene-break { cursor: pointer; border-radius: 8px; }
+:root:not(.script) .scene-break:hover { color: var(--muted); }
+:root:not(.script) .scene-break.open { color: var(--accent); }
+:root:not(.script) .scene-break.open .scene-title { visibility: hidden; }
+:root:not(.script) .scene-break .scene-title { cursor: text; }
+:root.hide-sections:not(.script):not(.focus) .scene-break .scene-title { display: none; }
+:root.reading .nv-plan, :root.reading .nv-head .wv-plan { display: none; }
+@media (--narrow) { .nv-ct { font-size: 22px; } }
 .hue-a { --h: #8fb0e8; } .hue-b { --h: #c9a6e4; } .hue-c { --h: #8fc7a0; } .hue-d { --h: #d9b382; } .hue-e { --h: #74c2bd; } .hue-f { --h: #e59aa6; } .hue-g { --h: #b9c26a; }
 :root[data-theme="light"] :is(.hue-a, .hue-b, .hue-c, .hue-d, .hue-e, .hue-f, .hue-g) { filter: saturate(1.4) brightness(.62); }
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) :is(.hue-a, .hue-b, .hue-c, .hue-d, .hue-e, .hue-f, .hue-g) { filter: saturate(1.4) brightness(.62); } }
@@ -1185,6 +1204,12 @@ html.typewriter #editor, html.typewriter #outline-editor { padding-bottom: 50vh;
 /* A piece already has Write · Outline · Grid in its top bar: no second switch on the page. */
 body:has(.topbar.has-switch) .gv-mode { display: none; }
 .ol-page { max-width: var(--page-width, 680px); margin: 0 auto; padding: 4px 0 30vh; }
+.ol-breaks { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 2px 26px; }
+.ol-break { display: flex; align-items: baseline; gap: 8px; border: 0; background: transparent; color: var(--muted); font: 13px/1.45 var(--ui); text-align: left; padding: 3px 6px; margin-left: -6px; border-radius: 6px; cursor: pointer; }
+.ol-break:hover, .ol-break:focus-visible { background: var(--tint); color: var(--ink); }
+.ol-bdots { color: var(--faint); letter-spacing: .12em; flex: none; }
+.ol-bt { color: var(--ink); flex: none; }
+.ol-bs { font: italic 14px/1.45 var(--prose); color: var(--muted); min-width: 0; }
 .ol-follow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 18px; }
 .ol-flabel { font: 11px var(--ui); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); margin-right: 4px; }
 .ol-chip { font: 12.5px var(--ui); color: var(--h, var(--muted)); border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; cursor: pointer; }

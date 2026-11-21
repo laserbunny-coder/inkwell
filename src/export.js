@@ -1,4 +1,4 @@
-import { children } from './db.js';
+import { chapterText } from './db.js';
 import { filePath, isImage } from './files.js';
 
 // Plain Markdown, so the writing stays readable in any app even if this one breaks.
@@ -33,7 +33,7 @@ export async function bookMarkdown(project, acts) {
   const out = [`# ${project.title}`, ''];
   for (const act of acts) {
     out.push(`# ${act.title}`, '');
-    for (const ch of act.chapters) out.push(chapterMarkdown(ch, await children(ch.id)), '');
+    for (const ch of act.chapters) out.push(chapterMarkdown(ch, await chapterText(ch.id)), '');
   }
   return out.join('\n');
 }

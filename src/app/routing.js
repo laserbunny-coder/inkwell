@@ -14,7 +14,7 @@ import { addCommands, mod } from './commandlist.js';
 import { $, body, editor, gone, gridTouched, inNotebook, root, setGridTouched, state, store, view } from '../main.js';
 import { touch } from './scriptbar.js';
 import { notebook } from './notebookview.js';
-import { newAct, newChapter, openChapter, scenePlan } from './manuscript.js';
+import { activePlan, newAct, newChapter, openChapter } from './manuscript.js';
 import { renderCrumb, renderRail } from './rail.js';
 import { grid, renderLibrary, renderProject, renderWorld } from './libraryview.js';
 import { beside, comparer, talk } from './revising.js';
@@ -139,7 +139,7 @@ async function go(place) {
     if (id !== state.chapterId) await openChapter(id);
     else remember({ view: 'write', chapterId: id });
     if (place.focus) focusParagraph(place.focus);
-    if (place.plan) scenePlan?.showPlan(place.plan);
+    if (place.plan) activePlan()?.showPlan(place.plan);
   } else if (place.view === 'notebook') {
     if (!touch.matches) notebook.editor.commands.focus();
     const id = place.pageId;
@@ -279,6 +279,9 @@ async function placeOf(id) {
     for (let i = 0; up && up.kind === 'line' && i < 40; i++) up = await getEntry(up.parent_id);
     if (up?.kind === 'note') up = await getEntry(up.parent_id);
     if (up?.kind === 'para') return { view: 'write', chapterId: home.id, focus: up.id, plan: up.id };
+    // A novel: the scene break's plan, or the chapter's own.
+    if (up?.kind === 'scene') return { view: 'write', chapterId: home.id, focus: up.id, plan: up.id };
+    if (up?.kind === 'chapter') return { view: 'write', chapterId: home.id, plan: up.id };
   }
   if (home.kind === 'chapter') return { view: 'write', chapterId: home.id, focus };
   return null;

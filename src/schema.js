@@ -63,7 +63,8 @@ export const SceneBreak = Node.create({
   atom: true,
   selectable: true,
   draggable: true,
-  addOptions() { return { names: () => SECTION_NAMES }; },
+  // onOpen(eid): a tap on a novel's scene break unfolds its plan (src/novelplan.js).
+  addOptions() { return { names: () => SECTION_NAMES, onOpen: null }; },
   addAttributes() {
     return {
       eid: { default: null, parseHTML: (el) => el.getAttribute('data-eid'), renderHTML: (a) => (a.eid ? { 'data-eid': a.eid } : {}) },
@@ -80,6 +81,7 @@ export const SceneBreak = Node.create({
   },
   addNodeView() {
     const names = () => this.options.names();
+    const onOpen = () => this.options.onOpen;
     return ({ node, getPos, editor }) => {
       const script = () => document.documentElement.classList.contains('script');
       const dom = document.createElement('div');
@@ -136,6 +138,11 @@ export const SceneBreak = Node.create({
         if (e.key === 'ArrowUp') { e.preventDefault(); input.focus(); }
       });
       dom.append(dots, input, summary);
+      // In a novel the break is a door to its plan: a tap anywhere but the fields.
+      dom.addEventListener('click', (e) => {
+        if (script() || e.target === input || e.target === summary || !onOpen()) return;
+        onOpen()(dom.dataset.eid);
+      });
       return {
         dom,
         update(updated) {

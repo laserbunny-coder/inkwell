@@ -138,7 +138,7 @@ const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: `${SHOTS
 
 let failed = 0;
 async function check(name, fn) {
-  try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message.split('\n').slice(0, 8).join('\n     ')}`); }
+  try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message.split('\n').slice(0, 8).join('\n     ')}\n     ${(e.stack || '').split('\n').find((l) => l.includes('structure.mjs')) || ''}`); }
 }
 
 try {
@@ -511,6 +511,66 @@ try {
     const eats = live().find((r) => r.kind === 'para' && r.text === 'The family eats in silence.');
     assert.ok(live().some((r) => r.kind === 'note' && r.parent_id === eats.id && r.text === 'funnier?'), 'the [[note]] is beside its line');
     assert.equal(live().find((r) => r.kind === 'para' && r.text === 'Elbows.').fields.el, 'dialogue');
+  });
+
+  await check('a novel: the chapter’s name opens its plan, a scene break opens its own, “# ” makes one; the plan is never part of the text', async () => {
+    await go(laptop, { view: 'write', chapterId: 'ch_3' });
+    await laptop.waitForFunction(() => /^Chapter \d+Road to the jungle$/.test(document.querySelector('.nv-head:not([hidden]) .nv-ch')?.textContent || ''));
+    // The grid's thread line on this chapter is in its plan, not in the text or the margin.
+    assert.doesNotMatch(await laptop.locator('#editor').innerText(), /Spores/);
+    await laptop.locator('.nv-ch').click();
+    await laptop.waitForFunction(() => document.querySelector('.nv-head .wv-beat .wv-bt')?.value === 'Spores in the rain');
+    await laptop.locator('.nv-head .wv-p-sum').click();
+    await laptop.keyboard.type('Rain and spores.');
+    await laptop.keyboard.press('Enter');
+    await laptop.waitForFunction(() => document.activeElement?.closest('.nv-head .wv-lines'));
+    await laptop.keyboard.type('Mud to the knees');
+    await sleep(900);
+    await settle(laptop);
+    assert.equal(row('ch_3').fields.synopsis, 'Rain and spores.');
+    const line = live().find((r) => r.kind === 'line' && r.text === 'Mud to the knees');
+    assert.equal(line?.parent_id, 'ch_3');
+    assert.equal(line.fields.plan, 'summary');
+    // "# " at the start of an empty paragraph: a scene break, its title waiting in its plan.
+    await laptop.locator('#editor p[data-eid="pa_31"]').click();
+    await laptop.keyboard.press('End');
+    await laptop.keyboard.press('Enter');
+    await laptop.keyboard.type('# ');
+    await laptop.waitForFunction(() => document.activeElement?.matches('.nv-plan .wv-p-title'));
+    await laptop.keyboard.type('The flood');
+    await laptop.keyboard.press('Enter');
+    await laptop.keyboard.type('Water rises.');
+    await laptop.keyboard.press('Escape');
+    await laptop.waitForFunction(() => window.__editor.isFocused);
+    await laptop.keyboard.type('The river comes up the road.');
+    await sleep(900);
+    await settle(laptop);
+    const brk = live().find((r) => r.kind === 'scene' && r.parent_id === 'ch_3');
+    assert.equal(brk?.title, 'The flood');
+    assert.equal(brk.fields.synopsis, 'Water rises.');
+    // Writing in the chapter keeps the plan's lines and thread lines as they are.
+    assert.equal(row(line.id).kind, 'line');
+    assert.equal(live().find((r) => r.text === 'Spores in the rain')?.kind, 'note');
+    assert.ok(live().some((r) => r.kind === 'para' && r.parent_id === 'ch_3' && /comes up the road/.test(r.text)));
+    // A tap on the break folds and opens its plan.
+    await laptop.locator(`.scene-break[data-eid="${brk.id}"]`).click({ position: { x: 4, y: 4 } });
+    await laptop.waitForFunction(() => !document.querySelector('.nv-plan'));
+    await laptop.locator(`.scene-break[data-eid="${brk.id}"]`).click({ position: { x: 4, y: 4 } });
+    await laptop.waitForSelector('.nv-plan .wv-p-sum');
+    await shot(laptop, 'novel-plan');
+    // The Outline: chapters, their scene breaks under them; "## " adds a chapter.
+    await go(laptop, { view: 'grid', id: 'pr_novel' });
+    await laptop.locator('.pv-seg button', { hasText: 'Outline' }).click();
+    await laptop.waitForFunction(() => document.querySelector('.ol-row[data-id="ch_3"] .ol-break')?.textContent.includes('The flood'));
+    assert.match(await laptop.locator('.ol-addline').getAttribute('placeholder'), /## a chapter/);
+    await shot(laptop, 'novel-outline');
+    await laptop.locator('.ol-addline').fill('## The temple gate');
+    await laptop.keyboard.press('Enter');
+    await laptop.waitForSelector('.ol-row .ol-title:text("The temple gate")');
+    await settle(laptop);
+    assert.equal(live().find((r) => r.kind === 'chapter' && r.title === 'The temple gate')?.parent_id, 'ac_2');
+    await laptop.locator('.pv-seg button', { hasText: 'Grid' }).click();
+    await laptop.waitForSelector('.gv-row');
   });
 
   // ---------- on a phone ----------

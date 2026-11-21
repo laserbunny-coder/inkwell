@@ -68,7 +68,16 @@ export class ScenePlan {
   titles() { return this.hooks.titles(); }
   version(k) { return this.versions.get(k) || 0; }
   bump(k) { this.versions.set(k, this.version(k) + 1); }
-  redraw() { redraw(this.editor); this.afterDraw(); }
+  redraw() { this.redrawDoc(); this.afterDraw(); }
+
+  // Where a scene's things are kept. Here a Woven scene (its hidden heading);
+  // a novel's chapters and scene breaks override these (src/novelplan.js).
+  find(ref) { return findScene(this.editor.state.doc, ref); }
+  keyOf(s) { return lineKey(s); }
+  putTitle(sc, v) { setTitle(this.editor, sc.pos, v); }
+  putSummary(sc, v) { setSummary(this.editor, sc.pos, v); }
+  redrawDoc() { redraw(this.editor); }
+  words() { return { title: 'Name this scene (only you see it)', titleAria: 'Scene title (only you see it)', sum: 'What happens in this scene' }; }
 
   toggle(ref) {
     if (this.open.has(ref.key)) this.open.delete(ref.key); else this.open.add(ref.key);
@@ -96,7 +105,7 @@ export class ScenePlan {
     if (!this.isOpen(eid)) { if (this.all) this.open.delete(eid); else this.open.add(eid); }
     this.save();
     this.redraw();
-    requestAnimationFrame(() => this.editor.view.dom.querySelector(`.wv-plan[data-key="${CSS.escape(eid)}"]`)?.scrollIntoView({ block: 'center' }));
+    requestAnimationFrame(() => document.querySelector(`.wv-plan[data-key="${CSS.escape(eid)}"]`)?.scrollIntoView({ block: 'center' }));
   }
 
   // A margin note's "▸ N": its scene's notes (or plan, for a thread line) unfolded.
@@ -106,7 +115,7 @@ export class ScenePlan {
     this.noted.add(eid);
     this.save();
     this.redraw();
-    requestAnimationFrame(() => this.editor.view.dom.querySelector(`.wv-notes[data-key="${CSS.escape(eid)}"]`)?.scrollIntoView({ block: 'center' }));
+    requestAnimationFrame(() => document.querySelector(`.wv-notes[data-key="${CSS.escape(eid)}"]`)?.scrollIntoView({ block: 'center' }));
   }
 
   // Every scene's plan at once (Ctrl + Shift + Comma, the Plan button).
@@ -117,7 +126,7 @@ export class ScenePlan {
       this.adding = null;
       document.documentElement.classList.toggle('wv-plan-all', this.all);
       this.save();
-      redraw(this.editor);
+      this.redrawDoc();
     }, key);
     this.afterDraw();
     document.dispatchEvent(new CustomEvent('inkwell:plan-all', { detail: this.all }));
@@ -125,7 +134,7 @@ export class ScenePlan {
   // The left end of a line: titles on or off for the whole script, and the
   // line you tapped stays where it is.
   titlesFrom(ref) {
-    this.hooks.steady(() => { this.hooks.toggleTitles(); redraw(this.editor); }, ref.key);
+    this.hooks.steady(() => { this.hooks.toggleTitles(); this.redrawDoc(); }, ref.key);
   }
 
   // The opening stretch of a chapter has no heading yet; give it one the first
@@ -151,7 +160,7 @@ export class ScenePlan {
     this.focusNext = null;
     if (!f) return;
     requestAnimationFrame(() => {
-      const el = this.editor.view.dom.querySelector(f);
+      const el = document.querySelector(f);
       if (el) { el.focus(); if (el.setSelectionRange && el.value) el.setSelectionRange(el.value.length, el.value.length); }
     });
   }
@@ -189,37 +198,38 @@ export class ScenePlan {
   under(ownerId, ref, field, summary = false) {
     const start = !!ownerId && this.startLines === ownerId;
     if (start) this.startLines = null;
-    return this.lines.mount(ownerId, { summary, start, top: () => (field.isConnected ? field : this.editor.view.dom.querySelector(`[data-owner="${CSS.escape(ownerId)}"] .wv-topf`)), leave: () => this.backToText(ref) });
+    return this.lines.mount(ownerId, { summary, start, top: () => (field.isConnected ? field : document.querySelector(`[data-owner="${CSS.escape(ownerId)}"] .wv-topf`)), leave: () => this.backToText(ref) });
   }
 
   // ---------- the story plan (middle of the line) ----------
 
   planBlock(s) {
-    const k = lineKey(s);
+    const k = this.keyOf(s);
     const ref = { eid: s.eid, at: s.at, key: k };
     const box = make('div', 'wv-plan');
+    const say = this.words(s);
     box.dataset.key = k;
     const title = make('input', 'wv-p-title');
-    title.placeholder = 'Name this scene (only you see it)';
-    title.setAttribute('aria-label', 'Scene title (only you see it)');
+    title.placeholder = say.title;
+    title.setAttribute('aria-label', say.titleAria);
     title.value = s.title || '';
     title.enterKeyHint = 'next';
     const keepTitle = () => {
       const v = title.value.trim();
-      const now = findScene(this.editor.state.doc, ref);
+      const now = this.find(ref);
       if (!now || v === (now.title || '')) return;
       const sc = this.anchor(ref);
-      if (sc) setTitle(this.editor, sc.pos, v);
+      if (sc) this.putTitle(sc, v);
     };
     title.addEventListener('change', keepTitle);
     title.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); keepTitle(); this.editor.view.dom.querySelector(`.wv-plan[data-key="${CSS.escape(ref.key)}"] .wv-p-sum`)?.focus(); }
+      if (e.key === 'Enter') { e.preventDefault(); keepTitle(); document.querySelector(`.wv-plan[data-key="${CSS.escape(ref.key)}"] .wv-p-sum`)?.focus(); }
       if (e.key === 'Escape') { e.preventDefault(); title.value = s.title || ''; this.backToText(ref); }
     });
     const sum = make('textarea', 'wv-p-sum');
     sum.rows = 1;
-    sum.placeholder = 'What happens in this scene';
-    sum.setAttribute('aria-label', 'What happens in this scene');
+    sum.placeholder = say.sum;
+    sum.setAttribute('aria-label', say.sum);
     sum.value = s.synopsis || '';
     sum.enterKeyHint = 'done';
     const grow = () => { sum.style.height = 'auto'; sum.style.height = `${sum.scrollHeight}px`; };
@@ -227,11 +237,11 @@ export class ScenePlan {
     sum.addEventListener('input', grow);
     const keepSum = () => {
       const v = sum.value.replace(/\s*\n\s*/g, ' ').trim();
-      const now = findScene(this.editor.state.doc, ref);
+      const now = this.find(ref);
       if (!now || (v === (now.synopsis || '') && !now.oldSynopsis)) return;
       if (!v && !now.synopsis) return;
       const sc = this.anchor(ref);
-      if (sc) setSummary(this.editor, sc.pos, v);
+      if (sc) this.putSummary(sc, v);
     };
     sum.addEventListener('change', keepSum);
     sum.classList.add('wv-topf');
@@ -380,7 +390,7 @@ export class ScenePlan {
   }
 
   backToText(ref) {
-    const s = findScene(this.editor.state.doc, ref);
+    const s = this.find(ref);
     if (this.hooks.touch()) { document.activeElement?.blur(); return; }
     if (!s) { this.editor.commands.focus(); return; }
     // The caret goes to the start of the scene's words.
@@ -393,7 +403,7 @@ export class ScenePlan {
   // ---------- the notes (right end of the line) ----------
 
   notesBlock(s) {
-    const k = lineKey(s);
+    const k = this.keyOf(s);
     const ref = { eid: s.eid, at: s.at, key: k };
     const box = make('div', 'wv-notes');
     box.dataset.key = k;

@@ -14,7 +14,7 @@ import { hasManuscript } from '../library.js';
 import { body, isWoven, root, state, view } from '../main.js';
 import { toggleGrid } from './productionwiring.js';
 import { grid as plotGrid } from './libraryview.js';
-import { scenePlan } from './manuscript.js';
+import { activePlan } from './manuscript.js';
 
 let box = null;
 let write = null;
@@ -48,7 +48,7 @@ function build() {
   plan = make('button', 'pv-plan', 'Plan');
   plan.type = 'button';
   plan.title = 'The plan under every scene: open or fold them all (Ctrl + Shift + Comma)';
-  plan.addEventListener('click', () => scenePlan?.toggleAll());
+  plan.addEventListener('click', () => activePlan()?.toggleAll());
   box.append(seg, plan);
 }
 
@@ -68,8 +68,8 @@ export async function syncPieceSwitch() {
   write.setAttribute('aria-pressed', String(v === 'write'));
   outline.setAttribute('aria-pressed', String(v === 'grid' && plotGrid?.mode === 'outline'));
   grid.setAttribute('aria-pressed', String(v === 'grid' && plotGrid?.mode !== 'outline'));
-  plan.hidden = !(v === 'write' && isWoven());
-  plan.setAttribute('aria-pressed', String(!!scenePlan?.all));
+  plan.hidden = !(v === 'write' && activePlan());
+  plan.setAttribute('aria-pressed', String(!!activePlan()?.all));
 }
 
 // ---------- stepping aside while reading ----------

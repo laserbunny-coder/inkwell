@@ -22,6 +22,8 @@ export class NotesLayer {
     // Notes left out of the margin: resolved comments, and categories switched
     // off (Claude's notes, readers' comments). Set by the app.
     this.skip = () => false;
+    // A thread line kept in a novel's plan (src/novelplan.js), not the margin.
+    this.inPlan = () => false;
     // Answering and resolving a reader's comment (src/sharelink.js).
     this.comments = null;
     window.addEventListener('resize', () => this.layout());
@@ -113,7 +115,7 @@ export class NotesLayer {
     this.layout();
   }
 
-  hides(note) { return !!note.fields?.resolved || this.skip(note) || this.underLine(note); }
+  hides(note) { return !!note.fields?.resolved || this.skip(note) || this.underLine(note) || this.inPlan(note); }
 
   // A thread line on a Woven scene's hidden heading lives in the plan under
   // the scene line (src/sceneplan.js), not in the margin.

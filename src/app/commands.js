@@ -4,7 +4,7 @@ import { SECTION_NAMES } from '../schema.js';
 import { keyLabel, showKeysForThisComputer } from '../keys.js';
 import { flip, newParagraphVersion } from '../alts.js';
 import { bySort } from '../order.js';
-import { putEntries, children, getEntry, byKind } from '../db.js';
+import { putEntries, chapterText, getEntry, byKind } from '../db.js';
 import { askText, askScript, toast } from '../menu.js';
 import { chapterMarkdown, bookMarkdown, download } from '../export.js';
 import { mb } from '../keep.js';
@@ -60,7 +60,7 @@ function openFontPicker() {
 async function exportChapter() {
   await store.close(editor.state.doc);
   const ch = await getEntry(state.chapterId);
-  download(`${ch.title}.md`, chapterMarkdown(ch, await children(ch.id)));
+  download(`${ch.title}.md`, chapterMarkdown(ch, await chapterText(ch.id)));
 }
 
 async function exportVault() {
@@ -72,7 +72,7 @@ async function exportVault() {
 async function exportFountain() {
   await store.close(editor.state.doc);
   const rows = [];
-  for (const act of state.acts) for (const ch of act.chapters) rows.push(...(await children(ch.id)));
+  for (const act of state.acts) for (const ch of act.chapters) rows.push(...(await chapterText(ch.id)));
   download(`${state.project.title}.fountain`, toFountain(state.project.title, rows));
 }
 

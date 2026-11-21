@@ -114,6 +114,14 @@ export async function children(parentId, { withTrash = false } = {}) {
   return rows.filter((r) => !r.deleted && r.kind !== 'about' && (withTrash || !isTrashed(r))).sort(bySort);
 }
 
+// A chapter's own text, in order: paragraphs, scene breaks and headings. A
+// chapter also holds the grid's thread lines (notes) and the plan's lines
+// under its summary; those are never part of the text, an export or a draft.
+const TEXT_KINDS = new Set(['para', 'scene', 'heading']);
+export async function chapterText(chapterId) {
+  return (await children(chapterId)).filter((r) => TEXT_KINDS.has(r.kind));
+}
+
 export async function linkedFrom(id) {
   const db = await open();
   const rows = await result(db.transaction('entries').objectStore('entries').index('links').getAll(id));
