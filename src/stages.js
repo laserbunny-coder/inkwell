@@ -1,4 +1,4 @@
-import { getEntry, children, putEntries, byKind, byTag, linkedFrom } from './db.js';
+import { getEntry, children, chapterText, putEntries, byKind, byTag, linkedFrom } from './db.js';
 import { entry, newId, tagsIn, outline } from './model.js';
 import { GAP, bySort } from './order.js';
 import {
@@ -228,7 +228,7 @@ export async function pieceText(piece, limit = 12000) {
   let n = 0;
   for (const act of await outline(piece.id)) {
     for (const ch of act.chapters) {
-      for (const r of await children(ch.id)) {
+      for (const r of await chapterText(ch.id)) {
         const t = r.kind === 'scene' ? r.title || r.text || '' : r.text || '';
         if (!t.trim()) continue;
         out.push(t);

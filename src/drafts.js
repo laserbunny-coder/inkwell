@@ -1,4 +1,4 @@
-import { children, getEntry, putEntries } from './db.js';
+import { chapterText, children, getEntry, putEntries } from './db.js';
 import { entry, newId, wordCount, outline } from './model.js';
 import { versionsOf, blocks as docBlocks, words as wordDiff } from './history.js';
 
@@ -53,7 +53,7 @@ export async function chaptersUnder(ownerId) {
 // A piece (or a draft of it) as chapters of blocks.
 export async function pieceDoc(ownerId) {
   const chapters = [];
-  for (const ch of await chaptersUnder(ownerId)) chapters.push({ ...ch, blocks: (await children(ch.id)).map(blockOf) });
+  for (const ch of await chaptersUnder(ownerId)) chapters.push({ ...ch, blocks: (await chapterText(ch.id)).map(blockOf) });
   return chapters;
 }
 

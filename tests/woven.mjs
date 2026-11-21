@@ -607,7 +607,6 @@ try {
     await p.waitForSelector('.ol-page');
     assert.equal(await p.locator('.pv-seg button', { hasText: 'Outline' }).getAttribute('aria-pressed'), 'true');
     assert.equal(await p.locator('.ol-row').count(), scenes);
-    await snap('c-outline');
     const two = p.locator('.ol-row').nth(1);
     // The summary is written here, the same one the plan and the grid show.
     await two.locator('.ol-sum').click();
@@ -617,6 +616,7 @@ try {
     await sleep(500);
     assert.ok((await all()).some((e) => e.kind === 'para' && e.fields?.el === 'scene' && /ALLEY/i.test(e.text) && !e.deleted && /Kenji counts it twice\.$/.test(e.fields.synopsis || '')));
     assert.equal(await two.locator('.ol-beat .ol-tn').first().innerText(), 'Saving the bakery');
+    if (process.env.SHOTS) { await p.evaluate(() => window.scrollTo(0, 0)); await snap('c-outline'); }
     // Follow a thread: the scenes without it go quiet.
     await p.locator('.ol-chip', { hasText: 'Saving the bakery' }).click();
     await p.waitForSelector('.ol-row.quiet');

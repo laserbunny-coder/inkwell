@@ -2,7 +2,7 @@
 // board (a world's pieces by stage).
 import { isTouch } from '../device.js';
 import { keyLabel } from '../keys.js';
-import { children, getEntry, byKind } from '../db.js';
+import { chapterText, getEntry, byKind } from '../db.js';
 import { searchChanged } from '../search.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, toast } from '../menu.js';
 import { outline, wordCount } from '../model.js';
@@ -211,7 +211,7 @@ async function filesOut(kind, b) {
   const acts = await outline(b.id);
   if (kind === 'fountain') {
     const rows = [];
-    for (const act of acts) for (const ch of act.chapters) rows.push(...(await children(ch.id)));
+    for (const act of acts) for (const ch of act.chapters) rows.push(...(await chapterText(ch.id)));
     return download(`${b.title || 'Untitled'}.fountain`, toFountain(b.title, rows));
   }
   if (kind === 'markdown') return download(`${b.title || 'Untitled'}.md`, await bookMarkdown(b, acts));

@@ -8,6 +8,7 @@ import { scriptPages, assignCodes } from '../script.js';
 import { renderLinkedFrom } from '../notebook.js';
 import { ScenePop, guessAll, redraw as redrawWoven, placeList, sceneAt, scenesOf, ensureHeading, setMarker, lineKey, KINDS as SCENE_KINDS } from '../woven.js';
 import { ScenePlan } from '../sceneplan.js';
+import { NovelPlan } from '../novelplan.js';
 import { shotsUnder } from '../production.js';
 import { applyLook, renderLook, renderNames, nameColour, cleanLook, DEFAULT_LOOK } from '../wovenlook.js';
 import { elementsIn, plainPages, newElement } from '../production.js';
@@ -46,6 +47,7 @@ async function openChapter(id) {
   numbering = book?.fields?.numbered ? await numberingAround(book, id) : { before: null, after: null, used: [] };
   requestAnimationFrame(placeScriptBar);
   scenePlan?.load(book?.id);
+  novelPlan?.load(book?.id);
   steadyPad(0);
   loadDoc(editor, doc);
   if (isWoven()) guessAll(editor);
@@ -57,6 +59,7 @@ async function openChapter(id) {
   await notes.load(id);
   // The threads and notes under the scene lines are known now.
   if (isWoven()) redrawWoven(editor);
+  novelPlan?.redrawDoc();
   await renderChapterLinks();
   await setMeta('lastChapter', id);
   if (state.project) await setMeta(`lastChapter:${state.project.id}`, id);
@@ -186,6 +189,11 @@ function wovenPick() {
 
 let scenePop; // set in wireManuscript()
 let scenePlan; // the plan under the scene line, set in wireManuscript()
+let novelPlan; // a novel's: under the chapter's name and each scene break (novelplan.js)
+// A novel (any book that isn't a script) has its chapter open in Write.
+const novelOn = () => !isScript() && !!store.chapter && !!state.project;
+// The plan for what's open: a Woven script's, a novel's, or none.
+const activePlan = () => (isWoven() ? scenePlan : novelOn() ? novelPlan : null);
 
 // ---------- keeping a line still (Michael, Nov 20 2026) ----------
 
@@ -413,7 +421,7 @@ addCommands(() => [
   { group: 'write', label: 'Script view: Woven (flowing, scene headings hidden)', keys: '', words: ['woven', 'flowing', 'prose', 'quiet', 'view'], run: () => setWoven(true), when: () => writing() && isScript() && !isWoven() },
   { group: 'write', label: 'Script view: Classic (the standard screenplay page)', keys: '', words: ['woven', 'classic', 'standard', 'view', 'courier'], run: () => setWoven(false), when: () => writing() && isWoven() },
   { group: 'write', label: 'Woven: this scene’s place, time and title…', keys: '/scene', words: ['scene', 'place', 'time', 'slug', 'heading', 'title'], run: sceneDetails, when: () => writing() && isWoven() },
-  { group: 'write', label: 'Plan under every scene (open or fold them all)', keys: '⌘⇧,', words: ['plan', 'summary', 'summaries', 'threads', 'outline', 'unfold', 'fold', 'beats'], run: () => scenePlan.toggleAll(), when: () => writing() && isWoven() },
+  { group: 'write', label: 'Plan under every scene (open or fold them all)', keys: '⌘⇧,', words: ['plan', 'summary', 'summaries', 'threads', 'outline', 'unfold', 'fold', 'beats'], run: () => activePlan()?.toggleAll(), when: () => writing() && !!activePlan() },
   { group: 'write', label: 'Woven: prepare for shoot (fill in every scene’s place and time)', keys: '', words: ['shoot', 'production', 'slug', 'headings', 'breakdown', 'claude'], run: prepareShoot, when: () => writing() && isWoven() },
   { group: 'write', label: 'Scene numbers: turn off', keys: '', run: async () => toggleNumbering(await currentBook()), when: () => writing() && isScript() && !!state.project?.fields?.numbered },
   { group: 'sync', label: 'Connect Claude to Inkwell (a connector address)…', keys: '', run: () => connectClaude() },
@@ -440,10 +448,39 @@ function wireManuscript() {
     openRef: (id) => openEntry(id),
     onLines: (ed) => planLinesFocus(ed, scenePlan.lines)
   });
-  document.addEventListener('inkwell:note-lines', (e) => { if (isWoven()) scenePlan.showNoteLines(e.detail); });
+  novelPlan = new NovelPlan({
+    editor: () => editor,
+    notes,
+    project: () => state.project,
+    world: async () => (state.project ? worldOf(state.project) : null),
+    toast: (m, a) => toast(m, a),
+    touch: () => matchMedia('(pointer: coarse)').matches,
+    titles: titlesShowing,
+    toggleTitles: () => toggleSections(),
+    openRef: (id) => openEntry(id),
+    onLines: (ed) => planLinesFocus(ed, novelPlan.lines),
+    on: novelOn,
+    chapter: () => store.chapter,
+    chapterN: () => state.acts.flatMap((a) => a.chapters).findIndex((c) => c.id === store.chapter?.id) + 1,
+    chapterWord: () => state.project?.fields?.levels?.[1] || 'Chapter',
+    head: () => $('.nv-head'),
+    saveChapter: async (fn) => {
+      const ch = store.chapter;
+      if (!ch) return;
+      const fresh = (await getEntry(ch.id)) || ch;
+      const change = fn(fresh);
+      // The store keeps this same chapter object: change it in place.
+      Object.assign(ch, fresh, change, { updated_at: Date.now() });
+      await putEntries([{ ...ch }]);
+      // A new name shows at the top; a summary is already where it was typed.
+      if (change.title) { state.acts = await outline(state.project.id); renderRail(); renderCrumb(); novelPlan.drawHead(); }
+    }
+  });
+  notes.inPlan = (n) => novelPlan.inPlan(n);
+  document.addEventListener('inkwell:note-lines', (e) => { activePlan()?.showNoteLines(e.detail); });
   editor.view.dom.addEventListener('mousemove', (e) => { pointerY = e.clientY; });
   editor.view.dom.addEventListener('mouseleave', () => { pointerY = null; });
   $('#chapter-links-chip').addEventListener('click', () => $('.chapter-links').scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
 
-export { biblePlaces, scenePlan, steadyTitles, connectScribe, markScene, newAct, newChapter, numbering, openChapter, refreshWords, renderChapterLinks, sceneDetails, scenePop, syncWoven, toggleNumbering, wireManuscript, wovenPick };
+export { activePlan, biblePlaces, novelPlan, scenePlan, steadyTitles, connectScribe, markScene, newAct, newChapter, numbering, openChapter, refreshWords, renderChapterLinks, sceneDetails, scenePop, syncWoven, toggleNumbering, wireManuscript, wovenPick };

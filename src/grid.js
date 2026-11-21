@@ -401,7 +401,7 @@ export class PlotGrid {
     this.stale = false;
     const owner = (this.owner = await getEntry(this.owner.id));
     if (!owner || owner.deleted) return;
-    const st = await loadStructure(owner);
+    const st = (this.st = await loadStructure(owner));
     const levels = levelsFor(owner, st);
     const wanted = pref(LEVEL_KEY(owner.id), null);
     const fallback = levels.find((l) => l.id === 'chapter' || l.id === 'wscene') || levels.filter((l) => /^s\d$/.test(l.id)).at(-1) || levels[0];
@@ -927,6 +927,25 @@ export class PlotGrid {
       const k = this.threads.indexOf(t);
       for (const n of this.cells.get(`${i}:${t.id}`)?.notes || []) box.append(this.olBeat(n, r, t, k));
     }
+    // A novel's chapter: its scene breaks, nested under it (a tap opens one in the text).
+    if (r.kind === 'chapter' && !f) {
+      const ch = (this.st?.acts || []).flatMap((a) => a.chapters).find((c) => c.id === r.id);
+      const breaks = (ch?.rows || []).filter((x) => x.kind === 'scene');
+      if (breaks.length) {
+        const list = make('div', 'ol-breaks');
+        for (const b of breaks) {
+          const row = make('button', 'ol-break');
+          row.type = 'button';
+          row.dataset.id = b.id;
+          row.title = 'Open it in the text';
+          row.append(make('span', 'ol-bdots', '· · ·'), make('span', 'ol-bt', b.title || 'A scene'));
+          if (b.fields?.synopsis) row.append(make('span', 'ol-bs', b.fields.synopsis));
+          row.addEventListener('click', () => this.hooks.open({ ...r, focus: b.id }));
+          list.append(row);
+        }
+        box.append(list);
+      }
+    }
     if (!f && this.threads.length) box.append(this.olAddBeat(r, i));
     return box;
   }
@@ -1041,13 +1060,16 @@ export class PlotGrid {
     const wrap = make('div', 'ol-addrow');
     const input = make('input', 'ol-addline');
     const woven = this.level === 'wscene';
-    input.placeholder = woven ? '# a new scene, ## a sequence, ### an act' : 'Add a line…';
+    // A novel (Part 3): "# " a scene break, "## " a chapter, "### " a part.
+    const novel = this.owner?.kind === 'project' && bookType(this.owner) !== 'screenplay' && ['chapter', 'scene'].includes(this.level);
+    const kinds = novel ? ['a scene', 'a chapter', 'a part'] : ['a scene', 'a sequence', 'an act'];
+    input.placeholder = woven ? '# a new scene, ## a sequence, ### an act' : novel ? '# a new scene, ## a chapter, ### a part' : 'Add a line…';
     input.setAttribute('aria-label', 'Add at the end');
     input.enterKeyHint = 'done';
     const hint = make('div', 'ol-hint');
     input.addEventListener('input', () => {
       const m = /^(#{1,3})\s/.exec(input.value);
-      hint.textContent = m ? `Enter adds ${['a scene', 'a sequence', 'an act'][m[1].length - 1]}` : '';
+      hint.textContent = m ? `Enter adds ${kinds[m[1].length - 1]}` : '';
     });
     input.addEventListener('keydown', async (e) => {
       if (e.key !== 'Enter') return;
@@ -1055,8 +1077,8 @@ export class PlotGrid {
       const m = /^(#{1,3})\s+(.*)$/.exec(input.value.trim() + (input.value.trim().endsWith('#') ? ' ' : ''));
       const count = m ? m[1].length : 1;
       const name = (m ? m[2] : input.value).trim();
-      if (!woven) { this.hooks.toast('Add lines with # in a script’s Outline'); return; }
-      await this.addAtEnd(count, name);
+      if (!woven && !novel) { this.hooks.toast('Add lines with # in a script’s or a book’s Outline'); return; }
+      if (novel) await this.addToBook(count, name); else await this.addAtEnd(count, name);
       input.value = '';
       hint.textContent = '';
       await this.render();
@@ -1080,6 +1102,32 @@ export class PlotGrid {
       rows.push(entry('para', { parent_id: chId, text: '', content: null, sort: next(), fields: { el: 'action' } }));
     } else {
       rows.push(entry('scene', { parent_id: chId, title: name, sort: next(), fields: count === 2 ? { level: 2 } : {} }));
+    }
+    await putEntries(rows);
+    this.hooks.changed(rows);
+  }
+
+  // A novel's add line: a scene break at the end of the last chapter, a new
+  // chapter after it, or a new part (with its first chapter).
+  async addToBook(count, name) {
+    const acts = this.st?.acts || [];
+    const act = acts.at(-1);
+    const word = (i, d) => this.owner.fields?.levels?.[i] || d;
+    const chapters = acts.flatMap((a) => a.chapters);
+    const rows = [];
+    if (count === 1) {
+      const ch = chapters.at(-1);
+      if (!ch) return;
+      const sibs = await children(ch.id);
+      const sort = (sibs.at(-1)?.sort || 0) + 1024;
+      rows.push(entry('scene', { parent_id: ch.id, title: name, sort }));
+      rows.push(entry('para', { parent_id: ch.id, text: '', content: null, sort: sort + 1024 }));
+    } else if (count === 2) {
+      if (!act) return;
+      rows.push(entry('chapter', { parent_id: act.id, title: name || `${word(1, 'Chapter')} ${chapters.length + 1}`, sort: (act.chapters.at(-1)?.sort || 0) + 1 }));
+    } else {
+      const part = entry('act', { parent_id: this.owner.id, title: name || `${word(0, 'Part')} ${acts.length + 1}`, sort: (act?.sort || 0) + 1 });
+      rows.push(part, entry('chapter', { parent_id: part.id, title: `${word(1, 'Chapter')} ${chapters.length + 1}`, sort: 1 }));
     }
     await putEntries(rows);
     this.hooks.changed(rows);

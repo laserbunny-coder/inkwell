@@ -1,4 +1,4 @@
-import { children, getEntry, putEntries, snapshots } from './db.js';
+import { chapterText, getEntry, putEntries, snapshots } from './db.js';
 import { keep } from './history.js';
 import { tagsIn, blockWords } from './model.js';
 import { refsIn, WAL_LONG } from './outline.js';
@@ -34,7 +34,7 @@ export class ChapterStore {
 
   async load(chapterId) {
     this.chapter = await getEntry(chapterId);
-    const rows = await children(chapterId);
+    const rows = await chapterText(chapterId);
     this.cache = new Map(rows.map((r) => [r.id, r]));
     const last = (await snapshots(chapterId))[0];
     this.lastSnapshot = last ? JSON.stringify(last.doc) : '';
@@ -47,7 +47,7 @@ export class ChapterStore {
 
   // Re-reads the chapter after another device changed it.
   async refresh() {
-    const rows = await children(this.chapter.id);
+    const rows = await chapterText(this.chapter.id);
     this.cache = new Map(rows.map((r) => [r.id, r]));
     return toDoc(rows);
   }
