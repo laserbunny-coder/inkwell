@@ -1,5 +1,5 @@
 // The top of a piece (Michael, Nov 20 2026: "it's important that we have
-// those views accessible"): Write · Grid (Outline joins in Part 2) in the top
+// those views accessible"): Write · Outline · Grid in the top
 // bar whenever a script or novel is open, the same place on Windows and
 // Android, and in a Woven script's Write the Plan button, which opens or
 // folds the plan under every scene (Ctrl + Shift + Comma).
@@ -13,11 +13,13 @@ import { getEntry } from '../db.js';
 import { hasManuscript } from '../library.js';
 import { body, isWoven, root, state, view } from '../main.js';
 import { toggleGrid } from './productionwiring.js';
+import { grid as plotGrid } from './libraryview.js';
 import { scenePlan } from './manuscript.js';
 
 let box = null;
 let write = null;
 let grid = null;
+let outline = null;
 let plan = null;
 
 function build() {
@@ -29,11 +31,20 @@ function build() {
   write.type = 'button';
   write.title = 'The text';
   write.addEventListener('click', () => { if (view() === 'grid') toggleGrid(); });
+  // Outline and Grid are the same place (Shape), shown two ways.
+  const shape = async (mode) => {
+    if (view() !== 'grid') { plotGrid.mode = mode; await toggleGrid(); } else await plotGrid.setMode(mode);
+    syncPieceSwitch();
+  };
+  outline = make('button', '', 'Outline');
+  outline.type = 'button';
+  outline.title = 'The outline: every scene with its summary and threads, no text';
+  outline.addEventListener('click', () => shape('outline'));
   grid = make('button', '', 'Grid');
   grid.type = 'button';
   grid.title = 'The plot grid: scenes down, threads across (Ctrl + Shift + G)';
-  grid.addEventListener('click', () => { if (view() !== 'grid') toggleGrid(); });
-  seg.append(write, grid);
+  grid.addEventListener('click', () => shape('grid'));
+  seg.append(write, outline, grid);
   plan = make('button', 'pv-plan', 'Plan');
   plan.type = 'button';
   plan.title = 'The plan under every scene: open or fold them all (Ctrl + Shift + Comma)';
@@ -55,7 +66,8 @@ export async function syncPieceSwitch() {
   document.querySelector('.topbar')?.classList.toggle('has-switch', on);
   if (!on) return;
   write.setAttribute('aria-pressed', String(v === 'write'));
-  grid.setAttribute('aria-pressed', String(v === 'grid'));
+  outline.setAttribute('aria-pressed', String(v === 'grid' && plotGrid?.mode === 'outline'));
+  grid.setAttribute('aria-pressed', String(v === 'grid' && plotGrid?.mode !== 'outline'));
   plan.hidden = !(v === 'write' && isWoven());
   plan.setAttribute('aria-pressed', String(!!scenePlan?.all));
 }
@@ -69,6 +81,7 @@ function away(on) { body.classList.toggle('scroll-away', on); }
 
 export function wirePieceSwitch() {
   document.addEventListener('inkwell:plan-all', () => syncPieceSwitch());
+  document.addEventListener('inkwell:grid-mode', () => syncPieceSwitch());
   document.addEventListener('inkwell:calm-scroll', () => { calmUntil = performance.now() + 250; });
   last = window.scrollY;
   window.addEventListener('scroll', () => {

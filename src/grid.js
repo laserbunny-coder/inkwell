@@ -21,6 +21,9 @@ import { plain as make } from './dom.js';
 // Threads belong to the world, so a promise planted in one piece can be paid
 // off in another (a gag sets up what an episode pays off).
 
+// Thread colours, by a thread's place in the world's list (as in the plan).
+const HUES = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+
 export const BEATS = [
   { id: 'promise', label: 'Promise', mark: '◇', about: 'Sets something up the story owes the reader' },
   { id: 'progress', label: 'Progress', mark: '→', about: 'Moves a promise along' },
@@ -227,7 +230,7 @@ function wovenRows(st, owner, row, group) {
     cur.members.push(r.id);
     cur.span.push(r.id);
   }
-  for (const r of rows) r.title = `${r.code ? '' : `${r.n} · `}${r.title || r.first || 'name it'}`;
+  for (const r of rows) { r.name = r.title || ''; r.title = `${r.code ? '' : `${r.n} · `}${r.title || r.first || 'name it'}`; }
 }
 
 // ---------- reading a thread down its column ----------
@@ -364,6 +367,10 @@ export class PlotGrid {
     this.saveTimers = new Map();
     this.busy = Promise.resolve();
     this.touch = media('touch');
+    // Outline or Grid (Part 2, Nov 2026): a phone opens on Outline, Windows on
+    // whichever was used last there.
+    this.mode = this.touch.matches ? 'outline' : pref('gridMode', 'grid');
+    this.follow = '';
     // Lines under a cell's top line, opened in place (planlines.js, loaded
     // when first needed so the grid's own logic runs anywhere).
     this.lines = null;
@@ -485,6 +492,20 @@ export class PlotGrid {
     back.addEventListener('click', () => this.hooks.leave(owner));
     tools.append(back, this.hooks.menuButton(() => this.moreMenu(), 'More for the grid'));
     head.append(title, tools);
+    if (this.level && this.rows.length) {
+      const sw = make('div', 'gv-mode');
+      sw.setAttribute('role', 'group');
+      sw.setAttribute('aria-label', 'Outline or grid');
+      for (const [id, label] of [['outline', 'Outline'], ['grid', 'Grid']]) {
+        const b = make('button', 'chip' + (this.mode === id ? ' on' : ''), label);
+        b.type = 'button';
+        b.setAttribute('aria-pressed', String(this.mode === id));
+        b.addEventListener('click', () => this.setMode(id));
+        sw.append(b);
+      }
+      sub.prepend(sw);
+    }
+    if (this.mode === 'outline' && this.level && this.rows.length) { this.paintOutline(head, sub); return; }
 
     const scroll = make('div', 'gv-scroll');
     if (!this.level) {
@@ -757,6 +778,311 @@ export class PlotGrid {
     box.append(mark, text);
     if (!n.unsaved) this.linesIn(box, n.id, false);
     return box;
+  }
+
+  // ---------- the Outline (Part 2) ----------
+  // The same rows as the grid, one under another: number, title, summary and
+  // each thread's line, all written in place (the plan under the scene line,
+  // without the text). Follow a thread to see only its lines.
+
+  setMode(mode) {
+    if (this.mode === mode) return this.busy;
+    this.mode = mode;
+    if (!this.touch.matches) setPref('gridMode', mode);
+    document.dispatchEvent(new CustomEvent('inkwell:grid-mode', { detail: mode }));
+    return this.render();
+  }
+
+  paintOutline(head, sub) {
+    const page = make('div', 'ol-page');
+    const f = this.threads.some((t) => t.id === this.follow) ? this.follow : '';
+    // Follow: Everything, then a chip per thread, then + New thread.
+    const follow = make('div', 'ol-follow');
+    follow.setAttribute('role', 'group');
+    follow.setAttribute('aria-label', 'Follow');
+    follow.append(make('span', 'ol-flabel', 'Follow'));
+    const chip = (id, label, hue) => {
+      const b = make('button', `ol-chip${hue ? ` hue-${hue}` : ''}`, label);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(f === id));
+      b.addEventListener('click', () => { this.follow = f === id && id ? '' : id; this.render(); });
+      return b;
+    };
+    follow.append(chip('', 'Everything'));
+    this.threads.forEach((t, k) => {
+      const b = chip(t.id, t.title || 'Untitled', HUES[k % HUES.length]);
+      b.title = this.touch.matches ? '' : 'Follow this thread. F2 or right-click: rename and more.';
+      b.addEventListener('contextmenu', (e) => { e.preventDefault(); this.hooks.menu(b, this.threadMenu(t)); });
+      b.addEventListener('keydown', (e) => { if (e.key === 'F2') { e.preventDefault(); this.hooks.menu(b, this.threadMenu(t)); } });
+      let hold = null;
+      b.addEventListener('touchstart', () => { hold = setTimeout(() => { hold = 'done'; this.hooks.menu(b, this.threadMenu(t)); }, 550); }, { passive: true });
+      b.addEventListener('touchend', (e) => { if (hold === 'done') e.preventDefault(); clearTimeout(hold); hold = null; });
+      b.addEventListener('touchmove', () => { clearTimeout(hold); hold = null; }, { passive: true });
+      follow.append(b);
+    });
+    const nt = make('button', 'ol-chip new', '+ New thread');
+    nt.type = 'button';
+    nt.addEventListener('click', () => this.addThread(nt));
+    follow.append(nt);
+    page.append(follow);
+
+    const word = this.level === 'chapter' ? 'chapters' : 'scenes';
+    const followed = f ? this.threads.find((t) => t.id === f) : null;
+    const has = (i) => (this.cells.get(`${i}:${f}`)?.notes || []).some((n) => (n.text || '').trim());
+    if (followed && !this.rows.some((_r, i) => has(i))) page.append(make('p', 'ol-none', `Nothing here yet for ${followed.title || 'this thread'}.`));
+    let i = 0;
+    let run = 0;
+    for (const item of this.items) {
+      if (item.type === 'group') { if (!f) page.append(this.olGroup(item)); continue; }
+      const r = item;
+      const k = i++;
+      if (f && this.gapSet.has(`${k}:${f}`)) {
+        if (!run) { let n = 0; while (this.gapSet.has(`${k + n}:${f}`)) n++; page.append(make('div', 'ol-gap', `Quiet for ${n} ${word}`)); }
+        run++;
+      } else run = 0;
+      if (f && !has(k)) {
+        const q = make('div', 'ol-row quiet');
+        q.append(make('span', 'ol-n', this.olNum(r, k)), make('span', 'ol-title', (r.name ?? r.title) || 'Untitled'));
+        page.append(q);
+        continue;
+      }
+      page.append(this.olRow(r, k, f));
+    }
+    if (!f) page.append(this.olAdd());
+    this.el.replaceChildren(head, sub, page);
+    this.lines?.sweep();
+  }
+
+  olNum(r, i) { return r.code || (r.n != null ? String(r.n) : String(i + 1)); }
+
+  olGroup(g) {
+    const box = make('div', `ol-sec d${g.depth || 1}`);
+    box.dataset.id = g.id;
+    const t = make('button', 'ol-st', g.title);
+    t.type = 'button';
+    t.title = this.touch.matches ? '' : 'Open it in the text';
+    t.addEventListener('click', () => this.hooks.open(g));
+    const sum = make('div', 'gv-text ol-gsum', g.entry?.fields?.synopsis || '');
+    sum.contentEditable = 'plaintext-only';
+    sum.dataset.placeholder = 'What happens in it';
+    sum.setAttribute('aria-label', `Summary of ${g.title}`);
+    sum.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sum.blur(); } });
+    sum.addEventListener('blur', () => this.saveSummary({ id: g.id, synopsis: g.entry?.fields?.synopsis || '' }, sum.textContent.trim()));
+    box.append(t, sum);
+    this.linesIn(box, g.id, true);
+    return box;
+  }
+
+  olRow(r, i, f) {
+    const box = make('div', 'ol-row' + (r.opening ? ' opening' : ''));
+    box.dataset.id = r.id;
+    const head = make('div', 'ol-head');
+    if (r.movable && !this.touch.matches) {
+      const grip = make('span', 'gv-grip ol-grip', '⠿');
+      grip.title = 'Drag to move it in the story';
+      grip.draggable = true;
+      grip.addEventListener('dragstart', (e) => { this.dragging = { row: r }; box.classList.add('dragging'); e.dataTransfer.setData('text/plain', r.title); e.dataTransfer.effectAllowed = 'move'; });
+      grip.addEventListener('dragend', () => { box.classList.remove('dragging'); this.dragging = null; });
+      head.append(grip);
+      this.dropTarget(box, { row: r });
+    }
+    head.append(make('span', 'ol-n', this.olNum(r, i)));
+    head.append(this.olTitle(r));
+    const tools = make('span', 'ol-tools');
+    const tool = (label, aria, run, on = true) => {
+      if (!on) return;
+      const b = make('button', '', label);
+      b.type = 'button';
+      b.setAttribute('aria-label', aria);
+      b.title = aria;
+      b.addEventListener('click', run);
+      tools.append(b);
+    };
+    tool('↑', 'Move up (Alt + Up)', () => this.nudge(r, i, -1), r.movable && i > 0);
+    tool('↓', 'Move down (Alt + Down)', () => this.nudge(r, i, 1), r.movable && i < this.rows.length - 1);
+    tool('Open', 'Open it in the text (Enter)', () => this.hooks.open(r));
+    head.append(tools);
+    box.append(head);
+    box.addEventListener('keydown', (e) => {
+      if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && r.movable) {
+        e.preventDefault();
+        const dir = e.key === 'ArrowUp' ? -1 : 1;
+        if (this.rows[i + dir]) this.nudge(r, i, dir).then(() => this.el.querySelector(`.ol-row[data-id="${CSS.escape(r.id)}"] .ol-title`)?.focus());
+      }
+    });
+    if (!f) {
+      const sum = make('div', 'gv-text ol-sum', r.synopsis || '');
+      sum.contentEditable = 'plaintext-only';
+      sum.dataset.placeholder = 'What happens';
+      sum.setAttribute('aria-label', `Summary of ${r.title}`);
+      sum.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sum.blur(); } if (e.key === 'Escape') { sum.textContent = r.synopsis || ''; sum.blur(); } });
+      sum.addEventListener('blur', () => this.saveSummary(r, sum.textContent.trim()));
+      const sw = make('div', 'ol-sumw');
+      sw.append(sum);
+      if (!r.opening) this.linesIn(sw, r.id, true);
+      box.append(sw);
+    }
+    const shown = f ? this.threads.filter((t) => t.id === f) : this.threads;
+    for (const t of shown) {
+      const k = this.threads.indexOf(t);
+      for (const n of this.cells.get(`${i}:${t.id}`)?.notes || []) box.append(this.olBeat(n, r, t, k));
+    }
+    if (!f && this.threads.length) box.append(this.olAddBeat(r, i));
+    return box;
+  }
+
+  // A row's title: the scene's own name (only you see it), written here.
+  olTitle(r) {
+    const open = () => this.hooks.open(r);
+    const titleId = r.kind === 'scene' && !r.untitled ? r.members?.[0] : (['chapter', 'act'].includes(r.kind) ? r.id : null);
+    if (r.kind !== 'scene' && !titleId) {
+      const b = make('button', 'ol-title', r.title || 'Untitled');
+      b.type = 'button';
+      b.addEventListener('click', open);
+      return b;
+    }
+    const own = r.name ?? r.title ?? '';
+    const t = make('div', 'ol-title', r.untitled ? '' : own);
+    t.contentEditable = 'plaintext-only';
+    t.tabIndex = 0;
+    t.dataset.placeholder = r.first ? `Name it (${r.first})` : 'Name it';
+    t.setAttribute('aria-label', `Title of ${r.title || 'this scene'} (only you see it)`);
+    t.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); if (t.textContent.trim() === (r.untitled ? '' : own)) open(); else t.blur(); }
+      if (e.key === 'Escape') { t.textContent = r.untitled ? '' : own; t.blur(); }
+    });
+    t.addEventListener('blur', () => this.renameRow(r, t.textContent.trim(), titleId));
+    return t;
+  }
+
+  async renameRow(r, name, titleId) {
+    const was = r.untitled ? '' : r.name ?? r.title ?? '';
+    if (name === was) return;
+    const now = Date.now();
+    if (titleId) {
+      const fresh = await getEntry(titleId);
+      if (!fresh) return;
+      await putEntries([{ ...fresh, title: name, updated_at: now }]);
+      this.hooks.changed([fresh]);
+    } else if (name && r.kind === 'scene' && r.chapterId) {
+      // An untitled scene gets its title section right above its heading.
+      const sibs = await children(r.chapterId);
+      const at = sibs.findIndex((x) => x.id === r.id);
+      if (at < 0) return;
+      const before = at > 0 ? sibs[at - 1].sort : sibs[at].sort - 2048;
+      const row = entry('scene', { parent_id: r.chapterId, title: name, sort: (before + sibs[at].sort) / 2, fields: { level: 3 } });
+      await putEntries([row]);
+      this.hooks.changed([row]);
+    } else return;
+    r.name = name;
+    r.untitled = !name;
+    this.render();
+  }
+
+  olBeat(n, r, t, k) {
+    const box = make('div', `gv-note ol-beat hue-${HUES[k % HUES.length]}`);
+    box.dataset.note = n.id;
+    const beat = beatOf(n.fields?.beat);
+    const mark = make('button', 'gv-mark', beat ? beat.mark : '·');
+    mark.type = 'button';
+    mark.title = `${beat ? beat.label : 'No mark'}. Tap for the next mark; right-click for more.`;
+    mark.setAttribute('aria-label', `${beat ? beat.label : 'No mark'}: next mark`);
+    const order = [null, 'promise', 'progress', 'payoff'];
+    mark.addEventListener('click', () => this.setBeat(n, order[(order.indexOf(n.fields?.beat || null) + 1) % order.length]));
+    mark.addEventListener('contextmenu', (e) => { e.preventDefault(); this.hooks.menu(mark, this.noteMenu(n, r, t)); });
+    const name = make('span', 'ol-tn', t.title || 'Thread');
+    const text = make('div', 'gv-text', n.text || '');
+    text.contentEditable = 'plaintext-only';
+    text.dataset.placeholder = 'what happens for this thread';
+    text.setAttribute('aria-label', `${t.title} in ${r.title}`);
+    text.addEventListener('input', () => this.saveNote(n, text.textContent));
+    text.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); text.blur(); } if (e.key === 'Escape') text.blur(); });
+    text.addEventListener('blur', () => this.doneNote(n, text.textContent));
+    const line = make('div', 'ol-bline');
+    line.append(mark, name, text);
+    box.append(line);
+    if (!n.unsaved) this.linesIn(box, n.id, false);
+    return box;
+  }
+
+  olAddBeat(r, i) {
+    const foot = make('div', 'ol-foot');
+    const add = make('button', 'ol-addb', '+ thread');
+    add.type = 'button';
+    add.addEventListener('click', () => {
+      const chips = make('div', 'ol-chips');
+      this.threads.forEach((t, k) => {
+        const b = make('button', `ol-chip hue-${HUES[k % HUES.length]}`, t.title || 'Untitled');
+        b.type = 'button';
+        b.addEventListener('click', () => {
+          const n = entry('note', { parent_id: r.id, type: this.hooks.noteType(), fields: { thread: t.id, ...(r.chapterId ? { chapter_id: r.chapterId } : {}) } });
+          n.unsaved = true;
+          n.sort = Date.now();
+          const el = this.olBeat(n, r, t, k);
+          foot.replaceWith(el, this.olAddBeat(r, i));
+          el.querySelector('.gv-text').focus();
+        });
+        chips.append(b);
+      });
+      const done = make('button', 'ol-addb', 'Done');
+      done.type = 'button';
+      done.addEventListener('click', () => chips.replaceWith(add));
+      chips.append(done);
+      add.replaceWith(chips);
+      chips.querySelector('button')?.focus();
+    });
+    foot.append(add);
+    return foot;
+  }
+
+  // The add line at the end: "# name" a scene, "## name" a sequence,
+  // "### name" an act (a chapter or part in a novel, Part 3).
+  olAdd() {
+    const wrap = make('div', 'ol-addrow');
+    const input = make('input', 'ol-addline');
+    const woven = this.level === 'wscene';
+    input.placeholder = woven ? '# a new scene, ## a sequence, ### an act' : 'Add a line…';
+    input.setAttribute('aria-label', 'Add at the end');
+    input.enterKeyHint = 'done';
+    const hint = make('div', 'ol-hint');
+    input.addEventListener('input', () => {
+      const m = /^(#{1,3})\s/.exec(input.value);
+      hint.textContent = m ? `Enter adds ${['a scene', 'a sequence', 'an act'][m[1].length - 1]}` : '';
+    });
+    input.addEventListener('keydown', async (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const m = /^(#{1,3})\s+(.*)$/.exec(input.value.trim() + (input.value.trim().endsWith('#') ? ' ' : ''));
+      const count = m ? m[1].length : 1;
+      const name = (m ? m[2] : input.value).trim();
+      if (!woven) { this.hooks.toast('Add lines with # in a script’s Outline'); return; }
+      await this.addAtEnd(count, name);
+      input.value = '';
+      hint.textContent = '';
+      await this.render();
+      this.el.querySelector('.ol-addline')?.focus();
+    });
+    wrap.append(input, hint);
+    return wrap;
+  }
+
+  async addAtEnd(count, name) {
+    const last = this.rows.at(-1);
+    const chId = last?.chapterId;
+    if (!chId) return;
+    const sibs = await children(chId);
+    let sort = (sibs.at(-1)?.sort || 0) + 1024;
+    const next = () => { const s0 = sort; sort += 1024; return s0; };
+    const rows = [];
+    if (count === 1) {
+      rows.push(entry('scene', { parent_id: chId, title: name, sort: next(), fields: { level: 3 } }));
+      rows.push(entry('para', { parent_id: chId, text: '', content: null, sort: next(), fields: { el: 'scene' } }));
+      rows.push(entry('para', { parent_id: chId, text: '', content: null, sort: next(), fields: { el: 'action' } }));
+    } else {
+      rows.push(entry('scene', { parent_id: chId, title: name, sort: next(), fields: count === 2 ? { level: 2 } : {} }));
+    }
+    await putEntries(rows);
+    this.hooks.changed(rows);
   }
 
   // ---------- column widths (Nov 20 2026) ----------
