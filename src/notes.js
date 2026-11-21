@@ -1,6 +1,7 @@
 import { byKind, putEntries } from './db.js';
 import { entry, newId, noteTypes, saveNoteTypes, tagsIn } from './model.js';
 import { plain as make } from './dom.js';
+import { descendants } from './outline.js';
 
 // Notes sit beside the text, each lined up with the top of its paragraph.
 // A note is its own entry whose parent is the paragraph it belongs to, so it
@@ -248,6 +249,21 @@ export class NotesLayer {
     head.append(hide);
 
     card.append(head, text);
+    // Lines under this note (planlines.js): the count here; they're written in
+    // the plan under the scene line.
+    const more = make('button', 'note-more');
+    more.type = 'button';
+    more.hidden = true;
+    more.addEventListener('click', () => document.dispatchEvent(new CustomEvent('inkwell:note-lines', { detail: note })));
+    card.append(more);
+    descendants(note.id).then((rows) => {
+      if (!rows.length) return;
+      more.textContent = `▸ ${rows.length}`;
+      more.title = `${rows.length === 1 ? 'A line' : `${rows.length} lines`} under this note: open them under the scene line`;
+      more.setAttribute('aria-label', more.title);
+      more.hidden = false;
+      this.layout();
+    }).catch(() => {});
     return card;
   }
 

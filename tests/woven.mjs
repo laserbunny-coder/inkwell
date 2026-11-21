@@ -346,6 +346,75 @@ try {
     await p.waitForFunction(() => !document.querySelector('.wv-plan'));
   });
 
+  await check('lines under lines: Enter at the end of a top line, Tab nests, fold shows the count, they follow the line to the Trash and back', async () => {
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.m').click();
+    await p.waitForSelector('.wv-plan .wv-p-sum');
+    // Enter at the end of the summary starts its first line.
+    await p.locator('.wv-plan .wv-p-sum').click();
+    await p.keyboard.press('End');
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => document.activeElement?.closest('.wv-sumi .wv-lines'));
+    await p.keyboard.type('He counts twice');
+    await p.keyboard.press('Enter');
+    await p.keyboard.press('Tab');
+    await p.keyboard.type('Once for luck');
+    // Tab where it can't nest stays in the plan.
+    await p.keyboard.press('Home');
+    await sleep(900);
+    let rows = await all();
+    const heading = rows.find((e) => e.kind === 'para' && e.fields?.el === 'scene' && /ALLEY/i.test(e.text) && !e.deleted);
+    const first = rows.find((e) => e.kind === 'line' && e.text === 'He counts twice' && !e.deleted);
+    const second = rows.find((e) => e.kind === 'line' && e.text === 'Once for luck' && !e.deleted);
+    assert.equal(first.parent_id, heading.id);
+    assert.equal(first.fields.plan, 'summary');
+    assert.equal(second.parent_id, first.id, 'Tab put it under the line above');
+    assert.equal(heading.fields.synopsis, 'Kenji counts the coins. It is not enough.', 'the summary itself is untouched');
+    // Fold: the top line shows how many lines are under it, at any depth.
+    const fold = p.locator('.wv-sumi > .wv-topl .wv-fold');
+    await fold.click();
+    assert.equal(await fold.innerText(), '▸ 2');
+    assert.equal(await p.locator('.wv-sumi > .wv-sub').isHidden(), true);
+    // Folded stays folded when the plan closes and opens again.
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.m').click();
+    await p.waitForFunction(() => !document.querySelector('.wv-plan'));
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.m').click();
+    await p.waitForFunction(() => document.querySelector('.wv-sumi > .wv-topl .wv-fold:not([hidden])')?.textContent === '▸ 2');
+    await p.locator('.wv-sumi > .wv-topl .wv-fold').click();
+    await p.waitForFunction(() => document.querySelector('.wv-sumi .wv-lines')?.textContent.includes('Once for luck'));
+    // Under a thread line: its lines hang on the line's note, and go to the Trash with it.
+    await p.locator('.wv-plan .wv-beat .wv-bt').click();
+    await p.keyboard.press('End');
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => document.activeElement?.closest('.wv-item:not(.wv-sumi) .wv-lines'));
+    await p.keyboard.type('Tells nobody');
+    await sleep(900);
+    rows = await all();
+    const note = rows.find((e) => e.kind === 'note' && e.fields?.thread && e.parent_id === heading.id && !e.deleted);
+    const under = rows.find((e) => e.kind === 'line' && e.text === 'Tells nobody' && !e.deleted);
+    assert.equal(under.parent_id, note.id);
+    // Esc goes back to the text.
+    await p.keyboard.press('Escape');
+    await p.waitForFunction(() => window.__editor.isFocused);
+    await p.locator('.wv-plan .wv-beat .wv-x').click();
+    await p.waitForFunction(() => !document.querySelector('.wv-plan .wv-beat'));
+    await sleep(300);
+    assert.equal((await all()).find((e) => e.id === under.id).deleted, true, 'its line went with it');
+    await p.locator('.toast button', { hasText: 'Undo' }).click();
+    await p.waitForFunction(() => document.querySelector('.wv-plan .wv-item:not(.wv-sumi) .wv-lines')?.textContent.includes('Tells nobody'));
+    assert.equal((await all()).find((e) => e.id === under.id).deleted, false);
+    // An empty first line left behind is no line at all.
+    await p.locator('.wv-plan .wv-beat .wv-bt').click();
+    await p.keyboard.press('End');
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => document.activeElement?.closest('.wv-item:not(.wv-sumi) .wv-lines'));
+    await p.keyboard.press('Backspace');
+    await p.waitForFunction(() => document.activeElement?.classList.contains('wv-bt'));
+    await sleep(600);
+    assert.equal((await all()).filter((e) => e.kind === 'line' && e.parent_id === note.id && !e.deleted).length, 1);
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.m').click();
+    await p.waitForFunction(() => !document.querySelector('.wv-plan'));
+  });
+
   await check('the right end: notes for the scene, + note in your own category', async () => {
     await p.locator('.wv-line').nth(0).locator('.wv-zone.r').click();
     await p.waitForSelector('.wv-notes');
@@ -401,6 +470,29 @@ try {
     await p.waitForFunction(() => [...document.querySelectorAll('.gv-row .gv-name')].map((x) => x.textContent).join('|').includes('2 · Counting the coins'));
     assert.equal(await p.locator('.gv-row').count(), 2);
     assert.match(await p.locator('.gv-row').nth(1).innerText(), /Kenji counts the coins/);
+    // Lines under the summary: folded to "▸ 2" in the cell, a tap opens them in place.
+    const tog = p.locator('.gv-row').nth(1).locator('.gv-sum .gv-lines-tog');
+    await tog.waitFor();
+    assert.equal(await tog.innerText(), '▸ 2');
+    await tog.click();
+    await p.waitForFunction(() => document.querySelector('.gv-sum .wv-lines')?.textContent.includes('Once for luck'));
+    // Columns resize: drag the edge of the heading; a double-click makes it wide and back.
+    const head = p.locator('.gv-sumh');
+    const w0 = (await head.boundingBox()).width;
+    const g = await p.locator('.gv-sumh .gv-colgrip').boundingBox();
+    await p.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+    await p.mouse.down();
+    await p.mouse.move(g.x + g.width / 2 + 60, g.y + g.height / 2, { steps: 4 });
+    await p.mouse.move(g.x + g.width / 2 + 120, g.y + g.height / 2, { steps: 4 });
+    await p.mouse.up();
+    const w1 = (await head.boundingBox()).width;
+    assert.ok(Math.abs(w1 - w0 - 120) < 6, `${w0} -> ${w1}`);
+    const cellW = (await p.locator('.gv-row').nth(1).locator('.gv-sum').boundingBox()).width;
+    assert.ok(Math.abs(cellW - w1) < 3, 'the column’s cells follow');
+    await p.locator('.gv-sumh .gv-colgrip').dblclick();
+    await p.waitForFunction(() => Math.abs(document.querySelector('.gv-sumh').offsetWidth - 520) < 3);
+    await p.locator('.gv-sumh .gv-colgrip').dblclick();
+    await p.waitForFunction((w) => Math.abs(document.querySelector('.gv-sumh').offsetWidth - w) < 3, w0);
     await p.locator('.pv-seg button', { hasText: 'Write' }).click();
     await p.waitForFunction(() => !document.documentElement.dataset.view && document.querySelector('.wv-line'));
   });
@@ -497,6 +589,22 @@ try {
     await p.waitForFunction(() => window.__editor.state.selection.$from.parent.attrs.el === 'action');
     await p.keyboard.type('Dawn. Out in the parking lot, the van will not start.');
     await p.waitForFunction(() => window.__editor.state.doc.firstChild.textContent === 'EXT. PARKING LOT - DAWN');
+  });
+
+  await check('412px wide: the plan’s lines under lines fit, nothing sideways', async () => {
+    await p.setViewportSize({ width: 412, height: 900 });
+    await p.keyboard.press('Control+O');
+    await p.keyboard.type('Script · Rent Day');
+    await p.waitForFunction(() => document.querySelector('.palette[data-loaded]') && /^Script\s*chapter · Rent Day/.test(document.querySelector('#palette-list li.box-row')?.textContent || ''));
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => document.querySelectorAll('.wv-line').length >= 2);
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.m').click();
+    await p.waitForFunction(() => document.querySelector('.wv-sumi .wv-lines')?.textContent.includes('Once for luck'));
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'nothing sideways');
+    const box = await p.locator('.wv-sumi .wv-lines').boundingBox();
+    assert.ok(box.x >= 0 && box.x + box.width <= 412, `lines at ${box.x}..${box.x + box.width}`);
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.m').click();
+    await p.setViewportSize({ width: 1280, height: 900 });
   });
 
   assert.deepEqual(errors, []);

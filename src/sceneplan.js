@@ -14,6 +14,7 @@ import { plain as make } from './dom.js';
 import { BEATS, newThread } from './grid.js';
 import { findScene, ensureHeading, setTitle, setSummary, lineKey, redraw } from './woven.js';
 import { shotsUnder } from './production.js';
+import { PlanLines, trashLinesUnder, restoreLines } from './planlines.js';
 
 // Thread colours, by a thread's place in the world's list.
 export const HUES = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
@@ -37,6 +38,9 @@ export class ScenePlan {
     this.adding = null; // the scene whose "+ thread" chips are showing
     this.versions = new Map();
     this.focusNext = null;
+    // Lines under the summary, a thread line or a note (planlines.js).
+    this.startLines = null; // the top line whose first line is on its way
+    this.lines = new PlanLines({ openRef: (id) => hooks.openRef?.(id), onFocus: (ed) => hooks.onLines?.(ed) });
   }
 
   get editor() { return this.hooks.editor(); }
@@ -52,6 +56,7 @@ export class ScenePlan {
     this.open = new Set(saved?.open || []);
     this.noted = new Set(saved?.notes || []);
     this.adding = null;
+    this.lines.dropAll();
     document.documentElement.classList.toggle('wv-plan-all', this.all);
   }
   save() {
@@ -84,6 +89,24 @@ export class ScenePlan {
     this.save();
     this.focusNext = `.wv-plan[data-key="${CSS.escape(eid)}"] .wv-p-title`;
     this.redraw();
+  }
+
+  // A search result in a scene's plan: that scene's plan unfolded, in view.
+  showPlan(eid) {
+    if (!this.isOpen(eid)) { if (this.all) this.open.delete(eid); else this.open.add(eid); }
+    this.save();
+    this.redraw();
+    requestAnimationFrame(() => this.editor.view.dom.querySelector(`.wv-plan[data-key="${CSS.escape(eid)}"]`)?.scrollIntoView({ block: 'center' }));
+  }
+
+  // A margin note's "▸ N": its scene's notes (or plan, for a thread line) unfolded.
+  showNoteLines(n) {
+    const eid = n.parent_id;
+    if (n.fields?.thread) return this.showPlan(eid);
+    this.noted.add(eid);
+    this.save();
+    this.redraw();
+    requestAnimationFrame(() => this.editor.view.dom.querySelector(`.wv-notes[data-key="${CSS.escape(eid)}"]`)?.scrollIntoView({ block: 'center' }));
   }
 
   // Every scene's plan at once (Ctrl + Shift + Comma, the Plan button).
@@ -123,6 +146,7 @@ export class ScenePlan {
 
   // After a redraw, the field that should have the caret gets it.
   afterDraw() {
+    requestAnimationFrame(() => this.lines.sweep());
     const f = this.focusNext;
     this.focusNext = null;
     if (!f) return;
@@ -151,6 +175,21 @@ export class ScenePlan {
     const last = localStorage.getItem('wvNoteType');
     const mine = this.notes.types.filter((t) => !NOT_MINE.includes(t.id));
     return (mine.find((t) => t.id === last) || mine[0] || this.notes.types[0])?.id || null;
+  }
+
+  // ---------- lines under a top line ----------
+
+  // Enter at the end of a top line starts the first line under it.
+  atEnd(field) { return field.selectionStart === field.value.length && field.selectionEnd === field.value.length; }
+  startUnder(ref, ownerId) {
+    this.startLines = ownerId;
+    this.bump(ref.key);
+    this.redraw();
+  }
+  under(ownerId, ref, field, summary = false) {
+    const start = !!ownerId && this.startLines === ownerId;
+    if (start) this.startLines = null;
+    return this.lines.mount(ownerId, { summary, start, top: () => (field.isConnected ? field : this.editor.view.dom.querySelector(`[data-owner="${CSS.escape(ownerId)}"] .wv-topf`)), leave: () => this.backToText(ref) });
   }
 
   // ---------- the story plan (middle of the line) ----------
@@ -195,11 +234,25 @@ export class ScenePlan {
       if (sc) setSummary(this.editor, sc.pos, v);
     };
     sum.addEventListener('change', keepSum);
+    sum.classList.add('wv-topf');
     sum.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && this.atEnd(sum)) {
+        e.preventDefault();
+        keepSum();
+        const sc = this.anchor(ref);
+        if (sc?.eid) this.startUnder(ref, sc.eid);
+        return;
+      }
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); keepSum(); this.backToText(ref); }
       if (e.key === 'Escape') { e.preventDefault(); keepSum(); this.backToText(ref); }
     });
-    box.append(title, sum);
+    const top = make('div', 'wv-item wv-sumi');
+    if (s.eid) top.dataset.owner = s.eid;
+    const { sub, fold } = this.under(s.eid, ref, sum, true);
+    const line = make('div', 'wv-topl');
+    line.append(sum, fold);
+    top.append(line, sub);
+    box.append(title, top);
     for (const n of this.threadNotes(s.eid)) box.append(this.beatRow(n, ref));
     box.append(this.addThreadRow(ref));
     return box;
@@ -229,14 +282,22 @@ export class ScenePlan {
     text.enterKeyHint = 'done';
     text.addEventListener('input', () => { n.text = text.value; this.notes.save(n); });
     text.addEventListener('change', () => this.notes.render());
-    text.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); this.backToText(ref); } });
+    text.classList.add('wv-topf');
+    text.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && this.atEnd(text)) { e.preventDefault(); this.notes.render(); this.startUnder(ref, n.id); return; }
+      if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); this.backToText(ref); }
+    });
     const x = make('button', 'wv-x', '×');
     x.type = 'button';
     x.title = 'Take this line away';
     x.setAttribute('aria-label', `Take the ${t?.title || 'thread'} line away`);
     x.addEventListener('click', () => this.removeNote(n, ref.key, 'Thread line'));
-    row.append(mark, name, text, x);
-    return row;
+    const { sub, fold } = this.under(n.id, ref, text);
+    row.append(mark, name, text, fold, x);
+    const item = make('div', 'wv-item');
+    item.dataset.owner = n.id;
+    item.append(row, sub);
+    return item;
   }
 
   addThreadRow(ref) {
@@ -301,6 +362,8 @@ export class ScenePlan {
   }
 
   async removeNote(n, key, what) {
+    await this.lines.drop(n.id);
+    const under = await trashLinesUnder(n.id);
     await this.notes.remove(n);
     this.bump(key);
     this.redraw();
@@ -309,6 +372,7 @@ export class ScenePlan {
       n.updated_at = Date.now();
       this.notes.notes.push(n);
       await putEntries([n]);
+      await restoreLines(under);
       this.bump(key);
       this.redraw();
       this.notes.render();
@@ -391,14 +455,22 @@ export class ScenePlan {
     requestAnimationFrame(grow);
     text.addEventListener('input', () => { n.text = text.value; grow(); this.notes.save(n); });
     text.addEventListener('change', () => this.notes.render());
-    text.addEventListener('keydown', (e) => { if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Escape') { e.preventDefault(); this.notes.render(); this.backToText(ref); } });
+    text.classList.add('wv-topf');
+    text.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && this.atEnd(text)) { e.preventDefault(); this.notes.render(); this.startUnder(ref, n.id); return; }
+      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Escape') { e.preventDefault(); this.notes.render(); this.backToText(ref); }
+    });
     const x = make('button', 'wv-x', '×');
     x.type = 'button';
     x.title = 'Take this note away';
     x.setAttribute('aria-label', 'Take this note away');
     x.addEventListener('click', () => this.removeNote(n, ref.key, 'Note'));
-    row.append(make('span', 'wv-mk', '–'), pick, text, x);
-    return row;
+    const { sub, fold } = this.under(n.id, ref, text);
+    row.append(make('span', 'wv-mk', '–'), pick, text, fold, x);
+    const item = make('div', 'wv-item');
+    item.dataset.owner = n.id;
+    item.append(row, sub);
+    return item;
   }
 
   async addNote(ref) {

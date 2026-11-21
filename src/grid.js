@@ -364,6 +364,9 @@ export class PlotGrid {
     this.saveTimers = new Map();
     this.busy = Promise.resolve();
     this.touch = media('touch');
+    // Lines under a cell's top line, opened in place (planlines.js, loaded
+    // when first needed so the grid's own logic runs anywhere).
+    this.lines = null;
   }
 
   get isOpen() { return !!this.owner && document.documentElement.dataset.view === 'grid'; }
@@ -497,7 +500,10 @@ export class PlotGrid {
     const hr = make('tr');
     const th0 = make('th', 'gv-corner');
     th0.append(make('span', '', levels.find((l) => l.id === this.level)?.label || ''));
-    hr.append(th0, Object.assign(make('th', 'gv-sumh', 'Summary'), { scope: 'col' }));
+    const sumh = Object.assign(make('th', 'gv-sumh', 'Summary'), { scope: 'col' });
+    sumh.dataset.col = 'summary';
+    this.grip(sumh, 'summary');
+    hr.append(th0, sumh);
     this.threads.forEach((t) => hr.append(this.threadHead(t)));
     const add = make('th', 'gv-addh');
     const addBtn = make('button', 'ghost-btn gv-add-thread', '+ Thread');
@@ -515,10 +521,13 @@ export class PlotGrid {
     }
     table.append(thead, tbody);
     scroll.append(table);
+    this.scrollEl = scroll;
+    this.colWidths();
     const empty = !this.rows.length ? make('p', 'hint gv-empty', 'No rows at this level yet.') : null;
     const read = this.claudePanel();
     const hint = !this.threads.length && this.rows.length ? make('p', 'hint gv-hint', 'Add a thread for each thing you want to follow down the story: a character’s journey, a mystery, a romance. A blank run in a column shows where a thread was dropped.') : null;
     this.el.replaceChildren(...[head, sub, read, scroll, empty, hint].filter(Boolean));
+    this.lines?.sweep();
   }
 
   // ---------- Claude, only when asked ----------
@@ -612,12 +621,14 @@ export class PlotGrid {
     const th = make('th', 'gv-thread');
     th.scope = 'col';
     th.dataset.thread = t.id;
+    th.dataset.col = t.id;
     const name = make('button', 'gv-tname', t.title || 'Untitled');
     name.type = 'button';
     name.title = t.fields?.tag ? `#${t.fields.tag}` : '';
     name.addEventListener('click', () => this.hooks.menu(name, this.threadMenu(t)));
     name.addEventListener('contextmenu', (e) => { e.preventDefault(); this.hooks.menu(name, this.threadMenu(t)); });
     th.append(name);
+    this.grip(th, t.id);
     if (!this.touch.matches) {
       th.draggable = true;
       th.addEventListener('dragstart', (e) => { this.dragging = { thread: t.id }; e.dataTransfer.setData('text/plain', t.title || ''); e.dataTransfer.effectAllowed = 'move'; });
@@ -669,6 +680,7 @@ export class PlotGrid {
     tr.append(th);
 
     const sum = make('td', 'gv-sum');
+    sum.dataset.col = 'summary';
     const text = make('div', 'gv-text', r.synopsis || '');
     text.contentEditable = 'plaintext-only';
     text.dataset.placeholder = 'What happens';
@@ -676,6 +688,7 @@ export class PlotGrid {
     text.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); text.blur(); } if (e.key === 'Escape') { text.textContent = r.synopsis || ''; text.blur(); } });
     text.addEventListener('blur', () => this.saveSummary(r, text.textContent.trim()));
     sum.append(text);
+    if (!r.opening) this.linesIn(sum, r.id, true);
     tr.append(sum);
 
     for (const t of this.threads) tr.append(this.cellEl(r, i, t));
@@ -687,6 +700,7 @@ export class PlotGrid {
   cellEl(r, i, t) {
     const td = make('td', 'gv-cell');
     td.dataset.thread = t.id;
+    td.dataset.col = t.id;
     const c = this.cells.get(`${i}:${t.id}`) || { notes: [], mentions: [] };
     if (this.gapSet.has(`${i}:${t.id}`)) td.classList.add('gap');
     for (const n of c.notes) td.append(this.noteEl(n, r, t));
@@ -741,7 +755,111 @@ export class PlotGrid {
     });
     text.addEventListener('blur', () => this.doneNote(n, text.textContent));
     box.append(mark, text);
+    if (!n.unsaved) this.linesIn(box, n.id, false);
     return box;
+  }
+
+  // ---------- column widths (Nov 20 2026) ----------
+  // Drag the right edge of a column's heading to widen or narrow it; a
+  // double-click on the edge (a tap on a phone) makes it wide and back. On a
+  // phone wide is the screen beside the row names, and the grid slides the
+  // column into place. Per script, per device.
+
+  widths() { try { return JSON.parse(pref(`gridCols:${this.owner?.id}`, '{}')) || {}; } catch { return {}; } }
+  colWidths(w = this.widths()) {
+    let style = document.getElementById('gv-colw');
+    if (!style) { style = document.createElement('style'); style.id = 'gv-colw'; document.head.append(style); }
+    style.textContent = Object.entries(w).map(([k, px]) => `.gv-table [data-col="${CSS.escape(k)}"] { width: ${px}px; min-width: ${px}px; max-width: ${px}px; }`).join('\n');
+  }
+  setWidth(col, px) {
+    const w = this.widths();
+    if (px == null) delete w[col]; else w[col] = Math.round(px);
+    setPref(`gridCols:${this.owner.id}`, JSON.stringify(w));
+    this.colWidths(w);
+  }
+  wideWidth() {
+    if (!this.touch.matches) return 520;
+    const corner = this.el.querySelector('.gv-corner')?.offsetWidth || 0;
+    return Math.max(200, (this.scrollEl?.clientWidth || window.innerWidth) - corner - 2);
+  }
+  toggleWide(th, col) {
+    const wide = this.wideWidth();
+    const now = th.offsetWidth;
+    this.setWidth(col, now >= wide - 4 ? null : wide);
+    if (this.touch.matches && this.scrollEl && now < wide - 4) {
+      const corner = this.el.querySelector('.gv-corner')?.offsetWidth || 0;
+      requestAnimationFrame(() => this.scrollEl.scrollTo({ left: th.offsetLeft - corner, behavior: 'smooth' }));
+    }
+  }
+  grip(th, col) {
+    const g = make('span', 'gv-colgrip');
+    g.setAttribute('role', 'separator');
+    g.setAttribute('aria-orientation', 'vertical');
+    g.setAttribute('aria-label', 'Drag to change the column’s width');
+    g.title = this.touch.matches ? '' : 'Drag to change the width. Double-click: wide, and back.';
+    let start = null;
+    g.addEventListener('mousedown', (e) => e.preventDefault()); // not a drag of the whole column
+    g.addEventListener('click', (e) => e.stopPropagation());
+    g.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      g.setPointerCapture(e.pointerId);
+      start = { x: e.clientX, w: th.offsetWidth, moved: false };
+      document.body.classList.add('gv-resizing');
+    });
+    g.addEventListener('pointermove', (e) => {
+      if (!start) return;
+      const dx = e.clientX - start.x;
+      if (Math.abs(dx) > 3) start.moved = true;
+      if (!start.moved) return;
+      const w = Math.max(110, Math.min(1000, start.w + dx));
+      const all = this.widths();
+      this.colWidths({ ...all, [col]: w });
+      start.now = w;
+    });
+    const end = () => {
+      if (!start) return;
+      const s0 = start;
+      start = null;
+      document.body.classList.remove('gv-resizing');
+      if (s0.moved && s0.now) this.setWidth(col, s0.now);
+      else if (this.touch.matches) this.toggleWide(th, col);
+    };
+    g.addEventListener('pointerup', end);
+    g.addEventListener('pointercancel', end);
+    g.addEventListener('dblclick', (e) => { e.preventDefault(); e.stopPropagation(); this.toggleWide(th, col); });
+    th.append(g);
+  }
+
+  // Lines under a cell's top line (planlines.js): "▸ N", and a tap opens
+  // them in place. Cells always start folded, so rows stay short.
+  linesIn(el, ownerId, summary) {
+    import('./planlines.js').then(async ({ PlanLines, linesUnder }) => {
+      if (!this.lines) this.lines = new PlanLines({ openRef: (id) => this.hooks.openRef?.(id) });
+      return linesUnder(ownerId, summary);
+    }).then((rows) => {
+      if (!rows.length) return;
+      const tog = make('button', 'gv-lines-tog', `▸ ${rows.length}`);
+      tog.type = 'button';
+      tog.setAttribute('aria-expanded', 'false');
+      tog.title = `${rows.length === 1 ? 'The line' : `The ${rows.length} lines`} under it`;
+      let sub = null;
+      tog.addEventListener('click', async () => {
+        if (sub) {
+          await this.lines.drop(ownerId);
+          sub.remove();
+          sub = null;
+          tog.textContent = `▸ ${rows.length}`;
+          tog.setAttribute('aria-expanded', 'false');
+          return;
+        }
+        ({ sub } = this.lines.mount(ownerId, { summary, folds: false }));
+        el.append(sub);
+        tog.textContent = `▾ ${rows.length}`;
+        tog.setAttribute('aria-expanded', 'true');
+      });
+      el.append(tog);
+    }).catch(() => {});
   }
 
   // ---------- writing ----------

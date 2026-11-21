@@ -25,6 +25,7 @@ import { beside, talk } from './revising.js';
 import { writing } from './commands.js';
 import { currentBook } from './quickinserts.js';
 import { askServer, canAskServer } from './talking.js';
+import { planLinesFocus } from './notebookview.js';
 // The scene numbers in the numbered script's other chapters, around the one open.
 let numbering = { before: null, after: null, used: [] };
 // The world's places (bible pages that are locations), for guessing where a scene is.
@@ -435,8 +436,11 @@ function wireManuscript() {
     titles: titlesShowing,
     toggleTitles: () => toggleSections(),
     openShots: async (eid) => { const list = await shotsUnder(eid); if (state.project) go({ view: 'production', id: state.project.id, tab: 'shots', ...(list[0] ? { shot: list[0].id } : {}) }); },
-    steady
+    steady,
+    openRef: (id) => openEntry(id),
+    onLines: (ed) => planLinesFocus(ed, scenePlan.lines)
   });
+  document.addEventListener('inkwell:note-lines', (e) => { if (isWoven()) scenePlan.showNoteLines(e.detail); });
   editor.view.dom.addEventListener('mousemove', (e) => { pointerY = e.clientY; });
   editor.view.dom.addEventListener('mouseleave', () => { pointerY = null; });
   $('#chapter-links-chip').addEventListener('click', () => $('.chapter-links').scrollIntoView({ behavior: 'smooth', block: 'center' }));

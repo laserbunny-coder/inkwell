@@ -1437,6 +1437,9 @@ export class OutlineStore {
     this.snapTimer = null;
     this.lastSnapshot = '';
     this.saving = Promise.resolve();
+    // A save marks the page itself as changed too; lines under a plan's top
+    // line (planlines.js) leave their owner row alone.
+    this.touchPage = true;
   }
 
   get idle() { return this.version === this.savedVersion; }
@@ -1608,7 +1611,7 @@ export class OutlineStore {
       this.sources.set(row.id, row);
     }
     rows.push(...sourceRows);
-    if (rows.length) {
+    if (rows.length && this.touchPage) {
       page.updated_at = now;
       rows.push(page);
     }
@@ -1681,7 +1684,7 @@ function checkFields(fields, checklist, box) {
   return f;
 }
 
-function toOutlineDoc(pageId, rows, sources = new Map()) {
+export function toOutlineDoc(pageId, rows, sources = new Map()) {
   const byParent = new Map();
   for (const r of rows) {
     if (!byParent.has(r.parent_id)) byParent.set(r.parent_id, []);
