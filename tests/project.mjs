@@ -248,7 +248,7 @@ try {
   });
 
   await check('Pieces (zoomed into from the home): by stage, the last column lit, → moves one on', async () => {
-    await page.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await page.evaluate(() => window.__go({ view: 'stage', id: history.state.id, page: 'write' })); // the Pieces zoom (One home: one piece is drawn as that piece)
     await page.waitForFunction(() => document.querySelector('.st-title')?.textContent === 'Pieces');
     assert.match(await page.locator('.st-pieces-head .panel-label').innerText(), /^7 pieces · 142 words$/i);
     await page.locator('.st-as').click();
@@ -269,7 +269,7 @@ try {
     await page.waitForSelector('#stage-view .st-write .wo-piece', { state: 'visible' });
     assert.equal(await page.locator('#stage-view .st-write .wo-piece').count(), 7);
     await world(page);
-    await page.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await page.evaluate(() => window.__go({ view: 'stage', id: history.state.id, page: 'write' })); // the Pieces zoom (One home: one piece is drawn as that piece)
     await page.waitForSelector('#stage-view .st-write .wo-piece', { state: 'visible' });
     await world(page);
   });

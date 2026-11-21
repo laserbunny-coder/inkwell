@@ -29,12 +29,16 @@ export function stageDots(p, w) {
 
 // One piece as an outline line: its name (opens it), its stage (dots and
 // word, a click picks another) and a quiet "→ next stage".
-// h: { open(p), stage(p, stage), menu(p) → items, pop(anchor, items), button(fn, label) }
+// h: { open(p), stage(p, stage, opts), menu(p) → items, pop(anchor, items), button(fn, label),
+//      and for One home: fold(p) → ▸, kids(p) → its scenes (or null), name(p), words(p), noKind }
 export function pieceLine(p, depth, w, h) {
   const li = make('li', 'wo-piece');
   li.dataset.id = p.id;
   if (depth) li.style.setProperty('--depth', depth);
-  const name = make('button', 'wo-item', p.title || 'Untitled');
+  // A piece with a text opens in place: ▸ shows its scenes (One home).
+  const fold = h.fold?.(p);
+  if (fold) li.append(fold);
+  const name = make('button', 'wo-item', h.name ? h.name(p) : p.title || 'Untitled');
   name.type = 'button';
   name.addEventListener('click', () => h.open(p));
   const list = stagesOf(p, w);
@@ -43,16 +47,20 @@ export function pieceLine(p, depth, w, h) {
   st.title = 'Stage: click to pick another';
   st.append(stageDots(p, w), make('span', 'wo-stage-w', stageOf(p, w)));
   st.addEventListener('click', () => h.pop(st, list.map((x) => ({ label: x, current: stageOf(p, w) === x, run: () => h.stage(p, x) }))));
-  li.append(name, make('span', 'wo-kind', kindName(p)), st);
+  li.append(name, ...(h.noKind ? [] : [make('span', 'wo-kind', kindName(p))]), st);
   const next = nextLabel(list, stageOf(p, w));
   if (next) {
-    const b = make('button', 'wo-next', `→ ${list[list.indexOf(stageOf(p, w)) + 1]}`);
+    // It says what starts (One home): "→ Start boarding".
+    const b = make('button', 'wo-next', `→ ${next}`);
     b.type = 'button';
-    b.title = `${next}: move it to the next stage`;
-    b.addEventListener('click', () => h.stage(p, list[list.indexOf(stageOf(p, w)) + 1]));
+    b.title = `Move it on to ${list[list.indexOf(stageOf(p, w)) + 1]}`;
+    b.addEventListener('click', () => h.stage(p, list[list.indexOf(stageOf(p, w)) + 1], { door: true }));
     li.append(b);
   }
+  const words = h.words?.(p);
+  if (words) li.append(words);
   if (h.button) li.append(h.button(() => h.menu(p), `More for ${p.title || 'this piece'}`));
+  if (h.kids) { const k = h.kids(p); if (k) li.append(k); }
   return li;
 }
 
