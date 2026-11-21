@@ -111,7 +111,7 @@ try {
     // It opened on its Idea page; go to the world and change its piece.
     await lib(a);
     await openWorld(a, 'Research');
-    await a.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await a.evaluate(() => window.__go({ view: 'stage', id: history.state.id, page: 'write' })); // the Pieces zoom (One home: one piece is drawn as that piece)
     await a.locator('#wh-pieces li', { hasText: 'Research' }).locator('.more-btn').click();
     await menuPick(a, 'Written as', 'Outline');
     await sleep(400);
@@ -129,7 +129,7 @@ try {
   await check('writing a piece with words in it as an outline asks first and keeps the manuscript', async () => {
     await lib(a);
     await openWorld(a, 'Untitled novel');
-    await a.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await a.evaluate(() => window.__go({ view: 'stage', id: history.state.id, page: 'write' })); // the Pieces zoom (One home: one piece is drawn as that piece)
     const asOutline = async () => { await a.locator('#wh-pieces li', { hasText: 'Untitled novel' }).locator('.more-btn').click(); await menuPick(a, 'Written as', 'Outline'); };
     await asOutline();
     await a.waitForSelector('.ask');
@@ -143,7 +143,7 @@ try {
     assert.equal((await book(a, 'Untitled novel')).fields.type, 'lines');
     { const nv = await book(a, 'Untitled novel'); const acts = (await all(a)).filter((e) => e.kind === 'act' && e.parent_id === nv.id && !e.deleted).map((x) => x.id); assert.ok((await all(a)).some((e) => e.kind === 'chapter' && acts.includes(e.parent_id) && e.title === 'Chapter 1' && !e.deleted), 'the manuscript is kept'); }
     await go(a, { view: 'world', id: (await world(a, 'Untitled novel')).id });
-    await a.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await a.evaluate(() => window.__go({ view: 'stage', id: history.state.id, page: 'write' })); // the Pieces zoom (One home: one piece is drawn as that piece)
     await a.locator('#wh-pieces li', { hasText: 'Untitled novel' }).locator('.more-btn').click();
     await menuPick(a, 'Written as', 'Prose');
     await sleep(500);

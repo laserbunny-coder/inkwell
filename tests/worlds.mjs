@@ -158,7 +158,7 @@ try {
     await sleep(500);
     assert.equal(await laptop.evaluate(() => document.documentElement.dataset.view), 'world');
     // Its home is one outline: Pieces zooms in to the list.
-    await laptop.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await laptop.evaluate(() => window.__go({ view: 'stage', id: history.state.id, page: 'write' })); // the Pieces zoom (One home: one piece is drawn as that piece)
     await laptop.waitForSelector('#wh-pieces');
     assert.match(await laptop.locator('#wh-pieces').innerText(), /The Harbour/);
   });

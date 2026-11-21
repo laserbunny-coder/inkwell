@@ -1,18 +1,18 @@
 // The Library, a book's home, a world's home (its pieces and its bible) and
 // the plot grid.
 import { pieceHead } from './piecehead.js';
-import { getMeta, putEntries, children, getEntry } from '../db.js';
+import { getMeta, putEntries, children, getEntry, byKind } from '../db.js';
 import { newWorkflow } from '../stageedit.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, toast } from '../menu.js';
 import { outline } from '../model.js';
 import { titleOf } from '../notebook.js';
-import { PlotGrid, worldPromises } from '../grid.js';
+import { PlotGrid, worldPromises, pieceRows } from '../grid.js';
 import { isLife, personalArea, partsFor } from '../pages.js';
 import { openParts, setPartOpen, pieceLine, inIdeaOrder, setIdeaOrder, stepKeys } from '../projectoutline.js';
 import { arrangeable, movableRow, refocus } from '../listkit.js';
 import { gatherItems } from '../stages.js';
 import { dayWord } from '../tasks.js';
-import { newPage as pagesNew, isFinished, areas, bookType, hasManuscript, kindName, areaColor, newArea, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, worlds, worldOf, piecesIn, worldTree, worldStats, usedLabels, SHAPES, shapeOf, nextLevel, newShaped, editedAt, defaultLabel, stageOf, nextLabel, setForNew, typeForSet, stageSetOf, stagesOf, isReady, isOut } from '../library.js';
+import { newPage as pagesNew, isFinished, areas, bookType, hasManuscript, kindName, areaColor, newArea, pagesIn, loosePages, bookOf, stats, dailyMentions, ago, worlds, worldOf, piecesIn, worldTree, worldStats, usedLabels, SHAPES, shapeOf, nextLevel, newShaped, editedAt, defaultLabel, stageOf, nextLabel, setForNew, typeForSet, stageSetOf, stagesOf, isReady, isOut, toolsOf } from '../library.js';
 import { make } from '../dom.js';
 import { isoToday, isoOf } from '../dates.js';
 import { addCommands } from './commandlist.js';
@@ -613,7 +613,8 @@ async function renderWorld() {
   $('#wh-continue-row').hidden = !here;
   if (here) {
     const at = (lastPiece?.id === here.id && lastCh ? editedAt(lastCh) : 0) || editedAt(here);
-    cont.replaceChildren(make('span', 'wt-t', here.title || 'Untitled'), make('small', 'wt-when', at ? ago(at) : ''));
+    const asOne = onePiece(w, s) && s.pieces[0].row.id === here.id;
+    cont.replaceChildren(make('span', 'wt-t', asOne ? kindName(here) : here.title || 'Untitled'), make('small', 'wt-when', at ? ago(at) : ''));
     cont.title = 'Carry on where you were writing';
     cont.onclick = () => openBook(here.id);
   }
@@ -761,8 +762,16 @@ async function drawOutline(w, s, { life, days }) {
   const zoomTo = (page, sub) => () => go({ view: 'stage', id: w.id, page, ...(sub ? { sub } : {}) });
   const parts = partsFor(w).map((p, i) => ({ ...p, keys: `Alt + ${i + 1}` }));
   const lines = [];
-  const { pages } = await worldTree(w.id);
+  const { pages, piecePages } = await worldTree(w.id);
+  const one = onePiece(w, s, life);
+  // Bible: the project's own pages, then those made inside a piece (named
+  // beside them when there's more than one piece). No page moves.
   const bible = pages.filter(({ row }) => row.id !== `steps-${w.id}` && !row.fields?.fixesFor);
+  for (const { row, depth } of piecePages) {
+    if (row.fields?.fixesFor) continue;
+    const owner = s.pieces.length > 1 ? await bookOf(row) : null;
+    bible.push({ row, depth, from: owner?.title || '' });
+  }
   for (const part of parts) {
     const on = open.has(part.id);
     if (part.id === 'ideas') {
@@ -775,7 +784,7 @@ async function drawOutline(w, s, { life, days }) {
       if (loose.length > 8) kids.push(kidLine(`${loose.length - 8} more ›`, zoomTo('gather'), { cls: 'wo-more' }));
       lines.push(partLine(w, part, on, { count: loose.length, meta: loose.length ? `to sort · newest: ${snipText(loose[0].row.text, 40)}` : 'nothing to sort', kids, zoom: zoomTo('gather') }));
     } else if (part.id === 'bible' || part.id === 'notes') {
-      const kids = [pageAdder(w, part.id === 'notes'), ...bible.map(({ row, depth }) => pageLine(row, depth))];
+      const kids = [pageAdder(w, part.id === 'notes'), ...bible.map(({ row, depth, from }) => pageLine(row, depth, from))];
       const more = make('li', 'wo-also');
       if (part.id === 'bible') {
         for (const [sub, label] of [['arcs', 'Arcs'], ['timeline', 'Timeline'], ['ties', 'Relationships'], ['promises', 'Promises']]) {
@@ -789,7 +798,31 @@ async function drawOutline(w, s, { life, days }) {
       const top = bible.filter(({ depth }) => depth === 0).map(({ row }) => row.title || 'Untitled');
       lines.push(partLine(w, part, on, { count: bible.length, meta: top.length ? snipText(top.slice(0, 4).join(', ') + (top.length > 4 ? '…' : ''), 60) : 'no pages yet', kids, zoom: zoomTo(part.page) }));
     } else if (part.id === 'pieces') {
-      const h = { open: (p) => go({ view: 'project', id: p.id }), stage: (p, st) => setStage(p, st), pop: popMenu, menu: (p) => bookMenu(p), button: menuButton };
+      // A piece with a text opens in place: ▸ shows its scenes (or a novel's
+      // chapters), each opening the text there (One home Part 2).
+      const rowsBy = new Map();
+      const wordsBy = new Map();
+      for (const { row } of s.pieces) {
+        if (!hasManuscript(row)) continue;
+        wordsBy.set(row.id, (await stats(row)).words);
+        if (pieceOpen(row.id)) rowsBy.set(row.id, await pieceRows(row));
+      }
+      const h = {
+        open: (p) => openBook(p.id), stage: (p, st, o) => setStage(p, st, o), pop: popMenu, menu: (p) => bookMenu(p), button: menuButton,
+        fold: (p) => (hasManuscript(p) ? pieceFold(p) : null),
+        kids: (p) => (rowsBy.has(p.id) ? sceneList(p, rowsBy.get(p.id)) : null),
+        words: (p) => (wordsBy.get(p.id) ? make('span', 'wo-words', `${wordsBy.get(p.id).toLocaleString('en-US')} words`) : null)
+      };
+      if (one) {
+        // One script, right on the page: the Pieces line is that piece, named by its label.
+        const p = s.pieces[0].row;
+        const li = pieceLine(p, 0, w, { ...h, name: (x) => kindName(x), noKind: true });
+        li.classList.add('wo-line', 'wo-one');
+        li.dataset.part = 'pieces';
+        li.querySelector('.wo-item').title = `Open ${p.title || 'it'} where you left off`;
+        lines.push(li);
+        continue;
+      }
       const kids = s.pieces.map(({ row, depth }) => movePiece(pieceLine(row, depth, w, h), row));
       const more = make('li', 'wo-also');
       const add = make('button', 'wo-add', `+ ${(await nextLevel(w))?.label || 'Piece'}`);
@@ -824,6 +857,12 @@ async function drawOutline(w, s, { life, days }) {
         kids.push(kidLine(`Shoot day · ${p.title || 'Untitled'}${d.fields?.place ? ` · ${d.fields.place}` : ''}`, () => go({ view: 'production', id: p.id, day: d.id }), { meta: when }));
       }
       if (days.length) kids.push(kidLine('All shoot days', zoomTo('make', 'days'), { cls: 'wo-more' }));
+      // One "Shots" line per piece with video tools: its production view.
+      const filmed = s.pieces.map(({ row }) => row).filter((p) => hasManuscript(p) && toolsOf(p, w).includes('shots'));
+      if (filmed.length) {
+        const counts = on ? await shotCounts(filmed) : new Map();
+        for (const p of filmed) kids.push(kidLine(filmed.length > 1 || s.pieces.length > 1 ? `Shots · ${p.title || 'Untitled'}` : 'Shots', () => go({ view: 'production', id: p.id }), { meta: on ? plural(counts.get(p.id) || 0, 'shot') : '' }));
+      }
       const metaBits = [looked.length && `${plural(looked.length, 'look')}`, els.length && `${els.length} in the kit`, ahead.length && plural(ahead.length, 'shoot day')].filter(Boolean);
       lines.push(partLine(w, part, on, { count: '', meta: metaBits.join(' · ') || 'looks, kit, shoot days', kids, zoom: zoomTo('make') }));
     } else if (part.id === 'deliver') {
@@ -842,7 +881,7 @@ async function drawOutline(w, s, { life, days }) {
   for (const el of [...list.querySelectorAll(':scope > li[data-part]:not(#wh-about)')]) el.remove();
   $('#wh-about').before(...lines);
   // Each open list can be rearranged: drag (hold on a phone), or the keys.
-  const ul = (part) => list.querySelector(`:scope > li[data-part="${part}"] > .wo-kids`);
+  const ul = (part) => list.querySelector(`:scope > li[data-part="${part}"] > .wo-kids:not(.wo-scenes)`);
   if (ul('ideas')) arrangeable(list, ul('ideas'), 'wo-idea', async (_key, keys) => { await applyRemote(await setIdeaOrder(w.id, keys)); await renderWorld(); });
   for (const part of ['bible', 'notes']) if (ul(part)) arrangeable(list, ul(part), 'wo-page', (key, keys) => placeAmong(key, keys));
   if (ul('pieces')) arrangeable(list, ul('pieces'), 'wo-piece', (key, keys) => placeAmong(key, keys));
@@ -886,13 +925,58 @@ function ideaLine(w, row, from, keys) {
 }
 
 // A bible page on the home: its name opens it; ⋯ is the page's own menu.
-function pageLine(row, depth) {
-  const li = kidLine(row.title || 'Untitled page', () => go({ view: 'notebook', pageId: row.id }), { depth, cls: 'wo-page' });
+function pageLine(row, depth, from = '') {
+  const li = kidLine(row.title || 'Untitled page', () => go({ view: 'notebook', pageId: row.id }), { depth, cls: 'wo-page', meta: from });
   li.append(menuButton(() => pageMenu(row), `More for ${row.title || 'this page'}`));
   onContextMenu(li.querySelector('.wo-item'), () => pageMenu(row));
   return arrangeRow(li, 'wo-page', row);
 }
 function movePiece(li, row) { return arrangeRow(li, 'wo-piece', row); }
+
+// One script, right on the project page: a story project with exactly one
+// piece draws its Pieces line as that piece. The project's ⋯ menu turns it off.
+export const onePiece = (w, s, life = isLife(w)) => !life && s.pieces.length === 1 && w.fields?.onePiece !== false;
+
+// A piece line's ▸: its scenes (or chapters) here, open per piece per device.
+const pieceOpen = (id) => { try { return localStorage.getItem(`wp:${id}`) === '1'; } catch { return false; } };
+function pieceFold(p) {
+  const on = pieceOpen(p.id);
+  const b = make('button', 'wo-tog wo-ptog', on ? '▾' : '▸');
+  b.type = 'button';
+  b.setAttribute('aria-expanded', String(on));
+  b.setAttribute('aria-label', `${on ? 'Hide' : 'Show'} what’s in ${p.title || 'this piece'}`);
+  b.addEventListener('click', () => { try { localStorage.setItem(`wp:${p.id}`, on ? '0' : '1'); } catch { /* private window */ } renderWorld(); });
+  return b;
+}
+function sceneList(p, rows) {
+  const ul = make('ul', 'wo-kids wo-scenes');
+  if (!rows.length) ul.append(kidLine('No scenes yet', null, { cls: 'wo-none' }));
+  rows.forEach((r, i) => {
+    const li = make('li', 'wo-scene');
+    li.dataset.row = r.id;
+    const b = make('button', 'wo-item');
+    b.type = 'button';
+    b.title = 'Open the text here';
+    b.append(make('span', 'wo-sn', grid.olNum(r, i)), document.createTextNode(r.name || r.title || 'Untitled'));
+    b.addEventListener('click', () => grid.hooks.open(r));
+    li.append(b);
+    if (r.synopsis) li.append(make('span', 'wo-meta', snipText(r.synopsis, 90)));
+    ul.append(li);
+  });
+  ul.append(kidLine('Open the outline ›', () => go({ view: 'grid', id: p.id, mode: 'outline' }), { cls: 'wo-more wo-ol' }));
+  return ul;
+}
+// How many shots each piece has (a shot knows its piece, or its scene does).
+async function shotCounts(pieces) {
+  const ids = new Set(pieces.map((p) => p.id));
+  const n = new Map();
+  for (const sh of await byKind('shot')) {
+    let pid = sh.fields?.piece;
+    if (!pid) { const sc = sh.parent_id && (await getEntry(sh.parent_id)); pid = sc ? (await bookOf(sc))?.id : null; }
+    if (ids.has(pid)) n.set(pid, (n.get(pid) || 0) + 1);
+  }
+  return n;
+}
 // The keys for a page, piece or area row: a step among its siblings, or the Trash.
 function arrangeRow(li, kind, row) {
   const step = async (how) => { await stepAmong(row, how); refocus(document, row.id); };

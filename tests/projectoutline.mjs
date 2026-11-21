@@ -219,7 +219,7 @@ try {
   await home(desk);
 
   await check('desktop: a name zooms in (its plain name, ‹ back), Alt + Left comes back out', async () => {
-    await desk.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await desk.evaluate(() => window.__go({ view: 'stage', id: history.state.id, page: 'write' })); // the Pieces zoom (One home: one piece is drawn as that piece)
     await desk.waitForFunction(() => document.documentElement.dataset.view === 'stage' && document.querySelector('.st-title')?.textContent === 'Pieces');
     assert.equal(await desk.locator('.st-back').innerText(), '‹ The Ninja Bunch');
     await desk.waitForSelector('.st-write .wo-piece');

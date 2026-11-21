@@ -135,7 +135,7 @@ try {
 
   await check('one button moves a piece on to its next status, on the board and on the piece; Undo takes it back', async () => {
     // Pieces, zoomed into: By stage shows the board, worded as what is happening.
-    await page.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await page.evaluate(() => window.__go({ view: 'stage', id: history.state.id, page: 'write' })); // the Pieces zoom (One home: one piece is drawn as that piece)
     await page.locator('#wh-as').click();
     await page.waitForSelector('#wh-pieces', { state: 'detached' }); // the board takes the list’s place
     await page.waitForSelector('.stage-board:visible .sb-card');

@@ -17,6 +17,7 @@ import { $, editor, gone, inNotebook, notes, root, state, store, view } from '..
 import { placeScriptBar } from './scriptbar.js';
 import { notebook } from './notebookview.js';
 import { go, openBook } from './routing.js';
+import { doorPlace } from './doors.js';
 import { refreshWords, syncWoven, toggleNumbering } from './manuscript.js';
 import { renderCrumb, renderRail, subtree } from './rail.js';
 import { areaOptions, grid, nudgeBook, renderLibrary, renderProject, renderWorld } from './libraryview.js';
@@ -359,6 +360,8 @@ async function worldMenu(world) {
     { label: 'New page in its bible', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(w.id); } },
     { label: 'Move to area', sub: (await areaOptions(all)).map(([id, label]) => ({ label: label.trim(), current: w.area_id === id, run: () => moveBookToArea(w, id) })) },
     ...(!isLife(w) ? [{ label: 'Workflow…', run: () => openStages(w) }] : []),
+    // One home: a project with one piece shows it right on its page.
+    ...(!isLife(w) ? [{ label: 'Show the script on the project page', current: w.fields?.onePiece !== false, run: async () => { await putEntries([{ ...w, fields: { ...(w.fields || {}), onePiece: w.fields?.onePiece === false }, updated_at: Date.now() }]); await refreshViews(); } }] : []),
     { label: 'Shape', sub: [
       ...SHAPES.map((sh) => ({ label: `${sh.name}: ${sh.about.toLowerCase()}`, current: shapeOf(w, top.length).id === sh.id, run: () => setShape(w, sh.id) })),
       ...(shapeOf(w, top.length).levels.length ? ['sep', { label: `Rename levels (${levelsOf(w, shapeOf(w, top.length)).map((l) => l.label).join(' › ')})…`, run: () => renameLevels(w) }] : [])
@@ -622,18 +625,24 @@ async function setLabel(piece) {
   await refreshViews();
 }
 
-async function setStage(piece, stage) {
+// { door: true } (→ next on the project page): the toast is the way through,
+// "<piece> is at Boarding. Go there ›" (One home).
+async function setStage(piece, stage, { door = false } = {}) {
   const b = await getEntry(piece.id);
   const was = b.fields?.stage;
   await putEntries([{ ...b, fields: { ...b.fields, stage }, updated_at: Date.now() }]);
   await refreshViews();
-  toast(`${b.title || 'It'}: ${stage}`, { label: 'Undo', run: async () => {
+  const undo = { label: 'Undo', run: async () => {
     const now = await getEntry(b.id);
     const fields = { ...now.fields, stage: was };
     if (!was) delete fields.stage;
     await putEntries([{ ...now, fields, updated_at: Date.now() }]);
     await refreshViews();
-  } });
+  } };
+  if (door) {
+    const world = await worldOf(b);
+    toast(`${b.title || 'It'} is at ${stage}.`, { label: 'Go there ›', run: async () => go(await doorPlace(b, stage, world)) }, undo);
+  } else toast(`${b.title || 'It'}: ${stage}`, undo);
 }
 
 // A new piece in a world or inside a piece: its name, what it is, how it's written.

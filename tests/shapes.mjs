@@ -50,7 +50,7 @@ const go = (p, place) => p.evaluate((pl) => { history.pushState(pl, ''); dispatc
 // A project's home is one outline (Nov 2026): + Season, + Book… is in its Pieces zoom.
 const newPiece = async (p) => {
   if ((await p.evaluate(() => history.state?.view)) === 'world') {
-    await p.locator('#wh-outline [data-part="pieces"] .wo-name').click();
+    await p.evaluate(() => window.__go({ view: 'stage', id: history.state.id, page: 'write' })); // the Pieces zoom (One home: one piece is drawn as that piece)
     await p.waitForSelector('#wh-new-piece');
   }
   return p.locator('#wh-new-piece');

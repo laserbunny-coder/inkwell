@@ -103,6 +103,15 @@ async function descendants(id) {
 // is in, the act and sequence a scene is in). Each row has the entry it
 // stands for (its anchor: where its notes and summary live), the entries it
 // covers (members), and the entries that move when it's dragged (span).
+// A piece's rows as its Outline lists them (its scenes, or a novel's
+// chapters): for the project page, where a piece line opens in place.
+export async function pieceRows(owner) {
+  const st = await loadStructure(owner);
+  const levels = levelsFor(owner, st);
+  const lv = levels.find((l) => l.id === 'chapter' || l.id === 'wscene') || levels.filter((l) => /^s\d$/.test(l.id)).at(-1) || null;
+  return lv ? rowsAt(lv.id, st, owner).filter((x) => x.type === 'row') : [];
+}
+
 export function rowsAt(level, st, owner) {
   const out = [];
   const row = (r) => { out.push({ type: 'row', movable: true, ...r }); return out.at(-1); };

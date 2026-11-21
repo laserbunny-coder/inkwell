@@ -156,6 +156,24 @@ span.wo-item { cursor: default; color: var(--muted); }
 .wo-next { border: 0; background: none; padding: 2px 0; color: var(--accent); font: 12px var(--ui); cursor: pointer; opacity: .75; }
 .wo-next:hover { opacity: 1; text-decoration: underline; }
 .wo-piece .menu-btn, .wo-piece .more-btn { margin-left: auto; }
+/* One home Part 2: a piece line opens in place (▸ its scenes). */
+.wo-kids > li.wo-piece:has(> .wo-ptog)::before { content: none; }
+.wo-kids > li.wo-piece > .wo-ptog { margin-left: -6px; width: 22px; height: 28px; }
+.wo-kids > li.wo-piece, .wo-line.wo-one { padding-right: 40px; position: relative; }
+.wo-kids > li.wo-piece > :is(.menu-btn, .more-btn), .wo-one > :is(.menu-btn, .more-btn) { position: absolute; right: 0; top: 3px; margin: 0; }
+.wo-words { font: 12px var(--ui); color: var(--faint); font-variant-numeric: tabular-nums; }
+.wo-scenes { flex-basis: 100%; margin: 0 0 6px 4px; }
+.wo-kids > li.wo-scene::before { content: none; }
+.wo-scene { min-height: 36px; }
+.wo-scene .wo-item { display: inline-flex; gap: 10px; align-items: baseline; }
+.wo-sn { font: 12px var(--ui); color: var(--faint); font-variant-numeric: tabular-nums; min-width: 2.2ch; text-align: right; }
+.wo-scene > .wo-meta { flex: 1 1 14ch !important; }
+.wo-ol .wo-item { color: var(--accent); }
+/* One script, right on the page: the Pieces line is that piece. */
+.wo-line.wo-one { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; min-height: 44px; align-content: center; }
+.wo-one > .wo-item { font: 400 21px/1.2 var(--prose); padding: 2px 0; }
+.wo-one > .wo-tog { margin-left: -4px; }
+.wo-one > .wo-scenes { margin: 2px 0 10px 9px; }
 .wo-also { gap: 4px 16px !important; }
 .wo-add, .wo-sub { border: 0; background: none; padding: 4px 0; color: var(--muted); font: 13px var(--ui); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
 .wo-add:hover, .wo-sub:hover { color: var(--ink); }
@@ -209,6 +227,11 @@ span.wo-item { cursor: default; color: var(--muted); }
   .wo-name { font-size: 20px; }
   .wo-row .wo-meta { flex-basis: 100%; padding-left: 24px; margin-top: -6px; }
   .wo-kids { padding-left: 16px; }
+  .wo-one > .wo-item { font-size: 20px; }
+  /* A piece line stays at two rows: its words are on its Outline. */
+  .wo-kids > li.wo-piece > .wo-words { display: none; }
+  .wo-kids > li.wo-piece, .wo-line.wo-one { padding-right: 32px; }
+  .wo-scene > .wo-meta { flex-basis: 100% !important; padding-left: calc(2.2ch + 10px); margin-top: -4px; }
 }
 
 /* A piece's pages (Gather…Deliver at a piece's size) on a phone: the strip
