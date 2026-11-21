@@ -238,7 +238,11 @@ try {
     await p.keyboard.press('Alt+L');
     await p.waitForSelector('.page-settings', { state: 'hidden' });
     // Ctrl + K still finds it, with its key.
+    // The panel that just closed hands the caret back a frame later, which can
+    // land after the box opens: wait for the box, then put the caret in it.
     await p.keyboard.press('Control+K');
+    await p.waitForSelector('.palette:not([hidden])');
+    await p.locator('#palette-input').focus();
     await p.waitForFunction(() => document.activeElement?.id === 'palette-input');
     await p.locator('#palette-input').fill('Look, page');
     const row = p.locator('#palette-list li', { hasText: 'Look, page' }).first();
