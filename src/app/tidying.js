@@ -608,10 +608,26 @@ async function pageMenu(page) {
     { label: 'Share a link to read and comment…', run: () => openShare(p) },
     { label: 'What Claude knows about this page…', run: () => showClaudeKnows(p) },
     ...(await stepItems(p)),
+    ...(await pageFor(p)),
     { label: 'Move to', sub: [{ label: 'Loose pages (no world)', current: !p.parent_id, run: () => movePage(p, null) }, ...(await homesFor(p)).map((h) => ({ label: h.label, current: p.parent_id === h.id, run: () => movePage(p, h.id) }))] },
     'sep',
     { label: 'Move to Trash', keys: '⌘⇧⌫', danger: true, run: () => toTrash(p) }
   ];
+}
+
+// "For…" on a Bible page (One home Part 3): the whole project, or one of
+// its pieces; the page moves there (movePage, with Undo).
+async function pageFor(p) {
+  const w = await worldOf(p);
+  if (!w) return [];
+  const { pieceIndex } = await import('../ideapieces.js');
+  const idx = await pieceIndex(w);
+  if (!idx.many) return [];
+  const cur = idx.ofPage(p);
+  return [{ label: 'For…', sub: [
+    { label: 'Whole project', current: !cur, run: () => movePage(p, w.id) },
+    ...idx.pieces.map((x) => ({ label: `${'  '.repeat(x.depth)}${x.title}`, current: cur === x.id, run: () => movePage(p, x.id) }))
+  ] }];
 }
 
 // What a piece is, in your own words; labels you've used before are offered.

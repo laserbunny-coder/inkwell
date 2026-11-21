@@ -8,6 +8,7 @@ import { outline } from '../model.js';
 import { titleOf } from '../notebook.js';
 import { PlotGrid, worldPromises, pieceRows } from '../grid.js';
 import { isLife, personalArea, partsFor } from '../pages.js';
+import { pieceIndex, pickOf, setPick, fits, chipList, lineFor } from '../ideapieces.js';
 import { openParts, setPartOpen, pieceLine, inIdeaOrder, setIdeaOrder, stepKeys } from '../projectoutline.js';
 import { arrangeable, movableRow, refocus } from '../listkit.js';
 import { gatherItems } from '../stages.js';
@@ -764,27 +765,31 @@ async function drawOutline(w, s, { life, days }) {
   const lines = [];
   const { pages, piecePages } = await worldTree(w.id);
   const one = onePiece(w, s, life);
+  const idx = await pieceIndex(w);
+  const pick = pickOf(idx);
   // Bible: the project's own pages, then those made inside a piece (named
   // beside them when there's more than one piece). No page moves.
   const bible = pages.filter(({ row }) => row.id !== `steps-${w.id}` && !row.fields?.fixesFor);
   for (const { row, depth } of piecePages) {
     if (row.fields?.fixesFor) continue;
-    const owner = s.pieces.length > 1 ? await bookOf(row) : null;
-    bible.push({ row, depth, from: owner?.title || '' });
+    bible.push({ row, depth, from: idx.many ? idx.name(idx.ofPage(row)) : '' });
   }
   for (const part of parts) {
     const on = open.has(part.id);
     if (part.id === 'ideas') {
       const items = await gatherItems(w);
-      const loose = inIdeaOrder(w, items.filter(({ row }) => !(row.fields?.filed || []).length && !row.fields?.letgo));
+      const all = inIdeaOrder(w, items.filter(({ row }) => !(row.fields?.filed || []).length && !row.fields?.letgo));
+      // One Ideas list: with several pieces, chips pick whose (One home Part 3).
+      const loose = all.filter(({ row }) => fits(pick, idx.ofLine(row)));
       const shown = loose.slice(0, 8);
       const keys = shown.map(({ row }) => row.id);
       // The way to add one comes first, so it is there without scrolling.
-      const kids = [ideaAdder(w), ...shown.map(({ row, from }) => ideaLine(w, row, from, keys))];
+      const kids = [...(idx.many ? [pickRow(w, idx, pick)] : []), ideaAdder(w, idx, pick), ...shown.map(({ row, from }) => ideaLine(w, row, from, keys, idx))];
       if (loose.length > 8) kids.push(kidLine(`${loose.length - 8} more ›`, zoomTo('gather'), { cls: 'wo-more' }));
       lines.push(partLine(w, part, on, { count: loose.length, meta: loose.length ? `to sort · newest: ${snipText(loose[0].row.text, 40)}` : 'nothing to sort', kids, zoom: zoomTo('gather') }));
     } else if (part.id === 'bible' || part.id === 'notes') {
-      const kids = [pageAdder(w, part.id === 'notes'), ...bible.map(({ row, depth, from }) => pageLine(row, depth, from))];
+      const mine = bible.filter(({ row }) => fits(pick, idx.ofPage(row)));
+      const kids = [...(idx.many && part.id === 'bible' ? [pickRow(w, idx, pick)] : []), pageAdder(w, part.id === 'notes', idx, pick), ...mine.map(({ row, depth, from }) => pageLine(row, depth, from))];
       const more = make('li', 'wo-also');
       if (part.id === 'bible') {
         for (const [sub, label] of [['arcs', 'Arcs'], ['timeline', 'Timeline'], ['ties', 'Relationships'], ['promises', 'Promises']]) {
@@ -901,8 +906,12 @@ async function drawOutline(w, s, { life, days }) {
 
 // An idea on the home: open it where it was written; ⋯ to move it or let it
 // go to the Trash; drag it (hold on a phone) into your own order.
-function ideaLine(w, row, from, keys) {
+function ideaLine(w, row, from, keys, idx = null) {
   const li = kidLine(snipText(row.text) || 'A picture or recording', () => openEntry(row.id), { meta: from || '' });
+  // Whose it is, when there are pieces to tell apart.
+  const pid = idx?.many ? idx.ofLine(row) : null;
+  // (Not when the line already says it, as "… [[The Harbour Book]]" does.)
+  if (pid && !(row.text || '').includes(idx.name(pid))) li.querySelector('.wo-item').after(make('span', 'wo-for', idx.name(pid)));
   const step = async (how) => {
     const next = stepKeys(keys, row.id, how);
     if (!next) return;
@@ -918,6 +927,7 @@ function ideaLine(w, row, from, keys) {
     { label: 'Move down', keys: '⌥⇧↓', off: i === keys.length - 1, run: () => step(1) },
     { label: 'Move to the top', off: i === 0, run: () => step('top') },
     { label: 'File it into a page…', run: () => go({ view: 'stage', id: w.id, page: 'gather' }) },
+    ...(idx?.many ? [forMenu(row, idx, async () => { await renderWorld(); })] : []),
     'sep',
     { label: 'Delete', keys: '⌘⇧⌫', danger: true, run: del }
   ], `More for this idea`));
@@ -932,6 +942,36 @@ function pageLine(row, depth, from = '') {
   return arrangeRow(li, 'wo-page', row);
 }
 function movePiece(li, row) { return arrangeRow(li, 'wo-piece', row); }
+
+// The chips over Ideas and the Bible (several pieces only): Everything,
+// Whole project, then each piece. Remembered on this device.
+function pickRow(w, idx, pick) {
+  const li = make('li', 'wo-also wo-picks');
+  for (const c of chipList(idx)) {
+    const b = make('button', 'chip' + (c.id === pick ? ' on' : ''), c.label);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(c.id === pick));
+    b.addEventListener('click', () => { setPick(w.id, c.id); renderWorld(); });
+    li.append(b);
+  }
+  return li;
+}
+// "For…" on an idea: the whole project, or one piece. Undo puts the link back.
+export function forMenu(row, idx, after) {
+  const cur = idx.ofLine(row);
+  const to = async (id) => {
+    const [next, was] = await lineFor(row, idx, id);
+    if (!next) return;
+    await putEntries([next]);
+    await applyRemote([next]);
+    await after();
+    toast(`Now for ${id === idx.world.id ? 'the whole project' : idx.name(id)}`, { label: 'Undo', run: async () => { const back = { ...was, updated_at: Date.now() }; await putEntries([back]); await applyRemote([back]); await after(); } });
+  };
+  return { label: 'For…', sub: [
+    { label: 'Whole project', current: !cur, run: () => to(idx.world.id) },
+    ...idx.pieces.map((p) => ({ label: `${'  '.repeat(p.depth)}${p.title}`, current: cur === p.id, run: () => to(p.id) }))
+  ] };
+}
 
 // One script, right on the project page: a story project with exactly one
 // piece draws its Pieces line as that piece. The project's ⋯ menu turns it off.
@@ -984,14 +1024,15 @@ function arrangeRow(li, kind, row) {
 }
 
 // "Add a page…" at the top of the Bible (or Notes): type its name, Enter.
-function pageAdder(w, notesToo) {
+function pageAdder(w, notesToo, idx = null, pick = 'all') {
+  const into = idx?.many && pick !== 'all' && pick !== 'whole' ? idx.pieces.find((p) => p.id === pick) : null;
   const li = make('li', 'wo-add-idea wo-add-page');
   const form = make('form', 'wo-idea');
   form.noValidate = true;
   const input = make('input');
   input.type = 'text';
-  input.placeholder = notesToo ? 'Add a page…' : 'Add a bible page…';
-  input.setAttribute('aria-label', `Add a page to ${w.title || 'this project'}`);
+  input.placeholder = into ? `Add a page for ${into.title}…` : notesToo ? 'Add a page…' : 'Add a bible page…';
+  input.setAttribute('aria-label', `Add a page to ${into ? into.title : w.title || 'this project'}`);
   input.setAttribute('enterkeyhint', 'enter');
   input.autocomplete = 'off';
   form.append(input);
@@ -1000,9 +1041,9 @@ function pageAdder(w, notesToo) {
     const title = input.value.trim();
     if (!title) return;
     input.value = '';
-    const page = await pagesNew(w.id, title);
+    const page = await pagesNew(into ? into.id : w.id, title);
     await applyRemote([page]);
-    toast(`“${title}” added`, { label: 'Open', run: () => go({ view: 'notebook', pageId: page.id }) });
+    toast(`“${title}” added${into ? ` to ${into.title}` : ''}`, { label: 'Open', run: () => go({ view: 'notebook', pageId: page.id }) });
     await renderWorld();
     document.querySelector('#wh-outline .wo-add-page input')?.focus();
   });
@@ -1011,14 +1052,16 @@ function pageAdder(w, notesToo) {
 }
 
 // "Add an idea…" at the end of Ideas: a line on today's page that links here.
-function ideaAdder(w) {
+function ideaAdder(w, idx = null, pick = 'all') {
+  const into = idx?.many && pick !== 'all' && pick !== 'whole' ? idx.pieces.find((p) => p.id === pick)?.row : null;
+  const to = into || w;
   const li = make('li', 'wo-add-idea');
   const form = make('form', 'wo-idea');
   form.noValidate = true;
   const input = make('input');
   input.type = 'text';
-  input.placeholder = 'Add an idea…';
-  input.setAttribute('aria-label', `Add an idea to ${w.title || 'this project'}`);
+  input.placeholder = into ? `Add an idea for ${into.title || 'this piece'}…` : 'Add an idea…';
+  input.setAttribute('aria-label', `Add an idea to ${to.title || 'this project'}`);
   input.setAttribute('enterkeyhint', 'enter');
   input.autocomplete = 'off';
   form.append(input);
@@ -1028,9 +1071,9 @@ function ideaAdder(w) {
     if (!text) return;
     input.value = '';
     const { addLine } = await import('../capture.js');
-    const { rows } = await addLine([{ type: 'text', text: `${text} ` }, { type: 'entryRef', attrs: { id: w.id, title: w.title || 'Untitled' } }], {});
+    const { rows } = await addLine([{ type: 'text', text: `${text} ` }, { type: 'entryRef', attrs: { id: to.id, title: to.title || 'Untitled' } }], {});
     await applyRemote(rows);
-    toast(`Idea added to ${w.title || 'the project'} (on today’s page too)`);
+    toast(`Idea added to ${to.title || 'the project'} (on today’s page too)`);
     await renderWorld();
     document.querySelector('#wh-outline .wo-idea input')?.focus();
   });
