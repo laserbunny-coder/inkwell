@@ -29,8 +29,19 @@ let notebook; // set in wireNotebook()
 // gets used all the time (mic, undo, indent, move, tag, link); Done, Move to…,
 // Zoom and + wait at the end of the row.
 let outlineBar; // set in wireNotebook()
+// The same row, for the lines under a top line in a script's plan
+// (planlines.js): indent, outdent, move, fold, undo.
+let planEd = null;
+let planLines = null;
+function planLinesFocus(ed, lines) {
+  planEd = ed;
+  if (lines) planLines = lines;
+  placeOutlineBar();
+}
 function placeOutlineBar() {
-  const show = touch.matches && keyboard.up && inNotebook() && notebook.editor.isFocused;
+  const inPlan = !!planEd && planEd.isFocused;
+  outlineBar.classList.toggle('in-plan', inPlan);
+  const show = touch.matches && keyboard.up && (inPlan || (inNotebook() && notebook.editor.isFocused));
   const back = show && outlineBar.hidden;
   outlineBar.hidden = !show;
   if (back) outlineBar.scrollLeft = 0; // a row that comes back starts with the mic in view
@@ -38,6 +49,11 @@ function placeOutlineBar() {
   if (!show) return;
   const vv = window.visualViewport;
   outlineBar.style.bottom = `${Math.max(0, vv ? window.innerHeight - (vv.offsetTop + vv.height) : 0)}px`;
+  if (inPlan) {
+    outlineBar.querySelector('[data-do="undo"]').disabled = !planEd.can().undo();
+    outlineBar.querySelector('[data-do="redo"]').disabled = !planEd.can().redo();
+    return;
+  }
   const here = notebook.currentLine();
   const zoomOut = !!notebook.zoom && here === notebook.zoom;
   outlineBar.querySelector('[data-do="undo"]').disabled = !notebook.editor.can().undo();
@@ -212,8 +228,9 @@ function wireNotebook() {
   outlineBar = $('.outline-bar');
   tapBar(outlineBar, 'button[data-do], button[data-end]', (b) => {
     if (b.dataset.end) return rowEnd(b.dataset.end);
-    const ed = notebook.editor;
     const act = b.dataset.do;
+    if (outlineBar.classList.contains('in-plan')) { planLines?.act(act); placeOutlineBar(); return; }
+    const ed = notebook.editor;
     if (act === 'talk') captureHere({ start: true });
     else if (act === 'undo') ed.chain().focus().undo().run();
     else if (act === 'redo') ed.chain().focus().redo().run();
@@ -253,4 +270,4 @@ function wireNotebook() {
   window.visualViewport?.addEventListener('scroll', placeOutlineBar);
 }
 
-export { caretSoon, currentEditor, notebook, placeOutlineBar, toggleTypewriter, wireNotebook };
+export { caretSoon, currentEditor, notebook, placeOutlineBar, planLinesFocus, toggleTypewriter, wireNotebook };

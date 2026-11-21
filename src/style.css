@@ -240,6 +240,39 @@ button.wv-mk:hover { background: var(--tint); }
 .wv-x:hover { color: var(--ink); }
 :is(.wv-beat, .wv-note):is(:hover, :focus-within) .wv-x { opacity: 1; }
 @media (pointer: coarse) { .wv-x { opacity: .7; width: 32px; } }
+/* Lines under a top line (the summary, a thread line, a note): a small outline. */
+.wv-item { display: flex; flex-direction: column; }
+.wv-topl { display: flex; align-items: baseline; gap: 6px; }
+.wv-topl .wv-p-sum { flex: 1; }
+.wv-fold { flex: none; border: 0; background: transparent; color: var(--faint); font: 11.5px var(--ui); padding: 0 3px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.wv-fold:hover { color: var(--ink); background: var(--tint); }
+.wv-fold[aria-expanded="true"] { opacity: 0; }
+:is(.wv-topl, .wv-beat, .wv-note):is(:hover, :focus-within) .wv-fold, .wv-fold:focus-visible { opacity: 1; }
+@media (pointer: coarse) { .wv-fold { padding: 2px 8px; } .wv-fold[aria-expanded="true"] { opacity: .6; } }
+.wv-sub { padding: 1px 0 3px 23px; }
+.wv-sumi > .wv-sub { padding-left: 1.1em; }
+.wv-lines .ProseMirror { outline: none; font: 14.5px/1.5 var(--prose); color: var(--ink); caret-color: var(--accent); white-space: pre-wrap; }
+.wv-lines ul { list-style: none; margin: 0; padding-left: 1.3em; }
+.wv-lines .ProseMirror > ul { padding-left: .1em; }
+.wv-lines li { position: relative; }
+.wv-lines p { margin: 0; }
+.wv-lines .line-gutter { position: absolute; left: -1.3em; top: 0; width: 1.3em; height: 1.5em; user-select: none; }
+.wv-lines .line-gutter button { position: absolute; padding: 0; border: 0; background: transparent; }
+.wv-lines .bullet { right: 0; top: 0; width: 1.3em; height: 1.5em; pointer-events: none; }
+.wv-lines .bullet::after { content: ''; position: absolute; left: .5em; top: .64em; width: .28em; height: .28em; border-radius: 50%; background: var(--faint); }
+.wv-lines .grip { display: none; }
+.wv-lines li.has-kids > .line-gutter .bullet { display: none; }
+.wv-lines .fold { left: 0; top: 0; width: 1.3em; height: 1.5em; color: var(--muted); cursor: pointer; display: none; }
+.wv-lines li.has-kids > .line-gutter .fold { display: block; opacity: .7; }
+.wv-lines .fold::after { content: ''; position: absolute; left: .4em; top: .6em; border: .22em solid transparent; border-top: .3em solid currentColor; border-bottom: 0; }
+.wv-lines li.folded > .line-gutter .fold { transform: rotate(-90deg); }
+.wv-lines li.folded > ul { display: none; }
+@media (pointer: coarse) { .wv-lines .fold { width: 1.8em; left: -.5em; } }
+.note-more { display: block; border: 0; background: transparent; color: var(--faint); font: 11.5px var(--ui); padding: 2px 0 0; cursor: pointer; }
+.note-more:hover { color: var(--ink); }
+.outline-bar [data-do="fold"] { display: none; }
+.outline-bar.in-plan [data-do="fold"] { display: inline-block; font-size: 12px; }
+.outline-bar.in-plan :is(.bar-mic, [data-do="tag"], [data-do="link"], [data-do="done"], [data-do="when"], [data-do="move"], [data-do="zoom"], [data-do="insert"]) { display: none; }
 .wv-p-foot { display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; padding-top: 2px; }
 .wv-addb { border: 0; background: transparent; color: var(--faint); font: inherit; font-size: 12px; padding: 2px 0; cursor: pointer; }
 .wv-addb:hover { color: var(--ink); }
@@ -1143,6 +1176,19 @@ html.typewriter #editor, html.typewriter #outline-editor { padding-bottom: 50vh;
 .gv-group[data-depth="2"] .gv-gtitle { color: var(--ink); padding-left: 20px; }
 .gv-group:is([data-depth="3"], [data-depth="4"], [data-depth="5"]) .gv-gtitle { color: var(--muted); text-transform: none; letter-spacing: 0; font-size: 12.5px; padding-left: 30px; }
 .gv-sum { width: 230px; min-width: 230px; max-width: 230px; }
+/* Column widths: drag the right edge of a heading (grid.js grip). */
+.gv-table thead th { overflow: visible; }
+.gv-colgrip { position: absolute; top: 0; right: -5px; bottom: 0; width: 10px; cursor: col-resize; z-index: 4; touch-action: none; }
+.gv-colgrip::after { content: ''; position: absolute; top: 25%; bottom: 25%; left: 4px; width: 2px; border-radius: 1px; background: var(--line); opacity: 0; transition: opacity .12s; }
+.gv-table th:hover > .gv-colgrip::after, .gv-colgrip:active::after { opacity: 1; }
+@media (pointer: coarse) { .gv-colgrip { width: 22px; right: -11px; } .gv-colgrip::after { left: 10px; opacity: .8; } }
+body.gv-resizing { cursor: col-resize; user-select: none; }
+.gv-table [data-col] .gv-text { overflow-wrap: anywhere; }
+.gv-lines-tog { display: block; border: 0; background: transparent; color: var(--faint); font: 11.5px var(--ui); padding: 1px 10px 6px; cursor: pointer; }
+.gv-note .gv-lines-tog { padding-left: 22px; }
+.gv-lines-tog:hover { color: var(--ink); }
+.gv-table .wv-sub { padding: 0 8px 8px 20px; font-size: 13px; }
+.gv-table .wv-lines .ProseMirror { font-size: 13.5px; }
 .gv-sumh { min-width: 230px; }
 .no-summary .gv-sum, .no-summary .gv-sumh { display: none; }
 .gv-thread { min-width: 190px; cursor: grab; }
