@@ -278,6 +278,9 @@ button.wv-mk:hover { background: var(--tint); }
 .outline-bar.in-plan [data-do="fold"] { display: inline-block; font-size: 12px; }
 .outline-bar.in-plan :is(.bar-mic, [data-do="tag"], [data-do="link"], [data-do="done"], [data-do="when"], [data-do="move"], [data-do="zoom"], [data-do="insert"]) { display: none; }
 .wv-p-foot { display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; padding-top: 2px; }
+.wv-note .wv-mk { color: var(--h); }
+.wv-go { border: 0; background: transparent; color: var(--faint); font: 13px var(--ui); padding: 0 4px; cursor: pointer; flex: none; }
+.wv-go:hover, .wv-go:focus-visible { color: var(--ink); }
 .wv-addb { border: 0; background: transparent; color: var(--faint); font: inherit; font-size: 12px; padding: 2px 0; cursor: pointer; }
 .wv-addb:hover { color: var(--ink); }
 .wv-chips-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
@@ -1204,6 +1207,20 @@ html.typewriter #editor, html.typewriter #outline-editor { padding-bottom: 50vh;
 /* A piece already has Write · Outline · Grid in its top bar: no second switch on the page. */
 body:has(.topbar.has-switch) .gv-mode { display: none; }
 .ol-page { max-width: var(--page-width, 680px); margin: 0 auto; padding: 4px 0 30vh; }
+/* Note categories gathered (Part 4): Follow chips in the Outline, columns in the grid. */
+.ol-chip.cat { color: var(--h); border-style: dotted; }
+.ol-chip.cat[aria-pressed="true"] { border-style: solid; border-color: var(--h); }
+.ol-tnotes { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 2px 20px; }
+.gv-cols { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.gv-colchip { color: var(--h); }
+.gv-colchip[aria-pressed="true"] { border-color: var(--h); background: var(--tint); }
+.gv-typeh { color: var(--h); }
+.gv-typecell { vertical-align: top; padding: 6px 8px; }
+.gv-tnote { display: flex; gap: 6px; align-items: baseline; width: 100%; border: 0; background: transparent; color: var(--ink); font: 13px/1.45 var(--ui); text-align: left; padding: 2px 4px; margin: 0 -4px; border-radius: 5px; cursor: pointer; }
+.gv-tnote::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--h); transform: translateY(-1px); }
+.gv-tnote:hover, .gv-tnote:focus-visible { background: var(--tint); }
+.gv-tnwho { color: var(--h); flex: none; font-size: 12px; }
+.gv-tntext { min-width: 0; overflow-wrap: anywhere; }
 .ol-breaks { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 2px 26px; }
 .ol-break { display: flex; align-items: baseline; gap: 8px; border: 0; background: transparent; color: var(--muted); font: 13px/1.45 var(--ui); text-align: left; padding: 3px 6px; margin-left: -6px; border-radius: 6px; cursor: pointer; }
 .ol-break:hover, .ol-break:focus-visible { background: var(--tint); color: var(--ink); }

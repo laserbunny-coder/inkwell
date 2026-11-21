@@ -1,5 +1,5 @@
 import { getEntry, children, putEntries, byKind } from './db.js';
-import { entry, newId, tagsIn, outline } from './model.js';
+import { entry, newId, tagsIn, outline, noteTypes } from './model.js';
 import { placeSorts } from './order.js';
 import { SECTION_NAMES, sectionName } from './schema.js';
 import { bookType, hasManuscript, kindName, worldOf, piecesIn } from './library.js';
@@ -438,6 +438,18 @@ export class PlotGrid {
     }
     for (const c of cells.values()) c.notes.sort((a, b) => (a.sort || 0) - (b.sort || 0) || a.created_at - b.created_at);
     this.cells = cells;
+    // Notes by category (Part 4): directing, fixes, readers' comments… gathered
+    // per row, for the Outline's Follow row and the grid's category columns.
+    this.types = await noteTypes();
+    const typed = new Map();
+    for (const n of notes) {
+      if (n.fields?.thread || n.fields?.resolved || !n.type || !(n.text || '').trim()) continue;
+      const k = `${where.get(n.parent_id)}:${n.type}`;
+      if (!typed.has(k)) typed.set(k, []);
+      typed.get(k).push(n);
+    }
+    for (const list of typed.values()) list.sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
+    this.typed = typed;
     this.gapSet = gaps(this.rows, this.threads, (r, t) => {
       const c = cells.get(`${this.rows.indexOf(r)}:${t.id}`);
       return !!c && (c.notes.some((n) => (n.text || '').trim()) || c.mentions.length > 0);
@@ -506,6 +518,27 @@ export class PlotGrid {
       sub.prepend(sw);
     }
     if (this.mode === 'outline' && this.level && this.rows.length) { this.paintOutline(head, sub); return; }
+    // Columns: a note category can sit beside the threads (per device).
+    const shownTypes = this.typeCols();
+    const offered = this.level ? this.usedTypes(shownTypes) : [];
+    if (offered.length) {
+      const cols = make('div', 'gv-cols');
+      cols.setAttribute('role', 'group');
+      cols.setAttribute('aria-label', 'Note columns');
+      cols.append(make('span', 'ol-flabel', 'Columns'));
+      for (const t of offered) {
+        const on = shownTypes.includes(t.id);
+        const b = make('button', 'ol-chip gv-colchip', t.name || 'Notes');
+        b.type = 'button';
+        b.style.setProperty('--h', t.color || 'var(--muted)');
+        b.setAttribute('aria-pressed', String(on));
+        b.title = on ? 'Take this column away' : 'Show these notes as a column';
+        b.addEventListener('click', () => { setPref('gridTypeCols', JSON.stringify(on ? shownTypes.filter((x) => x !== t.id) : [...shownTypes, t.id])); this.render(); });
+        cols.append(b);
+      }
+      sub.append(cols);
+    }
+    this.colTypes = offered.filter((t) => shownTypes.includes(t.id));
 
     const scroll = make('div', 'gv-scroll');
     if (!this.level) {
@@ -526,6 +559,13 @@ export class PlotGrid {
     this.grip(sumh, 'summary');
     hr.append(th0, sumh);
     this.threads.forEach((t) => hr.append(this.threadHead(t)));
+    for (const t of this.colTypes) {
+      const th = Object.assign(make('th', 'gv-typeh', t.name || 'Notes'), { scope: 'col' });
+      th.style.setProperty('--h', t.color || 'var(--muted)');
+      th.dataset.col = `type:${t.id}`;
+      this.grip(th, `type:${t.id}`);
+      hr.append(th);
+    }
     const add = make('th', 'gv-addh');
     const addBtn = make('button', 'ghost-btn gv-add-thread', '+ Thread');
     addBtn.type = 'button';
@@ -713,6 +753,12 @@ export class PlotGrid {
     tr.append(sum);
 
     for (const t of this.threads) tr.append(this.cellEl(r, i, t));
+    for (const t of this.colTypes || []) {
+      const td = make('td', 'gv-typecell');
+      td.dataset.col = `type:${t.id}`;
+      for (const n of this.typed.get(`${i}:${t.id}`) || []) td.append(this.typedNote(n, r));
+      tr.append(td);
+    }
     tr.append(make('td', 'gv-pad'));
     if (r.movable) this.dropTarget(tr, { row: r });
     return tr;
@@ -795,7 +841,8 @@ export class PlotGrid {
 
   paintOutline(head, sub) {
     const page = make('div', 'ol-page');
-    const f = this.threads.some((t) => t.id === this.follow) ? this.follow : '';
+    const cat = typeof this.follow === 'string' && this.follow.startsWith('type:') && this.usedTypes().some((t) => `type:${t.id}` === this.follow) ? this.follow.slice(5) : '';
+    const f = this.threads.some((t) => t.id === this.follow) ? this.follow : cat ? this.follow : '';
     // Follow: Everything, then a chip per thread, then + New thread.
     const follow = make('div', 'ol-follow');
     follow.setAttribute('role', 'group');
@@ -820,6 +867,13 @@ export class PlotGrid {
       b.addEventListener('touchmove', () => { clearTimeout(hold); hold = null; }, { passive: true });
       follow.append(b);
     });
+    // Then the note categories that have notes here (no "quiet" marks for these).
+    for (const t of this.usedTypes()) {
+      const b = chip(`type:${t.id}`, t.name || 'Notes');
+      b.classList.add('cat');
+      b.style.setProperty('--h', t.color || 'var(--muted)');
+      follow.append(b);
+    }
     const nt = make('button', 'ol-chip new', '+ New thread');
     nt.type = 'button';
     nt.addEventListener('click', () => this.addThread(nt));
@@ -827,16 +881,16 @@ export class PlotGrid {
     page.append(follow);
 
     const word = this.level === 'chapter' ? 'chapters' : 'scenes';
-    const followed = f ? this.threads.find((t) => t.id === f) : null;
-    const has = (i) => (this.cells.get(`${i}:${f}`)?.notes || []).some((n) => (n.text || '').trim());
-    if (followed && !this.rows.some((_r, i) => has(i))) page.append(make('p', 'ol-none', `Nothing here yet for ${followed.title || 'this thread'}.`));
+    const followed = cat ? this.types.find((t) => t.id === cat) : f ? this.threads.find((t) => t.id === f) : null;
+    const has = (i) => (cat ? (this.typed.get(`${i}:${cat}`) || []).length > 0 : (this.cells.get(`${i}:${f}`)?.notes || []).some((n) => (n.text || '').trim()));
+    if (followed && !this.rows.some((_r, i) => has(i))) page.append(make('p', 'ol-none', `Nothing here yet for ${followed.title || followed.name || 'this thread'}.`));
     let i = 0;
     let run = 0;
     for (const item of this.items) {
       if (item.type === 'group') { if (!f) page.append(this.olGroup(item)); continue; }
       const r = item;
       const k = i++;
-      if (f && this.gapSet.has(`${k}:${f}`)) {
+      if (f && !cat && this.gapSet.has(`${k}:${f}`)) {
         if (!run) { let n = 0; while (this.gapSet.has(`${k + n}:${f}`)) n++; page.append(make('div', 'ol-gap', `Quiet for ${n} ${word}`)); }
         run++;
       } else run = 0;
@@ -854,6 +908,28 @@ export class PlotGrid {
   }
 
   olNum(r, i) { return r.code || (r.n != null ? String(r.n) : String(i + 1)); }
+
+  // ---------- note categories (Part 4) ----------
+
+  // The categories that have notes in these rows (and any column already shown).
+  usedTypes(also = []) {
+    const used = new Set([...this.typed.keys()].map((k) => k.slice(k.indexOf(':') + 1)));
+    return (this.types || []).filter((t) => used.has(t.id) || also.includes(t.id));
+  }
+  typeCols() { try { return JSON.parse(pref('gridTypeCols', '[]')) || []; } catch { return []; } }
+  // One gathered note: its category's colour, its words, and a tap to its place in the text.
+  typedNote(n, r) {
+    const type = this.types.find((t) => t.id === n.type);
+    const b = make('button', 'gv-tnote');
+    b.type = 'button';
+    b.style.setProperty('--h', type?.color || 'var(--muted)');
+    b.title = 'Open it in the text';
+    const who = n.fields?.comment ? (n.fields.comment.owner ? 'You' : n.fields.comment.name || 'A reader') : '';
+    if (who) b.append(make('span', 'gv-tnwho', who));
+    b.append(make('span', 'gv-tntext', n.text || ''));
+    b.addEventListener('click', () => this.hooks.open({ ...r, focus: n.parent_id }));
+    return b;
+  }
 
   olGroup(g) {
     const box = make('div', `ol-sec d${g.depth || 1}`);
@@ -921,6 +997,12 @@ export class PlotGrid {
       sw.append(sum);
       if (!r.opening) this.linesIn(sw, r.id, true);
       box.append(sw);
+    }
+    if (f.startsWith?.('type:')) {
+      const list = make('div', 'ol-tnotes');
+      for (const n of this.typed.get(`${i}:${f.slice(5)}`) || []) list.append(this.typedNote(n, r));
+      box.append(list);
+      return box;
     }
     const shown = f ? this.threads.filter((t) => t.id === f) : this.threads;
     for (const t of shown) {
