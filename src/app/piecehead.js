@@ -4,9 +4,11 @@
 // "More ▸" holds the rest of what the Develop page had (a paragraph, who's
 // in it, one page), so nothing written there is lost.
 import { make } from '../dom.js';
-import { getEntry, putEntries } from '../db.js';
-import { popMenu } from '../menu.js';
-import { bookType, formatName, kindName, nextLabel, stageOf, stagesOf, stats } from '../library.js';
+import { getEntry, putEntries, byKind } from '../db.js';
+import { popMenu, onContextMenu } from '../menu.js';
+import { bookType, formatName, kindName, nextLabel, stageOf, stagesOf, stats, isOut, isReady } from '../library.js';
+import { draftsOf } from '../drafts.js';
+import { doorKind, doorPlace, DOOR_WORDS } from './doors.js';
 import { state } from '../main.js';
 import { go } from './routing.js';
 import { renderCrumb, renderRail } from './rail.js';
@@ -15,6 +17,56 @@ import { KINDS, setKind, setLabel, setStage } from './tidying.js';
 const MORE_KEY = 'phMore';
 const more = () => { try { return localStorage.getItem(MORE_KEY) === '1'; } catch { return false; } };
 const setMore = (on) => { try { localStorage.setItem(MORE_KEY, on ? '1' : '0'); } catch { /* full */ } };
+
+const PATH_KEY = 'phPath';
+const pathOpen = () => { try { return localStorage.getItem(PATH_KEY) === '1'; } catch { return false; } };
+const setPathOpen = (on) => { try { localStorage.setItem(PATH_KEY, on ? '1' : '0'); } catch { /* full */ } };
+
+// What has been built at each door, in a few plain words.
+async function built(kind, piece, world) {
+  if (kind === 'ideas') {
+    const { gatherItems } = await import('../stages.js');
+    const { pieceIndex } = await import('../ideapieces.js');
+    const idx = await pieceIndex(world);
+    const n = (await gatherItems(world)).filter(({ row }) => !row.fields?.letgo && idx.ofLine(row) === piece.id).length;
+    return n ? `${n} idea${n === 1 ? '' : 's'} for this` : 'no ideas for this yet';
+  }
+  if (kind === 'text') {
+    const { pieceRows } = await import('../grid.js');
+    const rows = await pieceRows(piece);
+    const s = await stats(piece);
+    const what = rows.some((r) => r.kind === 'scene') ? 'scene' : 'chapter';
+    return `${rows.length} ${what}${rows.length === 1 ? '' : 's'}, ${s.words.toLocaleString('en-US')} word${s.words === 1 ? '' : 's'}`;
+  }
+  if (kind === 'revise') {
+    const n = (await draftsOf(piece.id)).length;
+    return n ? `${n} kept draft${n === 1 ? '' : 's'}` : 'no kept drafts yet';
+  }
+  if (kind === 'make') {
+    const n = (await byKind('shot')).filter((sh) => sh.fields?.piece === piece.id).length;
+    return n ? `${n} shot${n === 1 ? '' : 's'}` : 'no shots yet';
+  }
+  return isOut(piece, world) ? 'posted' : isReady(piece, world) ? 'ready to post' : 'not posted';
+}
+
+// The unfolded path: one row per stage, filled up to where it is, each with
+// what's built there and a ›. Right-click (Windows) or a long press (Android)
+// on a row sets the stage.
+async function drawWay(ol, piece, world, list, here) {
+  const rows = await Promise.all(list.map(async (st, i) => {
+    const kind = doorKind(st, list);
+    const li = make('li', 'ph1-door' + (i <= here ? ' f' : '') + (i === here ? ' at' : ''));
+    const b = make('button', 'ph1-go');
+    b.type = 'button';
+    b.title = `${DOOR_WORDS[kind]} ›`;
+    b.append(make('i', 'ph1-dot'), make('span', 'ph1-st', st), make('span', 'ph1-built', await built(kind, piece, world).catch(() => '')), make('span', 'ph1-arrow', '›'));
+    b.addEventListener('click', async () => go(await doorPlace(piece, st, world)));
+    onContextMenu(b, () => [{ label: `Set stage to ${st}`, current: i === here, run: () => setStage(piece, st) }]);
+    li.append(b);
+    return li;
+  }));
+  ol.replaceChildren(...rows);
+}
 
 async function saveDev(id, patch) {
   const fresh = await getEntry(id);
@@ -77,13 +129,16 @@ export function pieceHead(piece, world) {
   const dots = make('span', 'ph1-dots');
   list.forEach((st, i) => dots.append(make('i', i <= here ? 'f' : '')));
   stage.append(dots, make('span', 'ph1-word', at || ''));
-  stage.addEventListener('click', () => popMenu(stage, list.map((st) => ({ label: st, current: st === at, run: () => setStage(piece, st) }))));
+  // Tapping the stage unfolds the path: each stage a door to where that work
+  // happens (One home Part 4). Folded by default, remembered on this device.
+  stage.setAttribute('aria-expanded', String(pathOpen()));
+  stage.title = 'The path: where each stage’s work happens';
   path.append(stage);
   const nl = nextLabel(list, at);
   if (nl) {
     const next = make('button', 'ph1-next', `→ ${nl}`);
     next.type = 'button';
-    next.addEventListener('click', () => setStage(piece, list[here + 1]));
+    next.addEventListener('click', () => setStage(piece, list[here + 1], { door: true }));
     path.append(next);
   }
   const words = make('span', 'ph1-words');
@@ -163,6 +218,17 @@ export function pieceHead(piece, world) {
   grow.addEventListener('click', () => go({ view: 'stage', id: piece.id, page: 'shape' }));
   rest.append(grow);
 
-  box.append(eye, name, path, sentence, fold, rest);
+  const way = make('ol', 'ph1-way');
+  way.hidden = !pathOpen();
+  const fill = () => drawWay(way, piece, world, list, here).catch(() => {});
+  if (!way.hidden) fill();
+  stage.addEventListener('click', () => {
+    const on = way.hidden;
+    setPathOpen(on);
+    way.hidden = !on;
+    stage.setAttribute('aria-expanded', String(on));
+    if (on) fill();
+  });
+  box.append(eye, name, path, way, sentence, fold, rest);
   return box;
 }
