@@ -430,6 +430,18 @@ try {
     assert.ok(n && !['comment', 'claude'].includes(n.type) && !n.fields?.thread);
     await p.locator('.wv-line').nth(0).locator('.wv-zone.r').click();
     await p.waitForFunction(() => !document.querySelector('.wv-notes'));
+    // A note on one of the scene's paragraphs is gathered here too, and leads to its paragraph.
+    await p.locator('#editor p', { hasText: 'A letter slaps down' }).click();
+    await p.keyboard.press('Control+Shift+N');
+    await p.waitForFunction(() => document.activeElement?.closest('.note'));
+    await p.keyboard.type('Insert on the till');
+    await sleep(700);
+    await p.locator('.wv-line').nth(0).locator('.wv-zone.r').click();
+    await p.waitForFunction(() => [...document.querySelectorAll('.wv-notes .wv-note.on-para .wv-bt')].some((t) => t.value === 'Insert on the till'));
+    await p.locator('.wv-notes .wv-note.on-para .wv-go').first().click();
+    await p.waitForFunction(() => window.__editor.isFocused && window.__editor.state.selection.$from.parent.textContent.startsWith('A letter slaps down'));
+    await p.locator('.wv-line').nth(0).locator('.wv-zone.r').click();
+    await p.waitForFunction(() => !document.querySelector('.wv-notes'));
   });
 
   await check('the left end turns titles on and off, and the line you tapped does not move', async () => {

@@ -12,7 +12,7 @@ import { putEntries } from './db.js';
 import { entry } from './model.js';
 import { plain as make } from './dom.js';
 import { BEATS, newThread } from './grid.js';
-import { findScene, ensureHeading, setTitle, setSummary, lineKey, redraw } from './woven.js';
+import { findScene, ensureHeading, setTitle, setSummary, lineKey, redraw, scenesOf } from './woven.js';
 import { shotsUnder } from './production.js';
 import { PlanLines, trashLinesUnder, restoreLines } from './planlines.js';
 
@@ -169,9 +169,37 @@ export class ScenePlan {
     if (!eid) return [];
     return this.notes.notes.filter((n) => n.parent_id === eid && !n.deleted && n.fields?.thread).sort((a, b) => (a.sort || a.created_at || 0) - (b.sort || b.created_at || 0));
   }
-  sceneNotes(eid) {
-    if (!eid) return [];
-    return this.notes.notes.filter((n) => n.parent_id === eid && !n.deleted && !n.fields?.thread && !n.fields?.resolved && !this.notes.skip(n)).sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
+  // Every note in a scene (Part 4): the scene's own, then those on its
+  // paragraphs in the order of the text. Nothing moves: a paragraph's note
+  // stays in the margin too; this only gathers them.
+  sceneNotes(s) {
+    const own = s.eid ? this.notes.notes.filter((n) => n.parent_id === s.eid && this.gathered(n)).sort((a, b) => (a.created_at || 0) - (b.created_at || 0)) : [];
+    const paras = this.parasIn(s);
+    const where = new Map(paras.map((id, i) => [id, i]));
+    const onParas = this.notes.notes.filter((n) => where.has(n.parent_id) && this.gathered(n)).sort((a, b) => where.get(a.parent_id) - where.get(b.parent_id) || (a.created_at || 0) - (b.created_at || 0));
+    return [...own, ...onParas];
+  }
+  gathered(n) { return !n.deleted && !n.fields?.thread && !n.fields?.resolved && !this.notes.skip(n); }
+  // The paragraphs a scene holds: from its heading to the next scene.
+  parasIn(s) {
+    const doc = this.editor.state.doc;
+    const all = scenesOf(doc);
+    const i = all.findIndex((x) => (s.eid ? x.eid === s.eid : !x.node));
+    if (i < 0) return [];
+    const from = all[i].at;
+    const next = all[i + 1];
+    const to = next ? (next.titlePos ?? next.at) : doc.content.size;
+    const ids = [];
+    doc.forEach((node, pos) => { if (pos > from && pos < to && node.attrs.eid && node.type.name === 'paragraph' && node.attrs.el !== 'scene') ids.push(node.attrs.eid); });
+    return ids;
+  }
+  // A paragraph's note: the caret to its paragraph, in view.
+  toParagraph(eid) {
+    let at = null;
+    this.editor.state.doc.forEach((node, pos) => { if (at === null && node.attrs.eid === eid) at = pos; });
+    if (at === null) return;
+    this.editor.commands.focus(at + 1);
+    requestAnimationFrame(() => this.editor.view.dom.querySelector(`[data-eid="${CSS.escape(eid)}"]`)?.scrollIntoView({ block: 'center' }));
   }
   hue(threadId) {
     const i = this.notes.threads.findIndex((t) => t.id === threadId);
@@ -424,7 +452,7 @@ export class ScenePlan {
       head.append(shots);
     }
     box.append(head);
-    for (const n of this.sceneNotes(s.eid)) box.append(this.noteRow(n, ref));
+    for (const n of this.sceneNotes(s)) box.append(this.noteRow(n, ref, n.parent_id !== s.eid));
     const foot = make('div', 'wv-p-foot');
     const add = make('button', 'wv-addb', '+ note');
     add.type = 'button';
@@ -435,15 +463,25 @@ export class ScenePlan {
     return box;
   }
 
-  noteRow(n, ref) {
+  noteRow(n, ref, onPara = false) {
     const type = this.notes.types.find((t) => t.id === n.type);
-    const row = make('div', 'wv-note');
+    const row = make('div', `wv-note${onPara ? ' on-para' : ''}`);
     row.dataset.note = n.id;
     row.style.setProperty('--h', type?.color || 'var(--muted)');
+    // A note on one of the scene's paragraphs: a tap here goes to it.
+    const go = () => {
+      const b = make('button', 'wv-go', '↗');
+      b.type = 'button';
+      b.title = 'Go to its paragraph';
+      b.setAttribute('aria-label', 'Go to its paragraph');
+      b.addEventListener('click', () => this.toParagraph(n.parent_id));
+      return b;
+    };
     const c = n.fields?.comment;
     if (c) {
       row.classList.add('comment');
       row.append(make('span', 'wv-mk', '–'), make('span', 'wv-tn', c.owner ? 'You' : c.name || 'A reader'), make('span', 'wv-bt', n.text || ''));
+      if (onPara) row.append(go());
       return row;
     }
     const pick = make('select', 'wv-ntype');
@@ -476,7 +514,7 @@ export class ScenePlan {
     x.setAttribute('aria-label', 'Take this note away');
     x.addEventListener('click', () => this.removeNote(n, ref.key, 'Note'));
     const { sub, fold } = this.under(n.id, ref, text);
-    row.append(make('span', 'wv-mk', '–'), pick, text, fold, x);
+    row.append(make('span', 'wv-mk', '–'), pick, text, fold, ...(onPara ? [go()] : []), x);
     const item = make('div', 'wv-item');
     item.dataset.owner = n.id;
     item.append(row, sub);

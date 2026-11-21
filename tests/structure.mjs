@@ -79,6 +79,7 @@ put({ id: 'th_monk', kind: 'thread', parent_id: 'wd_monks', title: 'Ex-Yakuza mo
 put({ id: 'th_goo', kind: 'thread', parent_id: 'wd_monks', title: 'The goo', sort: 2048, fields: { tag: 'goo' } });
 put({ id: 'no_1', kind: 'note', parent_id: 'pa_11', text: 'Refuses the call', fields: { chapter_id: 'ch_1', thread: 'th_monk' } });
 put({ id: 'no_2', kind: 'note', parent_id: 'pa_21', text: 'Meets the others', fields: { chapter_id: 'ch_2', thread: 'th_monk' } });
+put({ id: 'no_dir', kind: 'note', parent_id: 'pa_41', type: 'directing', text: 'Shoot the steps wide', fields: { chapter_id: 'ch_4' } });
 put({ id: 'no_5', kind: 'note', parent_id: 'pa_51', text: 'Won’t fight', fields: { chapter_id: 'ch_5', thread: 'th_monk' } });
 // The script.
 put({ id: 'pr_pilot', kind: 'project', parent_id: 'wd_monks', title: 'Pilot', area_id: 'area-writing', sort: 2, fields: { type: 'screenplay', levels: ['Act', 'Script', 'Scene'] } });
@@ -563,6 +564,14 @@ try {
     await laptop.locator('.pv-seg button', { hasText: 'Outline' }).click();
     await laptop.waitForFunction(() => document.querySelector('.ol-row[data-id="ch_3"] .ol-break')?.textContent.includes('The flood'));
     assert.match(await laptop.locator('.ol-addline').getAttribute('placeholder'), /## a chapter/);
+    // Follow a note category: only chapters with those notes speak, and a note leads to its place.
+    await laptop.locator('.ol-chip.cat', { hasText: 'Directing' }).click();
+    await laptop.waitForFunction(() => document.querySelector('.ol-row:not(.quiet) .gv-tnote')?.textContent.includes('Shoot the steps wide'));
+    assert.equal(await laptop.locator('.ol-row:not(.quiet)').count(), 1);
+    assert.equal(await laptop.locator('.ol-gap').count(), 0, 'no quiet marks for notes');
+    await shot(laptop, 'novel-follow-notes');
+    await laptop.locator('.ol-chip', { hasText: 'Everything' }).click();
+    await laptop.waitForFunction(() => !document.querySelector('.ol-row.quiet'));
     await shot(laptop, 'novel-outline');
     await laptop.locator('.ol-addline').fill('## The temple gate');
     await laptop.keyboard.press('Enter');
@@ -571,6 +580,12 @@ try {
     assert.equal(live().find((r) => r.kind === 'chapter' && r.title === 'The temple gate')?.parent_id, 'ac_2');
     await laptop.locator('.pv-seg button', { hasText: 'Grid' }).click();
     await laptop.waitForSelector('.gv-row');
+    // A note category as a column beside the threads.
+    await laptop.locator('.gv-colchip', { hasText: 'Directing' }).click();
+    await laptop.waitForFunction(() => document.querySelector('.gv-typeh')?.textContent === 'Directing' && document.querySelector('.gv-typecell .gv-tnote')?.textContent.includes('Shoot the steps wide'));
+    await shot(laptop, 'grid-note-column');
+    await laptop.locator('.gv-colchip', { hasText: 'Directing' }).click();
+    await laptop.waitForFunction(() => !document.querySelector('.gv-typeh'));
   });
 
   // ---------- on a phone ----------
@@ -596,6 +611,15 @@ try {
     await phone.locator('.gv-scroll').evaluate((e) => { e.scrollLeft = 300; });
     await sleep(100);
     assert.equal(await phone.locator('.gv-row[data-id="ch_1"] .gv-rtitle').evaluate((e) => e.getBoundingClientRect().left), left, 'the row names stay put');
+  });
+
+  await check('on a phone, a novel chapter’s plan opens from its name and fits the screen', async () => {
+    await go(phone, { view: 'write', chapterId: 'ch_3' });
+    await phone.waitForSelector('.nv-head:not([hidden]) .nv-ch');
+    await phone.locator('.nv-ch').tap();
+    await phone.waitForSelector('.nv-head .wv-p-sum');
+    assert.ok(await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'nothing sideways');
+    await shot(phone, 'novel-phone');
   });
 
   await check('no page errors', async () => {
