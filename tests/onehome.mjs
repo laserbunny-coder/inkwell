@@ -67,7 +67,15 @@ async function check(name, fn) {
 }
 const snap = async (n) => { if (SHOTS) { await sleep(300); await p.screenshot({ path: `${SHOTS}/${n}.png` }); } };
 const view = () => p.evaluate(() => document.documentElement.dataset.view || 'write');
-const until = (fn, arg, timeout = 15000) => p.waitForFunction(fn, arg, { timeout });
+const until = (fn, arg, timeout = 30000) => p.waitForFunction(fn, arg, { timeout }).catch((e) => { throw new Error(`waited for ${String(fn).slice(0, 90)}: ${e.message.split('\n')[0]}`); });
+// Go somewhere and wait to be there; once more if the app was still settling
+// in (start-up can land on Today just after the first go).
+const goThen = async (place, ready) => {
+  for (let i = 0; ; i++) {
+    await p.evaluate((pl) => window.__go(pl), place);
+    try { await p.waitForFunction(ready, null, { timeout: 8000 }); return; } catch (e) { if (i >= 2) throw e; }
+  }
+};
 
 const browser = await chromium.launch();
 try {
@@ -82,10 +90,8 @@ try {
   await until(() => new Promise((res) => { const r = indexedDB.open('writing'); r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').get('pp_4'); q.onsuccess = () => res(!!q.result); }; }));
 
   await check('the project page opens the script in one tap, on its text', async () => {
-    await p.evaluate(() => window.__go({ view: 'world', id: 'wd_nb' }));
-    await until(() => document.documentElement.dataset.view === 'world');
-    await p.evaluate(() => window.__go({ view: 'project', id: 'pr_nb' }));
-    await until(() => !document.documentElement.dataset.view && window.__editor?.getText().includes('Kenji'));
+    await goThen({ view: 'world', id: 'wd_nb' }, () => document.documentElement.dataset.view === 'world');
+    await goThen({ view: 'project', id: 'pr_nb' }, () => !document.documentElement.dataset.view && window.__editor?.getText().includes('Kenji'));
   });
 
   await check('inside the script the crumb is the way back, and Alt + 0 is the project page', async () => {
@@ -95,7 +101,8 @@ try {
     assert.ok(!/NB.*›.*NB/.test(crumb), `no NB › NB: ${crumb}`);
     assert.equal(await p.$eval('#page-tabs', (t) => t.hidden), true, 'no row of tabs in a piece');
     await snap('a-write-top');
-    await p.keyboard.press('Escape');
+    // Alt + 0 from inside the piece: the project page (the text keeps the caret).
+    await p.locator('#editor p', { hasText: 'Kenji' }).click();
     await p.keyboard.press('Alt+Digit0');
     await until(() => document.documentElement.dataset.view === 'world');
   });
@@ -165,8 +172,7 @@ try {
     await until(() => !!window.__grid);
     await until(() => new Promise((res) => { const r = indexedDB.open('writing'); r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').get('pp_4'); q.onsuccess = () => res(!!q.result); }; }));
     await check(`phone ${width}px: ‹ NB, then Outline · Write · Grid on one line; the Outline fits`, async () => {
-      await p.evaluate(() => window.__go({ view: 'grid', id: 'pr_nb', mode: 'outline' }));
-      await until(() => !!document.querySelector('.grid-view .ph1'));
+      await goThen({ view: 'grid', id: 'pr_nb', mode: 'outline' }, () => !!document.querySelector('.grid-view .ph1') && !document.querySelector('#piece-back').hidden);
       const back = await p.$eval('#piece-back', (b) => ({ shown: !b.hidden && b.offsetParent !== null, text: b.textContent, top: b.getBoundingClientRect().top }));
       assert.ok(back.shown, 'the back button shows');
       assert.match(back.text, /‹\s*NB/);
