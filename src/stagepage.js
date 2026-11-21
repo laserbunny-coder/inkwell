@@ -191,7 +191,7 @@ export class StagePage {
     from.title = 'Open where it was written';
     from.addEventListener('click', () => this.hooks.openEntry(row.id));
     const pid = this.idx?.many ? this.idx.ofLine(row) : null;
-    if (pid) from.append(make('span', 'st-for', ` · ${this.idx.name(pid)}`));
+    if (pid && !(row.text || '').includes(this.idx.name(pid))) from.append(make('span', 'st-for', ` · ${this.idx.name(pid)}`));
     const text = make('div', 'st-text');
     text.append(lineWords(row));
     li.append(from, text);

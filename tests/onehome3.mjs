@@ -70,6 +70,8 @@ put({ id: 'day-2026-11-20', kind: 'day', title: '2026-11-20' });
 const idea = (id, sort, text, to, title) => put({ id, kind: 'line', parent_id: 'day-2026-11-20', sort, text: `${text} ${title}`, content: [{ type: 'text', text: `${text} ` }, { type: 'entryRef', attrs: { id: to, title } }], links: [to], created_at: Date.parse('2026-11-20T10:00:00Z') + sort, fields: { done: false } });
 idea('li_whole', 1, 'The harbour freezes in act two', 'wd_wh', 'Winter Harbour');
 idea('li_nov', 2, 'Ada keeps a list of ferries', 'pr_nov', 'The Harbour Book');
+// A line that names its piece by a chapter, so the name is shown beside it.
+put({ id: 'li_ch', kind: 'line', parent_id: 'day-2026-11-20', sort: 5, text: 'More fog in The ferry', content: [{ type: 'text', text: 'More fog in ' }, { type: 'entryRef', attrs: { id: 'ch_a', title: 'The ferry' } }], links: ['ch_a'], created_at: Date.parse('2026-11-20T10:00:00Z') + 5, fields: { done: false } });
 idea('li_sh', 3, 'A gull steals the map', 'pr_sh', 'Gulls');
 idea('li_nb', 4, 'Kenji hates syrup', 'wd_nb', 'NB');
 put({ id: 'ch_s', kind: 'chapter', parent_id: 'pr_sh', title: 'Script', sort: 1 });
@@ -127,9 +129,10 @@ try {
     await openPart('ideas');
     const chips = await p.$$eval('li[data-part="ideas"] .wo-picks .chip', (b) => b.map((x) => x.textContent));
     assert.deepEqual(chips, ['Everything', 'Whole project', 'The Harbour Book', 'Gulls']);
-    await until(() => document.querySelectorAll('li[data-part="ideas"] li[data-drag="wo-idea"]').length === 3);
+    await until(() => document.querySelectorAll('li[data-part="ideas"] li[data-drag="wo-idea"]').length === 4);
     const list = await ideas();
-    assert.ok(list.some((t) => /Ada keeps a list.*The Harbour Book/.test(t)), list.join(' | '));
+    assert.ok(list.some((t) => /More fog in The ferry\s*The Harbour Book/.test(t)), list.join(' | '));
+    assert.ok(list.some((t) => /Ada keeps a list of ferries The Harbour Book\s*Fri/.test(t)), 'no name twice');
     assert.ok(list.some((t) => /harbour freezes/.test(t) && !/The Harbour Book|Gulls/.test(t)), 'a whole-project idea has no name');
     await snap('a-ideas-chips');
   });
@@ -148,7 +151,7 @@ try {
     await until(() => document.querySelectorAll('li[data-part="ideas"] li[data-drag="wo-idea"]').length === 1);
     assert.match((await ideas())[0], /harbour freezes/);
     await chip('ideas', 'Everything');
-    await until(() => document.querySelectorAll('li[data-part="ideas"] li[data-drag="wo-idea"]').length === 4);
+    await until(() => document.querySelectorAll('li[data-part="ideas"] li[data-drag="wo-idea"]').length === 5);
   });
 
   await check('"For…" ties an idea to a piece (the words stay), and Undo puts it back', async () => {
@@ -232,7 +235,7 @@ try {
       await openPart('ideas');
       await p.waitForSelector('li[data-part="ideas"] .wo-picks .chip');
       await p.locator('li[data-part="ideas"] .wo-picks .chip', { hasText: 'The Harbour Book' }).tap();
-      await until(() => document.querySelectorAll('li[data-part="ideas"] li[data-drag="wo-idea"]').length === 1);
+      await until(() => document.querySelectorAll('li[data-part="ideas"] li[data-drag="wo-idea"]').length === 2);
       assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'nothing scrolls sideways');
       await snap(`d-phone-${width}`);
     });

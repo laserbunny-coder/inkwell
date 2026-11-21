@@ -910,7 +910,8 @@ function ideaLine(w, row, from, keys, idx = null) {
   const li = kidLine(snipText(row.text) || 'A picture or recording', () => openEntry(row.id), { meta: from || '' });
   // Whose it is, when there are pieces to tell apart.
   const pid = idx?.many ? idx.ofLine(row) : null;
-  if (pid) li.querySelector('.wo-item').after(make('span', 'wo-for', idx.name(pid)));
+  // (Not when the line already says it, as "… [[The Harbour Book]]" does.)
+  if (pid && !(row.text || '').includes(idx.name(pid))) li.querySelector('.wo-item').after(make('span', 'wo-for', idx.name(pid)));
   const step = async (how) => {
     const next = stepKeys(keys, row.id, how);
     if (!next) return;
