@@ -463,7 +463,7 @@ try {
     assert.equal(await p.locator('.pv-plan').getAttribute('aria-pressed'), 'true');
     await p.locator('.pv-plan').click();
     await p.waitForFunction(() => document.querySelectorAll('.wv-plan').length === 0);
-    assert.deepEqual(await p.locator('.pv-seg button').allInnerTexts(), ['Write', 'Grid']);
+    assert.deepEqual(await p.locator('.pv-seg button').allInnerTexts(), ['Write', 'Outline', 'Grid']);
     // The grid: one row per scene, named by its title.
     await p.locator('.pv-seg button', { hasText: 'Grid' }).click();
     await p.waitForSelector('.gv-table');
@@ -591,13 +591,72 @@ try {
     await p.waitForFunction(() => window.__editor.state.doc.firstChild.textContent === 'EXT. PARKING LOT - DAWN');
   });
 
-  await check('412px wide: the plan’s lines under lines fit, nothing sideways', async () => {
-    await p.setViewportSize({ width: 412, height: 900 });
+  await check('the Outline: every scene with its summary and threads; follow a thread; name a scene; # adds one; Open goes to it', async () => {
     await p.keyboard.press('Control+O');
     await p.keyboard.type('Script · Rent Day');
     await p.waitForFunction(() => document.querySelector('.palette[data-loaded]') && /^Script\s*chapter · Rent Day/.test(document.querySelector('#palette-list li.box-row')?.textContent || ''));
     await p.keyboard.press('Enter');
     await p.waitForFunction(() => document.querySelectorAll('.wv-line').length >= 2);
+    const scenes = await p.locator('.wv-line').count();
+    await p.locator('.pv-seg button', { hasText: 'Outline' }).click();
+    await p.waitForSelector('.ol-page');
+    assert.equal(await p.locator('.pv-seg button', { hasText: 'Outline' }).getAttribute('aria-pressed'), 'true');
+    assert.equal(await p.locator('.ol-row').count(), scenes);
+    const two = p.locator('.ol-row').nth(1);
+    // The summary is written here, the same one the plan and the grid show.
+    await two.locator('.ol-sum').click();
+    await p.keyboard.press('End');
+    await p.keyboard.type('Kenji counts it twice.');
+    await p.keyboard.press('Enter');
+    await sleep(500);
+    assert.ok((await all()).some((e) => e.kind === 'para' && e.fields?.el === 'scene' && /ALLEY/i.test(e.text) && !e.deleted && /Kenji counts it twice\.$/.test(e.fields.synopsis || '')));
+    assert.equal(await two.locator('.ol-beat .ol-tn').first().innerText(), 'Saving the bakery');
+    // Follow a thread: the scenes without it go quiet.
+    await p.locator('.ol-chip', { hasText: 'Saving the bakery' }).click();
+    await p.waitForSelector('.ol-row.quiet');
+    assert.equal(await p.locator('.ol-row:not(.quiet)').count(), 1);
+    await p.locator('.ol-chip', { hasText: 'Everything' }).click();
+    await p.waitForFunction(() => !document.querySelector('.ol-row.quiet'));
+    // A scene is named (or renamed) here: its own title, only you see it.
+    const t1 = p.locator('.ol-row').nth(0).locator('.ol-title');
+    await t1.click();
+    await p.keyboard.press('Control+A');
+    await p.keyboard.type('The notice');
+    await p.locator('.ol-addline').click();
+    await p.waitForFunction(() => document.querySelector('.ol-row .ol-title')?.textContent === 'The notice');
+    await sleep(400);
+    assert.ok((await all()).some((e) => e.kind === 'scene' && e.title === 'The notice' && !e.deleted && e.fields.level === 3));
+    // "# " adds a scene at the end.
+    await p.locator('.ol-addline').fill('# The collector');
+    assert.match(await p.locator('.ol-hint').innerText(), /scene/);
+    await p.keyboard.press('Enter');
+    await p.waitForFunction((n) => document.querySelectorAll('.ol-row').length === n + 1, scenes);
+    // Open goes to it in the text.
+    await p.locator('.ol-row').last().hover();
+    await p.locator('.ol-row').last().locator('.ol-tools button', { hasText: 'Open' }).click();
+    await p.waitForFunction((n) => !document.documentElement.dataset.view && document.querySelectorAll('.wv-line').length === n + 1, scenes);
+    assert.match(await p.locator('.wv-line').last().innerText(), /The collector/i);
+    // Opening ends with the caret in the text, ready to write.
+    await p.waitForFunction(() => document.activeElement?.closest('.ProseMirror'));
+    await sleep(300);
+  });
+
+  await check('412px wide: the plan’s lines under lines fit, nothing sideways', async () => {
+    await p.setViewportSize({ width: 412, height: 900 });
+    await p.keyboard.press('Control+O');
+    await p.keyboard.type('Script · Rent Day');
+    await p.waitForFunction(() => document.querySelector('.palette[data-loaded]') && /^Script\s*chapter · Rent Day/.test(document.querySelector('#palette-list li.box-row')?.textContent || ''));
+    // The box can still be settling its list; press again until it has gone.
+    for (let n = 0; n < 4 && await p.evaluate(() => !!document.querySelector('.palette')?.checkVisibility()); n++) {
+      await p.keyboard.press('Enter');
+      await p.waitForFunction(() => !document.querySelector('.palette')?.checkVisibility(), null, { timeout: 3000 }).catch(() => {});
+    }
+    await p.waitForFunction(() => !document.querySelector('.palette')?.checkVisibility() && document.querySelectorAll('.wv-line').length >= 2);
+    await p.evaluate(() => window.scrollTo(0, 0));
+    await sleep(300);
+    // The switch fits beside the glass, Aa and ⋯.
+    const bar = await p.locator('.pv-switch').boundingBox();
+    assert.ok(bar && bar.x >= 0 && bar.x + bar.width <= 412, `switch at ${bar?.x}..${bar && bar.x + bar.width}`);
     await p.locator('.wv-line').nth(1).locator('.wv-zone.m').click();
     await p.waitForFunction(() => document.querySelector('.wv-sumi .wv-lines')?.textContent.includes('Once for luck'));
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'nothing sideways');

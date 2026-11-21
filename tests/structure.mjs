@@ -520,6 +520,8 @@ try {
 
   await check('on a phone the grid scrolls sideways with the names held still, and rows move from a tap menu', async () => {
     await go(phone, { view: 'grid', id: 'pr_novel' });
+    // A phone opens on the Outline; the switch goes to the grid.
+    await phone.locator('.gv-mode .chip', { hasText: 'Grid' }).tap();
     await phone.waitForSelector('.gv-row[data-id="ch_1"]');
     assert.equal(await phone.locator('.gv-grip').count(), 0, 'no dragging on a phone');
     await shot(phone, 'grid-phone');
