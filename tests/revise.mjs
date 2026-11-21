@@ -365,8 +365,12 @@ try {
 
   let token = null;
   await check('share a link: the reader’s copy has the piece’s words only (no notes, no other pieces, no days)', async () => {
+    // A script opens on its text (One home); sharing works from there.
     await go(laptop, { view: 'project', id: 'pr_s' });
-    await laptop.waitForSelector('html[data-view="project"]');
+    await laptop.waitForFunction(() => !document.documentElement.dataset.view && /pancake/.test(window.__editor.getText()));
+    // The text takes the caret a frame after it opens: let it, before the box opens.
+    await laptop.waitForFunction(() => window.__editor.isFocused);
+    await sleep(300);
     await palette(laptop, 'Share a link to read');
     await laptop.locator('.share-panel .pill', { hasText: 'Make a link' }).waitFor();
     await shot(laptop, '6-share-ask');

@@ -218,7 +218,7 @@ try {
     assert.equal(await scene(laptop, 'pp_1').locator('.pd-notes li').textContent(), 'The apron must be the red one');
     await settle(laptop);
     assert.equal(row('wd_nb').fields.production.code, 'NB', 'the show got a code from its name');
-    assert.equal(await laptop.locator('.crumb').textContent().then((t) => /Make/.test(t)).catch(() => true), true);
+    assert.equal(await laptop.locator('.crumb').textContent().then((t) => /Shots/.test(t)).catch(() => true), true);
   });
 
   await check('a piece code, then shots: codes that never change, 1A for one added between', async () => {
@@ -456,7 +456,8 @@ try {
   });
 
   await check('posting (in Deliver now): Claude drafts a caption per platform, links are kept for later', async () => {
-    await laptop.keyboard.press('Alt+Digit6');
+    // The piece's Share and post (One home: Alt + 6 no longer leads there; its ⋯ does).
+    await go(laptop, { view: 'deliver', id: 'pr_reel' });
     await laptop.waitForFunction(() => document.documentElement.dataset.view === 'deliver');
     await laptop.locator('.prod-view .gv-levels .chip[data-tab="post"]').click();
     await laptop.locator('.pd-add .pill', { hasText: 'Draft captions' }).click();
@@ -472,7 +473,8 @@ try {
 
   await check('out to Resolve: the shot list as CSV, the dialogue as subtitles, a shot’s kit as a zip', async () => {
     assert.deepEqual(laptop.errors, []);
-    await laptop.keyboard.press('Alt+Digit5');
+    // The piece's Shots (One home: Alt + 5 is the project's Deliver now; the piece's ⋯ leads here).
+    await go(laptop, { view: 'production', id: 'pr_reel' });
     await laptop.waitForFunction(() => document.documentElement.dataset.view === 'production');
     await sleep(500);
     await laptop.locator('.prod-view .gv-tools .more-btn').click();

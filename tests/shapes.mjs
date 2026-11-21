@@ -60,6 +60,7 @@ const backHome = async (p) => {
   if (at?.view === 'stage') { await go(p, { view: 'world', id: at.id }); await p.waitForSelector('#wh-more .more-btn'); await sleep(300); }
 };
 const pick = async (p, label) => { await p.locator('.pop-menu .pop-item', { hasText: label }).first().click(); await sleep(300); };
+const addInside = (pg, id) => pg.evaluate(async (pid) => { (await window.__bookMenu({ id: pid })).find((x) => x?.label?.startsWith("New piece inside")).run(); }, id);
 const live = (rows) => rows.filter((r) => !r.deleted && !r.fields?.trashed);
 
 const browser = withoutSync(await chromium.launch());
@@ -127,9 +128,8 @@ try {
   await check('inside a Season, a new piece starts as the next Episode, written as a script', async () => {
     const rows = live(await all(page));
     const season = rows.find((r) => r.title === 'Season 1' && r.kind === 'project');
-    await go(page, { view: 'project', id: season.id });
-    await page.waitForFunction(() => document.querySelector('#ph-new-piece')?.textContent === '+ Episode');
-    await page.locator('#ph-new-piece').click();
+    // A piece's "+ Piece" lives in its ⋯ menu now (One home: no Overview).
+    await addInside(page, season.id);
     await page.waitForSelector('.ask-piece');
     assert.equal(await page.locator('.ask-piece h2').innerText(), 'New episode in Season 1');
     assert.equal(await page.locator('.ask-piece input[aria-label="Name"]').inputValue(), 'Episode 2');
@@ -220,8 +220,15 @@ try {
     await page.waitForSelector('.ask-piece');
     assert.equal(await page.locator('.ask-piece input[aria-label="Name"]').inputValue(), 'Batch 1');
     await page.locator('.ask-piece .pill').click();
-    await page.waitForFunction(() => document.querySelector('#ph-new-piece')?.textContent === '+ Reel');
+    await page.waitForFunction(() => !document.querySelector('.ask-piece'));
+    let batch = null;
+    for (let i = 0; i < 60 && !batch; i++) { batch = live(await all(page)).find((r) => r.title === 'Batch 1'); if (!batch) await sleep(250); }
+    await addInside(page, batch.id);
+    await page.waitForSelector('.ask-piece');
+    assert.equal(await page.locator('.ask-piece input[aria-label="What it is"]').inputValue(), 'Reel');
     await shot(page, 'shapes-rename');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.ask-piece'));
     await go(page, { view: 'world', id: 'wd_nb' });
     await sleep(400);
   });
@@ -238,8 +245,14 @@ try {
     await page.fill('.ask-piece input[aria-label="Name"]', 'The Reels');
     await page.fill('.ask-piece input[aria-label="What it is"]', 'Show');
     await page.locator('.ask-piece .pill').click();
-    await page.waitForFunction(() => document.documentElement.dataset.view === 'project');
-    await page.waitForFunction(() => document.querySelector('#ph-new-piece')?.textContent === '+ Season');
+    await page.waitForFunction(() => !document.querySelector('.ask-piece'));
+    let reels = null;
+    for (let i = 0; i < 60 && !reels; i++) { reels = live(await all(page)).find((r) => r.title === 'The Reels'); if (!reels) await sleep(250); }
+    await addInside(page, reels.id);
+    await page.waitForSelector('.ask-piece');
+    assert.equal(await page.locator('.ask-piece input[aria-label="What it is"]').inputValue(), 'Season');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.ask-piece'));
   });
 
   await check('a life project from Shape, and back, keeps everything', async () => {

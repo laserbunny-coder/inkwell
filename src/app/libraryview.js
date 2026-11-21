@@ -1,5 +1,6 @@
 // The Library, a book's home, a world's home (its pieces and its bible) and
 // the plot grid.
+import { pieceHead } from './piecehead.js';
 import { getMeta, putEntries, children, getEntry } from '../db.js';
 import { newWorkflow } from '../stageedit.js';
 import { popMenu, menuButton, onContextMenu, ask, askText, toast } from '../menu.js';
@@ -1028,6 +1029,8 @@ function wireLibraryView() {
     menu: (anchor, items) => popMenu(anchor, items),
     menuButton: (items, label) => menuButton(items, label),
     ask, askText, toast,
+    pieceHead: (piece, world) => pieceHead(piece, world),
+    rowMenu: (r) => chapterMenu({ id: r.id }),
     noteType: () => notes.types[0]?.id || null,
     askServer: (body) => askServer(body),
     canAsk: () => canAskServer()

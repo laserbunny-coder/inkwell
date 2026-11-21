@@ -2234,3 +2234,44 @@ html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
   .palette li.box-in { padding-left: 18px; }
   .palette.box-all.box-typing { top: 0; bottom: auto; height: calc(var(--box-vh, 100vh)); }
 }
+
+/* ---------- One home (Nov 20 2026): inside a piece ---------- */
+/* ‹ the project, at the top left: the phone's way back (the computer's is the crumb). */
+.pc-back { flex: none; border: 0; background: transparent; color: var(--ink); padding: 5px 9px 5px 4px; border-radius: 8px; white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; display: none; }
+.pc-back:hover { background: var(--tint); }
+@media (--touch) { .pc-back:not([hidden]) { display: block; } }
+.crumb-part.back { color: var(--ink); }
+/* The top of a piece's Outline: its home. */
+.gv-head.ph1-head { align-items: flex-start; max-width: var(--page-width, 680px); margin: 0 auto; width: 100%; box-sizing: border-box; }
+/* The rows chip line sits in the same column as the head and the rows. */
+.gv-head.ph1-head + .gv-sub { max-width: var(--page-width, 680px); margin-left: auto; margin-right: auto; }
+.ph1 { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ph1-eye { align-self: flex-start; border: 0; background: transparent; padding: 2px 4px 2px 0; border-radius: 6px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.ph1-eye:hover { color: var(--ink); }
+.ph1-as { text-transform: none; letter-spacing: 0; font-size: 12.5px; color: var(--faint); }
+.ph1-name { outline: none; overflow-wrap: anywhere; }
+.ph1-name:focus { box-shadow: inset 0 -1px 0 var(--accent); }
+.ph1-path { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.ph1-stage { display: inline-flex; gap: 7px; align-items: center; border: 0; background: transparent; color: var(--muted); font-size: 12.5px; padding: 3px 6px 3px 0; border-radius: 7px; }
+.ph1-stage:hover { color: var(--ink); }
+.ph1-dots { display: inline-flex; gap: 4px; }
+.ph1-dots i { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--faint); display: inline-block; }
+.ph1-dots i.f { background: var(--accent); border-color: var(--accent); }
+.ph1-next { border: 0; background: transparent; color: var(--accent); font-size: 12.5px; padding: 3px 6px; border-radius: 7px; white-space: nowrap; }
+.ph1-next:hover { background: var(--tint); }
+.ph1-words { color: var(--faint); font-size: 12px; }
+.ph1-sentence { font: italic 400 17px/1.4 var(--prose); color: var(--muted); margin: 4px 0 0; min-height: 1.4em; outline: none; overflow-wrap: anywhere; }
+.ph1-sentence:empty::before { content: attr(data-placeholder); color: var(--faint); }
+.ph1-sentence:focus { color: var(--ink); }
+.ph1-more { align-self: flex-start; border: 0; background: transparent; color: var(--faint); font-size: 12.5px; padding: 2px 0; }
+.ph1-more:hover { color: var(--ink); }
+.ph1-dev { display: flex; flex-direction: column; gap: 12px; padding: 10px 0 4px; }
+.ph1-dev[hidden] { display: none; }
+.ph1-field { display: flex; flex-direction: column; gap: 6px; }
+.ph1-field .st-ta { font-size: 15px; }
+.ph1-people { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.ph1-people .st-people { align-self: stretch; }
+.ph1 .st-person { grid-template-columns: 1fr 1.4fr 1.4fr 1.4fr; }
+.ph1-grow { align-self: flex-start; padding-left: 0; }
+@media (--narrow) { .ph1 .st-person { grid-template-columns: 1fr 1fr; } }
+.ph1-head .gv-write { display: none; }

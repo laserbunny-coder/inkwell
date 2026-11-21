@@ -438,6 +438,7 @@ try {
     await sleep(700);
     await p.locator('.wv-line').nth(0).locator('.wv-zone.r').click();
     await p.waitForFunction(() => [...document.querySelectorAll('.wv-notes .wv-note.on-para .wv-bt')].some((t) => t.value === 'Insert on the till'));
+    await snap('d-notes');
     await p.locator('.wv-notes .wv-note.on-para .wv-go').first().click();
     await p.waitForFunction(() => window.__editor.isFocused && window.__editor.state.selection.$from.parent.textContent.startsWith('A letter slaps down'));
     await p.locator('.wv-line').nth(0).locator('.wv-zone.r').click();

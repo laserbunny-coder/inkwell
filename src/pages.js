@@ -96,6 +96,9 @@ export function tabsFor(ctx) {
   // so out on the desk the strip stays empty rather than repeat them.
   if (!ctx || ctx.scope === 'desk') return [];
   if (ctx.scope === 'world') return [{ id: 'overview', label: 'Project home', about: 'The project’s home: the whole outline', n: 0 }, ...(ctx.life ? LIFE_PARTS : PARTS).map((t, i) => ({ ...t, n: i + 1 }))];
+  // One home (Nov 20 2026): inside a piece, Alt + 0 to 5 are its project's
+  // home and parts too; the piece's own pages are in its ⋯ menu.
+  if (ctx.world) return [{ id: 'overview', label: 'Project home', about: 'The project’s home: the whole outline', n: 0 }, ...(ctx.wlife ? LIFE_PARTS : PARTS).map((t, i) => ({ ...t, n: i + 1 }))];
   const pages = ctx.life ? LIFE_PAGES : PAGES;
   return [{ id: 'overview', label: 'Overview', about: ctx.scope === 'world' ? 'The whole world at a glance' : 'This piece at a glance', n: 0 }, ...pages.map((t, i) => ({ ...t, n: i + 1 }))];
 }
@@ -113,11 +116,12 @@ export class PageStrip {
   set(ctx) {
     this.ctx = ctx;
     this.tabs = tabsFor(ctx);
-    const key = JSON.stringify([ctx?.scope, ctx?.life, ctx?.active]);
+    const key = JSON.stringify([ctx?.scope, ctx?.life, ctx?.active, ctx?.world]);
     if (key === this.key) return;
     this.key = key;
-    // A world is one outline: no strip (its parts are lines on its home).
-    this.el.hidden = !ctx || !this.tabs.length || ctx.scope === 'world';
+    // A world is one outline: no strip (its parts are lines on its home), and
+    // a piece is one thing in three views (One home): no strip either.
+    this.el.hidden = !ctx || !this.tabs.length || ctx.scope === 'world' || ctx.scope === 'piece';
     this.el.dataset.scope = ctx?.scope || '';
     this.el.replaceChildren(...this.tabs.map((t) => {
       const b = make('button', 'pt-tab' + (t.id === ctx?.active ? ' on' : ''), t.label);
