@@ -2257,6 +2257,18 @@ html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
 .ph1-dots { display: inline-flex; gap: 4px; }
 .ph1-dots i { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--faint); display: inline-block; }
 .ph1-dots i.f { background: var(--accent); border-color: var(--accent); }
+/* One home Part 4: the stage line is the path; each stage a door. */
+.ph1-stage { cursor: pointer; }
+.ph1-way { list-style: none; margin: 4px 0 14px; padding: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line); margin-left: 3px; }
+.ph1-way[hidden] { display: none; }
+.ph1-go { display: flex; align-items: baseline; gap: 10px; width: 100%; min-height: 40px; border: 0; background: none; padding: 8px 8px 8px 0; color: var(--muted); font: 14px var(--ui); text-align: left; cursor: pointer; border-radius: 8px; position: relative; }
+.ph1-go:hover { background: var(--tint); color: var(--ink); }
+.ph1-dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--faint); flex: none; margin-left: -5px; background: var(--bg, var(--panel)); align-self: center; }
+.ph1-door.f .ph1-dot { background: var(--accent); border-color: var(--accent); }
+.ph1-st { color: var(--ink); min-width: 9ch; }
+.ph1-door.at .ph1-st { font-weight: 600; }
+.ph1-built { flex: 1; min-width: 0; color: var(--faint); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph1-arrow { color: var(--faint); }
 .ph1-next { border: 0; background: transparent; color: var(--accent); font-size: 12.5px; padding: 3px 6px; border-radius: 7px; white-space: nowrap; }
 .ph1-next:hover { background: var(--tint); }
 .ph1-words { color: var(--faint); font-size: 12px; }

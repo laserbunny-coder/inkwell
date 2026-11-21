@@ -217,7 +217,8 @@ try {
     await page.keyboard.press('Control+A');
     await page.keyboard.press('Backspace');
     await page.keyboard.press('Enter');
-    await page.waitForSelector('#wh-facts .wp-claude');
+    // Wait for the Now line itself to be redrawn (another fact's ✦ line can show first).
+    await page.waitForFunction(() => /^✦\s*Reel 3/.test(document.querySelector('#wh-facts [data-field="now"]')?.closest('dd')?.innerText.trim() || ''));
     assert.equal((await get(page, 'wd_nb')).fields.now, '');
     assert.match((await facts(page)).Now, /^✦\s*Reel 3 prompts are half drafted/);
     await page.locator('#wh-facts [data-field="now"]').click();
