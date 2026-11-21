@@ -350,12 +350,12 @@ addCommands(() => [
   { group: 'go', label: 'Side panel with today’s lines, beside what you’re doing', keys: `${mod}⇧J`, words: ['panel', 'side'], run: () => todayPanel.toggle() },
   // Inside a piece (One home): its own places, found by their old words too.
   ...[
-    ['shape', 'Outline: the piece’s home, every scene with its plan', ['overview', 'shape', 'develop', 'sentence', 'home']],
-    ['gather', 'Ideas for this piece', ['gather', 'ideas']],
-    ['revise', 'Drafts and notes for this piece', ['revise', 'drafts', 'compare']],
-    ['make', 'Shots for this piece (production)', ['make', 'production', 'storyboard']],
-    ['deliver', 'Share and post this piece', ['deliver', 'post', 'share']]
-  ].map(([id, label, words]) => ({ group: 'go', label, keys: '', words: [...words, 'page'], run: () => (strip.ctx?.id ? piecePage(id) : null), when: () => strip.ctx?.scope === 'piece' })),
+    ['shape', 'Outline: the piece’s home, every scene with its plan', 'The top of the Outline: what it is, its name, stage and sentence; then every scene with its summary and threads.', ['overview', 'shape', 'develop', 'sentence', 'home']],
+    ['gather', 'Ideas for this piece', 'The ideas from your daily pages that link to this piece, to file or go through.', ['gather', 'ideas']],
+    ['revise', 'Drafts and notes for this piece', 'Kept drafts, compare, Fresh eyes, Claude’s notes and readers’ comments for this piece.', ['revise', 'drafts', 'compare']],
+    ['make', 'Shots for this piece (production)', 'This piece’s production: shots, storyboard, kit and shoot days.', ['make', 'production', 'storyboard']],
+    ['deliver', 'Share and post this piece', 'Files, share links and posting for this piece.', ['deliver', 'post', 'share']]
+  ].map(([id, label, hint, words]) => ({ group: 'go', label, hint, keys: '', words: [...words, 'page'], run: () => (strip.ctx?.id ? piecePage(id) : null), when: () => strip.ctx?.scope === 'piece' })),
   // In a project: its home and its parts by their plain names (the old words still find them).
   { group: 'go', label: 'Project home: the whole outline', hint: 'The project’s home: one outline of its parts, with what to carry on with at the top.', keys: '⌥0', words: ['overview', 'home', 'project', 'outline'], run: () => goPage('overview'), when: () => strip.ctx?.scope === 'world' || !!strip.ctx?.world },
   ...[...PARTS, ...LIFE_PARTS.filter((p) => p.id === 'notes')].map((p) => ({ group: 'go', label: `${p.label}: ${p.about.charAt(0).toLowerCase()}${p.about.slice(1)}`, hint: `Zooms into this project’s ${p.label}: ${p.about.charAt(0).toLowerCase()}${p.about.slice(1)}`, keys: strip.tabs.find((t) => t.id === p.id)?.n != null ? `⌥${strip.tabs.find((t) => t.id === p.id).n}` : '', words: [p.was, p.id === 'pieces' ? 'revise' : '', p.id === 'bible' ? 'characters places arcs timeline' : '', 'part', 'page'].filter(Boolean), run: () => goPage(p.id), when: () => (strip.ctx?.scope === 'world' || !!strip.ctx?.world) && strip.tabs.some((t) => t.id === p.id) })),
