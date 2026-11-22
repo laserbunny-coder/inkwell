@@ -45,7 +45,7 @@ export class NovelPlan extends ScenePlan {
   //   head()          the element at the top of the page that holds the chapter's name
   constructor(hooks) {
     super(hooks);
-    this.hooks.steady = (change) => change();
+    this.hooks.steady ||= (change) => change();
   }
 
   // ---------- where things are kept ----------
