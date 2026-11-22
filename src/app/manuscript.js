@@ -1,4 +1,5 @@
 // Chapters of a manuscript, and Woven (a script written as flowing prose).
+import { calm, calmNow, settle } from '../steady.js';
 import { setMeta, putEntries, children, getEntry } from '../db.js';
 import { ask, showCopy, toast } from '../menu.js';
 import { outline, entry, docWords } from '../model.js';
@@ -49,6 +50,7 @@ async function openChapter(id) {
   scenePlan?.load(book?.id);
   novelPlan?.load(book?.id);
   steadyPad(0);
+  roomBelow(0);
   loadDoc(editor, doc);
   if (isWoven()) guessAll(editor);
   if (recovered) store.change(editor.state.doc);
@@ -203,12 +205,26 @@ const activePlan = () => (isWoven() ? scenePlan : novelOn() ? novelPlan : null);
 // the screen. The scroll follows it, with room added at the very top when the
 // page can't scroll up far enough.
 let pad = 0;
+let padBelow = 0;
 let pointerY = null;
 function steadyPad(px) {
   pad = Math.max(0, px);
   editor.view.dom.style.marginTop = pad ? `${pad}px` : '';
 }
-const lineEl = (k) => editor.view.dom.querySelector(`.wv-line[data-key="${CSS.escape(k)}"]`);
+// Room at the very bottom, so a fold that makes the page shorter can't pull
+// the page down under you when you're near its end (Michael, Nov 22 2026:
+// "when it collapses, it's moving"). Only as much as is needed stays.
+function roomBelow(px) {
+  padBelow = Math.max(0, Math.round(px));
+  editor.view.dom.style.marginBottom = padBelow ? `${padBelow}px` : '';
+}
+function trimBelow() {
+  const spare = document.documentElement.scrollHeight - (window.scrollY + window.innerHeight);
+  if (spare > 0.5 && padBelow > 0) roomBelow(padBelow - Math.min(padBelow, spare));
+}
+// A line that folds: a Woven scene line, a novel's chapter name at the top,
+// or one of its scene breaks.
+const lineEl = (k) => { const q = CSS.escape(k); return editor.view.dom.querySelector(`.wv-line[data-key="${q}"], .scene-break[data-eid="${q}"]`) || document.querySelector(`.nv-head[data-key="${q}"]`); };
 function anchorKey() {
   const lines = [...editor.view.dom.querySelectorAll('.wv-line')].filter((l) => { const r = l.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; });
   if (pointerY !== null && lines.length) return lines.sort((a, b) => Math.abs(a.getBoundingClientRect().top - pointerY) - Math.abs(b.getBoundingClientRect().top - pointerY))[0].dataset.key;
@@ -220,19 +236,27 @@ function anchorKey() {
 function steady(change, key) {
   const k = key || anchorKey();
   const before = k && lineEl(k)?.getBoundingClientRect().top;
+  if (before != null) roomBelow(padBelow + window.innerHeight);
   change();
-  const el = k && lineEl(k);
-  if (before == null || !el) return;
-  document.dispatchEvent(new CustomEvent('inkwell:calm-scroll'));
-  const off = () => lineEl(k).getBoundingClientRect().top - before;
-  let d = off();
-  if (Math.abs(d) < 0.5) return;
-  window.scrollBy(0, d);
-  d = off();
-  // Above where it was and the page is at its top: room at the top.
-  if (d < -0.5) { steadyPad(pad - d); window.scrollBy(0, off()); }
-  // Below where it was with room at the top to give back.
-  else if (d > 0.5 && pad > 0) { steadyPad(pad - Math.min(pad, d)); window.scrollBy(0, off()); }
+  if (before == null || !lineEl(k)) { trimBelow(); return; }
+  calm(800);
+  const off = () => (lineEl(k)?.getBoundingClientRect().top ?? before) - before;
+  const fix = () => {
+    if (!lineEl(k)?.isConnected) return;
+    let d = off();
+    if (Math.abs(d) < 0.5) return;
+    window.scrollBy(0, d);
+    d = off();
+    // Above where it was and the page is at its top: room at the top.
+    if (d < -0.5) { steadyPad(pad - d); window.scrollBy(0, off()); }
+    // Below where it was with room at the top to give back.
+    else if (d > 0.5 && pad > 0) { steadyPad(pad - Math.min(pad, d)); window.scrollBy(0, off()); }
+  };
+  fix();
+  trimBelow();
+  // And while the page settles: a phone's keyboard closing as a field in the
+  // fold goes away, a summary growing to fit, fonts arriving.
+  settle(fix, 800, trimBelow);
 }
 // Titles on or off, the line under the pointer (or the caret's scene) kept still.
 function steadyTitles() { scenePlan.titlesFrom({ key: null }); }
@@ -463,6 +487,7 @@ function wireManuscript() {
     chapter: () => store.chapter,
     chapterN: () => state.acts.flatMap((a) => a.chapters).findIndex((c) => c.id === store.chapter?.id) + 1,
     chapterWord: () => state.project?.fields?.levels?.[1] || 'Chapter',
+    steady,
     head: () => $('.nv-head'),
     saveChapter: async (fn) => {
       const ch = store.chapter;
@@ -479,6 +504,8 @@ function wireManuscript() {
   notes.inPlan = (n) => novelPlan.inPlan(n);
   document.addEventListener('inkwell:note-lines', (e) => { activePlan()?.showNoteLines(e.detail); });
   editor.view.dom.addEventListener('mousemove', (e) => { pointerY = e.clientY; });
+  // The room left at the bottom goes once you've scrolled up away from it.
+  window.addEventListener('scroll', () => { if (padBelow && !calmNow()) trimBelow(); }, { passive: true });
   editor.view.dom.addEventListener('mouseleave', () => { pointerY = null; });
   $('#chapter-links-chip').addEventListener('click', () => $('.chapter-links').scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }

@@ -79,16 +79,24 @@ export class ScenePlan {
   redrawDoc() { redraw(this.editor); }
   words() { return { title: 'Name this scene (only you see it)', titleAria: 'Scene title (only you see it)', sum: 'What happens in this scene' }; }
 
+  // Folding or unfolding keeps the line you tapped where it is on the screen,
+  // both ways (src/steady.js), on a computer and a phone.
   toggle(ref) {
-    if (this.open.has(ref.key)) this.open.delete(ref.key); else this.open.add(ref.key);
-    if (!this.isOpen(ref.key) && this.adding === ref.key) this.adding = null;
-    this.save();
-    this.redraw();
+    this.hooks.steady(() => {
+      if (this.open.has(ref.key)) this.open.delete(ref.key); else this.open.add(ref.key);
+      if (!this.isOpen(ref.key) && this.adding === ref.key) this.adding = null;
+      this.save();
+      this.redrawDoc();
+    }, ref.key);
+    this.afterDraw();
   }
   toggleNotes(ref) {
-    if (this.noted.has(ref.key)) this.noted.delete(ref.key); else this.noted.add(ref.key);
-    this.save();
-    this.redraw();
+    this.hooks.steady(() => {
+      if (this.noted.has(ref.key)) this.noted.delete(ref.key); else this.noted.add(ref.key);
+      this.save();
+      this.redrawDoc();
+    }, ref.key);
+    this.afterDraw();
   }
   // A scene just made with "# ": its plan open, the caret in its title.
   openTitle(pos) {

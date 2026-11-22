@@ -25,7 +25,14 @@ const SHRUNK = 150; // px of page hidden: a keyboard is in the way
 const GROWN = 80; // back within this of the full height: it has gone
 
 const typing = (el) => !!el && (el.isContentEditable || /^(INPUT|TEXTAREA)$/.test(el.tagName) && !/^(checkbox|radio|range|button|submit|color|file)$/.test(el.type)) && !el.closest('.palette.box');
-const editableAt = (t) => t?.closest?.('[contenteditable="true"], input, textarea');
+// What a tap lands in that takes typing. A part of the text that isn't text
+// (a Woven scene line, a novel's scene break: contenteditable="false") is a
+// button, not a place to type, so a tap on it never counts as one.
+const editableAt = (t) => {
+  const own = t?.closest?.('[contenteditable]');
+  if (own && own.getAttribute('contenteditable') === 'false') return null;
+  return t?.closest?.('[contenteditable="true"], input, textarea');
+};
 
 class Keyboard {
   constructor() {

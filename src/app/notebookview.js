@@ -1,4 +1,5 @@
 // The notebook: daily pages and pages written as lines.
+import { calmNow } from '../steady.js';
 import { keyboard } from '../keyboard.js';
 import { menuButton, toast } from '../menu.js';
 import { toggleDone, indentLines, outdentLines, moveLine, foldKey, toggleChecklist, hasBox, toggleBox, canMoveLine, removeLine, lineChecks } from '../outline.js';
@@ -135,6 +136,9 @@ function lineMenu(eid) {
   };
 }
 function keepCaretInView(ed = currentEditor()) {
+  // Something just folded and is being held still (src/steady.js): the page
+  // doesn't chase the caret meanwhile.
+  if (calmNow()) return true;
   if (typewriter()) return holdLine(ed);
   if (!touch.matches || !ed?.isFocused) return false;
   let r;

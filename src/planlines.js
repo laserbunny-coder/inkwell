@@ -11,6 +11,7 @@
 //     else that hangs on the anchor is ever mistaken for them.
 // A small editor is made for a top line that has lines (or gets its first),
 // and dropped (after saving) when its block is drawn again.
+import { holdStill } from './steady.js';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { TextSelection } from '@tiptap/pm/state';
@@ -124,11 +125,11 @@ export class PlanLines {
     fold.type = 'button';
     fold.hidden = true;
     if (!ownerId) return { sub, fold };
-    fold.addEventListener('click', () => {
+    fold.addEventListener('click', () => holdStill(() => (fold.isConnected ? fold : document.querySelector(`[data-owner="${CSS.escape(ownerId)}"] .wv-fold`)), () => {
       setFolded(ownerId, !isFolded(ownerId));
       const it = this.live.get(ownerId);
       if (it) this.show(it);
-    });
+    }));
     const opts = { top, leave };
     // Drawn again (the line's block is rebuilt often): the same editor moves
     // into the new place at once, so nothing under the pointer shifts.
