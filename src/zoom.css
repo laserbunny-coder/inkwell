@@ -3,7 +3,7 @@
    layout" (Look) takes html.zoom away and the rail and the phone's bar are
    back as they were. */
 
-.zm-ruler, .zm-mic, .zm-when, .zm-go, .zm-aa, .zm-more, .zm-np { display: none; }
+.zm-ruler, .zm-mic, .zm-when, .zm-go, .zm-aa, .zm-more, .zm-np, .zm-shots { display: none; }
 
 /* ---------- what the ruler takes the place of ---------- */
 html.zoom.has-rail { --rail-w: 0px; }
@@ -51,6 +51,13 @@ html.zoom .zm-aa {
   border: 0; border-radius: 7px; background: transparent; color: var(--ink); font: 600 15px/1 var(--ui); letter-spacing: .01em; cursor: pointer;
 }
 html.zoom .zm-aa:hover, html.zoom .zm-aa[aria-expanded="true"] { background: var(--raise); }
+/* Shots: only while writing a piece with scenes; lit while they show. */
+html.zoom.ss-able:not([data-view]) .zm-shots {
+  display: inline-flex; align-items: center; flex: none; height: 30px; padding: 0 10px; border: 1px solid transparent; border-radius: 99px;
+  background: transparent; color: var(--muted); font: 500 13px/1 var(--ui); cursor: pointer;
+}
+html.zoom.ss-able .zm-shots:hover { color: var(--ink); background: var(--raise); }
+html.zoom.ss-able .zm-shots[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); }
 .zm-go svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
 html.zoom .topbar { view-transition-name: zm-top; }
 
@@ -124,7 +131,7 @@ html.zoom body.typing.in-piece.peek-top .topbar, html.zoom.has-rail body.typing.
   /* The top line is always there on the phone: the date, this place's pages, the glass and More. */
   html.zoom .topbar { display: flex !important; transform: none !important; opacity: 1 !important; align-items: center; gap: 6px; padding: 6px 8px 6px 12px; }
   html.zoom .topbar > .zm-when { order: 0; }
-  html.zoom .topbar > :is(.zm-np, .zm-go, .zm-aa, .zm-more) { order: 3; }
+  html.zoom .topbar > :is(.zm-np, .zm-go, .zm-shots, .zm-aa, .zm-more) { order: 3; }
   html.zoom body.kb-up .topbar { opacity: 0 !important; pointer-events: none; }
   html.zoom body:not(.looking) :is(.notebook, .page) { padding-top: calc(var(--topbar-h, 44px) + 18px); }
 }

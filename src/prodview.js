@@ -8,7 +8,7 @@ import { zip } from './vault.js';
 import { download } from './export.js';
 import {
   ELEMENT_TYPES, typeOf, elementsIn, plainPages, newElement, setElement, namesOf,
-  findElements, sceneElements, changeBreakdown, sceneSig, shotCode, newShot, shotStage, SHOT_STAGES,
+  findElements, sceneElements, changeBreakdown, sceneSig, shotCode, newShot, shotStage, SHOT_STAGES, stillOf,
   withRenders, withPrompts, isVideo, shotForName, shootDays, newShootDay, shootDayTask, toCsv, toSrt, speechesIn, PLATFORMS,
   MADE_BY, madeBy, needsFootage, AUDIO, audioOf, toPlan,
   viewSlots, toolIdsFor, toolIdsOf, ASPECTS, RATES, rulesOf, genOf, secsOf, runsOf,
@@ -1360,12 +1360,7 @@ export class ProductionView {
   }
 
   // The still to show for a shot: the starred one, or the newest.
-  stillOf(sh) {
-    const f = sh.fields || {};
-    if (f.star?.still) return f.star.still;
-    for (const t of [...(f.tries || [])].reverse()) for (const id of [...(t.files || [])].reverse()) if (this.kindOf?.get(id) === 'still') return id;
-    return null;
-  }
+  stillOf(sh) { return stillOf(sh, (id) => this.kindOf?.get(id)); }
 
   async play(cards) {
     const back = make('div', 'pd-viewer pd-play');
