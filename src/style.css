@@ -2020,6 +2020,7 @@ button.st-from:hover { color: var(--ink); }
 .pd-plan-what { margin: 6px 0 4px; }
 .pd-plan-list { margin: 0 0 10px; padding-left: 18px; color: var(--muted); }
 .pd-sheet-kind { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
+.pd-covers { font-size: 11px; color: var(--faint); white-space: nowrap; }
 .pd-state { display: flex; align-items: center; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 @media (--narrow) { .pd-state { justify-content: flex-start; } }
 

@@ -415,6 +415,8 @@ addCommands(() => [
   { group: 'view', label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: writing },
   { group: 'view', label: 'Shots beside the script, or put away', keys: 'Alt+B', words: ['shots', 'storyboard', 'frames', 'side by side', 'make'], run: () => scriptShots?.toggle(), when: () => writing() && root.classList.contains('ss-able') },
   { group: 'view', label: 'Shots: beside the script', keys: '', words: ['shots', 'storyboard', 'side by side', 'strip'], run: () => scriptShots?.sitAt('beside'), when: () => writing() && root.classList.contains('ss-able') },
+  { group: 'view', label: 'Next shot', keys: 'Alt+Down', words: ['shots', 'storyboard', 'step'], run: () => scriptShots?.step(1), when: () => writing() && root.classList.contains('ss-on') },
+  { group: 'view', label: 'Shot before', keys: 'Alt+Up', words: ['shots', 'storyboard', 'step'], run: () => scriptShots?.step(-1), when: () => writing() && root.classList.contains('ss-on') },
   { group: 'view', label: 'Shots: in the script (one column)', keys: '', words: ['shots', 'storyboard', 'inline', 'one column'], run: () => scriptShots?.sitAt('column'), when: () => writing() && root.classList.contains('ss-able') },
   { group: 'write', label: 'Move this line to another page or day…', keys: '', run: moveLinePicker, when: inNotebook },
   { group: 'write', label: 'Gather a #tag onto this page…', keys: '', run: gatherTagHere, when: inNotebook },
@@ -553,7 +555,7 @@ function wireQuickInserts() {
     else if (m && !e.shiftKey && !e.altKey && e.code === 'Backslash') { e.preventDefault(); toggleBesidePane(); }
     // Alt + T: talk it through with Claude, beside where you are.
     else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyT') { e.preventDefault(); openTalk(); }
-    // Alt + Bhift + T: everything left from earlier days onto today.
+    // Alt + Shift + T: everything left from earlier days onto today.
     else if (e.altKey && !m && e.shiftKey && e.code === 'KeyT') { e.preventDefault(); plan.bringToday(); }
     // Alt + B: the shots beside the script, or put away.
     else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyB' && writing() && root.classList.contains('ss-able')) { e.preventDefault(); scriptShots?.toggle(); }
@@ -578,6 +580,9 @@ function wireQuickInserts() {
     else if (m && k === 'j') { e.preventDefault(); toggleWriteToday(); }
     else if (m && k === '2' && writing()) { e.preventDefault(); toggleNotes(); }
     else if (((m && e.shiftKey) || (!isMac && e.altKey && !m && !e.shiftKey)) && e.code === 'KeyN' && writing()) { e.preventDefault(); notes.add(); }
+    // Alt + Down / Up: shot to shot, when the shots are on and one is picked
+    // (or the caret isn't in the words).
+    else if (e.altKey && !e.shiftKey && !m && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && writing() && root.classList.contains('ss-on') && scriptShots?.stepping()) { e.preventDefault(); scriptShots.step(e.key === 'ArrowDown' ? 1 : -1); }
     else if (e.altKey && e.shiftKey && !m && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && writing() && editor.isFocused) { e.preventDefault(); blocks.moveCurrent(e.key === 'ArrowUp' ? -1 : 1); }
     else if (m && e.shiftKey && k === 'e' && writing()) { e.preventDefault(); editor.commands.focus(); alts.toggle({ scope: 'word', focusAdd: true }); }
     else if (m && e.shiftKey && k === 'd' && writing() && editor.isFocused) { e.preventDefault(); newParagraphVersion(editor); }

@@ -15,6 +15,7 @@ import {
   PRICES_ID, priceList, priceOf, pricesChecked, estimate, spent, money, toEdl, cutEvents, lookOf
 } from './production.js';
 import { make } from './dom.js';
+import { resolve as linesOf, linesIn } from './shotlines.js';
 
 // The production view of a piece (Ctrl + Shift + S): its scenes, each with
 // the elements it uses and its shots; a storyboard of the stills picked;
@@ -562,6 +563,10 @@ export class ProductionView {
       m.addEventListener('click', () => this.hooks.menu(m, this.madeMenu(sh)));
       state.append(m);
     }
+    // The lines it covers in the script (Write > Shots), said quietly.
+    const paras = s ? (s.rows || []).filter((r) => r.kind === 'para' && r.fields?.el !== 'scene').map((r) => ({ id: r.id, el: r.fields?.el, text: r.text || '' })) : [];
+    const span = linesOf(sh, paras);
+    if (span) state.append(make('span', 'pd-covers', `covers ${linesIn(paras, span.from, span.to)} line${linesIn(paras, span.from, span.to) === 1 ? '' : 's'}`));
     state.append(dot);
     row.append(toggle, code, what, framing, state, this.hooks.menuButton(() => this.shotMenu(sh, s), 'More for this shot'));
     box.append(row);

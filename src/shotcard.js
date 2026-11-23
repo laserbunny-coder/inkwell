@@ -6,7 +6,7 @@
 import { plain as make } from './dom.js';
 import { shotStage, SHOT_STAGES } from './production.js';
 
-// opts: code, scene (its name), pic (element), close() or null, edit(patch
+// opts: code, scene (its name), covers (the lines it covers, said plainly), pic (element), close() or null, edit(patch
 // {text}|{framing}), done() (Enter), blur(), picture(file), make(), remove().
 export function shotCard(sh, opts) {
   const d = make('div', 'ss-detail');
@@ -35,6 +35,7 @@ export function shotCard(sh, opts) {
   const what = field('ss-what-in', sh.text, 'What happens', 'text');
   const framing = field('ss-framing-in', sh.fields?.framing, 'Framing: wide, close-up, insert…', 'framing');
   const where = make('p', 'ss-in', opts.scene ? `In ${opts.scene}` : '');
+  const covers = opts.covers ? make('p', 'ss-covers', opts.covers) : null;
   const acts = make('div', 'ss-acts');
   if (opts.picture) {
     const add = make('label', 'ss-act', 'Add a picture');
@@ -58,6 +59,6 @@ export function shotCard(sh, opts) {
     del.addEventListener('click', () => opts.remove());
     acts.append(del);
   }
-  d.append(top, what, framing, where, acts);
+  d.append(top, what, framing, where, ...(covers ? [covers] : []), acts);
   return d;
 }

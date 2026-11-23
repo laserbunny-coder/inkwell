@@ -172,14 +172,17 @@ export async function shotsUnder(sceneId) {
   return (await children(sceneId)).filter((r) => r.kind === 'shot').sort((a, b) => a.sort - b.sort);
 }
 
-export async function newShot(scene, { what = '', framing = '', after = null, pieceId = null, by = null } = {}) {
+// place: { sort, index } puts it somewhere other than after `after` (a shot
+// put on its lines between shots 3 and 4 is 3A); lines: { from, to }, the
+// first and last paragraph it covers (see shotlines.js).
+export async function newShot(scene, { what = '', framing = '', after = null, pieceId = null, by = null, place = null, lines = null } = {}) {
   const list = await shotsUnder(scene);
-  const at = after ? list.findIndex((s) => s.id === after) + 1 : list.length;
+  const at = place ? place.index : after ? list.findIndex((s) => s.id === after) + 1 : list.length;
   const n = shotNumber(list.map((s) => s.fields?.n || null), at);
   const prev = list[at - 1];
   const next = list[at];
-  const sort = prev && next ? (prev.sort + next.sort) / 2 : prev ? prev.sort + 1024 : next ? next.sort - 1024 : 1024;
-  const row = entry('shot', { id: newId('sh'), parent_id: scene, sort, text: what, fields: { n, framing, ...(pieceId ? { piece: pieceId } : {}) }, ...(by ? { _by: by } : {}) });
+  const sort = place ? place.sort : prev && next ? (prev.sort + next.sort) / 2 : prev ? prev.sort + 1024 : next ? next.sort - 1024 : 1024;
+  const row = entry('shot', { id: newId('sh'), parent_id: scene, sort, text: what, fields: { n, framing, ...(lines?.from ? { from: lines.from, to: lines.to || lines.from } : {}), ...(pieceId ? { piece: pieceId } : {}) }, ...(by ? { _by: by } : {}) });
   await putEntries([row]);
   return row;
 }
