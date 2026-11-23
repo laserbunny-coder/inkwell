@@ -176,6 +176,13 @@ try {
     await snap('c-camera-path');
     await door('Shooting').click();
     await until(() => document.documentElement.dataset.view === 'production' && document.querySelector('.prod-view .chip[data-tab="days"]')?.getAttribute('aria-selected') === 'true' && /Shoot days/.test(document.querySelector('#crumb')?.textContent || ''));
+    // A camera film has no voice sessions to add; its call sheet ticks shots.
+    assert.equal(await p.locator('.pd-days .chip.add', { hasText: 'Voice session' }).count(), 0);
+    await p.locator('.pd-days .chip:not(.add)').first().click();
+    await p.waitForSelector('.pd-sheet .pd-sheet-shot input');
+    await p.locator('.pd-sheet .pd-sheet-shot label', { hasText: 'Her boots' }).locator('input').check();
+    await db('sh_s2', '!!x.fields.got');
+    await snap('d-callsheet');
   });
 
   await check('right-click a row: Set stage to …', async () => {

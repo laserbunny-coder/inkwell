@@ -1572,10 +1572,15 @@ export class ProductionView {
     }
     const add = make('button', 'chip add', '+ Shoot day');
     add.addEventListener('click', () => this.addDay());
-    const addVoice = make('button', 'chip add', '+ Voice session');
-    addVoice.title = 'A day for recording voices';
-    addVoice.addEventListener('click', () => this.addDay('voice'));
-    list.append(add, addVoice);
+    list.append(add);
+    // Voices are recorded for generated shots; a film shot with a camera
+    // records its sound on the day.
+    if (this.anyGen || days.some((d) => d.fields?.type === 'voice')) {
+      const addVoice = make('button', 'chip add', '+ Voice session');
+      addVoice.title = 'A day for recording voices';
+      addVoice.addEventListener('click', () => this.addDay('voice'));
+      list.append(addVoice);
+    }
     body.append(list);
     if (!this.dayId) this.drawPlan(body, days);
     const day = days.find((d) => d.id === this.dayId);
@@ -1654,7 +1659,7 @@ export class ProductionView {
       });
       pick.append(c);
     }
-    form.append(pick);
+    form.append(pick, this.whoForm(day));
     const notes = make('textarea', 'pd-ta');
     notes.value = f.notes || '';
     notes.rows = 2;
@@ -1686,6 +1691,85 @@ export class ProductionView {
     acts.append(print, send, del);
     form.append(acts);
     return form;
+  }
+
+  // Who comes on a day: the cast in its scenes (who plays them comes from
+  // Cast and places) and the film's crew, typed once and kept on the film.
+  // Each can have their own call time that day; without one, the day's call.
+  dayCast(day) {
+    const ids = new Set(this.scenes.filter((s) => (day.fields?.scenes || []).includes(s.id)).flatMap((s) => s.uses));
+    return [...ids].map((id) => this.elById.get(id)).filter((e) => e && e.fields.element.type === 'character');
+  }
+  crewOf() { return (this.piece.fields?.crew || []).filter((c) => c && c.id); }
+  async saveCrew(crew) {
+    const fresh = await getEntry(this.piece.id);
+    const row = { ...fresh, fields: { ...fresh.fields, crew }, updated_at: Date.now() };
+    await putEntries([row]);
+    this.piece = row;
+    this.hooks.changed([row]);
+  }
+  whoForm(day) {
+    const f = day.fields || {};
+    const box = make('div', 'pd-who');
+    box.append(make('span', 'pd-field-label', 'Who’s coming'));
+    const grid = make('div', 'pd-who-grid');
+    const callIn = (key, label) => {
+      const t = make('input', 'pd-input pd-who-call');
+      t.type = 'time';
+      t.value = f.calls?.[key] || '';
+      t.setAttribute('aria-label', `Call time for ${label}`);
+      t.title = f.call ? `Leave empty for the day’s call (${clock(f.call)})` : 'Their call time';
+      t.addEventListener('change', async () => {
+        const fresh = await getEntry(day.id);
+        const calls = { ...(fresh.fields?.calls || {}) };
+        if (t.value) calls[key] = t.value; else delete calls[key];
+        await this.saveShotFields(day.id, { calls });
+        this.render();
+      });
+      return t;
+    };
+    for (const e of this.dayCast(day)) {
+      const by = (e.fields.element.playedBy || '').trim();
+      const who = make('span', 'pd-who-name');
+      who.append(make('strong', '', by || 'Not cast yet'), make('span', 'pd-sheet-sub', ` as ${e.title || 'Untitled'}`));
+      if (!by) who.title = 'Who plays them goes on Cast and places: tap their name there';
+      const row = make('div', 'pd-who-row cast');
+      row.append(who, callIn(e.id, e.title || 'them'));
+      grid.append(row);
+    }
+    const crew = this.crewOf();
+    crew.forEach((c, i) => {
+      const field = (key, ph) => {
+        const t = make('input', 'pd-input');
+        t.value = c[key] || '';
+        t.placeholder = ph;
+        t.setAttribute('aria-label', `${ph}, crew ${i + 1}`);
+        t.addEventListener('change', async () => { const list = this.crewOf().map((x) => (x.id === c.id ? { ...x, [key]: t.value.trim() } : x)); await this.saveCrew(list); this.render(); });
+        return t;
+      };
+      const del = make('button', 'pd-who-x', '×');
+      del.type = 'button';
+      del.setAttribute('aria-label', `Remove ${c.name || 'this person'} from the crew`);
+      del.addEventListener('click', async () => {
+        const before = this.crewOf();
+        await this.saveCrew(before.filter((x) => x.id !== c.id));
+        this.render();
+        this.hooks.toast(`${c.name || 'Crew member'} removed from the crew`, { label: 'Undo', run: async () => { await this.saveCrew(before); this.render(); } });
+      });
+      const row = make('div', 'pd-who-row crew');
+      row.append(field('name', 'Name'), field('job', 'Job'), callIn(c.id, c.name || c.job || 'crew'), del);
+      grid.append(row);
+    });
+    box.append(grid);
+    const add = make('button', 'ghost-btn', '+ Person');
+    add.title = 'Someone on the crew: kept on the film for every day';
+    add.addEventListener('click', async () => {
+      await this.saveCrew([...this.crewOf(), { id: newId('cr'), name: '', job: '' }]);
+      await this.render();
+      [...this.el.querySelectorAll('.pd-who-grid input[placeholder="Name"]')].at(-1)?.focus();
+    });
+    box.append(add);
+    return box;
   }
 
   // One page: everything on it already exists somewhere else.
@@ -1723,11 +1807,27 @@ export class ProductionView {
         }
       } else if (s.shots.length) {
         // A generated shot needs nothing from the day, so it isn't listed.
+        // Each can be ticked on the day: the same Got it as on Shots.
         const filmed = s.shots.filter((sh) => needsFootage(madeBy(sh, this.set)));
         const ul = make('ul', 'pd-sheet-shots');
         for (const sh of filmed.length ? filmed : s.shots) {
           const m = madeBy(sh, this.set);
-          ul.append(make('li', '', `${this.codeOf(sh, s)}  ${sh.text || ''}${sh.fields?.framing ? ` (${sh.fields.framing})` : ''}${m === 'ref' ? ' · reference' : ''}`));
+          const it = make('li', 'pd-sheet-shot');
+          const words = `${this.codeOf(sh, s)}  ${sh.text || ''}`;
+          const extra = [sh.fields?.framing, sh.fields?.note].filter(Boolean).join('. ');
+          if (needsFootage(m)) {
+            const lab = make('label');
+            const box = make('input');
+            box.type = 'checkbox';
+            box.checked = gotIt(sh);
+            box.setAttribute('aria-label', `Got it: ${sh.text || this.codeOf(sh, s)}`);
+            box.addEventListener('change', () => this.setGot(sh.id, box.checked));
+            lab.append(box, make('span', '', ` ${words}`));
+            if (extra) lab.append(make('span', 'pd-sheet-sub', ` (${extra})`));
+            if (m === 'ref') lab.append(make('span', 'pd-sheet-sub', ' · reference'));
+            it.append(lab);
+          } else it.textContent = `${words}${extra ? ` (${extra})` : ''}`;
+          ul.append(it);
         }
         li.append(ul);
       }
@@ -1735,7 +1835,19 @@ export class ProductionView {
       for (const n of notes) li.append(make('div', 'pd-sheet-note', n.text));
       return li;
     }));
-    section('Who’s needed', uses('character').map((e) => `${e.title}${e.fields.element.snippet ? `: ${e.fields.element.snippet}` : ''}`));
+    // Who's coming: the actor beside the character, then the crew, each
+    // with their call time (the day's call unless they have their own).
+    const callOf = (key) => { const v = f.calls?.[key] || f.call; return v ? clock(v) : ''; };
+    const cast = uses('character');
+    const crew = this.crewOf().filter((c) => c.name || c.job);
+    if (cast.length || crew.length) {
+      sheet.append(make('h3', '', 'Who’s coming'));
+      const t = make('table', 'pd-sheet-who');
+      const tr = (a, b, c) => { const r = make('tr'); r.append(make('td', 'pd-sheet-person', a), make('td', '', b), make('td', 'pd-sheet-call', c)); t.append(r); };
+      for (const e of cast) tr(e.fields.element.playedBy?.trim() || 'Not cast yet', e.title || 'Untitled', callOf(e.id));
+      if (!voice) for (const c of crew) tr(c.name || 'To find', c.job || '', callOf(c.id));
+      sheet.append(t);
+    }
     if (!voice) {
       section('Locations', uses('location').map((e) => e.title));
       section('Props', uses('prop').map((e) => e.title));
