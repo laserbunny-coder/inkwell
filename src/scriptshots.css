@@ -19,11 +19,12 @@ html.ss-rail.script #editor p[data-el="character"] { margin-left: 28%; }
 html.ss-rail.script #editor p[data-el="paren"] { margin: 0 4% 0 18%; }
 html.ss-rail.script #editor p[data-el="dialogue"] { margin-left: 9%; margin-right: 0; }
 
-.ss-group { position: absolute; top: 0; left: 0; right: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 10px; align-content: start; }
-html.ss-rail .ss-group { grid-template-columns: 1fr; gap: 6px; }
+/* Each scene's count and each shot sit at their own height (scriptshots.js
+   sets top), so the column follows the lines without moving them. */
+.ss-side > * { position: absolute; top: 0; left: 0; right: 0; }
 
 /* ---------- a shot, small ---------- */
-.ss-frame, .ss-thumb {
+.ss-thumb {
   position: relative; display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 0; border: 0; background: transparent;
   color: var(--ink); font: 13px/1.35 var(--ui); text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
@@ -35,30 +36,63 @@ html.ss-rail .ss-group { grid-template-columns: 1fr; gap: 6px; }
 .ss-nopic { padding: 6px; font-size: 11px; line-height: 1.3; color: var(--faint); text-align: center; overflow: hidden; }
 .ss-code { font-size: 11px; color: var(--accent); font-variant-numeric: tabular-nums; }
 .ss-what { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 13px; }
-.ss-frame:hover .ss-pic, .ss-thumb:hover .ss-pic { border-color: var(--accent); }
-.ss-frame.sel .ss-pic, .ss-thumb.sel .ss-pic { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-/* The picked shot says how to open it, without taking any room. */
-.ss-frame.sel:not(.ss-add)::after {
-  content: 'Open ›'; position: absolute; top: 4px; right: 4px; padding: 1px 6px; border-radius: 5px;
-  background: var(--bg); color: var(--accent); font-size: 11px; line-height: 16px;
-}
-.ss-frame.opened::after { content: none; }
-.ss-add .ss-pic { border-style: dashed; background: transparent; color: var(--muted); font-size: 13px; }
-.ss-add:hover .ss-pic { color: var(--accent); }
+.ss-thumb:hover .ss-pic { border-color: var(--accent); }
+.ss-card.sel .ss-pic, .ss-thumb.sel .ss-pic { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .ss-thumb .ss-nopic { display: none; }
 .ss-num {
   position: absolute; left: 3px; bottom: 3px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px;
   background: var(--bg); color: var(--accent); font-size: 9.5px; font-weight: 600; line-height: 14px; font-variant-numeric: tabular-nums;
 }
-.ss-thumb.ss-add .ss-pic { font-size: 16px; }
 
-/* ---------- in one column: a strip under each scene line ---------- */
-.ss-strip {
-  display: flex; gap: 12px; margin: .2em 0 1.3em; padding: 2px 2px 6px; overflow-x: auto; scrollbar-width: thin;
-  font: 13px/1.35 var(--ui); text-transform: none; white-space: normal; user-select: none;
+/* ---------- a shot as a row: its picture, code, what happens, framing ---------- */
+.ss-card {
+  display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 10px; align-items: start; width: 100%; padding: 6px;
+  border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--ink); font: 13px/1.35 var(--ui);
+  position: relative; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color .12s, border-color .12s;
 }
-.ss-strip .ss-frame { flex: none; width: 132px; }
-.ss-strip .ss-frame.sel::after { content: none; }
+.ss-card:hover, .ss-card.on { background: var(--tint); }
+.ss-card.sel { border-color: var(--accent); }
+.ss-card.sel:not(.opened)::after { content: 'Open ›'; position: absolute; top: 6px; right: 8px; color: var(--accent); font-size: 11px; }
+.ss-words { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ss-framing { overflow: hidden; color: var(--muted); font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
+.ss-framing:empty { display: none; }
+.ss-loose { color: var(--faint); font-size: 11px; }
+.ss-card:hover .ss-pic, .ss-card.on .ss-pic, .ss-thumb.on .ss-pic { border-color: var(--accent); }
+html.ss-sideways .ss-card { grid-template-columns: 84px minmax(0, 1fr); gap: 8px; padding: 4px; }
+html.ss-sideways .ss-what { font-size: 12px; }
+
+/* At the scene line: "3 shots · 2 lines without one" and + shot. */
+.ss-head { display: flex; align-items: baseline; gap: 10px; padding: 2px 6px; font: 12px/1.4 var(--ui); color: var(--muted); }
+.ss-count { flex: 1; min-width: 0; }
+.ss-addbtn { padding: 2px 8px; border: 1px dashed var(--line); border-radius: 6px; background: transparent; color: var(--muted); font: 12px var(--ui); cursor: pointer; white-space: nowrap; }
+.ss-addbtn:hover { border-color: var(--accent); color: var(--accent); }
+html.ss-rail .ss-head { padding: 0; }
+html.ss-rail .ss-head .ss-addbtn { width: 100%; padding: 3px 0; font-size: 15px; }
+
+/* ---------- in one column: each shot right above its first line ---------- */
+.ss-rows { display: flex; flex-direction: column; gap: 2px; margin: .1em -6px .5em; font: 13px/1.35 var(--ui); text-transform: none; white-space: normal; user-select: none; }
+.ss-rows .ss-card { grid-template-columns: 96px minmax(0, 1fr); }
+.ss-headrow { margin-top: .2em; }
+@media (--touch) { .ss-rows .ss-card { grid-template-columns: 84px minmax(0, 1fr); } }
+
+/* ---------- tramlines, dotted marks and what's lit (over the page, no room taken) ---------- */
+.ss-marks { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.ss-tram { position: absolute; width: 3px; border-radius: 2px; background: var(--faint); opacity: .55; transition: background-color .12s, opacity .12s; }
+.ss-tram.on { background: var(--accent); opacity: 1; }
+html.ss-rail .ss-tram { width: 2px; }
+.ss-bare { position: absolute; width: 0; border-left: 2px dotted var(--faint); opacity: .7; }
+.ss-hl { position: absolute; border-radius: 4px; background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.ss-hl.pick { background: color-mix(in srgb, var(--ink) 9%, transparent); box-shadow: inset 2px 0 0 var(--muted); }
+.ss-links { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
+.ss-links path { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; }
+.ss-links circle { fill: var(--accent); }
+
+/* The little bar over the picked lines. */
+.ss-bar { position: absolute; z-index: 25; display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--ink); box-shadow: 0 4px 16px rgba(0, 0, 0, .25); font-family: var(--ui); }
+.ss-bar[hidden] { display: none; }
+.ss-bar button { padding: 5px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--bg); font: 500 12px var(--ui); white-space: nowrap; cursor: pointer; }
+.ss-bar button:hover { background: var(--accent); }
+@media (--touch) { .ss-bar button { padding: 9px 12px; font-size: 14px; } }
 
 /* ---------- a shot, open: it floats, nothing under it moves ---------- */
 .ss-pop {
@@ -83,9 +117,13 @@ html.ss-rail .ss-group { grid-template-columns: 1fr; gap: 6px; }
 .ss-x:hover { background: var(--tint); color: var(--ink); }
 .ss-field { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--ink); font: 14px var(--ui); }
 .ss-field::placeholder { color: var(--faint); }
-.ss-in { margin: 0; font-size: 12px; color: var(--muted); }
+.ss-in, .ss-covers { margin: 0; font-size: 12px; color: var(--muted); }
 .ss-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .ss-act { padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: 12.5px var(--ui); cursor: pointer; }
 .ss-act:hover { background: var(--tint); color: var(--ink); }
 .ss-act.end { margin-left: auto; }
 @media (--touch) { .ss-act { padding: 9px 10px; font-size: 14px; } .ss-field { font-size: 16px; } }
+
+/* Beside the text, every shot and count sits at its own height. */
+.ss-side > .ss-card, .ss-side > .ss-thumb, .ss-side > .ss-head { position: absolute; left: 0; right: 0; }
+.ss-side > .ss-thumb { width: 100%; }

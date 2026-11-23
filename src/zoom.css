@@ -58,6 +58,10 @@ html.zoom.ss-able:not([data-view]) .zm-shots {
 }
 html.zoom.ss-able .zm-shots:hover { color: var(--ink); background: var(--raise); }
 html.zoom.ss-able .zm-shots[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); }
+/* Versions to check (Nov 22 2026): no pill up top; ⋯ gets a dot and lists them first. */
+html.zoom #versions { display: none !important; }
+html.zoom.to-check .zm-more { position: relative; }
+html.zoom.to-check .zm-more::after { content: ""; position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .zm-go svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
 html.zoom .topbar { view-transition-name: zm-top; }
 
@@ -129,7 +133,7 @@ html.zoom body.typing.in-piece.peek-top .topbar, html.zoom.has-rail body.typing.
   html.zoom body:is(.kb-up, .script-bar-on, .outline-bar-on, .go-on) .zm-ruler { display: none; }
   html.zoom body.kb-up { padding-bottom: 0; }
   /* The top line is always there on the phone: the date, this place's pages, the glass and More. */
-  html.zoom .topbar { display: flex !important; transform: none !important; opacity: 1 !important; align-items: center; gap: 6px; padding: 6px 8px 6px 12px; }
+  html.zoom .topbar { display: flex !important; transform: none !important; opacity: 1 !important; align-items: center; gap: 4px; padding: 6px 6px 6px 10px; }
   html.zoom .topbar > .zm-when { order: 0; }
   html.zoom .topbar > :is(.zm-np, .zm-go, .zm-shots, .zm-aa, .zm-more) { order: 3; }
   html.zoom body.kb-up .topbar { opacity: 0 !important; pointer-events: none; }
@@ -432,7 +436,15 @@ html.zoom #wh-stagebar[hidden] { display: none; }
   /* On the phone the switch takes the date's place in a piece. */
   html.zoom .topbar.has-switch > .zm-when { display: none; }
   html.zoom .topbar > .pv-switch { order: 1; margin-right: auto; }
-  .pv-seg button, .pv-plan { padding: 6px 10px; }
+  .pv-seg button, .pv-plan { padding: 6px 9px; }
+  /* Room for Shots, Aa and ⋯ on a phone: Plan lives in ⋯ here. */
+  html.zoom .topbar .pv-plan { display: none; }
+  html.zoom .topbar > .pv-switch { min-width: 0; }
+  /* The way back is only its arrow here, so it never slides under Write. */
+  html.zoom .topbar.has-switch > .tb-do { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+  html.zoom .topbar.has-switch .pc-back { flex: none; min-width: 28px; padding-left: 6px; text-align: left; }
+  html.zoom .topbar.has-switch .pc-name { display: none; }
+  html.zoom.ss-able:not([data-view]) .zm-shots { padding: 0 8px; }
 }
 
 /* ---------- stepping aside while reading: scroll down and the bars slide away ---------- */

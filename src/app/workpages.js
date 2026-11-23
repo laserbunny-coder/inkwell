@@ -128,7 +128,12 @@ async function renderStrip() {
   const w = strip.ctx?.scope === 'piece' && strip.ctx.world ? await getEntry(strip.ctx.world) : null;
   back.hidden = !w;
   if (w) {
-    back.textContent = `‹ ${w.title || 'Untitled'}`;
+    // The arrow, then the name; a phone with Write · Outline · Grid up top shows only the arrow.
+    const name = document.createElement('span');
+    name.className = 'pc-name';
+    name.textContent = ` ${w.title || 'Untitled'}`;
+    back.replaceChildren('‹', name);
+    back.setAttribute('aria-label', `Back to ${w.title || 'Untitled'}`);
     back.title = 'Back to the project page (Alt + 0)';
     back.onclick = () => go({ view: 'world', id: w.id });
   }

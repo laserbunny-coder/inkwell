@@ -378,6 +378,20 @@ assert.equal(pr.scenes[1].shots[0].made, "filmed live");
 // Estimate: shots 1 and 2 at Kling 3.0 ($0.08/s), 7 s, 2 tries; the live one isn't generated.
 assert.equal(pr.cost.estimate_usd, 1.12);
 assert.equal(pr.cost.prices_checked, "2026-11-03");
+// The lined script: shots on no lines yet, then put on their lines by words or id.
+assert.equal(s1.lines, "not on any lines yet");
+assert.deepEqual(pr.scenes[0].lines_without_a_shot.map((l: any) => l.text), ["Mother flips a pancake.", "KENJI"]);
+const onLines = await call("update_shot", { shot_id: "sh-2", first_line: "sit" });
+assert.deepEqual(onLines.changed, ["lines"]);
+assert.deepEqual([rows.find((r) => r.id === "sh-2")!.fields.from, rows.find((r) => r.id === "sh-2")!.fields.to], ["pp-3", "pp-4"], "a pick on what's said reaches back to the name");
+await call("update_shot", { shot_id: "sh-1", first_line: "pp-2" });
+const lined = await call("production", { piece_id: "pr-reel", scene: "1" });
+assert.deepEqual(lined.scenes[0].shots[1].lines, { first: { id: "pp-3", text: "KENJI" }, last: { id: "pp-4", text: "Sit." }, count: 1 });
+assert.equal(lined.scenes[0].lines_without_a_shot, undefined, "every line has a shot now");
+assert.ok((await call("update_shot", { shot_id: "sh-1", first_line: "Rain at the dojo" })).error, "only lines in its own scene");
+await call("update_shot", { shot_id: "sh-1", first_line: "" });
+assert.equal(rows.find((r) => r.id === "sh-1")!.fields.from, undefined, "off its lines again");
+await call("update_shot", { shot_id: "sh-2", first_line: "" });
 const one1 = await call("production", { piece_id: "pr-reel", scene: "2" });
 assert.equal(one1.scenes.length, 1);
 assert.ok((await call("production", { piece_id: "pr-reel", scene: "9" })).error);

@@ -130,7 +130,7 @@ export const INSTRUCTIONS = `Inkwell is this person's own writing app and notebo
 - For bigger tidying (two worlds that are the same thing, a tag that means the same as another, a line that belongs on a bible page, an idea for the Drawer, a world in the wrong area, a name that's a whole sentence), don't do it: suggest it with suggest_tidy. It waits on their tidy pass in the app until they tick yes or no. A weekly tidy pass is also made for them early each Monday.
 - Keep to the person's voice and don't add more than they asked for.
 - Say what you added and where, in plain words, since the person sees your reply, not the tool calls.
-- Production (AI video): a piece's shots, each with a code that never changes (NB-E01-S03A-04), prompts for its still and its video, how it's generated (model, seconds, first and last frame, the line it's timed to, and a group when several shots are made in one generation), and its tries with a star on the one that worked. The world's kit holds each character's sheet (front, three-quarter, side, back), each location's lighting line and angles, the show rules (frame, frame rate, always and never) and each tool's ID for an element (Higgsfield Soul ID or Element, ComfyUI LoRA, Kling reference). To make shots in another tool (Higgsfield, Kling, ComfyUI…): read them with production, write prompts that use the kit's looks, lighting, rules and tool IDs, and pass the reference picture links along. Bring results back with add_try (the file or link, model, settings, seconds, cost), star the one that worked with star, and keep prompts or generation details current with update_shot. Old prompts are never lost: they stay with the try that used them. Prices (prices, update_prices) feed the cost estimate on the Make tab; when you check prices, update them with the source. Each character and place also has a look wall (looks): every version of its look, with one starred as the pick. Bring new versions home with add_look (by the element's id or name), star one with pick_look only when the person asks, and use the pick's link as the lead reference whenever you generate with that element.
+- Production (AI video): a piece's shots, each with a code that never changes (NB-E01-S03A-04), prompts for its still and its video, how it's generated (model, seconds, first and last frame, the line it's timed to, and a group when several shots are made in one generation), and its tries with a star on the one that worked. The world's kit holds each character's sheet (front, three-quarter, side, back), each location's lighting line and angles, the show rules (frame, frame rate, always and never) and each tool's ID for an element (Higgsfield Soul ID or Element, ComfyUI LoRA, Kling reference). To make shots in another tool (Higgsfield, Kling, ComfyUI…): read them with production, write prompts that use the kit's looks, lighting, rules and tool IDs, and pass the reference picture links along. Each shot can sit on the lines of the script it covers (a lined script): production gives each shot's lines and each scene's lines without a shot, and update_shot sets them (first_line, last_line), so put suggested shots on their lines. Bring results back with add_try (the file or link, model, settings, seconds, cost), star the one that worked with star, and keep prompts or generation details current with update_shot. Old prompts are never lost: they stay with the try that used them. Prices (prices, update_prices) feed the cost estimate on the Make tab; when you check prices, update them with the source. Each character and place also has a look wall (looks): every version of its look, with one starred as the pick. Bring new versions home with add_look (by the element's id or name), star one with pick_look only when the person asks, and use the pick's link as the lead reference whenever you generate with that element.
 - Tasks and plans live in Inkwell. A task is an ordinary line with a day (or, with no exact day yet, a loose when: this week, next week, a month, or later), an estimate and a tick, and it lives where it was written: on a project's Steps page, on a daily page, or on the Tasks page for ones added straight to a plan. Today's page gathers every task on that day at its top (the person reorders it there), with Week, Weeks ahead and Pace beside it. list_tasks reads them (by day range, by project, done since a day); add_task adds one (put it in its project when it belongs to one, with notes as lines under it and a link back to where it came from; whenever it is work on a piece or a bible page, always set for to that piece or page, without being asked, so its page opens straight onto the work); update_task moves it to another day, sets its estimate, makes it repeat or a habit, a stretch of work (until) or a date to hit (mark, hard when it can't move: never move a hard one); time puts it at a time on its day's Calendar (the hand-arranged day view; length_minutes is how long the block is), and null takes it off; order_day sets a day's order; mark_done ticks it; delete_line and rename_line delete or reword one when the person asks, and a repeating one comes round again on its next day. Each change is recorded as yours with an Undo. Keep a week's estimated hours within the person's free hours (free_hours). Habits have no hours. Only tasks owned by the person (owner me) are on their day; others are planning lines.
 - Needs you: when this chat needs the person (a decision only they can make, work blocked on them, something ready to review or try), raise_needs_you with one short line, the kind, the Claude project's name and this chat's link; raising again from the same link updates it; clear_needs_you once it no longer needs them. It shows in Inkwell's Catch-up and on Today.
 - Setting up his day by talking: first_light reads or sets where each morning Bible reading track is; training reads the sessions and sets the round, the next session, or which session falls on which weekday. The exercises and their amounts are lines on the Training page (pg_training): read it before suggesting changes.
@@ -435,7 +435,7 @@ export const TOOLS: Record<string, unknown>[] = [
   {
     name: "update_shot",
     title: "Update a shot",
-    description: "Changes a shot's prompts or how it's generated. New prompts replace the current ones, which are kept with the tries (nothing is lost). Leave out what stays the same; give an empty string to clear a generation detail. What happens in the shot and its framing are the person's and don't change here.",
+    description: "Changes a shot's prompts, how it's generated, or the lines of the script it covers. New prompts replace the current ones, which are kept with the tries (nothing is lost). Leave out what stays the same; give an empty string to clear a generation detail. What happens in the shot and its framing are the person's and don't change here.",
     inputSchema: {
       type: "object",
       required: ["shot_id"],
@@ -449,6 +449,8 @@ export const TOOLS: Record<string, unknown>[] = [
         last_frame: str("A picture file id from this shot's tries to end on."),
         timed_to: str("The line of dialogue or song it's timed to, as written (WHO: words)."),
         group_with_next: { type: ["boolean", "string"], description: "true: made in one generation with the next shot in the scene (a multi-shot clip). false: made on its own." },
+        first_line: str("The first line of its scene the shot covers (the lined script): a line id from production, or the line's words. An empty string takes the shot off its lines."),
+        last_line: str("The last line it covers (id or words; leave out for one line). A name and what's said under it count as one line."),
       },
     },
   },
@@ -1864,24 +1866,49 @@ async function priceRow(db: Db): Promise<{ row: Entry | null; list: Price[] }> {
 const DEFAULT_SECS = 5;
 const secsOf = (sh: Entry) => Number((sh.fields?.gen as any)?.secs) > 0 ? Number((sh.fields?.gen as any).secs) : DEFAULT_SECS;
 
+// The lined script (as the app's shotlines.js): a shot keeps the first and
+// last paragraph it covers (fields.from, fields.to); a name and what's said
+// under it are one line. A shot whose lines are gone is on no lines.
+type Line = { id: string; el: string; text: string };
+const SPEECH = ["dialogue", "paren"];
+function lineStarts(ps: Line[]) { return ps.map((p, i) => ((p.text || "").trim() && !SPEECH.includes(p.el) ? i : -1)).filter((i) => i >= 0); }
+function snapLines(ps: Line[], from: number, to: number) {
+  let a = Math.max(0, Math.min(from, to)), b = Math.min(ps.length - 1, Math.max(from, to));
+  while (a > 0 && SPEECH.includes(ps[a].el)) a--;
+  while (b < ps.length - 1 && SPEECH.includes(ps[b + 1].el) && ["character", ...SPEECH].includes(ps[b].el)) b++;
+  return { from: a, to: b };
+}
+function linesOf(sh: Entry, ps: Line[]) {
+  const f = (sh.fields ?? {}) as Record<string, any>;
+  if (!f.from && !f.to) return null;
+  let a = f.from ? ps.findIndex((p) => p.id === f.from) : -1, b = f.to ? ps.findIndex((p) => p.id === f.to) : -1;
+  if (a < 0 && b < 0) return null;
+  if (a < 0) a = b;
+  if (b < 0) b = a;
+  return snapLines(ps, Math.min(a, b), Math.max(a, b));
+}
+const countLines = (ps: Line[], a: number, b: number) => Math.max(1, lineStarts(ps).filter((i) => i >= a && i <= b).length);
+const lineOut = (p: Line) => ({ id: p.id, text: p.text.trim().slice(0, 160) });
+
 /** A piece's scenes in order, each with its words and its shots. */
 async function scenesOf(db: Db, shape: Shape, piece: Entry) {
   const script = typeOf(piece) === "screenplay";
-  type Scene = { id: string; number: string | null; heading: string; text: string[]; cues: string[] };
+  type Scene = { id: string; number: string | null; heading: string; text: string[]; cues: string[]; paras: Line[] };
   const scenes: Scene[] = [];
   for (const ch of shape.chapters(piece)) {
     const rows = (await db.kids([ch.id])).filter((r) => ["para", "heading", "scene"].includes(r.kind) && !gone(r)).sort(bySort);
     let cur: Scene | null = null;
-    if (!script) { cur = { id: ch.id, number: null, heading: ch.title || "Opening", text: [], cues: [] }; scenes.push(cur); }
+    if (!script) { cur = { id: ch.id, number: null, heading: ch.title || "Opening", text: [], cues: [], paras: [] }; scenes.push(cur); }
     for (const r of rows) {
       const slug = script && r.kind === "para" && r.fields?.el === "scene" && (r.text || "").trim();
       if (slug || (!script && r.kind === "scene")) {
-        cur = { id: r.id, number: (r.fields?.code as string) || null, heading: slug ? (r.text || "").trim().toUpperCase() : r.title || "Scene", text: [slug ? r.text : r.title], cues: [] };
+        cur = { id: r.id, number: (r.fields?.code as string) || null, heading: slug ? (r.text || "").trim().toUpperCase() : r.title || "Scene", text: [slug ? r.text : r.title], cues: [], paras: [] };
         scenes.push(cur);
         continue;
       }
       if (!cur) continue;
       cur.text.push(r.text || "");
+      if (r.kind === "para") cur.paras.push({ id: r.id, el: (r.fields?.el as string) || "action", text: r.text || "" });
       if (r.fields?.el === "character") cur.cues.push(r.text || "");
     }
   }
@@ -1985,6 +2012,7 @@ async function production(args: Record<string, unknown>, db: Db) {
       const tries = ((f.tries ?? []) as any[]).filter((t) => t.files?.length || t.links?.length || t.cost);
       return {
         id: sh.id, code: shotCode({ show, piece: pc, scene: s.number, shot: f.n }), what: sh.text || "", framing: f.framing || "",
+        lines: (() => { const r = linesOf(sh, s.paras); return r ? { first: lineOut(s.paras[r.from]), last: lineOut(s.paras[r.to]), count: countLines(s.paras, r.from, r.to) } : "not on any lines yet"; })(),
         ...(made !== "gen" ? { made: made === "live" ? "filmed live" : "generated from footage" } : {}),
         stage: stageOf(f),
         still_prompt: f.still || "", video_prompt: f.video || "",
@@ -2007,7 +2035,9 @@ async function production(args: Record<string, unknown>, db: Db) {
         } : {}),
       };
     });
-    return { id: s.id, ...(s.number ? { number: s.number } : {}), heading: s.heading, elements: uses.map((id) => shape.byId.get(id)?.title).filter(Boolean), shots: shotsOut };
+    const spans = s.shots.map((sh) => linesOf(sh, s.paras)).filter(Boolean) as { from: number; to: number }[];
+    const bare = lineStarts(s.paras).filter((i) => !spans.some((r) => r.from <= i && i <= r.to));
+    return { id: s.id, ...(s.number ? { number: s.number } : {}), heading: s.heading, ...(bare.length ? { lines_without_a_shot: bare.map((i) => lineOut(s.paras[i])) } : {}), elements: uses.map((id) => shape.byId.get(id)?.title).filter(Boolean), shots: shotsOut };
   });
   const checked = list.map((p) => p.checked ?? "").sort().at(-1);
   return {
@@ -2042,6 +2072,20 @@ async function shotArg(db: Db, id: unknown): Promise<Entry> {
   const sh = await one(db, id, "shot_id");
   if (sh.kind !== "shot") throw new Bad("shot_id must be a shot (ids come from production).");
   return sh;
+}
+
+/** The lines of a shot's scene, in order (after its heading, up to the next). */
+async function sceneLines(db: Db, sh: Entry): Promise<Line[]> {
+  const [head] = await db.get([sh.parent_id!]);
+  if (!head || !head.parent_id) return [];
+  const rows = (await db.kids([head.parent_id])).filter((r) => ["para", "heading", "scene"].includes(r.kind) && !gone(r)).sort(bySort);
+  const at = rows.findIndex((r) => r.id === head.id);
+  const out: Line[] = [];
+  for (const r of rows.slice(at + 1)) {
+    if (r.kind === "scene" || (r.kind === "para" && r.fields?.el === "scene")) break;
+    if (r.kind === "para") out.push({ id: r.id, el: (r.fields?.el as string) || "action", text: r.text || "" });
+  }
+  return out;
 }
 
 /** Changes a shot's fields, reading it again if it changed in between (once). */
@@ -2084,7 +2128,29 @@ async function updateShot(args: Record<string, unknown>, db: Db) {
   if (args.timed_to !== undefined) { gen.sync = opt("timed_to", 400) ?? ""; touched.push("timed_to"); }
   let group: boolean | undefined;
   if (args.group_with_next !== undefined && args.group_with_next !== "") group = boolArg(args.group_with_next, true);
-  if (still === undefined && video === undefined && !touched.length && group === undefined) throw new Bad("Nothing to change: give prompts or generation details.");
+  // The lines it covers: by id or by the words, in its own scene.
+  let lines: { from: string; to: string } | null | undefined;
+  if (args.first_line !== undefined) {
+    const first = opt("first_line", 400) ?? "";
+    if (!first) lines = null;
+    else {
+      const ps = await sceneLines(db, sh);
+      const find = (v: string) => {
+        const k = v.toLowerCase();
+        const i = ps.findIndex((p) => p.id === v);
+        return i >= 0 ? i : ps.findIndex((p) => p.text.toLowerCase().includes(k));
+      };
+      const a = find(first);
+      const last = opt("last_line", 400);
+      const b = last ? find(last) : a;
+      if (a < 0) throw new Bad(`No line in this shot's scene matches first_line ${JSON.stringify(first)}. Give a line id from production or words from the line.`);
+      if (b < 0) throw new Bad(`No line in this shot's scene matches last_line ${JSON.stringify(last)}.`);
+      const r = snapLines(ps, a, b);
+      lines = { from: ps[r.from].id, to: ps[r.to].id };
+    }
+    touched.push("lines");
+  }
+  if (still === undefined && video === undefined && !touched.length && group === undefined) throw new Bad("Nothing to change: give prompts, generation details or lines.");
   // Grouping touches the next shot too.
   let next: Entry | undefined;
   if (group !== undefined) {
@@ -2095,7 +2161,11 @@ async function updateShot(args: Record<string, unknown>, db: Db) {
   let gid: string | null = null;
   await changeShot(db, sh.id, (f) => {
     let out: Record<string, any> = still !== undefined || video !== undefined ? withPrompts(f, still, video) : f;
-    if (touched.length) {
+    if (lines !== undefined) {
+      out = { ...out };
+      if (lines) { out.from = lines.from; out.to = lines.to; } else { delete out.from; delete out.to; }
+    }
+    if (touched.some((t) => t !== "lines")) {
       const g = { ...(out.gen ?? {}), ...gen };
       for (const k of Object.keys(g)) if (g[k] === "" || g[k] === null) delete g[k];
       out = { ...out, gen: g };

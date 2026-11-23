@@ -477,6 +477,11 @@ try {
     await p.keyboard.press('Control+Shift+Comma');
     await p.waitForFunction(() => document.querySelectorAll('.wv-plan').length === 2);
     assert.equal(await p.locator('.pv-plan').getAttribute('aria-pressed'), 'true');
+    // Opening every plan can scroll the page while it settles, which slides
+    // the top bar away as in reading: the pointer at the top brings it back.
+    await p.mouse.move(400, 30);
+    await p.mouse.move(400, 10);
+    await p.waitForFunction(() => !document.body.classList.contains('scroll-away'));
     await p.locator('.pv-plan').click();
     await p.waitForFunction(() => document.querySelectorAll('.wv-plan').length === 0);
     assert.deepEqual(await p.locator('.pv-seg button').allInnerTexts(), ['Write', 'Outline', 'Grid']);

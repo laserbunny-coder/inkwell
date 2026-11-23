@@ -335,6 +335,7 @@ function build() {
   more = make('button', 'zm-more', '⋯');
   more.type = 'button';
   more.title = 'More: notes beside the text, Beside, every command';
+  document.addEventListener('inkwell:to-check', (e) => { const n = e.detail?.n || 0; more.title = n ? `More: ${n} to check, notes beside the text, Beside, every command` : 'More: notes beside the text, Beside, every command'; });
   more.setAttribute('aria-label', 'More');
   more.addEventListener('click', () => moreMenu());
   document.body.append(ruler, mic);
@@ -343,9 +344,13 @@ function build() {
 function moreMenu() {
   const writingNow = !root.dataset.view;
   const click = (sel) => () => document.querySelector(sel)?.click();
+  const pill = document.querySelector('#versions');
+  const toCheck = pill && !pill.hidden ? [{ label: `${pill.textContent}: two devices changed the same text`, run: () => { closeMenu(); pill.click(); } }, 'sep'] : [];
+  const planBtn = document.querySelector('.pv-plan');
   const items = [
+    ...toCheck,
     ...(writingNow ? [{ label: 'Notes beside the text (Ctrl + 2)', run: click('#notes-toggle') }] : []),
-    ...(writingNow && root.classList.contains('woven') ? [{ label: 'Plan under every scene (Ctrl + Shift + Comma)', run: click('.pv-plan') }] : []),
+    ...(writingNow && planBtn && !planBtn.hidden ? [{ label: 'Plan under every scene (Ctrl + Shift + Comma)', run: click('.pv-plan') }] : []),
     ...(writingNow && root.classList.contains('ss-able') ? [{ label: root.classList.contains('ss-on') ? 'Put the shots away (Alt + B)' : 'Shots beside the script (Alt + B)', run: () => { closeMenu(); document.dispatchEvent(new CustomEvent('inkwell:toggle-shots')); } }] : []),
     { label: 'Beside: a pane next to this (Ctrl + \\)', run: click('#beside-toggle') },
     'sep',

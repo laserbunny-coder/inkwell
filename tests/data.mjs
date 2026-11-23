@@ -100,15 +100,19 @@ try {
     const first = (await paras()).find((e) => e.text === 'First.');
     await put('conflicts', [{ ...first, text: 'First, from the phone.', content: [{ type: 'text', text: 'First, from the phone.' }], saved_at: Date.now() }]);
     await p.reload();
-    await p.waitForSelector('#versions', { state: 'visible' });
-    assert.equal(await p.locator('#versions').innerText(), '1 to check');
-    await p.locator('#versions').click();
+    // No pill up top: ⋯ carries a dot, and its menu lists them first.
+    await p.waitForFunction(() => document.documentElement.classList.contains('to-check'));
+    assert.equal(await p.locator('#versions').isVisible(), false, 'no pill up top');
+    await p.locator('.zm-more').click();
+    const item = p.locator('.pop-menu [role="menuitem"]').first();
+    assert.match(await item.innerText(), /^1 to check/);
+    await item.click();
     await p.waitForSelector('.versions-pair');
     const panel = await p.locator('.versions').innerText();
     assert.match(panel, /On this device[\s\S]*First\.[\s\S]*From the other device[\s\S]*First, from the phone\./i);
     await p.locator('.versions button', { hasText: 'Use the other' }).click();
     await sleep(300);
-    assert.equal(await p.locator('#versions').isVisible(), false);
+    assert.equal(await p.evaluate(() => document.documentElement.classList.contains('to-check')), false, 'the dot on ⋯ is gone');
     await p.evaluate(() => document.querySelector('.versions:not([hidden]) [data-close]')?.click());
     await sleep(1200);
     assert.match(await p.locator('#editor .ProseMirror').innerText(), /First, from the phone\./i);
@@ -120,8 +124,9 @@ try {
     assert.equal(ps.length, 2);
     await put('conflicts', ps.map((e, k) => ({ ...e, text: `Old test ${k}`, content: [{ type: 'text', text: `Old test ${k}` }], saved_at: Date.now() - k })));
     await p.reload();
-    await p.waitForSelector('#versions', { state: 'visible' });
-    await p.locator('#versions').click();
+    await p.waitForFunction(() => document.documentElement.classList.contains('to-check'));
+    await p.locator('.zm-more').click();
+    await p.locator('.pop-menu [role="menuitem"]', { hasText: '2 to check' }).click();
     await p.waitForSelector('.versions-pair');
     // The panel slides in; measure once it has landed.
     await p.locator('.versions').evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
@@ -139,7 +144,7 @@ try {
     await sleep(300);
     assert.equal((await all('conflicts')).length, 0);
     assert.match(await p.locator('.versions').innerText(), /Nothing to check/);
-    assert.equal(await p.locator('#versions').isVisible(), false);
+    assert.equal(await p.evaluate(() => document.documentElement.classList.contains('to-check')), false, 'the dot on ⋯ is gone');
     await p.evaluate(() => document.querySelector('.versions:not([hidden]) [data-close]')?.click());
     assert.equal(await p.locator('#editor .ProseMirror').innerText(), before);
   });
