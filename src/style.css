@@ -450,7 +450,7 @@ button.wv-mk:hover { background: var(--tint); }
 .ps-addons .switch { padding: 8px 0 0; font-size: 14px; }
 .ps-addon-about { margin: 0 0 6px; }
 .ps-plans { display: flex; flex-direction: column; gap: 2px; margin: 0 0 8px 4px; }
-.ps-plan { display: flex; gap: 8px; align-items: flex-start; padding: 6px 4px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.page-settings label.ps-plan, .ps-plan { display: flex; flex-direction: row; gap: 8px; align-items: flex-start; padding: 6px 4px; border-radius: 6px; cursor: pointer; font-size: 14px; }
 .ps-plan:hover { background: var(--hover, rgba(127,127,127,.08)); }
 .ps-plan input { margin-top: 3px; }
 .ps-plan-t { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
