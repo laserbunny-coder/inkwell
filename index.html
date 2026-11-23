@@ -17,6 +17,43 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
   <script>
+    // "Try Studio as a new person" (src/preview.js). Runs first: this tab gets
+    // its own storage and local data, so nothing here touches your own.
+    (function () {
+      try {
+        const q = new URLSearchParams(location.search), mode = q.get('preview');
+        let fresh = false;
+        if (mode === 'new') { sessionStorage.setItem('inkwell-preview', 'new'); fresh = true; }
+        if (mode === 'off') sessionStorage.removeItem('inkwell-preview');
+        if (mode) { q.delete('preview'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash); }
+        if (sessionStorage.getItem('inkwell-preview') !== 'new') return;
+        const ss = sessionStorage, P = 'pv:';
+        const mine = () => { const k = []; for (let i = 0; i < ss.length; i++) { const n = ss.key(i); if (n && n.startsWith(P)) k.push(n); } return k; };
+        if (fresh) for (const k of mine()) ss.removeItem(k);
+        const store = {
+          getItem: (k) => ss.getItem(P + k),
+          setItem: (k, v) => ss.setItem(P + k, String(v)),
+          removeItem: (k) => ss.removeItem(P + k),
+          clear: () => { for (const k of mine()) ss.removeItem(k); },
+          key: (i) => (mine()[i] || '').slice(P.length) || null,
+          get length() { return mine().length; }
+        };
+        Object.defineProperty(window, 'localStorage', { value: store, configurable: true });
+        store.setItem('edition', 'studio');
+        const idb = window.indexedDB, D = 'pv-';
+        if (fresh) for (const n of ['writing', 'writing-files', 'writing-thumbs', 'inkwell-share', 'inkwell-capture']) idb.deleteDatabase(D + n);
+        Object.defineProperty(window, 'indexedDB', { configurable: true, value: {
+          open: (n, v) => (v === undefined ? idb.open(D + n) : idb.open(D + n, v)),
+          deleteDatabase: (n) => idb.deleteDatabase(D + n),
+          cmp: (a, b) => idb.cmp(a, b),
+          databases: () => idb.databases().then((l) => l.filter((d) => d.name.startsWith(D)).map((d) => ({ ...d, name: d.name.slice(D.length) })))
+        } });
+        if (window.BroadcastChannel) { const BC = window.BroadcastChannel; window.BroadcastChannel = class extends BC { constructor(n) { super('pv-' + n); } }; }
+        document.documentElement.classList.add('preview');
+      } catch (e) { console.warn(e); }
+    })();
+  </script>
+  <script>
     try {
       const d = document.documentElement, t = localStorage.getItem('theme');
       // The look (frame.js): Midnight Ink unless another was picked on this device.
