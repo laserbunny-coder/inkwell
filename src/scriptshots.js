@@ -37,6 +37,7 @@ import { snap, resolve, linesIn, inOrder, covering, bareLines, lanes, placeAmong
 import { scenesOf } from './woven.js';
 import { holdStill } from './steady.js';
 import { shotCard } from './shotcard.js';
+import { picturesOnScene, picturesOnShot, picturesText } from './picturesin.js';
 import './scriptshots.css';
 import { screenKind, sceneName } from './scenename.js';
 
@@ -334,12 +335,36 @@ export class ScriptShots {
     b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); this.add(a.eid); });
     return b;
   }
+  // "+ pictures": several at once fill the scene's shots without a picture,
+  // in order, then each one left becomes a new shot.
+  picsEl(a, label = '+ pictures') {
+    const b = make('label', 'ss-addbtn ss-addpics', label);
+    b.title = `Add pictures to ${sceneName(a)}: they fill its shots without a picture, then make new shots`;
+    b.setAttribute('aria-label', `Add pictures to ${sceneName(a)}`);
+    b.addEventListener('mousedown', (e) => e.preventDefault());
+    b.addEventListener('click', (e) => e.stopPropagation());
+    const input = make('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.hidden = true;
+    input.addEventListener('change', async () => {
+      const files = [...(input.files || [])];
+      input.value = '';
+      if (!files.length) return;
+      const r = await picturesOnScene(a.eid, files, { pieceId: this.pieceId });
+      await this.reload();
+      this.hooks.toast(picturesText(r), r.filled + r.made ? { label: 'Undo', run: async () => { await r.undo(); await this.reload(); } } : undefined);
+    });
+    b.append(input);
+    return b;
+  }
   // At each scene line: how many shots and how many lines still without one.
   headEl(a, thumb = false) {
     const h = make('div', 'ss-head');
     h.dataset.eid = a.eid;
-    if (thumb) { h.append(this.addEl(a, '+')); h.title = this.countText(a); return h; }
-    h.append(make('span', 'ss-count', this.countText(a)), this.addEl(a));
+    if (thumb) { h.append(this.picsEl(a, '+ pics'), this.addEl(a, '+ shot')); h.title = this.countText(a); return h; }
+    h.append(make('span', 'ss-count', this.countText(a)), this.picsEl(a), this.addEl(a));
     return h;
   }
 
@@ -493,7 +518,7 @@ export class ScriptShots {
       h.dataset.eid = a.eid;
       const count = make('span', 'ss-count', this.countText(a));
       count.dataset.eid = a.eid;
-      h.append(count, this.addEl(a));
+      h.append(count, this.picsEl(a), this.addEl(a));
       box.append(h);
       box.setAttribute('aria-label', `Shots in ${sceneName(a)}`);
     }
@@ -703,7 +728,7 @@ export class ScriptShots {
       edit: (patch) => { if ('text' in patch) sh.text = patch.text; if ('framing' in patch) sh.fields = { ...sh.fields, framing: patch.framing }; this.patch(sh); this.later(sh.id); },
       done: () => { this.flush(sh.id); this.close(); },
       blur: () => this.flush(sh.id),
-      picture: (f) => this.addPicture(sh.id, f),
+      picture: (files) => this.addPictures(sh.id, files),
       make: () => { this.flush(sh.id); this.hooks.openInMake(sh); },
       remove: () => this.remove(sh.id)
     });
@@ -783,6 +808,15 @@ export class ScriptShots {
       this.hooks.toast(`Shot ${this.codeOf(cur.sh, cur.a)} now covers ${plural(linesIn(a.paras, L.from, L.to), 'line')}`, { label: 'Undo', run: async () => { const now = await getEntry(id); if (!now) return; const back = { ...now, fields: { ...now.fields, from: fresh.fields?.from || '', to: fresh.fields?.to || '' }, updated_at: Date.now() }; if (!back.fields.from) { delete back.fields.from; delete back.fields.to; } delete back._by; await putEntries([back]); await this.reload(); } });
       if (this.open === id) this.showOpen(id); else this.paint();
     }
+  }
+  async addPictures(id, files) {
+    if (files.length === 1) return this.addPicture(id, files[0]);
+    await this.flush(id);
+    const r = await picturesOnShot(id, files);
+    if (!r.added) { this.hooks.toast('Only pictures go on a frame here. Videos go in Make.'); return; }
+    await this.reload();
+    if (this.open === id) this.showOpen(id);
+    this.hooks.toast(`${r.added} pictures on this shot${r.skipped ? ` (${r.skipped} left out)` : ''}`, { label: 'Undo', run: async () => { await r.undo(); await this.reload(); if (this.open === id) this.showOpen(id); } });
   }
   async addPicture(id, f) {
     if (!isImage(f.type)) { this.hooks.toast('Only pictures go on a frame here. Videos go in Make.'); return; }

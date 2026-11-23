@@ -499,6 +499,7 @@ function wireQuickInserts() {
   });
   $('.palette-backdrop').addEventListener('click', () => closePalette());
   document.addEventListener('inkwell:toggle-shots', () => { if (writing()) scriptShots?.toggle(); });
+  document.addEventListener('inkwell:shots-sit', (e) => { if (writing()) scriptShots?.sitAt(e.detail?.sit); });
   document.addEventListener('notes-visibility', () => { $('#notes-toggle').setAttribute('aria-pressed', String(notes.visible)); });
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-cmd]');

@@ -17,6 +17,7 @@ import {
 import { make } from './dom.js';
 import { resolve as linesOf, linesIn } from './shotlines.js';
 import { sceneTitle } from './scenename.js';
+import { picturesOnScene, picturesText } from './picturesin.js';
 
 // The production view of a piece (Ctrl + Shift + S): its scenes, each with
 // the elements it uses and its shots; a storyboard of the stills picked;
@@ -433,7 +434,23 @@ export class ProductionView {
     const add = make('div', 'pd-add');
     const plus = make('button', 'ghost-btn', '+ Shot');
     plus.addEventListener('click', () => this.addShot(s));
-    add.append(plus);
+    const pics = make('label', 'ghost-btn pd-addpics', '+ Pictures');
+    pics.title = 'Several at once: they fill this scene’s shots without a picture, in order, then make new shots';
+    const pin = make('input');
+    pin.type = 'file';
+    pin.accept = 'image/*';
+    pin.multiple = true;
+    pin.hidden = true;
+    pin.addEventListener('change', async () => {
+      const files = [...(pin.files || [])];
+      pin.value = '';
+      if (!files.length) return;
+      const r = await picturesOnScene(s.id, files, { pieceId: this.piece.id });
+      await this.render();
+      this.hooks.toast(picturesText(r), r.filled + r.made ? { label: 'Undo', run: async () => { await r.undo(); await this.render(); } } : undefined);
+    });
+    pics.append(pin);
+    add.append(plus, pics);
     if (this.hooks.canAsk()) {
       const sug = make('button', 'ghost-btn', s.shots.length ? 'Claude: more shots' : 'Claude: suggest shots');
       sug.addEventListener('click', () => this.suggestShots(s));

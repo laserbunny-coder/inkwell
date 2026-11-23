@@ -556,6 +556,28 @@ try {
     await other.context().close();
   });
 
+  await check('+ Pictures on a scene: several fill its shots without a picture, in order, then make new shots; Undo takes them back', async () => {
+    const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==', 'base64');
+    await go(laptop, { view: 'production', id: 'pr_reel', tab: 'shots' });
+    await laptop.waitForSelector('.pd-scene[data-scene="pp_5"] .pd-addpics');
+    const has = (sh) => (sh.fields?.tries || []).some((t) => t.files?.length);
+    const before = shots().filter((sh) => sh.parent_id === 'pp_5');
+    const empty = before.filter((sh) => !has(sh)).map((sh) => sh.id);
+    await scene(laptop, 'pp_5').locator('.pd-addpics input').setInputFiles([1, 2, 3, 4].map((i) => ({ name: `frame${i}.png`, mimeType: 'image/png', buffer: PNG })));
+    await laptop.waitForFunction(() => /pictures?:/.test(document.querySelector('.toast')?.textContent || ''));
+    await settle(laptop);
+    const after = shots().filter((sh) => sh.parent_id === 'pp_5');
+    const fill = Math.min(empty.length, 4);
+    for (const id of empty.slice(0, fill)) assert.ok(has(row(id)), `${id} got a picture`);
+    assert.equal(after.length, before.length + (4 - fill), 'the rest became new shots');
+    for (const sh of after.filter((x) => !before.some((b) => b.id === x.id))) assert.ok(has(sh) && sh.fields.star?.still, 'a new shot has its picture as the picked still');
+    await laptop.locator('.toast button', { hasText: 'Undo' }).click();
+    await sleep(500);
+    await settle(laptop);
+    assert.equal(shots().filter((sh) => sh.parent_id === 'pp_5').length, before.length, 'Undo takes the new shots away');
+    for (const id of empty) assert.ok(!has(row(id)), `${id} is as it was`);
+  });
+
   await check('on a phone: the shots fit, nothing scrolls sideways', async () => {
     const phone = await device({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     await settle(phone);

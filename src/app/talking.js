@@ -275,8 +275,35 @@ async function landSharesNow(quiet = false) {
   await Promise.all([store.close(editor.state.doc), notebook.close()]);
   await applyRemote(added.flatMap((a) => a.rows));
   await go({ view: 'notebook', pageId: last.line.parent_id, line: last.line.id });
-  toast(added.length === 1 ? 'Kept on today’s page' : `${added.length} things kept on today’s page`);
+  // Pictures shared from Photos (no link): one tap puts them on a scene.
+  const pics = added.filter((a) => !a.line.fields?.url && a.rows.some((r) => r.kind === 'file' && /^image\//.test(r.fields?.type || '')));
+  const picN = pics.flatMap((a) => a.rows.filter((r) => r.kind === 'file' && /^image\//.test(r.fields?.type || ''))).length;
+  if (picN) toast(`${picN === 1 ? 'A picture' : `${picN} pictures`} kept on today’s page`, { label: 'Put on a scene…', run: () => picturesToScene(pics) });
+  else toast(added.length === 1 ? 'Kept on today’s page' : `${added.length} things kept on today’s page`);
   writeOut();
+}
+
+// Shared pictures onto a film's scene: they fill its shots without a picture,
+// then make new shots; today's line for them goes (Undo brings all back).
+async function picturesToScene(shares) {
+  const { filmsForPictures, picturesOnScene, picturesText } = await import('../picturesin.js');
+  const films = await filmsForPictures();
+  if (!films.length) { toast('No script with scenes yet to put them on'); return; }
+  const ids = shares.flatMap((a) => a.rows.filter((r) => r.kind === 'file' && /^image\//.test(r.fields?.type || '')).map((r) => r.id));
+  const sceneItems = (f) => f.scenes.map((sc) => {
+    const empty = sc.shots.filter((sh) => !(sh.fields?.tries || []).some((t) => t.files?.length || t.links?.length)).length;
+    return { label: `${sc.name}${sc.shots.length ? ` · ${sc.shots.length} ${sc.shots.length === 1 ? 'shot' : 'shots'}${empty ? `, ${empty} without a picture` : ''}` : ''}`, run: () => place(f.film, sc) };
+  });
+  const place = async (film, sc) => {
+    const r = await picturesOnScene(sc.id, ids, { pieceId: film.id });
+    const lines = [];
+    for (const a of shares) { const cur = await getEntry(a.line.id); if (cur && !cur.deleted) lines.push(cur); }
+    if (r.filled + r.made && lines.length) await putEntries(lines.map((l) => ({ ...l, deleted: true, updated_at: Date.now() })));
+    await go({ view: 'production', id: film.id, tab: 'shots' });
+    toast(`${picturesText(r)} in ${sc.name}`, r.filled + r.made ? { label: 'Undo', run: async () => { await r.undo(); if (lines.length) await putEntries(lines.map((l) => ({ ...l, deleted: false, updated_at: Date.now() }))); await go({ view: 'production', id: film.id, tab: 'shots' }); } } : undefined);
+  };
+  const items = films.length === 1 ? sceneItems(films[0]) : films.map((f) => ({ label: f.film.title || 'Untitled', sub: sceneItems(f) }));
+  popMenu(null, [{ note: films.length === 1 ? `Which scene of ${films[0].film.title || 'the script'}?` : 'Which film, then which scene?', plain: true }, ...items], { left: Math.max(8, window.innerWidth / 2 - 160), top: 72 });
 }
 // Lands a capture on today's page and shows it there.
 async function showCapture({ line, rows }) {
