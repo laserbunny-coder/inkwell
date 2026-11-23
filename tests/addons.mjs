@@ -36,7 +36,15 @@ const goto = async (p, place) => {
 };
 const sheet = (p) => p.locator('#plan-sheet');
 const toNow = async (p) => { await goto(p, { view: 'plan', tab: 'now' }); await p.waitForSelector('#plan-sheet .now-view'); await sleep(400); };
-const toDesk = async (p) => { await goto(p, { view: 'desk' }); await p.waitForSelector('.desk-home .zd-head, .desk-home .dk-head'); await sleep(500); };
+// The Desk can still be redrawing from a switch just turned; a slow machine
+// gets one more try instead of a single long wait.
+const toDesk = async (p) => {
+  for (let k = 0; k < 3; k++) {
+    await goto(p, { view: 'desk' });
+    try { await p.waitForSelector('.desk-home .zd-head, .desk-home .dk-head', { timeout: 8000 }); break; } catch (e) { if (k === 2) throw e; }
+  }
+  await sleep(500);
+};
 const addons = async (p) => { await p.evaluate(() => dispatchEvent(new CustomEvent('open-addons'))); await p.waitForSelector('.page-settings .ps-addons [data-addon="bible"]'); await sleep(200); };
 const sw = (p, id) => p.locator(`.page-settings [data-addon="${id}"]`);
 const lightLines = async (p) => (await all(p)).filter((r) => r.fields?.firstlight && !r.deleted && !r.fields?.done);
