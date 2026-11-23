@@ -707,6 +707,9 @@ try {
     const had = (await shotsIn(0)).map((sh) => sh.id);
     await tap(line('Dad would’ve checked'));
     await p.waitForSelector('.ss-bar:not([hidden]) .ss-barpic');
+    // The bar can still change its buttons while the last check's reload
+    // lands (a slow machine): wait until they hold still before tapping.
+    await p.waitForFunction(() => new Promise((ok) => { const a = document.querySelector('.ss-bar')?.dataset.sig; const r0 = document.querySelector('.ss-bar .ss-barpic')?.getBoundingClientRect().x; setTimeout(() => ok(a && a === document.querySelector('.ss-bar')?.dataset.sig && r0 === document.querySelector('.ss-bar .ss-barpic')?.getBoundingClientRect().x), 400); }));
     await tap('.ss-bar .ss-barpic');
     await p.locator('.pop-menu .pop-item', { hasText: 'Sketch' }).waitFor();
     await tap(p.locator('.pop-menu .pop-item', { hasText: 'Sketch' }));
