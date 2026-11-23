@@ -1,4 +1,5 @@
 // The command box (Ctrl + K) and go-to (Ctrl + O).
+import { dayOff } from '../edition.js';
 import { media } from '../device.js';
 import { SECTION_NAMES } from '../schema.js';
 import { keyLabel, showKeysForThisComputer } from '../keys.js';
@@ -252,7 +253,8 @@ function wireCommands() {
   // For the tests: every command as the box lists it.
   window.__commandList = () => commands.map((c) => ({ label: c.label, group: c.group, hint: c.hint, words: c.words, where: c.where || [], needs: c.needs || '' }));
   box = new Box($('.palette'), {
-    commands: () => commands,
+    // Studio without the day tools: the day's commands leave the box (edition.js).
+    commands: () => (dayOff() ? commands.filter((c) => c.group !== 'plan') : commands),
     usable: (c) => !c.when || c.when(),
     recent: () => nav.recent,
     jump: (place) => go(place),

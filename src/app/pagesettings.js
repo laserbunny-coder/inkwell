@@ -20,6 +20,7 @@ import { box, writing } from './commands.js';
 import { deskPage, plan } from './talking.js';
 import { panes, syncBeside } from './beside.js';
 import { ADDONS, loadAddons, setAddon } from '../addons.js';
+import { STUDIO, dayOff, setDayTools } from '../edition.js';
 import { PLANS, planOf, readReading, saveReading, lightToday, dropLine, isLight } from '../firstlight.js';
 import { startTraining, isTraining } from '../training.js';
 import { loadTasks, isoOf } from '../tasks.js';
@@ -98,6 +99,22 @@ async function drawAddons() {
   const on = await loadAddons();
   const st = await readReading();
   box.replaceChildren(make('p', 'hint', 'Routines that come up on Today and the Desk. Each is off until you turn it on.'));
+  // Studio (edition.js): the day tools themselves, first.
+  if (STUDIO) {
+    const label = make('label', 'switch');
+    const input = make('input');
+    input.type = 'checkbox';
+    input.dataset.addon = 'daytools';
+    input.checked = !dayOff();
+    label.append(input, ' Day tools');
+    box.append(label, make('p', 'hint ps-addon-about', 'Today, Now, Week and Month on the ruler: your tasks by day and the one thing you’re on. Off, Inkwell opens on the Desk.'));
+    input.addEventListener('change', async () => {
+      await setDayTools(input.checked);
+      if (!input.checked && document.documentElement.dataset.view === 'plan') go({ view: 'desk' });
+      await plan?.refresh?.();
+      toast(input.checked ? 'Day tools are on: Today, Now, Week and Month are on the ruler' : 'Day tools are off. Nothing of them is lost');
+    });
+  }
   for (const a of ADDONS) {
     const label = make('label', 'switch');
     const input = make('input');
