@@ -55,6 +55,20 @@ para('pp_4', 'ch_1', 6144, 'Rain. A stranger at the gate.', { el: 'action' });
 put({ id: 'pg_chars', kind: 'page', parent_id: 'pr_nb', title: 'Characters', sort: 1 });
 put({ id: 'sh_1', kind: 'shot', parent_id: 'pp_1', sort: 1024, text: 'Wide on the kitchen', fields: { n: 1, piece: 'pr_nb' } });
 put({ id: 'sh_2', kind: 'shot', parent_id: 'pp_1', sort: 2048, text: 'Close on the syrup', fields: { n: 2 } });
+// A film shot with a camera: one scene on a shoot day, one not; a shot got.
+put({ id: 'pr_salt', kind: 'project', parent_id: 'wd_nb', title: 'Salt Road', area_id: 'area-film', sort: 2, fields: { type: 'screenplay', woven: true, stage: 'Prepping', stageSet: 'live' } });
+put({ id: 'ac_s', kind: 'act', parent_id: 'pr_salt', title: 'Screenplay', sort: 1 });
+put({ id: 'ch_s1', kind: 'chapter', parent_id: 'ac_s', title: 'Script', sort: 1 });
+put({ id: 'sc_s1', kind: 'scene', parent_id: 'ch_s1', sort: 1024, title: 'The shoulder', fields: { level: 3 } });
+para('pp_s1', 'ch_s1', 2048, 'EXT. HIGHWAY SHOULDER - DAY', { el: 'scene' });
+para('pp_s2', 'ch_s1', 3072, 'Mara stands on the shoulder.', { el: 'action' });
+put({ id: 'sc_s2', kind: 'scene', parent_id: 'ch_s1', sort: 4096, title: 'Two coffees', fields: { level: 3 } });
+para('pp_s3', 'ch_s1', 5120, 'INT. DINER - NIGHT', { el: 'scene' });
+para('pp_s4', 'ch_s1', 6144, 'Two coffees go cold.', { el: 'action' });
+put({ id: 'sh_s1', kind: 'shot', parent_id: 'pp_s1', sort: 1024, text: 'Wide on the road', fields: { n: 1, piece: 'pr_salt', got: 1, from: 'pp_s2', to: 'pp_s2', tries: [{ files: ['fi_frame'] }] } });
+put({ id: 'sh_s2', kind: 'shot', parent_id: 'pp_s1', sort: 2048, text: 'Her boots', fields: { n: 2, piece: 'pr_salt' } });
+put({ id: 'sh_s3', kind: 'shot', parent_id: 'pp_s3', sort: 1024, text: 'The cups', fields: { n: 1, piece: 'pr_salt' } });
+put({ id: 'sd_1', kind: 'shootday', parent_id: 'pr_salt', fields: { date: '2026-12-05', place: 'Bonneville turn-off', scenes: ['pp_s1'] } });
 // A project with two pieces: a novel (chapters) and a short.
 put({ id: 'wd_wh', kind: 'world', title: 'Winter Harbour', area_id: 'area-film', sort: 2 });
 put({ id: 'pr_nov', kind: 'project', parent_id: 'wd_wh', title: 'The Harbour Book', area_id: 'area-film', sort: 1, fields: { type: 'novel', label: 'Novel', stage: 'Drafting' } });
@@ -116,11 +130,13 @@ try {
     await until(() => document.querySelectorAll('.ph1-way .ph1-door').length >= 4 && !/^\s*$/.test(document.querySelector('.ph1-way .ph1-door .ph1-built')?.textContent || ''));
     const rows = await doorRows();
     assert.equal(rows.length, await p.$$eval('.ph1-dots i', (d) => d.length));
-    assert.match(rows[0], /\bf\b.*New idea\s*1 idea for this\s*›/);
+    assert.match(rows[0], /\bf\b.*New idea\s*1 idea for this\s*Opens Ideas for this\s*›/);
     assert.match(rows[1], /\bf\b.*\bat\b.*Writing\s*2 scenes, 420 words/);
-    assert.match(rows.find((r) => /Boarding/.test(r)), /Boarding\s*1 shot/);
+    assert.match(rows.find((r) => /Boarding/.test(r)), /Boarding\s*\d of \d shots? (has|have) a picked still\.\s*Opens Storyboard/);
+    assert.match(rows[1], /Opens the script/);
     assert.ok(!/\bf\b/.test(rows.at(-1).split('|')[0]), 'not filled past where it is');
-    assert.match(rows.at(-1), /not posted/);
+    assert.match(rows.at(-1), /Not out yet\s*Opens Deliver, Posting/);
+    assert.match(rows.find((r) => /Editing/.test(r)), /Hand-off for Resolve not made yet/);
     await snap('a-path');
   });
 
@@ -137,11 +153,29 @@ try {
     await door('New idea').click();
     await until(() => document.documentElement.dataset.view === 'stage' && /Kenji hates syrup/.test(document.querySelector('.st-cards')?.textContent || ''));
     await outlineOf('pr_nb');
+    // Each making stage lands on its own screen, and the crumb names it.
     await door('Boarding').click();
-    await until(() => document.documentElement.dataset.view === 'production');
+    await until(() => document.documentElement.dataset.view === 'production' && document.querySelector('.prod-view .chip[data-tab="board"]')?.getAttribute('aria-selected') === 'true' && /Storyboard/.test(document.querySelector('#crumb')?.textContent || ''));
+    await outlineOf('pr_nb');
+    await door('Generating').click();
+    await until(() => document.documentElement.dataset.view === 'production' && document.querySelector('.prod-view .chip[data-tab="shots"]')?.getAttribute('aria-selected') === 'true' && /Shots/.test(document.querySelector('#crumb')?.textContent || ''));
+    await outlineOf('pr_nb');
+    await door('Editing').click();
+    await until(() => document.documentElement.dataset.view === 'deliver' && document.querySelector('.prod-view .chip[data-tab="files"]')?.getAttribute('aria-selected') === 'true');
     await outlineOf('pr_nb');
     await p.locator('.ph1-way .ph1-go').last().click();
-    await until(() => document.documentElement.dataset.view === 'deliver');
+    await until(() => document.documentElement.dataset.view === 'deliver' && document.querySelector('.prod-view .chip[data-tab="post"]')?.getAttribute('aria-selected') === 'true' && /Deliver/.test(document.querySelector('#crumb')?.textContent || ''));
+  });
+
+  await check('a film shot with a camera: Prepping and Shooting say what is done and left, and land on Shots and Shoot days', async () => {
+    await outlineOf('pr_salt');
+    await until(() => /Bonneville/.test(document.querySelector('.ph1-way')?.textContent || ''));
+    const rows = await doorRows();
+    assert.match(rows.find((r) => /Prepping/.test(r)), /Prepping\s*3 shots planned, 1 with a frame\. Two coffees is on no shoot day yet\. 1 line without a shot\.\s*Opens Shots/);
+    assert.match(rows.find((r) => /Shooting/.test(r)), /Shooting\s*Sat, Dec 5 at Bonneville turn-off\. 2 of 3 shots still to get\.\s*Opens Shoot days/);
+    await snap('c-camera-path');
+    await door('Shooting').click();
+    await until(() => document.documentElement.dataset.view === 'production' && document.querySelector('.prod-view .chip[data-tab="days"]')?.getAttribute('aria-selected') === 'true' && /Shoot days/.test(document.querySelector('#crumb')?.textContent || ''));
   });
 
   await check('right-click a row: Set stage to …', async () => {
@@ -186,7 +220,7 @@ try {
       await until(() => /scenes/.test(document.querySelector('.ph1-way')?.textContent || ''));
       assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'nothing scrolls sideways');
       const h = await p.$$eval('.ph1-way .ph1-door', (b) => b.map((x) => x.getBoundingClientRect().height));
-      assert.ok(h.every((x) => x >= 40 && x < 70), h.join(','));
+      assert.ok(h.every((x) => x >= 40 && x < 100), h.join(','));
       await sleep(1200); await snap(`b-phone-${width}`);
       await door('Writing').tap();
       await until(() => !document.documentElement.dataset.view && window.__editor?.getText().includes('Kenji'));

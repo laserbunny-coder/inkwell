@@ -277,7 +277,7 @@ async function drawCrumb() {
   } else if (view() === 'production' || view() === 'deliver') {
     const g = await getEntry(state.prodId);
     if (g) { const up = await within(g); parts.push(...(up ? up.out : [lib]), bookPart(g)); }
-    parts.push(link(view() === 'deliver' ? 'Deliver' : 'Make', () => {}, 'here'));
+    parts.push(link(prodScreen(), () => {}, 'here'));
   } else if (view() === 'stage' && state.stage) {
     const g = await getEntry(state.stage.id);
     if (g?.kind === 'world') parts.push(lib, ...(await areaParts(g.area_id)), bookPart(g));
@@ -374,6 +374,12 @@ async function pieceHere() {
   const world = await worldOf(piece);
   return world ? { piece, world } : null;
 }
+// The crumb names the screen you're on in Make (Shots, Storyboard, Cast and
+// places, Shoot days); Deliver is one place.
+function prodScreen() {
+  if (view() === 'deliver') return 'Deliver';
+  return document.querySelector('.prod-view .gv-levels .chip[aria-selected="true"]')?.textContent?.trim() || 'Shots';
+}
 async function pieceCrumb(link) {
   if (inPane) return null;
   const at = await pieceHere();
@@ -382,7 +388,7 @@ async function pieceCrumb(link) {
   back.title = 'Back to the project page (Alt + 0)';
   const v = view();
   const here = v === 'stage' ? { gather: 'Ideas for this', revise: 'Drafts and notes', shape: 'Develop' }[state.stage?.page] || PAGE_NAMES[state.stage?.page] || ''
-    : v === 'production' ? 'Shots' : v === 'deliver' ? 'Share and post' : v === 'compare' ? 'Compare'
+    : v === 'production' || v === 'deliver' ? prodScreen() : v === 'compare' ? 'Compare'
     : inNotebook() && notebook.page?.kind === 'page' ? notebook.page.title || 'Untitled page'
     // A novel's chapter names where you are in it (a script's one chapter needn't).
     : v === 'write' && bookType(at.piece) !== 'screenplay' && state.chapterId ? (await getEntry(state.chapterId))?.title || '' : '';

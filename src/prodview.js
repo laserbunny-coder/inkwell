@@ -256,7 +256,7 @@ export class ProductionView {
       b.setAttribute('role', 'tab');
       b.dataset.tab = t.id;
       b.setAttribute('aria-selected', String(t.id === this.tab));
-      b.addEventListener('click', () => { setPref(this.tabKey, t.id); this.hooks.moved?.(this.place()); this.render(); });
+      b.addEventListener('click', async () => { setPref(this.tabKey, t.id); await this.render(); this.hooks.moved?.(this.place()); });
       tabs.append(b);
     }
     sub.append(tabs);
@@ -1978,6 +1978,9 @@ export class ProductionView {
       missing.length ? `\nNot on this device yet (open them once in Inkwell, then hand off again): ${missing.join(', ')}` : ''
     ].join('\r\n') });
     download(`${this.piece.title || 'Rough cut'} for Resolve.zip`, zip(out));
+    // The path's Editing stage says when the hand-off was made.
+    const fresh = await getEntry(this.piece.id);
+    if (fresh) { const row = { ...fresh, fields: { ...fresh.fields, handoff: Date.now() }, updated_at: Date.now() }; await putEntries([row]); this.piece = row; this.hooks.changed([row]); }
     this.hooks.toast(missing.length ? `Hand-off saved. ${plural(missing.length, 'take')} weren’t on this device yet.` : 'Hand-off saved for Resolve');
   }
 

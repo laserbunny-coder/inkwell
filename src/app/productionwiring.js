@@ -8,7 +8,7 @@ import { $, inNotebook, state, view } from '../main.js';
 import { notebook } from './notebookview.js';
 import { go, openBook, remember } from './routing.js';
 import { toggleNumbering } from './manuscript.js';
-import { renderRail } from './rail.js';
+import { renderRail, renderCrumb } from './rail.js';
 import { grid } from './libraryview.js';
 import { openShare, sharing } from './sharing.js';
 import { filesOut } from './workpages.js';
@@ -44,7 +44,7 @@ const productionHooks = {
   files: (kind, piece) => filesOut(kind, piece),
   share: (piece) => openShare(piece),
   shareOf: async (piece) => { const sh = await sharing.current(piece); return sh ? { url: linkFor(sh.fields.token), comments: !!sh.fields.comments } : null; },
-  moved: (place) => remember(place)
+  moved: (place) => { remember(place); renderCrumb(); }
 };
 
 // The piece production is for, from where you are.
