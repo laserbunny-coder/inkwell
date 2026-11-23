@@ -201,12 +201,15 @@ try {
     await go(page, { view: 'production', id: 'pr_reel2', tab: 'shots' });
     await page.waitForSelector('.pd-scene[data-scene="pp_1"] .pd-shot');
     assert.equal(await page.locator('.pd-shot[data-shot="sh_1"]').getAttribute('data-made'), 'live');
-    assert.equal(await page.locator('.pd-shot[data-shot="sh_1"] .pd-made').innerText(), 'Live action');
-    await page.locator('.pd-shot[data-shot="sh_1"] .pd-made').click();
+    // Filmed is this film's way, so the row doesn't say it; it has the Got it tick instead.
+    assert.equal(await page.locator('.pd-shot[data-shot="sh_1"] .pd-made').count(), 0);
+    assert.equal(await page.locator('.pd-shot[data-shot="sh_1"] .pd-got').count(), 1);
+    await page.locator('.pd-shot[data-shot="sh_1"] .more-btn').click();
+    await pick(page, 'Made by');
     await pick(page, 'Generated');
     await sleep(400);
     assert.equal((await get(page, 'sh_1')).fields.made, 'gen');
-    assert.equal(await page.locator('.pd-shot[data-shot="sh_1"] .pd-made').count(), 0);
+    assert.equal(await page.locator('.pd-shot[data-shot="sh_1"] .pd-made').innerText(), 'Generated', 'a generated shot in a filmed film says so');
     await page.locator('.toast button', { hasText: 'Undo' }).click();
     await sleep(500);
     assert.equal((await get(page, 'sh_1')).fields.made, undefined);

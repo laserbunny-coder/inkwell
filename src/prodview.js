@@ -10,12 +10,13 @@ import {
   ELEMENT_TYPES, typeOf, elementsIn, plainPages, newElement, setElement, namesOf,
   findElements, sceneElements, changeBreakdown, sceneSig, shotCode, newShot, shotStage, SHOT_STAGES, stillOf,
   withRenders, withPrompts, isVideo, shotForName, shootDays, newShootDay, shootDayTask, toCsv, toSrt, speechesIn, PLATFORMS,
-  MADE_BY, madeBy, needsFootage, AUDIO, audioOf, toPlan,
+  MADE_BY, madeBy, isFilmed, gotIt, shotStatus, needsFootage, AUDIO, audioOf, toPlan,
   viewSlots, toolIdsFor, toolIdsOf, ASPECTS, RATES, rulesOf, genOf, secsOf, runsOf,
   PRICES_ID, priceList, priceOf, pricesChecked, estimate, spent, money, toEdl, cutEvents, lookOf
 } from './production.js';
 import { make } from './dom.js';
 import { resolve as linesOf, linesIn } from './shotlines.js';
+import { sceneTitle } from './scenename.js';
 
 // The production view of a piece (Ctrl + Shift + S): its scenes, each with
 // the elements it uses and its shots; a storyboard of the stills picked;
@@ -25,7 +26,6 @@ import { resolve as linesOf, linesIn } from './shotlines.js';
 
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch { /* full */ } };
-const hidden = () => new Set(JSON.parse(pref('prodHide', '[]')));
 // Make: the shots and what they need. Deliver: what goes out (files, a share
 // link, posting). Both are this view, with different tabs.
 export const TABS = [
@@ -117,6 +117,25 @@ export class ProductionView {
     this.set = set.own ? set.base : set.id;
     const st = hasManuscript(piece) ? await loadStructure(piece) : { acts: [], pieces: [] };
     this.items = st.acts.length ? rowsAt(this.script ? 'slug' : 'scene', st, piece) : [];
+    // A script's scenes go by their own names (the Woven title, or the first
+    // words), never their slug lines; the slug stays as a faint aside. A
+    // scene's title section is part of its name, not a group of its own.
+    if (this.script && st.acts.length) {
+      const named = new Map(rowsAt('wscene', st, piece).filter((r) => r.type === 'row' && r.kind === 'scene').map((r) => [r.id, r]));
+      this.items = this.items.filter((x) => x.type !== 'group' || (x.depth || 1) < 3);
+      let n = 0;
+      for (const x of this.items) {
+        if (x.type !== 'row') continue;
+        n += 1;
+        const w = named.get(x.id);
+        x.slug = x.kind === 'slug' ? x.title : '';
+        x.n = String(x.code || w?.n || n);
+        x.title = sceneTitle({ title: w?.name || '', first: w?.first || '' }) || (x.kind === 'slug' ? `Scene ${x.n}` : x.title);
+      }
+    } else {
+      let n = 0;
+      for (const x of this.items) if (x.type === 'row') { n += 1; x.slug = ''; x.n = String(x.code || n); }
+    }
     const scenes = this.items.filter((x) => x.type === 'row');
     const texts = new Map();
     for (const act of st.acts) for (const ch of act.chapters) for (const r of ch.rows) texts.set(r.id, r);
@@ -174,6 +193,11 @@ export class ProductionView {
     this.codes = new Map();
     for (const s of scenes) for (const sh of s.shots) this.codes.set(this.codeOf(sh, s), sh.id);
     this.scenes = scenes;
+    // How this film is made decides what shows (no switches): generation
+    // details, cost and Claude's prompts only where something is generated.
+    for (const sc of scenes) sc.gen = sc.shots.some((sh) => !isFilmed(sh, this.set));
+    this.anyGen = scenes.some((sc) => sc.gen) || this.lost.some((sh) => !isFilmed(sh, this.set));
+    this.aiFilm = this.set !== 'live';
     return true;
   }
 
@@ -238,8 +262,6 @@ export class ProductionView {
     sub.append(tabs);
     const body = make('div', 'pd-body');
     body.dataset.tab = this.tab;
-    const hide = hidden();
-    for (const k of hide) body.classList.add(`no-${k}`);
     if (this.tab === 'shots') await this.drawShots(body);
     if (this.tab === 'board') await this.drawBoard(body);
     if (this.tab === 'kit') await this.drawKit(body);
@@ -299,13 +321,9 @@ export class ProductionView {
       body.append(make('p', 'hint gv-empty', hasManuscript(this.piece) ? 'No scenes yet. Scene headings in the script (INT. / EXT.) become scenes here, each with its shots.' : 'Production works on a script or prose draft. This piece is an outline.'));
       return;
     }
-    const codes = make('div', 'pd-codes');
-    codes.append(make('span', 'panel-label', 'Shot codes'));
-    const show = this.codeInput(this.world?.fields?.production?.code || '', 'Show', 'NB', (v) => this.saveWorldProd({ code: v }));
-    const pc = this.codeInput(this.piece.fields?.code || '', 'Piece', 'E01', (v) => this.savePiece({ code: v || null }));
-    codes.append(show, make('span', 'pd-dash', '-'), pc, make('span', 'pd-dash', this.script ? '-S03-04' : '-04'));
-    codes.title = 'Shot codes go in file names on the NAS and clip names in Resolve. Set them before files are named; after that, leave them.';
-    body.append(codes, this.costEl());
+    // Shot codes are set once, from ⋯ (Shot codes…); they show here only then.
+    if (this.codesOpen) body.append(this.codesEl());
+    body.append(this.summaryEl());
     if (this.script && !this.piece.fields?.numbered) {
       const note = make('div', 'pd-banner');
       note.append(make('span', '', 'Number the scenes so every shot gets a code that never changes.'));
@@ -326,6 +344,33 @@ export class ProductionView {
       box.append(list);
       body.append(box);
     }
+    // What it costs: one quiet line at the bottom, only when something is generated.
+    if (this.anyGen) body.append(this.costEl());
+  }
+
+  // "Shot with a camera · 5 shots · 2 still to get", or "AI video · 5 shots · 1 take picked".
+  summaryEl() {
+    const shots = this.scenes.flatMap((x) => x.shots);
+    const filmed = shots.filter((sh) => isFilmed(sh, this.set));
+    const left = filmed.filter((sh) => !gotIt(sh)).length;
+    const takes = shots.filter((sh) => !isFilmed(sh, this.set) && sh.fields?.star?.video).length;
+    const bits = this.aiFilm
+      ? ['AI video', plural(shots.length, 'shot'), `${takes} ${takes === 1 ? 'take' : 'takes'} picked`]
+      : ['Shot with a camera', plural(shots.length, 'shot'), filmed.length ? (left ? `${left} still to get` : 'all got') : ''];
+    return make('p', 'pd-summary-line', bits.filter(Boolean).join(' · '));
+  }
+
+  codesEl() {
+    const codes = make('div', 'pd-codes');
+    codes.append(make('span', 'panel-label', 'Shot codes'));
+    const show = this.codeInput(this.world?.fields?.production?.code || '', 'Show', 'NB', (v) => this.saveWorldProd({ code: v }));
+    const pc = this.codeInput(this.piece.fields?.code || '', 'Piece', 'E01', (v) => this.savePiece({ code: v || null }));
+    codes.append(show, make('span', 'pd-dash', '-'), pc, make('span', 'pd-dash', this.script ? '-S03-04' : '-04'));
+    const done = make('button', 'ghost-btn', 'Done');
+    done.addEventListener('click', () => { this.codesOpen = false; this.render(); });
+    codes.append(done);
+    codes.title = 'Shot codes go in file names on the NAS and clip names in Resolve. Set them before files are named; after that, leave them.';
+    return codes;
   }
 
   codeInput(value, label, placeholder, save) {
@@ -343,12 +388,14 @@ export class ProductionView {
     const box = make('section', 'pd-scene' + (s.shots.length ? '' : ' empty'));
     box.dataset.scene = s.id;
     const head = make('div', 'pd-scene-head');
-    const title = make('button', 'pd-scene-title');
-    if (s.code) title.append(make('span', 'gv-code', s.code));
-    title.append(make('span', '', s.title));
-    title.title = 'Open it in the text';
-    title.addEventListener('click', () => this.hooks.open(s));
+    // Its number, its name (opens the scene in the script with Shots on), and
+    // the slug line small and faint beside it.
+    head.append(make('span', 'pd-scene-n', s.n || ''));
+    const title = make('button', 'pd-scene-title', s.title);
+    title.title = 'Open this scene in the script, with its shots';
+    title.addEventListener('click', () => this.openScene(s));
     head.append(title);
+    if (s.slug) head.append(make('span', 'pd-slugline', s.slug));
     if (s.changed) {
       const ch = make('button', 'pd-changed', 'Changed since shots');
       ch.title = 'The scene was rewritten after its shots were planned. Check the shots, then mark them as matching.';
@@ -358,7 +405,9 @@ export class ProductionView {
       ]));
       head.append(ch);
     }
-    if (s.talk) {
+    const left = this.leftText(s);
+    if (left) head.append(make('span', 'pd-left', left));
+    if (s.talk && s.gen) {
       const au = make('button', 'pd-audio', AUDIO.find((a) => a.id === s.audio).label);
       au.title = 'How this scene’s voices are made';
       au.addEventListener('click', () => this.hooks.menu(au, this.audioMenu(s)));
@@ -385,7 +434,7 @@ export class ProductionView {
       const sug = make('button', 'ghost-btn', s.shots.length ? 'Claude: more shots' : 'Claude: suggest shots');
       sug.addEventListener('click', () => this.suggestShots(s));
       add.append(sug);
-      if (s.shots.length) {
+      if (s.gen) {
         const pr = make('button', 'ghost-btn', 'Claude: write prompts');
         pr.addEventListener('click', () => this.writePrompts(s));
         add.append(pr);
@@ -393,6 +442,23 @@ export class ProductionView {
     }
     box.append(add);
     return box;
+  }
+
+  // What is left in a scene: "2 of 3 still to get" (filmed), "1 of 2 takes picked" (generated).
+  leftText(s) {
+    if (!s.shots.length) return '';
+    const filmed = s.shots.filter((sh) => isFilmed(sh, this.set));
+    if (filmed.length) {
+      const left = filmed.filter((sh) => !gotIt(sh)).length;
+      return left ? `${left} of ${filmed.length} still to get` : 'All got';
+    }
+    return `${s.shots.filter((sh) => sh.fields?.star?.video).length} of ${s.shots.length} takes picked`;
+  }
+
+  // The scene in the script, with Shots on there.
+  openScene(s) {
+    try { localStorage.setItem(`shotsOn:${this.piece.id}`, '1'); } catch { /* private window */ }
+    this.hooks.open(s);
   }
 
   chipsEl(s) {
@@ -536,6 +602,8 @@ export class ProductionView {
     box.dataset.shot = sh.id;
     const stage = shotStage(sh);
     box.dataset.stage = stage;
+    const filmed = isFilmed(sh, this.set);
+    box.dataset.filmed = String(filmed);
     const run = s ? runsOf(s.shots).find((r) => r.shots.includes(sh)) : null;
     if (run && run.shots.length > 1) {
       box.classList.add('grouped');
@@ -543,23 +611,27 @@ export class ProductionView {
       if (run.shots.at(-1) === sh) box.classList.add('group-last');
     }
     const row = make('div', 'pd-shot-row');
-    const code = make('button', 'pd-code', s ? this.codeOf(sh, s) : `#${f.n || ''}`);
-    code.title = 'Copy the shot code (for the file name)';
-    code.addEventListener('click', () => this.copy(code.textContent, 'Shot code copied'));
-    const what = this.editable('pd-what', sh.text || '', 'What happens', (v) => this.saveShot(sh.id, { text: v, tags: tagsIn(v) }));
+    // The short code on the row; the full one stays in file names, exports and ⋯.
+    const full = s ? this.codeOf(sh, s) : '';
+    const code = make('span', 'pd-code', f.n || '');
+    code.dataset.code = full;
+    if (full) code.title = full;
+    const what = this.editable('pd-what' + (filmed && gotIt(sh) ? ' done' : ''), sh.text || '', 'What happens', (v) => this.saveShot(sh.id, { text: v, tags: tagsIn(v) }));
     const framing = this.editable('pd-framing', f.framing || '', 'Framing', (v) => this.saveShotFields(sh.id, { framing: v }));
-    const dot = make('span', 'pd-stage', SHOT_STAGES.find((x) => x.id === stage).label);
     const toggle = make('button', 'pd-toggle', this.open.has(sh.id) ? '▾' : '▸');
-    toggle.setAttribute('aria-label', this.open.has(sh.id) ? 'Hide prompts and renders' : 'Prompts and renders');
+    const opens = filmed ? 'Note and reference frame' : 'Prompts and tries';
+    toggle.setAttribute('aria-label', this.open.has(sh.id) ? `Hide ${opens.toLowerCase()}` : opens);
     toggle.setAttribute('aria-expanded', String(this.open.has(sh.id)));
     toggle.addEventListener('click', () => { if (this.open.has(sh.id)) this.open.delete(sh.id); else this.open.add(sh.id); this.render(); });
     const made = madeBy(sh, this.set);
     box.dataset.made = made;
-    // How it's made sits with where it's at, so the row keeps its columns.
     const state = make('span', 'pd-state');
-    if (made !== 'gen') {
+    // How it's made shows only where it differs from the film (a generated
+    // insert in a filmed film, footage-based shots).
+    const usual = this.set === 'live' ? 'live' : 'gen';
+    if (made !== usual) {
       const m = make('button', 'pd-made', MADE_BY.find((x) => x.id === made).label);
-      m.title = MADE_BY.find((x) => x.id === made).about;
+      m.title = MADE_BY.find((x) => x.id === made).about || '';
       m.addEventListener('click', () => this.hooks.menu(m, this.madeMenu(sh)));
       state.append(m);
     }
@@ -567,8 +639,11 @@ export class ProductionView {
     const paras = s ? (s.rows || []).filter((r) => r.kind === 'para' && r.fields?.el !== 'scene').map((r) => ({ id: r.id, el: r.fields?.el, text: r.text || '' })) : [];
     const span = linesOf(sh, paras);
     if (span) state.append(make('span', 'pd-covers', `covers ${linesIn(paras, span.from, span.to)} line${linesIn(paras, span.from, span.to) === 1 ? '' : 's'}`));
-    state.append(dot);
-    row.append(toggle, code, what, framing, state, this.hooks.menuButton(() => this.shotMenu(sh, s), 'More for this shot'));
+    if (!filmed) state.append(make('span', 'pd-stage', shotStatus(sh, this.set)));
+    row.append(toggle, what, framing, state, code);
+    // A filmed shot: one tap says it's in the can.
+    if (filmed) row.append(this.gotEl(sh));
+    row.append(this.hooks.menuButton(() => this.shotMenu(sh, s), 'More for this shot'));
     box.append(row);
     if (this.open.has(sh.id)) box.append(this.shotDetail(sh, s));
     // Renders dropped on a shot go to it.
@@ -578,10 +653,82 @@ export class ProductionView {
     return box;
   }
 
+  gotEl(sh) {
+    const on = gotIt(sh);
+    const b = make('button', 'pd-got', '✓');
+    b.setAttribute('aria-pressed', String(on));
+    b.setAttribute('aria-label', on ? 'Got it (tap to mark it still to get)' : 'Got it');
+    b.title = on ? 'Got it. Tap again if it still needs shooting.' : 'Got it: this shot is in the can';
+    b.addEventListener('click', () => this.setGot(sh.id, !on));
+    return b;
+  }
+
+  async setGot(id, on) {
+    const fresh = await getEntry(id);
+    if (!fresh) return;
+    const fields = { ...fresh.fields };
+    if (on) fields.got = Date.now(); else delete fields.got;
+    await this.saveShot(id, { fields });
+    await this.render();
+  }
+
   shotDetail(sh, s) {
+    return isFilmed(sh, this.set) ? this.filmedDetail(sh) : this.genDetail(sh, s);
+  }
+
+  // A filmed shot: its framing, one note for the day, and a reference frame
+  // (the picture the storyboard shows); takes can be dropped and starred.
+  // Nothing about models, seconds or prompts.
+  filmedDetail(sh) {
+    const f = sh.fields || {};
+    const d = make('div', 'pd-detail filmed');
+    const chips = make('div', 'pd-framings');
+    for (const w of ['Wide', 'Medium', 'Close-up', 'Two-shot', 'Insert']) {
+      const c = make('button', 'chip' + ((f.framing || '').toLowerCase() === w.toLowerCase() ? ' on' : ''), w);
+      c.addEventListener('click', async () => { await this.saveShotFields(sh.id, { framing: w }); this.render(); });
+      chips.append(c);
+    }
+    d.append(chips);
+    const wrap = make('label', 'pd-prompt');
+    wrap.append(make('span', 'panel-label', 'Note for the day: lens, move, sound'));
+    const ta = make('textarea', 'pd-ta pd-note');
+    ta.value = f.note || '';
+    ta.rows = 2;
+    ta.setAttribute('aria-label', 'Note for the day');
+    const fit = () => { ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight + 2}px`; };
+    ta.addEventListener('input', () => { fit(); this.later(`${sh.id}:note`, () => this.saveShotFields(sh.id, { note: ta.value })); });
+    ta.addEventListener('blur', () => this.now(`${sh.id}:note`));
+    requestAnimationFrame(fit);
+    wrap.append(ta);
+    d.append(wrap, this.rendersEl(sh, 'Reference frame or takes: drop them here, star the one you use'));
+    return d;
+  }
+
+  // The pictures and takes of a shot, newest first, with the star.
+  rendersEl(sh, hint) {
+    const f = sh.fields || {};
+    const tries = (f.tries || []).filter((t) => t.files?.length);
+    const strip = make('div', 'pd-renders');
+    for (const t of [...tries].reverse()) for (const id of [...t.files].reverse()) strip.append(this.renderEl(sh, id));
+    const add = make('label', 'pd-render add');
+    add.title = hint;
+    add.append(make('span', '', '+'));
+    const input = make('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = 'image/*,video/*';
+    input.hidden = true;
+    input.addEventListener('change', () => this.addRenders(sh.id, [...input.files]));
+    add.append(input);
+    strip.append(add);
+    return strip;
+  }
+
+  // A generated shot: prompts and tries first; the settings fold into one
+  // line ("Kling 3.0 · 5 s · starts on the starred still") with Change.
+  genDetail(sh, s) {
     const f = sh.fields || {};
     const d = make('div', 'pd-detail');
-    d.append(this.genEl(sh, s));
     for (const [k, label] of [['still', 'Still prompt'], ['video', 'Video prompt']]) {
       const wrap = make('div', 'pd-prompt');
       const top = make('div', 'pd-prompt-head');
@@ -601,22 +748,7 @@ export class ProductionView {
       wrap.append(top, ta);
       d.append(wrap);
     }
-    // Renders: the try that made each one, newest first, with the star.
-    const tries = (f.tries || []).filter((t) => t.files?.length);
-    const strip = make('div', 'pd-renders');
-    for (const t of [...tries].reverse()) for (const id of [...t.files].reverse()) strip.append(this.renderEl(sh, id));
-    const add = make('label', 'pd-render add');
-    add.title = 'Add renders: stills or video takes. Or drop them on the shot.';
-    add.append(make('span', '', '+'));
-    const input = make('input');
-    input.type = 'file';
-    input.multiple = true;
-    input.accept = 'image/*,video/*';
-    input.hidden = true;
-    input.addEventListener('change', () => this.addRenders(sh.id, [...input.files]));
-    add.append(input);
-    strip.append(add);
-    d.append(strip);
+    d.append(this.rendersEl(sh, 'Add renders: stills or video takes. Or drop them on the shot.'));
     // Results kept as links (too big to keep, or on the NAS).
     const links = (f.tries || []).flatMap((t) => (t.links || []).map((url) => ({ url, t })));
     if (links.length) {
@@ -631,7 +763,14 @@ export class ProductionView {
       }
       d.append(ul);
     }
-    const acts = make('div', 'pd-add');
+    const genOpen = this.genOpen?.has(sh.id);
+    if (genOpen) d.append(this.genEl(sh, s));
+    const acts = make('div', 'pd-add pd-genline');
+    acts.append(make('span', 'pd-gen-sum', this.genSummary(sh)));
+    const change = make('button', 'ghost-btn', genOpen ? 'Done' : 'Change');
+    change.title = 'Model, seconds, first and last frame, and the line it is timed to';
+    change.addEventListener('click', () => { this.genOpen ||= new Set(); if (genOpen) this.genOpen.delete(sh.id); else this.genOpen.add(sh.id); this.render(); });
+    acts.append(change);
     const kit = make('button', 'ghost-btn', 'Download kit');
     kit.title = 'The prompts and the reference pictures of everything in the shot, in one .zip, for PixAI, Seedance or any tool on the web';
     kit.addEventListener('click', () => this.kit(sh, s));
@@ -657,6 +796,14 @@ export class ProductionView {
       d.append(acts, box);
     } else d.append(acts);
     return d;
+  }
+
+  // "Kling 3.0 · 5 s · starts on the starred still"
+  genSummary(sh) {
+    const g = genOf(sh);
+    const model = g.model || this.piece.fields?.gen?.model || 'Model not set';
+    const first = g.first ? 'starts on a chosen still' : sh.fields?.star?.still ? 'starts on the starred still' : 'no first frame yet';
+    return [model, `${g.secs || secsOf(sh)} s`, first, g.sync ? 'timed to a line' : ''].filter(Boolean).join(' · ');
   }
 
   renderEl(sh, id) {
@@ -747,7 +894,7 @@ export class ProductionView {
       s && { label: 'Add a shot after this one', run: () => this.addShot(s, sh.id) },
       s && i > 0 && { label: 'Move up', run: () => this.nudge(sh, list, i, -1) },
       s && i < list.length - 1 && { label: 'Move down', run: () => this.nudge(sh, list, i, 1) },
-      { label: s ? 'Move to another scene…' : 'Move to a scene…', run: () => this.hooks.menu(this.el.querySelector(`[data-shot="${CSS.escape(sh.id)}"] .pd-code`) || this.el, this.scenes.filter((x) => x.id !== s?.id).map((x) => ({ label: `${x.code ? `${x.code} ` : ''}${x.title}`, run: () => this.moveShot(sh, x) }))) },
+      { label: s ? 'Move to another scene…' : 'Move to a scene…', run: () => this.hooks.menu(this.el.querySelector(`[data-shot="${CSS.escape(sh.id)}"] .pd-code`) || this.el, this.scenes.filter((x) => x.id !== s?.id).map((x) => ({ label: `${x.n ? `${x.n} ` : ''}${x.title}`, run: () => this.moveShot(sh, x) }))) },
       s && i < list.length - 1 && (!sh.fields?.group || sh.fields.group !== list[i + 1].fields?.group) && { label: 'Make with the next shot, in one generation', run: () => this.joinNext(sh, list[i + 1]) },
       sh.fields?.group && { label: 'Make on its own again', run: () => this.leaveGroup(sh, list) },
       { label: 'Made by…', sub: this.madeMenu(sh) },
@@ -895,9 +1042,8 @@ export class ProductionView {
     const month = { from: new Date(now.getFullYear(), now.getMonth(), 1).getTime(), to: new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime() };
     const here = spent([...shots, ...this.lost]);
     const thisMonth = spent(this.allShots || [], month);
-    box.append(make('span', 'panel-label', 'Cost'));
     const e = make('span', 'pd-cost-est');
-    e.append(make('strong', '', `About ${money(est.usd)}`), document.createTextNode(` for ${plural(est.shots, 'shot')}, ${Math.round(est.secs)} s, at `));
+    e.append(make('strong', '', `About ${money(est.usd)}`), document.createTextNode(` to make ${plural(est.shots, 'generated shot')}, ${Math.round(est.secs)} s, at `));
     const model = make('input', 'pd-cost-input wide');
     model.value = pg.model || '';
     model.placeholder = 'Kling 3.0';
@@ -1202,7 +1348,7 @@ export class ProductionView {
   sceneBody(s, withShots = false) {
     const notes = (this.notesOf.get(s.id) || []).map((n) => n.text);
     return {
-      id: s.id, code: s.code || '', heading: s.title, summary: s.synopsis || '',
+      id: s.id, code: s.code || '', heading: s.slug || s.title, ...(s.slug ? { name: s.title } : {}), summary: s.synopsis || '',
       text: s.rows.map((r) => (r.kind === 'scene' ? `[${r.title || 'section'}]` : r.fields?.el === 'character' ? (r.text || '').toUpperCase() : r.text || '')).filter((t) => t.trim()).join('\n'),
       notes, elements: s.uses,
       ...(withShots ? { shots: s.shots.map((sh) => ({ id: sh.id, code: this.codeOf(sh, s), what: sh.text || '', framing: sh.fields?.framing || '', still: sh.fields?.still || '', video: sh.fields?.video || '', model: genOf(sh).model || this.piece.fields?.gen?.model || '', secs: secsOf(sh), sync: genOf(sh).sync || '', group: sh.fields?.group || '' })) } : {})
@@ -1583,7 +1729,10 @@ export class ProductionView {
       wrap.append(make('span', 'pd-field-label', label), i);
       return wrap;
     };
-    const slots = viewSlots(x.type);
+    // Character sheets, angles and tool IDs are for AI tools: only on AI
+    // films, or a film with a generated shot.
+    const forAi = this.aiFilm || this.anyGen;
+    const slots = forAi ? viewSlots(x.type) : [];
     if (slots.length) {
       const sheet = make('div', 'pd-views');
       sheet.append(make('span', 'pd-field-label', x.type === 'character' ? 'Character sheet' : 'Angles'));
@@ -1619,7 +1768,7 @@ export class ProductionView {
       w.append(make('span', 'pd-field-label', t.label), i);
       ids.append(w);
     }
-    card.append(ids);
+    if (forAi) card.append(ids);
     return card;
   }
 
@@ -1669,7 +1818,8 @@ export class ProductionView {
       const ul = make('ul', 'pd-plan-list');
       for (const { scene, shots } of shoot) {
         const li = make('li');
-        li.append(make('strong', '', `${scene.code ? `${scene.code} ` : ''}${scene.title}`));
+        li.append(make('strong', '', `${scene.n ? `${scene.n} ` : ''}${scene.title}`));
+        if (scene.slug) li.append(make('span', 'pd-sheet-slug', ` ${scene.slug}`));
         li.append(make('span', 'pd-sheet-sub', ` ${shots.map((sh) => `${this.codeOf(sh, scene)} ${MADE_BY.find((m) => m.id === madeBy(sh, this.set)).label.toLowerCase()}`).join(', ')}`));
         ul.append(li);
       }
@@ -1680,7 +1830,7 @@ export class ProductionView {
     if (voice.length) {
       box.append(make('p', 'pd-plan-what', `${plural(voice.length, 'scene')} with voices to record, not on a voice session yet`));
       const ul = make('ul', 'pd-plan-list');
-      for (const s of voice) ul.append(make('li', '', `${s.code ? `${s.code} ` : ''}${s.title}`));
+      for (const s of voice) { const li = make('li', '', `${s.n ? `${s.n} ` : ''}${s.title}`); if (s.slug) li.append(make('span', 'pd-sheet-slug', ` ${s.slug}`)); ul.append(li); }
       const go = make('button', 'pill', 'Put them on a new voice session');
       go.addEventListener('click', () => this.addDay('voice', voice.map((s) => s.id)));
       box.append(ul, go);
@@ -1709,7 +1859,8 @@ export class ProductionView {
     pick.append(make('span', 'pd-field-label', 'Scenes'));
     const chosen = new Set(f.scenes || []);
     for (const s of this.scenes) {
-      const c = make('button', 'chip' + (chosen.has(s.id) ? ' on' : ''), `${s.code ? `${s.code} ` : ''}${s.title}`);
+      const c = make('button', 'chip' + (chosen.has(s.id) ? ' on' : ''), `${s.n ? `${s.n} ` : ''}${s.title}`);
+      if (s.slug) c.title = s.slug;
       c.setAttribute('aria-pressed', String(chosen.has(s.id)));
       c.addEventListener('click', async () => {
         if (chosen.has(s.id)) chosen.delete(s.id); else chosen.add(s.id);
@@ -1773,7 +1924,9 @@ export class ProductionView {
     };
     section('Scenes', scenes.map((s) => {
       const li = make('li');
-      li.append(make('strong', '', `${s.code ? `${s.code}  ` : ''}${s.title}`));
+      li.append(make('strong', '', `${s.n ? `${s.n}  ` : ''}${s.title}`));
+      // The crew needs the place and time: the slug, small, beside the name.
+      if (s.slug) li.append(make('span', 'pd-sheet-slug', ` ${s.slug}`));
       if (s.synopsis) li.append(make('span', 'pd-sheet-sub', ` ${s.synopsis}`));
       if (voice) {
         // The lines to record, in order, with who says them.
@@ -1941,7 +2094,7 @@ export class ProductionView {
     const name = (id) => this.fileNames.get(id) || '';
     for (const s of this.scenes) for (const sh of s.shots) {
       const f = sh.fields || {};
-      rows.push([this.codeOf(sh, s), s.code || '', s.title, sh.text || '', f.framing || '', SHOT_STAGES.find((x) => x.id === shotStage(sh)).label, genOf(sh).model || '', genOf(sh).secs || '', f.still || '', f.video || '', name(f.star?.still), name(f.star?.video)]);
+      rows.push([this.codeOf(sh, s), s.code || '', s.slug || s.title, sh.text || '', f.framing || '', shotStatus(sh, this.set), genOf(sh).model || '', genOf(sh).secs || '', f.still || '', f.video || '', name(f.star?.still), name(f.star?.video)]);
     }
     return toCsv(rows);
   }
@@ -2075,8 +2228,6 @@ export class ProductionView {
   }
 
   moreMenu() {
-    const hide = hidden();
-    const flip = (k) => { if (hide.has(k)) hide.delete(k); else hide.add(k); setPref('prodHide', JSON.stringify([...hide])); this.render(); };
     return [
       this.hooks.canAsk() && { label: 'Break down every scene, with Claude', run: () => this.breakdown() },
       { label: 'Shot list for Resolve (.csv)', run: async () => { await this.loadNames(); this.exportCsv(); } },
@@ -2084,16 +2235,7 @@ export class ProductionView {
       this.script && { label: 'Dialogue for subtitles (.srt)', run: () => this.exportSrt() },
       this.script && !this.piece.fields?.numbered && { label: 'Number the scenes', run: () => this.hooks.numberScenes(this.piece) },
       'sep',
-      { label: hide.has('elements') ? 'Show elements on scenes' : 'Hide elements on scenes', run: () => flip('elements') },
-      { label: hide.has('notes') ? 'Show production notes' : 'Hide production notes', run: () => flip('notes') },
-      { label: hide.has('summary') ? 'Show scene summaries' : 'Hide scene summaries', run: () => flip('summary') },
-      { label: hide.has('empty') ? 'Show scenes with no shots' : 'Hide scenes with no shots', run: () => flip('empty') },
-      { label: hide.has('cost') ? 'Show cost' : 'Hide cost', run: () => flip('cost') },
-      { label: hide.has('gen') ? 'Show generation details' : 'Hide generation details', run: () => flip('gen') },
-      { label: hide.has('views') ? 'Show character sheets and angles' : 'Hide character sheets and angles', run: () => flip('views') },
-      { label: hide.has('ids') ? 'Show tool IDs' : 'Hide tool IDs', run: () => flip('ids') },
-      { label: hide.has('rules') ? 'Show the show rules' : 'Hide the show rules', run: () => flip('rules') },
-      'sep',
+      { label: 'Shot codes…', run: () => { this.codesOpen = true; setPref('prodTab', 'shots'); this.render().then(() => this.el.querySelector('.pd-code-input')?.focus()); } },
       { label: 'Prices…', run: () => this.pricesDialog() },
       this.piece.fields?.videoTools && !this.setTools.length && 'sep',
       this.piece.fields?.videoTools && !this.setTools.length && { label: 'Put the video tools away', run: () => this.setVideoTools(false) }

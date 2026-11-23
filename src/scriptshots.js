@@ -31,7 +31,8 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { getEntry, getMany, putEntries } from './db.js';
 import { plain as make } from './dom.js';
 import { addFile, fileUrl, thumbUrl, isImage } from './files.js';
-import { shotsUnder, newShot, shotCode, stillOf, withRenders, isVideo } from './production.js';
+import { shotsUnder, newShot, shotCode, stillOf, withRenders, isVideo, isFilmed, gotIt, shotStatus } from './production.js';
+import { stageSetOf } from './library.js';
 import { snap, resolve, linesIn, inOrder, covering, bareLines, lanes, placeAmong } from './shotlines.js';
 import { scenesOf } from './woven.js';
 import { holdStill } from './steady.js';
@@ -269,6 +270,8 @@ export class ScriptShots {
     for (const list of lists) for (const sh of list) for (const t of sh.fields?.tries || []) for (const id of t.files || []) if (!this.kinds.has(id)) files.add(id);
     if (files.size) for (const f of (await getMany([...files])).filter(Boolean)) this.kinds.set(f.id, isVideo(f.fields?.type) ? 'video' : 'still');
     this.world = await this.hooks.world();
+    // How the film is made (filmed or generated), as Make sees it.
+    try { const set = stageSetOf(this.hooks.piece(), this.world); this.setId = set.own ? set.base : set.id; } catch { this.setId = null; }
     for (const a of anchors) {
       const was = (this.shots.get(a.eid) || []).map((s) => `${s.id}:${s.updated_at}`).join();
       const now = shots.get(a.eid).map((s) => `${s.id}:${s.updated_at}`).join();
@@ -693,6 +696,8 @@ export class ScriptShots {
       code: this.codeOf(sh, a),
       scene: sceneName(a),
       covers: this.coversText(sh, a),
+      status: shotStatus(sh, this.setId),
+      got: isFilmed(sh, this.setId) ? { on: gotIt(sh), set: (on) => this.setGot(sh.id, on) } : null,
       pic: this.pic(sh, true),
       close: closeBtn ? () => this.close() : null,
       edit: (patch) => { if ('text' in patch) sh.text = patch.text; if ('framing' in patch) sh.fields = { ...sh.fields, framing: patch.framing }; this.patch(sh); this.later(sh.id); },
@@ -702,6 +707,20 @@ export class ScriptShots {
       make: () => { this.flush(sh.id); this.hooks.openInMake(sh); },
       remove: () => this.remove(sh.id)
     });
+  }
+  // Got it, from the open shot: the same field Make's tick sets.
+  async setGot(id, on) {
+    await this.flush(id);
+    const fresh = await getEntry(id);
+    if (!fresh) return;
+    const fields = { ...fresh.fields };
+    if (on) fields.got = Date.now(); else delete fields.got;
+    const row = { ...fresh, fields, updated_at: Date.now() };
+    delete row._by;
+    await putEntries([row]);
+    const cur = this.find(id);
+    if (cur) { cur.sh.fields = fields; cur.sh.updated_at = row.updated_at; }
+    this.showOpen?.();
   }
   // What happens and framing change on the frames as you type: no redraw.
   patch(sh) {

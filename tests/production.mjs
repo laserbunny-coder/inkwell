@@ -211,8 +211,12 @@ try {
     await laptop.locator('#editor p[data-eid="pp_2"]').click();
     await laptop.keyboard.press('Control+Shift+S');
     await laptop.waitForSelector('html[data-view="production"] .pd-scene[data-scene="pp_1"]');
+    // Scenes go by their own names (here, with none given, their first words), never their slug lines; the slug sits faint beside.
     const titles = await laptop.locator('.pd-scene-title').allTextContents();
-    assert.deepEqual(titles, ['1INT. KITCHEN - MORNING', '2EXT. DOJO - DAY']);
+    assert.deepEqual(titles, ['Mother flips a pancake. Kenji sneaks', 'Rain. A stranger at the gate']);
+    assert.deepEqual(await laptop.locator('.pd-scene-n').allTextContents(), ['1', '2']);
+    assert.deepEqual(await laptop.locator('.pd-slugline').allTextContents(), ['INT. KITCHEN - MORNING', 'EXT. DOJO - DAY']);
+    assert.equal(await laptop.locator('.pd-codes').count(), 0, 'shot codes wait in ⋯');
     assert.deepEqual(await scene(laptop, 'pp_1').locator('.pd-chip:not(.add)').allTextContents(), ['Mom', 'Kenji', 'Kitchen'], 'Mom by another name, the kitchen in the heading');
     assert.deepEqual(await scene(laptop, 'pp_5').locator('.pd-chip:not(.add)').allTextContents(), ['Kenji'], 'Kenji by the name over his lines');
     assert.equal(await scene(laptop, 'pp_1').locator('.pd-notes li').textContent(), 'The apron must be the red one');
@@ -222,6 +226,8 @@ try {
   });
 
   await check('a piece code, then shots: codes that never change, 1A for one added between', async () => {
+    await laptop.locator('.gv-tools .more-btn').click();
+    await pick(laptop, 'Shot codes…');
     const pc = laptop.locator('.pd-code-input[aria-label="Piece code"]');
     await pc.fill('e01');
     await pc.press('Enter');
@@ -245,7 +251,9 @@ try {
     await laptop.keyboard.press('Enter');
     await sleep(400);
     await settle(laptop);
-    const codes = await scene(laptop, 'pp_1').locator('.pd-code').allTextContents();
+    // The row shows the short code; the full one is in file names, exports and ⋯.
+    assert.deepEqual(await scene(laptop, 'pp_1').locator('.pd-code').allTextContents(), ['1', '1A', '2']);
+    const codes = await scene(laptop, 'pp_1').locator('.pd-code').evaluateAll((els) => els.map((e) => e.dataset.code));
     assert.deepEqual(codes, ['NB-E01-S01-01', 'NB-E01-S01-01A', 'NB-E01-S01-02']);
     assert.equal(row('pr_reel').fields.code, 'E01');
     const s = shots();
@@ -420,22 +428,22 @@ try {
     await laptop.locator('.pd-dayform input[aria-label="Where"]').fill('Echo Park');
     await laptop.locator('.pd-dayform input[aria-label="Where"]').dispatchEvent('change');
     await sleep(300);
-    await laptop.locator('.pd-daypick .chip', { hasText: 'KITCHEN' }).click();
+    await laptop.locator('.pd-daypick .chip', { hasText: 'Mother burns' }).click();
     await sleep(400);
     const sheet = await laptop.locator('.pd-sheet').innerText();
     assert.match(sheet, /Call 7:30 am/);
     assert.match(sheet, /Echo Park/);
-    assert.match(sheet, /1\s+INT\. KITCHEN - MORNING/);
+    assert.match(sheet, /1\s+Mother burns a pancake[\s\S]{0,40}INT\. KITCHEN - MORNING/, 'the scene by its name, the slug small beside it');
     assert.match(sheet, /NB-E01-S01-01A\s+Pancake in the air/);
     assert.match(sheet, /WHO’S NEEDED\s+Mom: Short, calm, grey bun/i);
     assert.match(sheet.trim(), /WHO’S NEEDED\s+Mom: Short, calm, grey bun$/i, 'Kenji and the katana left the scene in its rewrite');
     assert.match(sheet, /The apron must be the red one/);
     assert.doesNotMatch(sheet, /DOJO/);
-    await laptop.locator('.pd-daypick .chip', { hasText: 'DOJO' }).click();
+    await laptop.locator('.pd-daypick .chip', { hasText: 'Rain. A stranger' }).click();
     await sleep(400);
     const both = await laptop.locator('.pd-sheet').innerText();
     assert.match(both, /WHO’S NEEDED\s+Mom: Short, calm, grey bun\s+Kenji\s+PROPS\s+Katana\s+WARDROBE\s+Red apron/i, JSON.stringify(both.slice(-300)));
-    await laptop.locator('.pd-daypick .chip', { hasText: 'DOJO' }).click();
+    await laptop.locator('.pd-daypick .chip', { hasText: 'Rain. A stranger' }).click();
     await sleep(400);
     await shot(laptop, 'production-callsheet');
     await laptop.locator('.pd-dayform .pill', { hasText: 'Make it a task' }).click();
@@ -507,7 +515,7 @@ try {
     await settle(other);
     await go(other, { view: 'production', id: 'pr_reel', tab: 'shots' });
     await other.waitForSelector('.pd-scene[data-scene="pp_1"] .pd-shot');
-    assert.deepEqual(await scene(other, 'pp_1').locator('.pd-code').allTextContents(), ['NB-E01-S01-01', 'NB-E01-S01-01A', 'NB-E01-S01-02']);
+    assert.deepEqual(await scene(other, 'pp_1').locator('.pd-code').evaluateAll((els) => els.map((e) => e.dataset.code)), ['NB-E01-S01-01', 'NB-E01-S01-01A', 'NB-E01-S01-02']);
     const id = await scene(other, 'pp_1').locator('.pd-shot').first().getAttribute('data-shot');
     await scene(other, 'pp_1').locator('.pd-shot').first().locator('.pd-toggle').click();
     await other.waitForSelector(`[data-shot="${id}"] .pd-render.starred img`, { timeout: 5000 });

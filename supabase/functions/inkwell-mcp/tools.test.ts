@@ -375,6 +375,16 @@ assert.equal(s1.generation.model, "Kling 3.0", "the piece's model for finals whe
 assert.equal(s1.generation.seconds, 4);
 assert.equal(s1.tries[0].files[0].url, "https://files.test/fi-s1?sig=1");
 assert.equal(pr.scenes[1].shots[0].made, "filmed live");
+// A filmed shot is Planned or Got it, and update_shot can tick it.
+assert.equal(pr.scenes[1].shots[0].got_it, false);
+assert.equal(pr.scenes[1].shots[0].stage, "planned");
+assert.ok(!("got_it" in pr.scenes[0].shots[0]), "a generated shot has no Got it");
+await call("update_shot", { shot_id: "sh-3", got_it: true });
+const gotPr = await call("production", { piece_id: "pr-reel" });
+assert.equal(gotPr.scenes[1].shots[0].got_it, true);
+assert.equal(gotPr.scenes[1].shots[0].stage, "got it");
+await call("update_shot", { shot_id: "sh-3", got_it: false });
+assert.equal((await call("production", { piece_id: "pr-reel" })).scenes[1].shots[0].got_it, false);
 // Estimate: shots 1 and 2 at Kling 3.0 ($0.08/s), 7 s, 2 tries; the live one isn't generated.
 assert.equal(pr.cost.estimate_usd, 1.12);
 assert.equal(pr.cost.prices_checked, "2026-11-03");

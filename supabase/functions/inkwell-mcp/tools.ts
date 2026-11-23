@@ -130,7 +130,7 @@ export const INSTRUCTIONS = `Inkwell is this person's own writing app and notebo
 - For bigger tidying (two worlds that are the same thing, a tag that means the same as another, a line that belongs on a bible page, an idea for the Drawer, a world in the wrong area, a name that's a whole sentence), don't do it: suggest it with suggest_tidy. It waits on their tidy pass in the app until they tick yes or no. A weekly tidy pass is also made for them early each Monday.
 - Keep to the person's voice and don't add more than they asked for.
 - Say what you added and where, in plain words, since the person sees your reply, not the tool calls.
-- Production (AI video): a piece's shots, each with a code that never changes (NB-E01-S03A-04), prompts for its still and its video, how it's generated (model, seconds, first and last frame, the line it's timed to, and a group when several shots are made in one generation), and its tries with a star on the one that worked. The world's kit holds each character's sheet (front, three-quarter, side, back), each location's lighting line and angles, the show rules (frame, frame rate, always and never) and each tool's ID for an element (Higgsfield Soul ID or Element, ComfyUI LoRA, Kling reference). To make shots in another tool (Higgsfield, Kling, ComfyUI…): read them with production, write prompts that use the kit's looks, lighting, rules and tool IDs, and pass the reference picture links along. Each shot can sit on the lines of the script it covers (a lined script): production gives each shot's lines and each scene's lines without a shot, and update_shot sets them (first_line, last_line), so put suggested shots on their lines. Bring results back with add_try (the file or link, model, settings, seconds, cost), star the one that worked with star, and keep prompts or generation details current with update_shot. Old prompts are never lost: they stay with the try that used them. Prices (prices, update_prices) feed the cost estimate on the Make tab; when you check prices, update them with the source. Each character and place also has a look wall (looks): every version of its look, with one starred as the pick. Bring new versions home with add_look (by the element's id or name), star one with pick_look only when the person asks, and use the pick's link as the lead reference whenever you generate with that element.
+- Production (AI video): a piece's shots, each with a code that never changes (NB-E01-S03A-04), prompts for its still and its video, how it's generated (model, seconds, first and last frame, the line it's timed to, and a group when several shots are made in one generation), and its tries with a star on the one that worked. The world's kit holds each character's sheet (front, three-quarter, side, back), each location's lighting line and angles, the show rules (frame, frame rate, always and never) and each tool's ID for an element (Higgsfield Soul ID or Element, ComfyUI LoRA, Kling reference). To make shots in another tool (Higgsfield, Kling, ComfyUI…): read them with production, write prompts that use the kit's looks, lighting, rules and tool IDs, and pass the reference picture links along. Each shot can sit on the lines of the script it covers (a lined script): production gives each shot's lines and each scene's lines without a shot, and update_shot sets them (first_line, last_line), so put suggested shots on their lines. A filmed shot (made: filmed live) is planned or got it: when the person says it's shot, tick it with update_shot got_it. Bring results back with add_try (the file or link, model, settings, seconds, cost), star the one that worked with star, and keep prompts or generation details current with update_shot. Old prompts are never lost: they stay with the try that used them. Prices (prices, update_prices) feed the cost estimate on the Make tab; when you check prices, update them with the source. Each character and place also has a look wall (looks): every version of its look, with one starred as the pick. Bring new versions home with add_look (by the element's id or name), star one with pick_look only when the person asks, and use the pick's link as the lead reference whenever you generate with that element.
 - Tasks and plans live in Inkwell. A task is an ordinary line with a day (or, with no exact day yet, a loose when: this week, next week, a month, or later), an estimate and a tick, and it lives where it was written: on a project's Steps page, on a daily page, or on the Tasks page for ones added straight to a plan. Today's page gathers every task on that day at its top (the person reorders it there), with Week, Weeks ahead and Pace beside it. list_tasks reads them (by day range, by project, done since a day); add_task adds one (put it in its project when it belongs to one, with notes as lines under it and a link back to where it came from; whenever it is work on a piece or a bible page, always set for to that piece or page, without being asked, so its page opens straight onto the work); update_task moves it to another day, sets its estimate, makes it repeat or a habit, a stretch of work (until) or a date to hit (mark, hard when it can't move: never move a hard one); time puts it at a time on its day's Calendar (the hand-arranged day view; length_minutes is how long the block is), and null takes it off; order_day sets a day's order; mark_done ticks it; delete_line and rename_line delete or reword one when the person asks, and a repeating one comes round again on its next day. Each change is recorded as yours with an Undo. Keep a week's estimated hours within the person's free hours (free_hours). Habits have no hours. Only tasks owned by the person (owner me) are on their day; others are planning lines.
 - Needs you: when this chat needs the person (a decision only they can make, work blocked on them, something ready to review or try), raise_needs_you with one short line, the kind, the Claude project's name and this chat's link; raising again from the same link updates it; clear_needs_you once it no longer needs them. It shows in Inkwell's Catch-up and on Today.
 - Setting up his day by talking: first_light reads or sets where each morning Bible reading track is; training reads the sessions and sets the round, the next session, or which session falls on which weekday. The exercises and their amounts are lines on the Training page (pg_training): read it before suggesting changes.
@@ -451,6 +451,7 @@ export const TOOLS: Record<string, unknown>[] = [
         group_with_next: { type: ["boolean", "string"], description: "true: made in one generation with the next shot in the scene (a multi-shot clip). false: made on its own." },
         first_line: str("The first line of its scene the shot covers (the lined script): a line id from production, or the line's words. An empty string takes the shot off its lines."),
         last_line: str("The last line it covers (id or words; leave out for one line). A name and what's said under it count as one line."),
+        got_it: { type: ["boolean", "string"], description: "A filmed shot only: true when it's in the can (Got it), false when it still needs shooting." },
       },
     },
   },
@@ -1951,6 +1952,10 @@ async function production(args: Record<string, unknown>, db: Db) {
   }
   const prod = (world?.fields?.production ?? {}) as Record<string, any>;
   const show = prod.code, pc = piece.fields?.code;
+  // A film shot with a camera (the Live action workflow, or one made from it):
+  // its shots are filmed unless one says otherwise.
+  const setId = String(piece.fields?.stageSet || (world?.fields?.stageFor as any)?.[typeOf(piece)] || "");
+  const liveFilm = setId === "live" || (shape.byId.get(setId)?.fields as any)?.base === "live";
   const { list } = await priceRow(db);
   // Which files are where, then one batch of links.
   const fileIds = new Set<string>();
@@ -1996,7 +2001,7 @@ async function production(args: Record<string, unknown>, db: Db) {
       const f = (sh.fields ?? {}) as Record<string, any>;
       const g = (f.gen ?? {}) as Record<string, any>;
       const group = f.group as string | undefined;
-      const made = f.made || "gen";
+      const made = f.made || (liveFilm ? "live" : "gen");
       if (made !== "live") {
         const lead = !group || group !== prevGroup;
         if (lead) {
@@ -2014,7 +2019,9 @@ async function production(args: Record<string, unknown>, db: Db) {
         id: sh.id, code: shotCode({ show, piece: pc, scene: s.number, shot: f.n }), what: sh.text || "", framing: f.framing || "",
         lines: (() => { const r = linesOf(sh, s.paras); return r ? { first: lineOut(s.paras[r.from]), last: lineOut(s.paras[r.to]), count: countLines(s.paras, r.from, r.to) } : "not on any lines yet"; })(),
         ...(made !== "gen" ? { made: made === "live" ? "filmed live" : "generated from footage" } : {}),
-        stage: stageOf(f),
+        // A filmed shot is Planned or Got it; a generated one has its five stages.
+        ...(made === "live" ? { got_it: !!f.got, ...(f.got ? { got_on: localDate(new Date(Number(f.got)).toISOString(), tz) } : {}) } : {}),
+        stage: made === "live" ? (f.got ? "got it" : "planned") : stageOf(f),
         still_prompt: f.still || "", video_prompt: f.video || "",
         generation: {
           model: g.model || pg.model || "", seconds: secsOf(sh),
@@ -2150,7 +2157,9 @@ async function updateShot(args: Record<string, unknown>, db: Db) {
     }
     touched.push("lines");
   }
-  if (still === undefined && video === undefined && !touched.length && group === undefined) throw new Bad("Nothing to change: give prompts, generation details or lines.");
+  let got: boolean | undefined;
+  if (args.got_it !== undefined && args.got_it !== "") got = boolArg(args.got_it, true);
+  if (still === undefined && video === undefined && !touched.length && group === undefined && got === undefined) throw new Bad("Nothing to change: give prompts, generation details, lines or got_it.");
   // Grouping touches the next shot too.
   let next: Entry | undefined;
   if (group !== undefined) {
@@ -2173,6 +2182,8 @@ async function updateShot(args: Record<string, unknown>, db: Db) {
     }
     if (group === true) { gid = (out.group as string) || (next!.fields?.group as string) || newId("gr"); out = { ...out, group: gid }; }
     if (group === false) { out = { ...out }; delete out.group; }
+    if (got === true) out = { ...out, got: out.got || Date.now() };
+    if (got === false) { out = { ...out }; delete out.got; }
     return { ...out, edited_by: CLAUDE };
   });
   if (group === true && next && next.fields?.group !== gid) await changeShot(db, next.id, (f) => ({ ...f, group: gid }));

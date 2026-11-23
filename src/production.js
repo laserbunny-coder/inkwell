@@ -258,6 +258,15 @@ export const MADE_BY = [
 ];
 export const madeBy = (shot, setId) => shot?.fields?.made || (setId === 'live' ? 'live' : 'gen');
 export const needsFootage = (made) => made === 'ref' || made === 'live';
+// Filmed or generated, the one split Make follows (Studio polish, Nov 22
+// 2026): a filmed shot is Planned or Got it; a generated one (from words or
+// from reference footage) goes through the five stages.
+export const isFilmed = (shot, setId) => madeBy(shot, setId) === 'live';
+export const gotIt = (shot) => !!shot?.fields?.got;
+export function shotStatus(shot, setId) {
+  if (isFilmed(shot, setId)) return gotIt(shot) ? 'Got it' : 'Planned';
+  return SHOT_STAGES.find((x) => x.id === shotStage(shot))?.label || 'Planned';
+}
 
 // A scene's voices: recorded in a session, generated, or some of each. The
 // project's choice unless the scene says otherwise.
