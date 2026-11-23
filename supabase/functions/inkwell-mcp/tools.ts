@@ -25,7 +25,7 @@
 
 import { oneSuggestion, type Item as TidyItem, type Row as TidyRow } from "../_shared/tidy.ts";
 import { Bad as LogBad, type Db as LogDb, type Note, runNeeds, runUpdates, TOOLS as LOG_SOURCE, type Update } from "../mcp/tools.ts";
-import { placeIn, todays as readingToday, TRACKS as READING, weekFrom, weekWords } from "./reading.ts";
+import { placeIn, todays as readingToday, tracksOf, planOf, PLANS, weekFrom, weekWords } from "./reading.ts";
 import { addDays, blank, daysIn, dow, dueDay, firstOn, isRepeat, isStretch, repeatWord, roll, spanOf, spanWord, type RepeatRule, type Task, taskOf } from "./taskrules.ts";
 
 /** One Inkwell entry, as stored in writing_entries. */
@@ -696,7 +696,7 @@ TOOLS.push(
   {
     name: "first_light",
     title: "The morning Bible reading",
-    description: "The person's morning reading in Inkwell (ESV): four tracks that each go round by themselves, 2 chapters Old Testament (without Psalms, Proverbs and Ecclesiastes), 1 Psalm, 1 Wisdom (Proverbs, then Ecclesiastes), 2 New Testament. A place only moves when they say they read. With no arguments: where each track is, and today's six chapters. To set where they are (only when they tell you), pass any track as the next chapter to read, such as \"2 Kings 4\"; a book alone starts at chapter 1. The app shows the new places at once.",
+    description: "The person's morning reading in Inkwell (ESV), if they turned Bible reading on in Look > Add-ons. The plan they picked is one of: Four tracks (each going round by itself: 2 chapters Old Testament without Psalms, Proverbs and Ecclesiastes, 1 Psalm, 1 Wisdom (Proverbs, then Ecclesiastes), 2 New Testament); Old and New Testament (3 Old Testament, 1 New Testament); One chapter a day (Genesis to Revelation). A place only moves when they say they read. With no arguments: the plan, where each track is, and today's chapters. Each plan takes only its own tracks: Four tracks all four, Old and New Testament old_testament and new_testament, One chapter a day bible. To set where they are (only when they tell you), pass any track as the next chapter to read, such as \"2 Kings 4\"; a book alone starts at chapter 1. The app shows the new places at once.",
     inputSchema: {
       type: "object",
       properties: {
@@ -704,6 +704,7 @@ TOOLS.push(
         psalms: str("The next Psalm, such as \"Psalm 23\"."),
         wisdom: str("The next chapter of Proverbs or Ecclesiastes."),
         new_testament: str("The next New Testament chapter, such as \"John 1\"."),
+        bible: str("One chapter a day only: the next chapter, such as \"Exodus 3\"."),
       },
     },
   },
@@ -2891,10 +2892,14 @@ async function firstLight(args: Record<string, unknown>, db: Db) {
   const was = { ot: 0, ps: 0, wi: 0, nt: 0, read: null, skip: null, ...((s && !s.deleted && s.fields?.reading) || {}) } as Record<string, unknown>;
   const next = { ...was };
   let set = false;
-  for (const [arg, k] of Object.entries(READ_ARGS)) {
+  const plan = planOf(was);
+  const tracks = tracksOf(was);
+  // Other plans (add-ons): old_testament / new_testament name their tracks; one chapter a day is "bible".
+  const args2: Record<string, string> = plan === "four" ? READ_ARGS : plan === "year" ? { old_testament: "yo", new_testament: "yn" } : { bible: "ch" };
+  for (const [arg, k] of Object.entries(args2)) {
     const v = args[arg];
     if (v === undefined || v === null || v === "") continue;
-    const got = placeIn(k, v);
+    const got = placeIn(k, v, tracks);
     if ("error" in got) throw new Bad(got.error);
     next[k] = got.place;
     set = true;
@@ -2906,16 +2911,19 @@ async function firstLight(args: Record<string, unknown>, db: Db) {
   }
   const tz = await db.timeZone();
   const six = readingToday(next);
-  const tracks = Object.fromEntries(READING.map((t) => [t.name, `next: ${six[READ_START[t.k]]}`]));
+  let at = 0;
+  const starts: Record<string, number> = {};
+  for (const t of tracks) { starts[t.k] = at; at += t.per; }
+  const where = Object.fromEntries(tracks.map((t) => [t.name, `next: ${six[starts[t.k]]}`]));
   return {
     ...(set ? { set: true, before: readingToday(was) } : {}),
-    tracks,
+    plan: PLANS[plan].name,
+    tracks: where,
     todays_chapters: six,
     read_today: next.read === today(tz),
     note: "Each chapter name in the app links to esv.org until the ESV key is approved; then the text shows in the app.",
   };
 }
-const READ_START: Record<string, number> = { ot: 0, ps: 2, wi: 3, nt: 4 };
 
 const TRAINING_PAGE = "pg_training";
 

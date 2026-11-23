@@ -22,7 +22,8 @@ import { make } from './dom.js';
 import { deskTraining, TRAINING_PAGE, PLAN_URL, trainingToday, addTrainingLine, seedTraining, trainingLog } from './training.js';
 import { streakBlock, chartBox } from './trainview.js';
 import { GOALS } from './trainstats.js';
-import { readingLog, readReading, saveReading, toggledDay } from './firstlight.js';
+import { readingLog, readReading, saveReading, toggledDay, PLANS, planOf } from './firstlight.js';
+import { addonOn } from './addons.js';
 import { readBlock } from './readview.js';
 
 export const DESK_ID = 'settings-desk';
@@ -773,6 +774,7 @@ export class DeskPage {
   // ones waiting their turn, and the next session; the streak and a chart
   // behind each goal (Part 7), each with its own switch in Look.
   async readingBlock() {
+    if (!(await addonOn('bible'))) return null;
     const root = document.documentElement;
     const streak = true;
     const progress = true;
@@ -780,7 +782,7 @@ export class DeskPage {
     const st = await readingLog(await loadTasks(), today);
     const sec = make('section', 'dk-sec dk-reading');
     const h = make('h2', 'dk-label', 'Reading');
-    h.append(make('span', 'dk-label-more', 'four tracks'));
+    h.append(make('span', 'dk-label-more', PLANS[planOf(st)].name.toLowerCase()));
     sec.append(h);
     // A day in the past week, tapped: read or not, for the days he read on
     // paper and never opened the app. His places stay where they are.
@@ -797,12 +799,13 @@ export class DeskPage {
   }
 
   async trainingBlock() {
+    if (!(await addonOn('training'))) return null;
     await seedTraining();
     const t = await deskTraining();
     if (!t) return null;
     const sec = make('section', 'dk-sec dk-train');
     const h = make('h2', 'dk-label', 'Training');
-    h.append(make('span', 'dk-label-more', 'four goals, and the handstand'));
+    h.append(make('span', 'dk-label-more', t.own ? 'your sessions' : 'four goals, and the handstand'));
     sec.append(h);
     const root = document.documentElement;
     const streakOn = true;
@@ -827,8 +830,8 @@ export class DeskPage {
       // One open at a time; tapping again closes it.
       r.addEventListener('click', () => { this.openGoal = this.openGoal === k ? null : k; this.render({ now: this.now, failed: false }); });
     }
-    sec.append(list);
-    sec.append(make('p', 'hint dk-wait', `Waiting their turn: ${t.waiting.join(', ')}.`));
+    if (t.goals.length) sec.append(list);
+    if (t.waiting.length) sec.append(make('p', 'hint dk-wait', `Waiting their turn: ${t.waiting.join(', ')}.`));
     const foot = make('p', 'hint dk-tnext');
     foot.append(`Next session: ${t.next || 'none'}. `);
     const today = isoOf();
@@ -842,7 +845,8 @@ export class DeskPage {
     open.addEventListener('click', () => this.open?.(TRAINING_PAGE));
     const plan = make('a', 'dk-link', 'your training plan');
     plan.href = PLAN_URL; plan.target = '_blank'; plan.rel = 'noopener';
-    foot.append(open, ' · ', plan);
+    if (t.own) foot.append(open);
+    else foot.append(open, ' · ', plan);
     sec.append(foot);
     return sec;
   }

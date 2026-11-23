@@ -8,7 +8,7 @@
 
 import { make } from './dom.js';
 import { autoOn } from './auto.js';
-import { TRACKS, posOf, placeOf, readReading, saveReading, todays, advanced, readYesterday, missedYesterday, esvLink, keyState, kept, chapter, tickBibleHabit } from './firstlight.js';
+import { tracksOf, posOf, placeOf, readReading, saveReading, todays, advanced, readYesterday, missedYesterday, esvLink, keyState, kept, chapter, tickBibleHabit } from './firstlight.js';
 import { readStreak, doneLine } from './readstats.js';
 import { tickLight, lightToday, dropLine } from './firstlight.js';
 
@@ -133,7 +133,7 @@ export class LightNow {
   setView(mid) {
     mid.append(make('p', 'now-eyebrow', 'Bible reading'), make('h1', 'now-thing sm', 'Where are you in each?'));
     const form = make('form', 'now-tracks');
-    for (const t of TRACKS) {
+    for (const t of tracksOf(this.st)) {
       const [b, ch] = posOf(t.books, this.st[t.k] || 0);
       const row = make('div', 'now-track');
       const lab = make('span', 'now-trk', t.name);
@@ -230,7 +230,7 @@ export class LightNow {
     const was = { ...this.st };
     const next = { ...this.st };
     const form = this.p.sheet.querySelector('.now-tracks');
-    for (const t of TRACKS) {
+    for (const t of tracksOf(this.st)) {
       const sel = form?.querySelector(`select[data-trk="${t.k}"]`);
       const num = form?.querySelector(`input[data-trk="${t.k}"]`);
       if (!sel || !num) continue;

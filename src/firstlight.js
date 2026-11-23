@@ -27,6 +27,19 @@ export const TRACKS = [
   { k: 'wi', name: 'Wisdom', books: [['Proverbs', 31], ['Ecclesiastes', 12]], per: 1 },
   { k: 'nt', name: 'New Testament', books: NT, per: 2 }
 ];
+// The whole Old Testament in its usual order (Psalms to Ecclesiastes after Job).
+const JOB = OT.findIndex(([b]) => b === 'Job') + 1;
+const OT_ALL = [...OT.slice(0, JOB), ['Psalms', 150], ['Proverbs', 31], ['Ecclesiastes', 12], ...OT.slice(JOB)];
+// Reading plans (Nov 23 2026, add-ons): picked when Bible reading is turned
+// on, kept in fields.reading.plan. Each plan's tracks have their own keys, so
+// switching plans keeps every place. 'four' is Michael's, and the default.
+export const PLANS = {
+  four: { name: 'Four tracks', words: '2 Old Testament, 1 Psalm, 1 Proverbs or Ecclesiastes and 2 New Testament chapters a day', tracks: TRACKS },
+  year: { name: 'Old and New Testament', words: '3 Old Testament and 1 New Testament chapter a day: the whole Bible in about a year', tracks: [{ k: 'yo', name: 'Old Testament', books: OT_ALL, per: 3 }, { k: 'yn', name: 'New Testament', books: NT, per: 1 }] },
+  chapter: { name: 'One chapter a day', words: 'Genesis to Revelation, one chapter a day', tracks: [{ k: 'ch', name: 'The Bible', books: [...OT_ALL, ...NT], per: 1 }] }
+};
+export const planOf = (st) => (PLANS[st?.plan] ? st.plan : 'four');
+export const tracksOf = (st) => PLANS[planOf(st)].tracks;
 
 const total = (books) => books.reduce((a, b) => a + b[1], 0);
 // A place (chapters from the start) → [book index, chapter], going round.
@@ -51,17 +64,17 @@ export async function readReading() {
 }
 export async function saveReading(next) { return savePlanSettings({ reading: next }); }
 
-// Today's six chapters, in order.
+// Today's chapters, in order (six on the four tracks).
 export function todays(st) {
   const out = [];
-  for (const t of TRACKS) for (let n = 0; n < t.per; n++) { const [b, ch] = posOf(t.books, (st[t.k] || 0) + n); out.push(`${t.books[b][0]} ${ch}`); }
+  for (const t of tracksOf(st)) for (let n = 0; n < t.per; n++) { const [b, ch] = posOf(t.books, (st[t.k] || 0) + n); out.push(`${t.books[b][0]} ${ch}`); }
   return out;
 }
 // Read: each track moves on by its share, round to the start at its end
 // (which counts a time through), and the day goes in the log (Part 8).
 function moved(st) {
   const next = { ...st, rounds: { ...(st.rounds || {}) } };
-  for (const t of TRACKS) {
+  for (const t of tracksOf(st)) {
     const at = (st[t.k] || 0) + t.per;
     if (at >= total(t.books)) next.rounds[t.k] = (next.rounds[t.k] || 0) + 1;
     next[t.k] = at % total(t.books);
@@ -87,7 +100,7 @@ export function toggledDay(st, day, today = isoOf()) {
 export const totalOf = (t) => total(t.books);
 // Each track: { k, name, words, pos, total } for the Desk.
 export function trackRows(st) {
-  return TRACKS.map((t) => {
+  return tracksOf(st).map((t) => {
     const pos = st[t.k] || 0;
     const [b, ch] = posOf(t.books, pos);
     return { k: t.k, name: t.name, pos, total: total(t.books), words: trackWords(t.books[b][0], ch, t.books.length, total(t.books), st.rounds?.[t.k] || 0) };

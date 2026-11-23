@@ -445,6 +445,16 @@ button.wv-mk:hover { background: var(--tint); }
 .ps-list { display: flex; flex-direction: column; gap: 2px; }
 .ps-list .switch { padding: 7px 0; font-size: 14px; border-bottom: 1px solid var(--line); }
 .ps-list .switch:last-child { border-bottom: 0; }
+/* Add-ons (Nov 23 2026): a switch, a line on what it is, the reading plans under Bible reading. */
+.ps-addons { display: flex; flex-direction: column; gap: 4px; }
+.ps-addons .switch { padding: 8px 0 0; font-size: 14px; }
+.ps-addon-about { margin: 0 0 6px; }
+.ps-plans { display: flex; flex-direction: column; gap: 2px; margin: 0 0 8px 4px; }
+.ps-plan { display: flex; gap: 8px; align-items: flex-start; padding: 6px 4px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.ps-plan:hover { background: var(--hover, rgba(127,127,127,.08)); }
+.ps-plan input { margin-top: 3px; }
+.ps-plan-t { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ps-plan-t .hint { font-size: 12.5px; }
 .font-pick { display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--muted); }
 .font-groups { display: flex; gap: 2px; }
 .font-groups button { border: 0; background: transparent; padding: 3px 10px; border-radius: 99px; color: var(--muted); font-size: 12px; }
