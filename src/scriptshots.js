@@ -37,7 +37,8 @@ import { snap, resolve, linesIn, inOrder, covering, bareLines, lanes, placeAmong
 import { scenesOf } from './woven.js';
 import { holdStill } from './steady.js';
 import { shotCard } from './shotcard.js';
-import { picturesOnScene, picturesOnShot, picturesText } from './picturesin.js';
+import { picturesOnScene, picturesOnShot, picturesText, pictureSources } from './picturesin.js';
+import { popMenu } from './menu.js';
 import './scriptshots.css';
 import { screenKind, sceneName } from './scenename.js';
 
@@ -117,6 +118,27 @@ export class ScriptShots {
     const picked = () => setTimeout(() => this.pickLines(), 0);
     dom.addEventListener('mouseup', picked);
     dom.addEventListener('touchend', picked);
+    // Pictures dragged from the computer's folders onto a line: a shot there.
+    dom.addEventListener('dragover', (e) => {
+      if (!this.picsDragged(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      this.showDrop(this.lineAt(e.clientX, e.clientY), null, this.picked ?? (this.picked = this.lines));
+    }, true);
+    dom.addEventListener('dragleave', (e) => { if (!dom.contains(e.relatedTarget)) this.endDrop(); }, true);
+    dom.addEventListener('drop', (e) => {
+      if (!this.picsDragged(e)) return;
+      const files = [...(e.dataTransfer.files || [])].filter((f) => isImage(f.type));
+      const hit = this.lineAt(e.clientX, e.clientY);
+      const picked = this.picked;
+      this.endDrop();
+      if (!files.length || !hit) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.picturesOnLines(hit.a, this.dropSpan(hit, picked), files);
+    }, true);
+    // While a frame is held and dragged on a phone, the page doesn't scroll.
+    document.addEventListener('touchmove', (e) => { if (this.dragging) e.preventDefault(); }, { passive: false });
     dom.addEventListener('keydown', (e) => { if (this.lines && !['Shift', 'Alt', 'Control', 'Meta'].includes(e.key)) this.dropLines(); });
     // A click anywhere else lets go of the picked shot; nothing else changes.
     document.addEventListener('click', (e) => {
@@ -320,7 +342,9 @@ export class ScriptShots {
     }
     b.classList.toggle('sel', this.sel === sh.id);
     b.addEventListener('mousedown', (e) => e.preventDefault()); // the caret stays where it was
-    b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); this.clickShot(sh.id); });
+    b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); if (Date.now() - (this.dropped || 0) < 500) return; this.clickShot(sh.id); });
+    b.addEventListener('pointerdown', (e) => this.dragShot(e, sh, a, b));
+    b.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); }); // a held frame is being dragged, not asking for a menu
     b.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); this.sel = this.last = sh.id; this.showOpen(sh.id); } });
     b.addEventListener('mouseenter', () => { this.hover = sh.id; this.paint(); });
     b.addEventListener('mouseleave', () => { if (this.hover === sh.id) { this.hover = null; this.paint(); } });
@@ -556,13 +580,9 @@ export class ScriptShots {
 
   // The line (or lines) the caret or the picked words are on, in one scene.
   pickLines() {
-    if (this.mode === 'off' || !this.pieceId) return;
+    if (this.mode === 'off' || !this.pieceId || this.dragging || Date.now() - (this.dropped || 0) < 500) return;
     const { from, to } = this.editor.state.selection;
-    const anchors = this.anchors();
-    const where = (pos) => {
-      for (const a of anchors) { const i = a.paras.findIndex((p) => pos >= p.pos && pos < p.end); if (i >= 0) return { a, i }; }
-      return null;
-    };
+    const where = (pos) => this.lineAtPos(pos);
     const A = where(from);
     if (!A) { this.dropLines(); return; }
     const B = where(Math.max(from, to - 1));
@@ -592,13 +612,25 @@ export class ScriptShots {
   placeBar(box, textR, sheet) {
     const bar = this.bar;
     if (!box) { bar.hidden = true; bar.replaceChildren(); delete bar.dataset.sig; return; }
+    if (this.dragging) { bar.hidden = true; return; }
     const { a } = box;
     const L = this.lines;
-    const btn = (label, run) => { const b = make('button', '', label); b.type = 'button'; b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); run(); }); return b; };
-    const kids = [btn(`+ Shot for ${linesIn(a.paras, L.from, L.to) === 1 ? 'this line' : 'these lines'}`, () => this.add(a.eid, { from: L.from, to: L.to }))];
+    // What the buttons act on is read when they're pressed: the bar is kept
+    // while its words stay the same, and the picked lines may have changed.
+    const now = () => { const l = this.lines; const at = l && this.anchors().find((x) => x.eid === l.eid); return at ? { at, l } : null; };
+    const btn = (label, run) => { const b = make('button', '', label); b.type = 'button'; b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); const n = now(); if (n) run(n); }); return b; };
+    const kids = [btn(`+ Shot for ${linesIn(a.paras, L.from, L.to) === 1 ? 'this line' : 'these lines'}`, ({ at, l }) => this.add(at.eid, { from: l.from, to: l.to }))];
+    // + Picture: a picture straight onto the picked lines (the phone's gallery).
+    const pic = btn('+ Picture', (n) => this.choosePicture(pic, (files, meta) => this.picturesOnLines(n.at, n.l, files, meta)));
+    pic.classList.add('ss-barpic');
+    pic.title = 'A picture for these lines: it becomes a shot covering them';
+    kids.push(pic);
     const mover = this.find(this.open || this.last);
     const r = mover ? this.span(mover.sh, mover.a) : null;
-    if (mover && mover.a.eid === a.eid && !(r && r.from === L.from && r.to === L.to)) kids.push(btn(`Move shot ${mover.sh.fields?.n || ''} here`, () => this.moveTo(mover.sh.id, a, L)));
+    if (mover && mover.a.eid === a.eid && !(r && r.from === L.from && r.to === L.to)) {
+      const put = btn(`${r ? 'Move' : 'Put'} shot ${mover.sh.fields?.n || ''} here`, ({ at, l }) => { this.placing = null; this.moveTo(mover.sh.id, at, l); });
+      if (this.placing === mover.sh.id || !r) kids.unshift(put); else kids.push(put);
+    }
     const sig = kids.map((k) => k.textContent).join('|');
     if (bar.dataset.sig !== sig) { bar.replaceChildren(...kids); bar.dataset.sig = sig; }
     bar.hidden = false;
@@ -729,6 +761,7 @@ export class ScriptShots {
       done: () => { this.flush(sh.id); this.close(); },
       blur: () => this.flush(sh.id),
       picture: (files) => this.addPictures(sh.id, files),
+      place: { label: this.span(sh, a) ? 'Move to other lines' : 'Put on lines', run: () => this.startPlacing(sh.id) },
       make: () => { this.flush(sh.id); this.hooks.openInMake(sh); },
       remove: () => this.remove(sh.id)
     });
@@ -774,6 +807,166 @@ export class ScriptShots {
 
   // A new shot: on the lines picked (between the shots around it, so one put
   // between 3 and 4 is 3A), or at the scene line.
+  // ---------- pictures and text, joined by hand ----------
+
+  // The line at a place in the text, or under a point on the screen: { a, i }.
+  lineAtPos(pos) {
+    for (const a of this.anchors()) { const i = a.paras.findIndex((p) => pos >= p.pos && pos < p.end); if (i >= 0) return { a, i }; }
+    return null;
+  }
+  lineAt(x, y) {
+    if (this.mode === 'off') return null;
+    const at = this.editor.view.posAtCoords({ left: x, top: y });
+    return at ? this.lineAtPos(at.inside >= 0 ? at.inside : at.pos) || this.lineAtPos(at.pos) : null;
+  }
+  // A drop on lines that were picked lands on all of them; anywhere else, on
+  // the line under it (a name and its speech count as one).
+  dropSpan(hit, picked) {
+    if (picked && picked.eid === hit.a.eid && hit.i >= picked.from && hit.i <= picked.to) return { from: picked.from, to: picked.to };
+    return snap(hit.a.paras, hit.i, hit.i);
+  }
+  // Lights the lines a drop would land on (only in `eid`'s scene, when given).
+  showDrop(hit, eid, picked) {
+    const ok = hit && (!eid || hit.a.eid === eid);
+    const next = ok ? { eid: hit.a.eid, ...this.dropSpan(hit, picked) } : null;
+    const same = (next && this.lines && next.eid === this.lines.eid && next.from === this.lines.from && next.to === this.lines.to) || (!next && !this.lines);
+    this.dragging = this.dragging || 'files';
+    if (!same) { this.lines = next; this.lit = []; this.paint(); }
+    document.documentElement.classList.toggle('ss-dropping', true);
+  }
+  endDrop() {
+    if (this.dragging === 'files') this.dragging = null;
+    this.picked = undefined;
+    document.documentElement.classList.remove('ss-dropping');
+    if (this.lines) { this.lines = null; this.paint(); }
+  }
+  picsDragged(e) {
+    if (this.mode === 'off' || !this.pieceId) return false;
+    const items = [...(e.dataTransfer?.items || [])];
+    return items.some((it) => it.kind === 'file' && /^image\//.test(it.type || '')) || (!items.length && [...(e.dataTransfer?.types || [])].includes('Files'));
+  }
+
+  // Pictures onto lines: one new shot covering them, the first picture its still.
+  // The one way pictures land on lines, whatever made them.
+  async picturesOnLines(a, span, files, meta = null) {
+    const pics = files.filter((f) => isImage(f.type));
+    if (!pics.length) { if (files.length) this.hooks.toast('Only pictures go on a frame here. Videos go in Make.'); return; }
+    const sh = await this.add(a.eid, { from: span.from, to: span.to, focus: false });
+    const r = await picturesOnShot(sh.id, pics, meta);
+    await this.reload();
+    this.showOpen(sh.id);
+    const cur = this.find(sh.id);
+    const code = cur ? this.codeOf(cur.sh, cur.a) : '';
+    const n = cur ? linesIn(cur.a.paras, span.from, span.to) : 1;
+    this.hooks.toast(`Shot ${code} on ${plural(n, 'line')}, with ${r.added === 1 ? 'its picture' : `${r.added} pictures`}`, { label: 'Undo', run: async () => {
+      const now = await getEntry(sh.id);
+      if (now) await putEntries([{ ...now, deleted: true, updated_at: Date.now() }]);
+      if (this.open === sh.id) this.close();
+      await this.reload();
+    } });
+  }
+
+  // Where the picture comes from: straight to the only source there is
+  // today, a short menu once there are more (sketch, image model).
+  choosePicture(anchor, land) {
+    const run = async (src) => { const got = await src.pick(); const files = Array.isArray(got) ? got : got?.files || []; if (files.length) land(files, got?.meta || null); };
+    if (pictureSources.length === 1) { run(pictureSources[0]); return; }
+    popMenu(anchor, pictureSources.map((src) => ({ label: src.label, run: () => run(src) })));
+  }
+
+  // "Put on lines" from the open shot: it closes, you pick the lines, and
+  // the bar's first button puts it there.
+  startPlacing(id) {
+    const cur = this.find(id);
+    if (!cur) return;
+    this.close();
+    this.sel = this.last = this.placing = id;
+    this.paint();
+    const touch = this.kind() !== 'computer';
+    this.hooks.toast(`Now pick the lines in ${sceneName(cur.a)} for shot ${this.codeOf(cur.sh, cur.a)}${touch ? ' (hold a word, stretch the handles)' : ' (click, or Shift + click for several)'}, or drag the frame onto them`);
+  }
+
+  // A frame dragged onto lines covers them. With a mouse it starts on a
+  // small move; with a finger, after holding it still for a moment.
+  dragShot(e, sh, a, node) {
+    if (e.button > 0 || this.mode === 'off') return;
+    const touch = e.pointerType !== 'mouse';
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    let x = x0;
+    let y = y0;
+    let live = false;
+    let ghost = null;
+    let hit = null;
+    let scroll = 0;
+    const picked = this.lines;
+    const move = () => {
+      ghost.style.transform = `translate(${x - 30}px, ${y - 24}px)`;
+      hit = this.lineAt(x, y);
+      const other = hit && hit.a.eid !== a.eid;
+      ghost.classList.toggle('no', !!other);
+      this.showDrop(other ? null : hit, a.eid, picked);
+      this.dragging = sh.id;
+    };
+    const begin = () => {
+      live = true;
+      this.dragging = sh.id;
+      ghost = make('div', 'ss-ghost');
+      ghost.append(this.pic(sh));
+      ghost.append(make('span', 'ss-num', sh.fields?.n || ''));
+      document.body.append(ghost);
+      document.documentElement.classList.add('ss-dragging');
+      navigator.vibrate?.(12);
+      move();
+      // Near the top or bottom, the page creeps along so far lines can be reached.
+      scroll = setInterval(() => {
+        const ruler = document.querySelector('.zm-ruler');
+        const bottom = window.innerHeight - (ruler?.offsetHeight || 0);
+        const d = y < 90 ? -14 : y > bottom - 70 ? 14 : 0;
+        if (d) { window.scrollBy(0, d); move(); }
+      }, 30);
+    };
+    const hold = touch ? setTimeout(begin, 380) : null;
+    const done = () => {
+      clearTimeout(hold);
+      clearInterval(scroll);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      ghost?.remove();
+      document.documentElement.classList.remove('ss-dragging', 'ss-dropping');
+      this.dragging = null;
+    };
+    const onMove = (ev) => {
+      if (ev.pointerId !== e.pointerId) return;
+      x = ev.clientX;
+      y = ev.clientY;
+      if (!live) {
+        if (Math.hypot(x - x0, y - y0) < 8) return;
+        if (touch) { done(); return; } // a finger that moves first is scrolling
+        begin();
+      }
+      move();
+    };
+    const onUp = async (ev) => {
+      if (ev.pointerId !== e.pointerId) return;
+      const was = live;
+      const at = hit;
+      done();
+      if (!was) return;
+      this.dropped = Date.now();
+      this.lines = null;
+      if (!at) { this.paint(); return; }
+      if (at.a.eid !== a.eid) { this.paint(); this.hooks.toast(`Shot ${this.codeOf(sh, a)} belongs to ${sceneName(a)}: drop it on a line there`); return; }
+      this.placing = null;
+      await this.moveTo(sh.id, at.a, this.dropSpan(at, picked));
+    };
+    const onCancel = (ev) => { if (ev.pointerId !== e.pointerId) return; const was = live; done(); if (was) { this.lines = null; this.paint(); } };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+  }
+
   async add(eid, { what = '', framing = '', focus = true, from = null, to = null } = {}) {
     const a = this.anchors().find((x) => x.eid === eid);
     let opts = { what, framing, pieceId: this.pieceId };

@@ -25,21 +25,48 @@ async function keep(f, shotId) {
   return row?.id || null;
 }
 
-function withPicture(sh, ids) {
-  const fields = withRenders(sh.fields || {}, ids);
-  if (!fields.star?.still && ids.length) fields.star = { ...(fields.star || {}), still: ids[0] };
+// Where pictures come from. Each source hands back Files when picked (from a
+// tap: it may open a picker). Today only Photo or file; a sketch pad and an
+// image model join this list later, and land the same way.
+export const pictureSources = [
+  { id: 'photo', label: 'Photo or file', pick: () => pickFiles() }
+];
+function pickFiles() {
+  return new Promise((done) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.addEventListener('change', () => done([...(input.files || [])]), { once: true });
+    input.addEventListener('cancel', () => done([]), { once: true });
+    input.click();
+  });
+}
+
+// `meta` (kind 'board', source, from, note, strokes…) goes onto the try as
+// it is. A board frame is a plan, so it never becomes the picked still.
+function withPicture(sh, ids, meta = null) {
+  let fields;
+  if (meta && Object.keys(meta).length) {
+    const f = sh.fields || {};
+    fields = { ...f, tries: [...(f.tries || []), { id: `tr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`, at: Date.now(), by: 'me', still: f.still || '', video: f.video || '', ...meta, files: [...ids] }] };
+  } else fields = withRenders(sh.fields || {}, ids);
+  // A board frame is a plan: it becomes the picked board frame (star.board),
+  // never the still the video starts on.
+  const slot = meta?.kind === 'board' ? 'board' : 'still';
+  if (!fields.star?.[slot] && ids.length) fields.star = { ...(fields.star || {}), [slot]: ids[0] };
   const next = { ...sh, fields, updated_at: Date.now() };
   delete next._by;
   return next;
 }
 
 // Pictures on one shot. Returns { added, skipped, undo }.
-export async function picturesOnShot(shotId, files) {
+export async function picturesOnShot(shotId, files, meta = null) {
   const before = await getEntry(shotId);
   if (!before) return { added: 0, skipped: files.length, undo: async () => {} };
   const ids = [];
   for (const f of files) { const id = await keep(f, shotId); if (id) ids.push(id); }
-  if (ids.length) await putEntries([withPicture(await getEntry(shotId), ids)]);
+  if (ids.length) await putEntries([withPicture(await getEntry(shotId), ids, meta)]);
   return {
     added: ids.length,
     skipped: files.length - ids.length,
@@ -49,7 +76,7 @@ export async function picturesOnShot(shotId, files) {
 
 // Pictures on a scene: shots without a picture first, in order, then new shots.
 // Returns { filled, made, skipped, rows, undo }.
-export async function picturesOnScene(sceneId, files, { pieceId = null } = {}) {
+export async function picturesOnScene(sceneId, files, { pieceId = null, meta = null } = {}) {
   const shots = await shotsUnder(sceneId);
   const empty = shots.filter((sh) => !sh.deleted && !hasPicture(sh));
   const before = [];
@@ -68,7 +95,7 @@ export async function picturesOnScene(sceneId, files, { pieceId = null } = {}) {
       made.push(target);
     }
     const fresh = await getEntry(target.id);
-    await putEntries([withPicture(fresh, [id])]);
+    await putEntries([withPicture(fresh, [id], meta)]);
   }
   return {
     filled,
