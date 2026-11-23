@@ -512,15 +512,15 @@ function gestures() {
   let pinch = null;
   let swipe = null;
   const gap = (ts) => Math.hypot(ts[0].clientX - ts[1].clientX, ts[0].clientY - ts[1].clientY);
-  const holding = () => ['pl-touchdrag', 'line-holding', 'pl-calm', 'pull-dropping', 'dk-dragging'].some((c) => root.classList.contains(c) || body.classList.contains(c));
+  const holding = () => ['pl-touchdrag', 'line-holding', 'pl-calm', 'pull-dropping', 'dk-dragging', 'sk-open', 'ss-dragging'].some((c) => root.classList.contains(c) || body.classList.contains(c));
   document.addEventListener('touchstart', (e) => {
     if (!touch.matches) return;
     // The hours of Today keep their own pinch (it zooms the hours, not the ruler).
-    if (e.touches.length === 2) { pinch = e.target.closest?.('.dc-grid') ? null : { d: gap(e.touches), done: false }; swipe = null; return; }
+    if (e.touches.length === 2) { pinch = e.target.closest?.('.dc-grid, .sk-pad') ? null : { d: gap(e.touches), done: false }; swipe = null; return; }
     if (e.touches.length !== 1) { swipe = null; return; }
     pinch = null;
     const el = e.target;
-    if (el.closest?.('.zm-ruler, .topbar, .ah-wrap, .page-tabs, input:focus, textarea:focus, .pop-menu, .palette, .pl-pickbar, .pl-zoom, .lw-strip, .hstrip, [contenteditable="true"]')) { swipe = null; return; }
+    if (el.closest?.('.zm-ruler, .topbar, .ah-wrap, .page-tabs, input:focus, textarea:focus, .pop-menu, .palette, .pl-pickbar, .pl-zoom, .lw-strip, .hstrip, .sk-pad, .ss-card, .ss-thumb, [contenteditable="true"]')) { swipe = null; return; }
     swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
   }, { passive: true });
   document.addEventListener('touchmove', (e) => {

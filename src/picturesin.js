@@ -7,7 +7,7 @@
 // Pictures given to one shot all go on that shot. The first picture a shot
 // gets is its picked still. Every change can be undone in one step.
 import { getEntry, putEntries, byKind } from './db.js';
-import { addFile, isImage } from './files.js';
+import { addFile, isImage, fileUrl, fileBlob } from './files.js';
 import { shotsUnder, newShot, withRenders } from './production.js';
 import { bookType } from './library.js';
 
@@ -28,9 +28,28 @@ async function keep(f, shotId) {
 // Where pictures come from. Each source hands back Files when picked (from a
 // tap: it may open a picker). Today only Photo or file; a sketch pad and an
 // image model join this list later, and land the same way.
+// pick(ctx) may get { title, under (a file id to draw over), strokes (a
+// sketch's strokes file id, to keep drawing) }.
 export const pictureSources = [
+  { id: 'sketch', label: 'Sketch', pick: (ctx) => sketch(ctx) },
   { id: 'photo', label: 'Photo or file', pick: () => pickFiles() }
 ];
+
+// The pad, then the sketch as a board frame (never the video's first still),
+// with its strokes kept as a small file so it can be opened again.
+export async function sketch({ title = 'Sketch', under = null, strokes = null, from = null } = {}) {
+  const { openSketchPad } = await import('./sketchpad.js');
+  const underUrl = under ? await fileUrl(under).catch(() => null) : null;
+  let old = null;
+  if (strokes) { try { old = JSON.parse(await (await fileBlob(strokes)).text()); } catch { old = null; } }
+  const out = await openSketchPad({ title, under: underUrl, strokes: old });
+  if (!out) return [];
+  const kept = await addFile(new File([JSON.stringify(out.strokes)], 'Sketch strokes.json', { type: 'application/json' }));
+  const png = new File([out.blob], 'Sketch.png', { type: 'image/png' });
+  return { files: [png], meta: { kind: 'board', source: 'sketch', ...(kept ? { strokes: kept.id } : {}), ...(from ? { from } : {}) } };
+}
+// The try a picture is in, and so whether it's a sketch that can be reopened.
+export function tryOf(sh, fileId) { return (sh?.fields?.tries || []).find((t) => (t.files || []).includes(fileId)) || null; }
 function pickFiles() {
   return new Promise((done) => {
     const input = document.createElement('input');
@@ -54,7 +73,10 @@ function withPicture(sh, ids, meta = null) {
   // A board frame is a plan: it becomes the picked board frame (star.board),
   // never the still the video starts on.
   const slot = meta?.kind === 'board' ? 'board' : 'still';
-  if (!fields.star?.[slot] && ids.length) fields.star = { ...(fields.star || {}), [slot]: ids[0] };
+  // Drawn on from the picked sketch (Keep drawing, Draw over it): the new
+  // one is the pick now.
+  const fromPicked = meta?.from && fields.star?.[slot] && (fields.tries || []).some((t) => t.id === meta.from && (t.files || []).includes(fields.star[slot]));
+  if ((!fields.star?.[slot] || fromPicked) && ids.length) fields.star = { ...(fields.star || {}), [slot]: ids[0] };
   const next = { ...sh, fields, updated_at: Date.now() };
   delete next._by;
   return next;
@@ -130,4 +152,34 @@ export async function filmsForPictures(limit = 6) {
     if (scenes.length) out.push({ film: f, scenes });
   }
   return out;
+}
+
+// Words to paste into an image model by hand (Gemini, ChatGPT) beside the
+// sketch: the look, the shot, the lines it covers, who and where.
+export async function framePrompt({ style = '', scene = '', heading = '', code = '', what = '', framing = '', lines = [], worldId = null }) {
+  const all = (await byKind('page')).filter((p) => !p.deleted);
+  const byId = new Map(all.map((p) => [p.id, p]));
+  // Only this film's world: a page's parents lead up to it.
+  const inWorld = (p) => { for (let at = p, n = 0; at && n < 20; at = byId.get(at.parent_id), n += 1) if (at.parent_id === worldId) return true; return false; };
+  const pages = all.filter((p) => p.fields?.element && (!worldId || inWorld(p)));
+  const named = (name) => pages.find((p) => p.fields.element.type === 'character' && [p.title, ...(p.fields.element.also || [])].some((n) => (n || '').trim().toUpperCase() === name));
+  const who = [];
+  for (const l of lines) {
+    if (l.el !== 'character') continue;
+    const name = l.text.replace(/\(.*?\)/g, '').trim().toUpperCase();
+    const p = named(name);
+    const line = p ? `${p.title}${p.fields.element.snippet ? `: ${p.fields.element.snippet}` : ''}` : name.charAt(0) + name.slice(1).toLowerCase();
+    if (!who.includes(line)) who.push(line);
+  }
+  const head = (heading || '').toUpperCase();
+  const place = pages.find((p) => p.fields.element.type === 'location' && p.title && head.includes(p.title.toUpperCase()));
+  const words = lines.filter((l) => l.el !== 'character' && l.text.trim()).map((l) => (l.el === 'dialogue' ? `“${l.text.trim()}”` : l.text.trim()));
+  return [
+    `One storyboard frame, 16:9. ${style ? `Look: ${style}.` : 'Look: a clean, clear storyboard drawing, not photoreal.'} Keep the layout of my sketch if I give one.`,
+    `Scene: ${scene}${heading && heading !== scene ? ` (${heading})` : ''}.`,
+    `Shot ${code}: ${what || 'see the lines below'}${framing ? `. Framing: ${framing}` : ''}.`,
+    words.length ? `The lines it covers: ${words.join(' ')}` : '',
+    who.length ? `Who: ${who.join('; ')}.` : '',
+    place ? `Where: ${place.title}${place.fields.element.snippet ? `, ${place.fields.element.snippet}` : ''}${place.fields.element.lighting ? `. Lighting: ${place.fields.element.lighting}` : ''}.` : ''
+  ].filter(Boolean).join('\n');
 }

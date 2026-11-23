@@ -1,0 +1,33 @@
+/* The sketch pad: the whole screen, paper in the middle, tools underneath
+   (at the left on a phone held sideways, so the page gets the height). */
+.sk-pad { position: fixed; inset: 0; z-index: 90; display: grid; grid-template: "top" auto "mid" minmax(0, 1fr) "tools" auto / minmax(0, 1fr); gap: 8px;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) max(12px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 10px) max(12px, env(safe-area-inset-left, 0px));
+  background: var(--bg); color: var(--ink); font-family: var(--ui); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+html.sk-open { overflow: hidden; }
+.sk-top { grid-area: top; display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--muted); font-size: 13px; }
+.sk-title { flex: 1; min-width: 0; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sk-stat { color: var(--faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sk-x { width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 24px; line-height: 1; cursor: pointer; }
+.sk-x:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.sk-mid { grid-area: mid; position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: 6px; touch-action: none; }
+.sk-sheet { position: absolute; left: 0; top: 0; transform-origin: 0 0; background: #FBFAF6; outline: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); }
+.sk-sheet canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.sk-under { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .28; pointer-events: none; }
+.sk-tools { grid-area: tools; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+.sk-sp { flex: 1; }
+.sk-btn { padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); font: 500 13px var(--ui); white-space: nowrap; cursor: pointer; }
+.sk-btn:hover { color: var(--ink); border-color: var(--accent); }
+.sk-btn[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.sk-btn.go { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.sk-btn[hidden] { display: none; }
+.sk-size { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.sk-size input { width: 96px; accent-color: var(--accent); }
+@media (pointer: coarse) { .sk-btn { padding: 9px 14px; font-size: 14px; } }
+@media (max-height: 560px) and (orientation: landscape) {
+  .sk-pad { grid-template: "tools top" auto "tools mid" minmax(0, 1fr) / 150px minmax(0, 1fr); }
+  .sk-tools { align-content: flex-start; overflow-y: auto; gap: 5px; }
+  .sk-sp { display: none; }
+  .sk-btn { flex: 1 1 62px; padding: 6px 4px; }
+  .sk-size { flex: 1 1 100%; }
+  .sk-size input { flex: 1; width: auto; min-width: 0; }
+}

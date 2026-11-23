@@ -456,7 +456,9 @@ try {
     await tap(line('June climbs onto a stool'), { shift: true });
     await sleep(200);
     const had = (await shotsIn(2)).map((sh) => sh.id);
-    const [chooser] = await Promise.all([p.waitForEvent('filechooser'), p.locator('.ss-bar .ss-barpic').click()]);
+    await p.locator('.ss-bar .ss-barpic').click();
+    assert.deepEqual(await p.locator('.pop-menu .pop-item').allTextContents(), ['Sketch', 'Photo or file'], '+ Picture: a sketch or a photo');
+    const [chooser] = await Promise.all([p.waitForEvent('filechooser'), p.locator('.pop-menu .pop-item', { hasText: 'Photo or file' }).click()]);
     await chooser.setFiles([{ name: 'bell.png', mimeType: 'image/png', buffer: PNG1 }]);
     await p.waitForFunction(() => /with its picture/.test(document.querySelector('.toast')?.textContent || ''));
     await snap('13-desktop-picture-on-lines');
@@ -511,6 +513,74 @@ try {
     await sleep(700);
     assert.equal((await shotsIn(0)).length, n);
     await p.evaluate(() => { window.__scriptShots.close(); window.__scriptShots.pick(null); });
+  });
+
+  // A pen stroke on the pad: pressure from light to firm.
+  async function penStroke(pts, type = 'pen') {
+    await p.evaluate(({ pts, type }) => {
+      const cv = document.querySelector('.sk-pad canvas');
+      const r = cv.getBoundingClientRect();
+      const at = ([x, y, pr]) => ({ clientX: r.left + x * r.width, clientY: r.top + y * r.height, pressure: pr, pointerType: type, pointerId: type === 'pen' ? 7 : 9, isPrimary: true, bubbles: true, button: 0, buttons: 1 });
+      cv.dispatchEvent(new PointerEvent('pointerdown', at(pts[0])));
+      for (const q of pts.slice(1)) cv.dispatchEvent(new PointerEvent('pointermove', at(q)));
+      cv.dispatchEvent(new PointerEvent('pointerup', { ...at(pts.at(-1)), buttons: 0 }));
+    }, { pts, type });
+  }
+
+  await check('desktop: pick lines, + Picture, Sketch: the pad; a pen’s pressure sets the line; Done puts the sketch on those lines as a board frame', async () => {
+    await p.evaluate(() => window.scrollTo(0, 0));
+    await tap(line('A bell on the door'));
+    await sleep(200);
+    const had = (await shotsIn(2)).map((sh) => sh.id);
+    await p.locator('.ss-bar .ss-barpic').click();
+    await p.locator('.pop-menu .pop-item', { hasText: 'Sketch' }).click();
+    await p.waitForSelector('.sk-pad canvas');
+    await penStroke([[0.2, 0.5, 0.1], [0.3, 0.5, 0.2], [0.4, 0.52, 0.6], [0.5, 0.55, 1]]);
+    const pr = await p.evaluate(() => window.__sketchPad.pad.strokes[0].pts.map((q) => q[2]));
+    assert.deepEqual(pr.map((x) => Math.round(x * 10) / 10), [0.1, 0.2, 0.6, 1], 'pressure is kept per point');
+    // Once a pen has been seen, a palm (one touch) draws nothing.
+    await penStroke([[0.6, 0.3, 0.5], [0.7, 0.4, 0.5]], 'touch');
+    assert.equal(await p.evaluate(() => window.__sketchPad.pad.strokes.length), 1, 'a palm after the pen draws nothing');
+    await penStroke([[0.2, 0.2, 0.5], [0.35, 0.25, 0.5]]);
+    assert.equal(await p.evaluate(() => window.__sketchPad.pad.strokes.length), 2);
+    await p.keyboard.press('Control+z');
+    assert.equal(await p.evaluate(() => window.__sketchPad.pad.strokes.length), 1, 'Ctrl + Z undoes');
+    await snap('17-desktop-pad');
+    await p.locator('.sk-pad .sk-btn.go').click();
+    await p.waitForFunction(() => /with its sketch/.test(document.querySelector('.toast')?.textContent || ''));
+    const made = (await shotsIn(2)).find((sh) => !had.includes(sh.id));
+    assert.ok(made && made.from >= 0, 'a new shot on the picked line');
+    const row = await p.evaluate((id) => { const ss = window.__scriptShots; return ss.find(id).sh.fields; }, made.id);
+    assert.equal(row.tries.at(-1).kind, 'board');
+    assert.equal(row.tries.at(-1).source, 'sketch');
+    assert.ok(row.tries.at(-1).strokes, 'its strokes are kept');
+    assert.ok(row.star?.board, 'it is the picked board frame');
+    assert.equal(row.star?.still, undefined, 'never the still the video starts on');
+    assert.equal(await p.evaluate((id) => { const ss = window.__scriptShots; return ss.still(ss.find(id).sh); }, made.id), row.star.board, 'the frame shows the sketch');
+    await snap('18-desktop-sketch-on-lines');
+    globalThis.__madeSketch = made.id;
+  });
+
+  await check('desktop: Keep drawing opens the sketch again; Copy the prompt has the shot, its lines and the scene', async () => {
+    const id = globalThis.__madeSketch;
+    await p.waitForSelector('.ss-pop .ss-sketch-again');
+    await p.locator('.ss-pop .ss-sketch-again').click();
+    await p.waitForSelector('.sk-pad canvas');
+    assert.equal(await p.evaluate(() => window.__sketchPad.pad.strokes.length), 1, 'the strokes are back');
+    await penStroke([[0.7, 0.7, 0.4], [0.8, 0.75, 0.8]]);
+    await p.keyboard.press('Escape');
+    await p.waitForFunction(() => /Sketch kept/.test(document.querySelector('.toast')?.textContent || ''));
+    const f = await p.evaluate((id) => window.__scriptShots.find(id).sh.fields, id);
+    assert.equal(f.tries.length, 2, 'a new try, the first kept');
+    assert.equal(f.tries[1].from, f.tries[0].id, 'it says which sketch it came from');
+    assert.equal(f.star.board, f.tries[1].files[0], 'the new drawing is the picked frame now');
+    assert.equal(await p.locator('.ss-pop .ss-frame').count(), 2, 'both in the strip');
+    await snap('19-desktop-card-frames');
+    const text = await p.evaluate(async (id) => { const ss = window.__scriptShots; const c = ss.find(id); return ss.copyPrompt(c.sh, c.a); }, id);
+    assert.match(text, /storyboard frame/i);
+    assert.match(text, /A bell on the door/, 'the line it covers');
+    await p.evaluate(async (id) => { const ss = window.__scriptShots; await ss.remove(id); }, id);
+    await sleep(500);
   });
 
   await check('desktop: a window too narrow for both columns puts the shots in the script', async () => {
@@ -628,6 +698,48 @@ try {
     assert.notEqual((await shotsIn(0)).find((x) => x.id === sh.id).from, sh.from, 'it moved to the line');
     // The shot made for this check goes again, so the counts below stay as they were.
     if (madeHere && placedId) { await p.evaluate((id) => window.__scriptShots.remove(id), placedId); await sleep(600); }
+    await p.evaluate(() => { document.activeElement?.blur(); window.scrollTo(0, 0); });
+    await sleep(400);
+  });
+
+  await check('phone upright: tap a line, + Picture, Sketch, draw with a finger, Done: the frame is on that line', async () => {
+    await p.evaluate(() => window.scrollTo(0, 0));
+    const had = (await shotsIn(0)).map((sh) => sh.id);
+    await tap(line('Dad would’ve checked'));
+    await p.waitForSelector('.ss-bar:not([hidden]) .ss-barpic');
+    // The bar can still change its buttons while the last check's reload
+    // lands (a slow machine): wait until they hold still before tapping.
+    await p.waitForFunction(() => new Promise((ok) => { const a = document.querySelector('.ss-bar')?.dataset.sig; const r0 = document.querySelector('.ss-bar .ss-barpic')?.getBoundingClientRect().x; setTimeout(() => ok(a && a === document.querySelector('.ss-bar')?.dataset.sig && r0 === document.querySelector('.ss-bar .ss-barpic')?.getBoundingClientRect().x), 400); }));
+    await tap('.ss-bar .ss-barpic');
+    await p.locator('.pop-menu .pop-item', { hasText: 'Sketch' }).waitFor();
+    await tap(p.locator('.pop-menu .pop-item', { hasText: 'Sketch' }));
+    await p.waitForSelector('.sk-pad canvas');
+    const box = await p.locator('.sk-pad canvas').boundingBox();
+    assert.ok(box.width >= 380, 'the pad takes the width of the phone');
+    const cdp = await p.context().newCDPSession(p);
+    const pt = (x, y) => [{ x: Math.round(box.x + box.width * x), y: Math.round(box.y + box.height * y), id: 3 }];
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt(0.2, 0.3) });
+    for (let i = 1; i <= 8; i += 1) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pt(0.2 + i * 0.07, 0.3 + i * 0.05) });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    assert.equal(await p.evaluate(() => window.__sketchPad.pad.strokes.length), 1, 'one finger draws when there is no pen');
+    // Two fingers tapped together: undo.
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt(0.5, 0.8) });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pt(0.55, 0.8) });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    assert.equal(await p.evaluate(() => window.__sketchPad.pad.strokes.length), 2);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...pt(0.4, 0.5)[0], id: 4 }, { ...pt(0.6, 0.5)[0], id: 5 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    assert.equal(await p.evaluate(() => window.__sketchPad.pad.strokes.length), 1, 'a two-finger tap undoes');
+    await snap('20-phone-pad');
+    await tap('.sk-pad .sk-btn.go');
+    await p.waitForFunction(() => /with its sketch/.test(document.querySelector('.toast')?.textContent || ''));
+    const made = (await shotsIn(0)).find((sh) => !had.includes(sh.id));
+    assert.ok(made && made.from >= 0, 'on the tapped line');
+    await p.evaluate(() => window.__scriptShots.close());
+    await sleep(300);
+    await snap('21-phone-sketch-in-script');
+    await p.evaluate((id) => window.__scriptShots.remove(id), made.id);
+    await sleep(600);
     await p.evaluate(() => { document.activeElement?.blur(); window.scrollTo(0, 0); });
     await sleep(400);
   });
