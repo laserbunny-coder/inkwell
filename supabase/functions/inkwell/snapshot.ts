@@ -7,7 +7,7 @@ import { tagFor } from "./enrich.ts";
 
 const PAGE_LIMIT = 3 * 1024 * 1024;
 const IMAGE_LIMIT = 8 * 1024 * 1024;
-const UA = "Mozilla/5.0 (compatible; InkwellSnapshot/1.0; +https://laserbunny-coder.github.io/inkwell/)";
+const UA = `Mozilla/5.0 (compatible; InkwellSnapshot/1.0; +${globalThis.Deno?.env.get("APP_URL") || "https://laserbunny-coder.github.io/inkwell/"})`;
 
 // Only ordinary public web addresses: nothing on this machine or a private network.
 function allowed(u: URL): boolean {

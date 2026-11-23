@@ -16,7 +16,8 @@ let local = '';
 try { local = localStorage.getItem('edition') || ''; } catch { /* no storage here */ }
 export const STUDIO = import.meta.env?.VITE_EDITION === 'studio' || local === 'studio';
 
-const root = document.documentElement;
+// Outside a browser (the Node checks load the Library's code) there is no page.
+const root = typeof document !== 'undefined' ? document.documentElement : { classList: { add() {}, remove() {}, toggle() {}, contains: () => false } };
 if (STUDIO) { root.classList.add('studio'); root.classList.add('no-day'); }
 
 export const dayOff = () => root.classList.contains('no-day');

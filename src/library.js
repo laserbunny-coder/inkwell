@@ -1,4 +1,5 @@
 import { byKind, children, getEntry, putEntries, linkedFrom, getMeta, setMeta } from './db.js';
+import { STUDIO } from './edition.js';
 import { entry, newId, outline, tagsIn } from './model.js';
 
 // How the vault is organized: areas (Writing, Filmmaking…) hold worlds. A
@@ -25,7 +26,8 @@ export async function ensureAreas() {
     const have = new Set((await byKind('area')).map((a) => a.id));
     // Kept local until edited: the cloud's copy (if any) always wins, so an
     // area deleted on one device doesn't come back from another.
-    const rows = STARTER_AREAS.filter((a) => !have.has(a.id)).map((a, i) =>
+    // Studio (edition.js) starts with Writing and Filmmaking only.
+    const rows = STARTER_AREAS.filter((a) => !have.has(a.id) && (!STUDIO || ['area-writing', 'area-filmmaking'].includes(a.id))).map((a, i) =>
       entry('area', { id: a.id, title: a.title, sort: i + 1, fields: { color: a.color }, created_at: 0, updated_at: 0 }));
     if (rows.length) await putEntries(rows, { fromSync: true });
     await setMeta('areasSeeded', true);

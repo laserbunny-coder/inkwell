@@ -11,7 +11,8 @@ import {
 } from "./digest.ts";
 import { makeTidy } from "../_shared/tidyrun.ts";
 
-const INKWELL = "https://laserbunny-coder.github.io/inkwell/";
+// The app's own address: APP_URL on another copy of Inkwell (Studio, Nov 23 2026).
+const INKWELL = (globalThis.Deno?.env.get("APP_URL") || "https://laserbunny-coder.github.io/inkwell/");
 
 const client = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY") });
 const COLS = "id,kind,parent_id,title,text,tags,fields,created_at";

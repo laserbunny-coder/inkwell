@@ -73,6 +73,7 @@ jobs:
           ACRO_CONNECTOR_URL: ${{ secrets.ACRO_CONNECTOR_URL }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
         run: |
           args=()
           [ -n "$ANTHROPIC_API_KEY" ] && args+=("ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
@@ -81,6 +82,8 @@ jobs:
           [ -n "$ACRO_CONNECTOR_URL" ] && args+=("ACRO_CONNECTOR_URL=$ACRO_CONNECTOR_URL")
           [ -n "$GOOGLE_CLIENT_ID" ] && args+=("GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID")
           [ -n "$GOOGLE_CLIENT_SECRET" ] && args+=("GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET")
+          # A copy of Inkwell's own address (repository variable APP_URL), for links the server writes.
+          [ -n "$APP_URL" ] && args+=("APP_URL=$APP_URL")
           if [ ${#args[@]} -gt 0 ]; then supabase secrets set --yes --project-ref "$PROJECT_REF" "${args[@]}"; fi
       - name: Deploy server functions
         if: steps.ready.outputs.ok == 'true'
@@ -89,3 +92,16 @@ jobs:
           fns=$(cd supabase/functions && ls -d */ | tr -d / | grep -v '^_')
           echo "Deploying: $fns"
           supabase functions deploy $fns --project-ref "$PROJECT_REF" --use-api --yes
+      - name: Point the timed jobs at this project
+        if: steps.ready.outputs.ok == 'true'
+        # The migrations name Michael's project (abybjllpksjeccwolyhn) in their
+        # timed jobs. A copy of Inkwell (Studio, Nov 23 2026) points them at its
+        # own project instead, and drops Acro HQ's two business jobs. On
+        # Michael's own project this step does nothing.
+        run: |
+          if [ "$PROJECT_REF" = "abybjllpksjeccwolyhn" ]; then exit 0; fi
+          sql="select cron.alter_job(jobid, command := replace(command, 'abybjllpksjeccwolyhn', '$PROJECT_REF')) from cron.job where command like '%abybjllpksjeccwolyhn%'; select cron.unschedule(jobname) from cron.job where jobname in ('acro-tasks', 'acro-meetings');"
+          curl -fsS -X POST "https://api.supabase.com/v1/projects/$PROJECT_REF/database/query" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg q "$sql" '{query: $q}')"
+          echo

@@ -50,6 +50,11 @@ try {
     assert.equal(await page.locator('.zm-np').isVisible(), false);
   });
 
+  await check('a new Studio Library starts with Writing and Filmmaking', async () => {
+    const areas = await page.evaluate(() => new Promise((res) => { const r = indexedDB.open('writing'); r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').getAll(); q.onsuccess = () => res(q.result.filter((x) => x.kind === 'area' && !x.deleted).map((x) => x.title).sort()); }; }));
+    assert.deepEqual(areas, ['Filmmaking', 'Writing']);
+  });
+
   await check('the plan’s places open the Desk, and the 4 key does nothing of the day', async () => {
     await goto(page, { view: 'plan', tab: 'week' });
     assert.equal(await view(page), 'desk');

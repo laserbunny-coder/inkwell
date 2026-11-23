@@ -3,6 +3,8 @@ import config from './config.js';
 import { getEntry, putEntries, outboxIds, clearOutbox, addConflict, getMeta, setMeta, setWriter } from './db.js';
 import { setFileBackend, uploadPending } from './files.js';
 import { renewAlerts } from './alerts.js';
+import { STUDIO } from './edition.js';
+import { askText, toast } from './menu.js';
 
 // Keeps this device's entries in step with the cloud (the Supabase project
 // shared with Daybook). The device is always the first copy: writing works
@@ -64,6 +66,11 @@ function supabaseBackend() {
     onAuth(fn) { sb.auth.onAuthStateChange((_e, session) => fn(session?.user || null)); },
     signIn() {
       return sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+    },
+    // A sign-in link by email (Studio, Nov 23 2026): nothing to set up on
+    // Google's side, so a new copy of Inkwell can sign in the day it's made.
+    signInEmail(email) {
+      return sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
     },
     signOut() { return sb.auth.signOut(); },
     connectCalendar() {
@@ -251,7 +258,15 @@ export class Sync {
     if (this.user) { setWriter(this.user.id); setFileBackend(this.backend, this.user.id); }
   }
 
-  signIn() { return this.backend?.signIn(); }
+  // Studio signs in with an emailed link; the full edition with Google.
+  async signIn() {
+    if (!STUDIO || !this.backend?.signInEmail) return this.backend?.signIn();
+    const email = await askText({ title: 'Sign in', body: 'Your email address. Inkwell sends a link; open it on this device to sign in.', placeholder: 'you@example.com', ok: 'Send the link', type: 'email' });
+    if (!email || !String(email).includes('@')) return null;
+    const { error } = await this.backend.signInEmail(String(email).trim());
+    toast(error ? `Couldn’t send the link: ${error.message}` : 'Sent. Open the link in that email on this device');
+    return null;
+  }
   invoke(name, body) { return this.backend.invoke(name, body); }
 
   async signOut() { await this.backend?.signOut(); this.user = null; setFileBackend(null, null); this.onStatus('signed-out'); }
