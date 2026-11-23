@@ -4,9 +4,9 @@
 // "More ▸" holds the rest of what the Develop page had (a paragraph, who's
 // in it, one page), so nothing written there is lost.
 import { make } from '../dom.js';
-import { getEntry, putEntries, byKind } from '../db.js';
+import { getEntry, putEntries } from '../db.js';
 import { popMenu, onContextMenu } from '../menu.js';
-import { bookType, formatName, kindName, nextLabel, stageOf, stagesOf, stats, isOut, isReady } from '../library.js';
+import { bookType, formatName, kindName, nextLabel, stageOf, stagesOf, stats } from '../library.js';
 import { draftsOf } from '../drafts.js';
 import { doorKind, doorPlace, DOOR_WORDS } from './doors.js';
 import { state } from '../main.js';
@@ -42,11 +42,8 @@ async function built(kind, piece, world) {
     const n = (await draftsOf(piece.id)).length;
     return n ? `${n} kept draft${n === 1 ? '' : 's'}` : 'no kept drafts yet';
   }
-  if (kind === 'make') {
-    const n = (await byKind('shot')).filter((sh) => sh.fields?.piece === piece.id).length;
-    return n ? `${n} shot${n === 1 ? '' : 's'}` : 'no shots yet';
-  }
-  return isOut(piece, world) ? 'posted' : isReady(piece, world) ? 'ready to post' : 'not posted';
+  const { pathNote } = await import('./pathnotes.js');
+  return pathNote(kind, piece, world);
 }
 
 // The unfolded path: one row per stage, filled up to where it is, each with
@@ -59,7 +56,10 @@ async function drawWay(ol, piece, world, list, here) {
     const b = make('button', 'ph1-go');
     b.type = 'button';
     b.title = `${DOOR_WORDS[kind]} ›`;
-    b.append(make('i', 'ph1-dot'), make('span', 'ph1-st', st), make('span', 'ph1-built', await built(kind, piece, world).catch(() => '')), make('span', 'ph1-arrow', '›'));
+    // What's done and left there, and the screen it opens.
+    const wrap = make('span', 'ph1-built-wrap');
+    wrap.append(make('span', 'ph1-built', await built(kind, piece, world).catch(() => '')), make('span', 'ph1-to', `Opens ${kind === 'text' ? (bookType(piece) === 'screenplay' ? 'the script' : 'the text') : DOOR_WORDS[kind]}`));
+    b.append(make('i', 'ph1-dot'), make('span', 'ph1-st', st), wrap, make('span', 'ph1-arrow', '›'));
     b.addEventListener('click', async () => go(await doorPlace(piece, st, world)));
     onContextMenu(b, () => [{ label: `Set stage to ${st}`, current: i === here, run: () => setStage(piece, st) }]);
     li.append(b);

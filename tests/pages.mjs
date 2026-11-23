@@ -385,7 +385,7 @@ try {
     await shot(page, 'pages-deliver');
     await page.locator('.prod-view .gv-levels .chip[data-tab="post"]').click();
     await page.waitForSelector('.pd-post-card');
-    assert.match(await page.locator('#crumb').innerText(), /Share and post/);
+    assert.match(await page.locator('#crumb').innerText(), /Deliver/);
   });
 
   await check('new draft from this one: a copy is kept as the draft, the text you carry on in keeps its ids', async () => {

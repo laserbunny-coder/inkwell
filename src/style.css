@@ -2284,7 +2284,9 @@ html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
 .ph1-door.f .ph1-dot { background: var(--accent); border-color: var(--accent); }
 .ph1-st { color: var(--ink); min-width: 9ch; }
 .ph1-door.at .ph1-st { font-weight: 600; }
-.ph1-built { flex: 1; min-width: 0; color: var(--faint); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph1-built { flex: 1; min-width: 0; color: var(--faint); font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.ph1-to { display: block; color: var(--faint); opacity: .8; font-size: 11.5px; margin-top: 1px; }
+.ph1-built-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .ph1-arrow { color: var(--faint); }
 .ph1-next { border: 0; background: transparent; color: var(--accent); font-size: 12.5px; padding: 3px 6px; border-radius: 7px; white-space: nowrap; }
 .ph1-next:hover { background: var(--tint); }
