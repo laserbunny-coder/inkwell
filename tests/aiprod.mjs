@@ -380,22 +380,32 @@ try {
     await laptop.waitForFunction(() => /Spent \$1\.65 here/.test(document.querySelector('.pd-cost')?.innerText || ''));
   });
 
-  await check('the Kit: show rules, a character sheet, location lighting and tool IDs', async () => {
+  await check('Cast and places: the rules for every shot, a character sheet, place lighting and tool IDs', async () => {
     await laptop.locator('.gv-levels .chip[data-tab="kit"]').click();
-    await laptop.waitForSelector('.pd-rules');
-    await laptop.locator('.pd-rules select[aria-label="Frame"]').selectOption('9:16');
+    await laptop.waitForSelector('.pd-body .cd-rules-line');
+    await laptop.locator('.pd-body .cd-rules-line').click();
+    const rules = laptop.locator('.pd-body .cd-rules-box');
+    await rules.locator('select[aria-label="Frame"]').selectOption('9:16');
     await sleep(300);
-    await laptop.locator('.pd-rules textarea[aria-label="Always and never"]').fill('Kenji is always a head shorter than Mom.\nNever any text in frame.');
+    await rules.locator('textarea[aria-label="Always and never"]').fill('Kenji is always a head shorter than Mom.\nNever any text in frame.');
     await blur(laptop);
-    const mom = laptop.locator('.pd-el[data-element="pg_mom"]');
-    assert.deepEqual(await mom.locator('.pd-slot .pd-slot-label').allTextContents(), ['Front', '3/4', 'Side', 'Back']);
-    await mom.locator('.pd-slot[data-slot="front"] input[type=file]').setInputFiles({ name: 'mom front.png', mimeType: 'image/png', buffer: PNG });
-    await laptop.waitForSelector('.pd-el[data-element="pg_mom"] .pd-slot[data-slot="front"] img');
-    await laptop.locator('.pd-el[data-element="pg_mom"] input[aria-label="Higgsfield Soul ID"]').fill('soul_mom_01');
-    await laptop.locator('.pd-el[data-element="pg_mom"] input[aria-label="ComfyUI LoRA"]').fill('mom_v2');
-    await laptop.locator('.pd-el[data-element="pg_kitchen"] input[aria-label="Lighting"]').fill('Low morning sun through the blinds, warm');
-    await laptop.locator('.pd-el[data-element="pg_kitchen"] input[aria-label="Kling reference"]').fill('kl_kitchen');
-    assert.equal(await laptop.locator('.pd-el[data-element="pg_kitchen"] input[aria-label="Higgsfield Soul ID"]').count(), 0, 'Soul IDs are for characters');
+    // A name opens their details; on an AI film For AI tools starts open.
+    await laptop.locator('.pd-body .lw-row[data-row="pg_mom"] .lw-name').click();
+    const mom = laptop.locator('.pd-body .cd[data-element="pg_mom"]');
+    await mom.waitFor();
+    assert.equal(await mom.locator('.cd-ai').isVisible(), true, 'open on an AI film');
+    assert.deepEqual(await mom.locator('.cd-slot .cd-slot-label').allTextContents(), ['Front', '3/4', 'Side', 'Back']);
+    await mom.locator('.cd-slot[data-slot="front"] input[type=file]').setInputFiles({ name: 'mom front.png', mimeType: 'image/png', buffer: PNG });
+    await laptop.waitForSelector('.pd-body .cd[data-element="pg_mom"] .cd-slot[data-slot="front"] img');
+    await laptop.locator('.pd-body .cd[data-element="pg_mom"] input[aria-label="Higgsfield Soul ID"]').fill('soul_mom_01');
+    await laptop.locator('.pd-body .cd[data-element="pg_mom"] input[aria-label="ComfyUI LoRA"]').fill('mom_v2');
+    await blur(laptop);
+    await laptop.locator('.pd-body .lw-row[data-row="pg_kitchen"] .lw-name').click();
+    const kitchen = laptop.locator('.pd-body .cd[data-element="pg_kitchen"]');
+    await kitchen.waitFor();
+    await kitchen.locator('input[aria-label="Lighting"]').fill('Low morning sun through the blinds, warm');
+    await kitchen.locator('input[aria-label="Kling reference"]').fill('kl_kitchen');
+    assert.equal(await kitchen.locator('input[aria-label="Higgsfield Soul ID"]').count(), 0, 'Soul IDs are for characters');
     await blur(laptop);
     await settle(laptop);
     assert.deepEqual(row('wd_nb').fields.production, { code: 'NB', aspect: '9:16', constraints: 'Kenji is always a head shorter than Mom.\nNever any text in frame.' });
@@ -411,7 +421,7 @@ try {
     await laptop.locator('.gv-tools .more-btn').click();
     assert.equal(await laptop.locator('.pop-menu .pop-item', { hasText: /^(Hide|Show) / }).count(), 0, 'no show and hide switches in ⋯');
     await laptop.keyboard.press('Escape');
-    assert.equal(await laptop.locator('.pd-ids').first().isVisible(), true);
+    assert.equal(await laptop.locator('.pd-body .cd-ids').first().isVisible(), true);
   });
 
   await check('the kit reaches Claude’s prompts: rules, lighting, IDs, sheet, and each shot’s model and timing', async () => {

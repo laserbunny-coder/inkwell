@@ -14,18 +14,23 @@ import { isTouch } from './device.js';
 import { make } from './dom.js';
 import {
   elementsIn, newElement, setElement, typeOf, lookOf, starPatch, asidePatch, standIn, nextPick,
-  elementForName, lostLooks, worldScenes, ELEMENT_TYPES
+  elementForName, lostLooks, worldScenes, plainPages, ELEMENT_TYPES
 } from './production.js';
+import { castDetails, rulesFold, flushDetails } from './castdetails.js';
 import './lookwall.css';
 
 const PREF = 'lookwall';
-const DEFAULTS = { view: 'wall', scope: 'all', zoom: 150, caps: true, showOut: true, more: true };
+const DEFAULTS = { view: 'wall', scope: 'all', zoom: 150, caps: true, showOut: true, more: true, keys: false, details: 'beside' };
+const SIZES = [{ v: 110, label: 'Small' }, { v: 150, label: 'Medium' }, { v: 220, label: 'Large' }, { v: 300, label: 'Largest' }];
+// Details open beside the wall only where there is room for both.
+const roomBeside = () => typeof matchMedia === 'function' && matchMedia('(min-width: 1000px)').matches && !matchMedia('(pointer: coarse)').matches;
 const readPrefs = () => { try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(PREF) || '{}') }; } catch { return { ...DEFAULTS }; } };
 const VIEWS = [{ id: 'wall', label: 'Wall' }, { id: 'side', label: 'Side by side' }, { id: 'together', label: 'Together' }];
 const kindLabel = (type) => (type === 'location' ? 'Place' : typeOf(type).label);
 const bare = (name) => String(name || '').replace(/\.[a-z0-9]{1,5}$/i, '');
 const UNSORTED = 'unsorted';
 
+// Cast and places: the look wall, with each name opening its details.
 export class LookWall {
   // hooks: changed(rows), toast(text, action), menu(anchor, items), askText(opts), openPage(id)
   constructor(hooks) {
@@ -34,6 +39,9 @@ export class LookWall {
     this.gid = null; // the row in front (One at a time, Side by side), and the focused picture's row
     this.f = null; // the focused picture
     this.scene = null;
+    this.who = null; // the row whose details are open
+    this.piece = null; // inside a film: only what's in it
+    this.added = new Set(); // added inside a film, kept on the wall though in no scene yet
     this.healed = new Set();
     this.lb = null;
     this.seen = typeof IntersectionObserver === 'function'
@@ -41,9 +49,11 @@ export class LookWall {
       : null;
     document.addEventListener('keydown', (e) => this.key(e));
     document.addEventListener('paste', (e) => this.paste(e));
+    // Leaving the wall's view closes its large view (it sits over the whole page).
+    new MutationObserver(() => { if (this.lb && !this.isOpen) { this.lb.remove(); this.lb = null; } }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-view'] });
   }
 
-  get isOpen() { return !!this.root?.isConnected && document.documentElement.dataset.view === 'stage'; }
+  get isOpen() { return !!this.root?.isConnected && document.documentElement.dataset.view === this.view; }
   save() { try { localStorage.setItem(PREF, JSON.stringify(this.p)); } catch { /* full */ } }
 
   // ---------- reading ----------
@@ -63,12 +73,20 @@ export class LookWall {
       }
       if (rows.length) { await this.hooks.changed(rows); els = await elementsIn(this.world); }
     }
+    this.allEls = els;
+    this.scenes = await worldScenes(this.world, els).catch(() => []);
+    // Inside a film: the people and places in its scenes (all of them while
+    // its script names none yet).
+    if (this.piece) {
+      this.scenes = this.scenes.filter((s) => s.piece === this.piece);
+      const used = new Set(this.scenes.flatMap((s) => [s.place, ...s.cast]).filter(Boolean));
+      if (used.size) els = els.filter((e) => used.has(e.id) || this.added.has(e.id));
+    }
     this.els = els;
     const ids = new Set(els.flatMap((e) => lookOf(e).refs));
     this.files = new Map(files.filter((f) => ids.has(f.id) || f.fields?.unsorted === world.id).map((f) => [f.id, f]));
     for (const id of ids) if (!this.files.has(id)) this.files.set(id, { id, title: '', fields: {}, missing: true });
     this.unsorted = files.filter((f) => f.fields?.unsorted === world.id && !f.fields?.element).map((f) => f.id);
-    this.scenes = await worldScenes(this.world, els).catch(() => []);
   }
 
   // The rows, in order: characters, places, then the rest (which can be
@@ -92,27 +110,43 @@ export class LookWall {
 
   // ---------- drawing ----------
 
-  async draw(body, world) {
+  // opts: piece (inside a film, only what's in it), ai (For AI tools starts open).
+  async draw(body, world, opts = {}) {
+    flushDetails();
+    if (this.piece !== (opts.piece || null)) { this.who = null; this.added.clear(); }
+    this.piece = opts.piece || null;
+    this.ai = !!opts.ai;
+    this.view = opts.view || 'stage'; // the view it's drawn in (the project's Make, or a film)
     await this.load(world);
+    if (this.who && !this.els.some((e) => e.id === this.who)) this.who = null;
     const root = make('div', 'lw');
     root.dataset.view = this.p.view;
     this.root = root;
     root.append(this.controls());
+    this.rulesEl = rulesFold(this.world, { changed: (rows) => { this.world = rows[0]; return this.hooks.changed(rows); } });
+    root.append(this.rulesEl);
     if (!isTouch()) {
       const keys = make('p', 'lw-keys');
       keys.innerHTML = 'Keys: <kbd>1</kbd> Wall, <kbd>2</kbd> Side by side, <kbd>3</kbd> Together. Arrow keys move between pictures and rows. <kbd>S</kbd> stars, <kbd>X</kbd> sets aside, <kbd>Enter</kbd> opens it large, <kbd>Escape</kbd> closes. <kbd>Minus</kbd> and <kbd>Equals</kbd> change the size. <kbd>Ctrl</kbd> + <kbd>V</kbd> pastes a picture onto the row you’re on.';
-      keys.hidden = !this.p.caps;
+      keys.hidden = !this.p.keys;
       root.append(keys);
     }
+    const grid = make('div', 'lw-grid');
+    const col = make('div', 'lw-col');
     this.main = make('div', 'lw-main');
-    root.append(this.main);
+    this.side = make('aside', 'lw-side');
+    this.grid = grid;
+    col.append(this.main);
     const add = make('div', 'lw-add');
-    for (const [type, label] of [['character', 'Add a character'], ['location', 'Add a place']]) {
+    for (const [type, label] of [['character', '+ Character'], ['location', '+ Place'], ['prop', '+ Prop']]) {
       const b = make('button', 'ghost-btn', label);
+      b.dataset.type = type;
       b.addEventListener('click', () => this.newRow(type));
       add.append(b);
     }
-    root.append(add);
+    col.append(add);
+    grid.append(col, this.side);
+    root.append(grid);
     // Dropped outside any row: found by name, or into Unsorted.
     root.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault(); });
     root.addEventListener('drop', (e) => {
@@ -129,48 +163,55 @@ export class LookWall {
 
   controls() {
     const ctl = make('div', 'lw-ctl');
-    const seg = (label, list, cur, pick) => {
-      const s = make('div', 'lw-seg');
-      s.setAttribute('role', 'group');
-      s.setAttribute('aria-label', label);
-      for (const x of list) {
-        const b = make('button', '', x.label);
-        b.dataset.v = x.id;
-        b.setAttribute('aria-pressed', String(x.id === cur));
-        b.addEventListener('click', () => pick(x.id));
-        s.append(b);
-      }
-      return s;
-    };
-    ctl.append(seg('View', VIEWS, this.p.view, (v) => this.setView(v)));
-    const scope = seg('How much at once', [{ id: 'all', label: 'Everything' }, { id: 'one', label: 'One at a time' }], this.p.scope, (v) => { this.p.scope = v; this.save(); this.redraw(); });
-    scope.classList.add('lw-scope');
-    scope.hidden = this.p.view === 'side';
-    ctl.append(scope);
-    const zoom = make('label', 'lw-zoom');
-    zoom.append('Size ');
-    const range = make('input');
-    range.type = 'range';
-    range.min = '90';
-    range.max = '320';
-    range.step = '10';
-    range.value = String(this.p.zoom);
-    range.setAttribute('aria-label', 'Picture size');
-    range.addEventListener('input', () => { this.p.zoom = Number(range.value); this.save(); this.sizeTiles(); });
-    zoom.append(range);
-    zoom.hidden = this.p.view !== 'wall';
-    ctl.append(zoom);
-    const tog = (label, key, after) => {
-      const w = make('label', 'lw-tog');
-      const i = make('input');
-      i.type = 'checkbox';
-      i.checked = !!this.p[key];
-      i.addEventListener('change', () => { this.p[key] = i.checked; this.save(); after?.(); this.redraw(); });
-      w.append(i, ` ${label}`);
-      return w;
-    };
-    ctl.append(tog('Captions', 'caps', () => { const k = this.root?.querySelector('.lw-keys'); if (k) k.hidden = !this.p.caps; }), tog('Show set aside', 'showOut'), tog('Props and more', 'more'));
+    const seg = make('div', 'lw-seg');
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', 'View');
+    for (const x of VIEWS) {
+      const b = make('button', '', x.label);
+      b.dataset.v = x.id;
+      b.setAttribute('aria-pressed', String(x.id === this.p.view));
+      b.addEventListener('click', () => this.setView(x.id));
+      seg.append(b);
+    }
+    const more = make('button', 'lw-more', '⋯');
+    more.type = 'button';
+    more.setAttribute('aria-label', 'More for the wall');
+    more.addEventListener('click', () => this.hooks.menu(more, this.moreItems()));
+    ctl.append(seg, make('span', 'lw-sp'), more);
     return ctl;
+  }
+
+  // Everything but the three views lives in ⋯.
+  moreItems() {
+    const set = (key, v) => { this.p[key] = v; this.save(); this.redraw(); };
+    const items = [];
+    if (this.p.view !== 'side') items.push({ label: 'How much at once', sub: [{ id: 'all', label: 'Everything' }, { id: 'one', label: 'One at a time' }].map((x) => ({ label: x.label, current: this.p.scope === x.id, run: () => set('scope', x.id) })) });
+    if (this.p.view === 'wall') items.push({ label: 'Picture size', sub: SIZES.map((x) => ({ label: x.label, current: Math.abs(this.p.zoom - x.v) < 20, run: () => { this.p.zoom = x.v; this.save(); this.sizeTiles(); } })) });
+    items.push(
+      { label: this.p.caps ? 'Hide captions' : 'Show captions', run: () => set('caps', !this.p.caps) },
+      { label: this.p.showOut ? 'Hide what’s set aside' : 'Show what’s set aside', run: () => set('showOut', !this.p.showOut) },
+      { label: this.p.more ? 'Only characters and places' : 'Props and the rest too', run: () => set('more', !this.p.more) }
+    );
+    if (roomBeside()) items.push({ label: 'Details open', sub: [{ id: 'beside', label: 'Beside the wall' }, { id: 'under', label: 'Under the row (one column)' }].map((x) => ({ label: x.label, current: this.p.details === x.id, run: () => set('details', x.id) })) });
+    if (!isTouch()) items.push({ label: this.p.keys ? 'Hide the keys' : 'Show the keys', run: () => { this.p.keys = !this.p.keys; this.save(); const k = this.root?.querySelector('.lw-keys'); if (k) k.hidden = !this.p.keys; } });
+    items.push({ label: 'Use a Bible page…', run: () => this.fromPage() });
+    return items;
+  }
+
+  // A Bible page that's already written joins the cast and places.
+  async fromPage() {
+    const plain = await plainPages(this.world);
+    if (!plain.length) { this.hooks.toast('Every Bible page is already on the wall.'); return; }
+    const anchor = this.root?.querySelector('.lw-more');
+    this.hooks.menu(anchor, plain.slice(0, 60).map(({ page, guess }) => ({
+      label: page.title || 'Untitled',
+      sub: ELEMENT_TYPES.map((t) => ({ label: `${t.id === 'location' ? 'Place' : t.label}${t.id === guess ? ' (likely)' : ''}`, run: async () => {
+        await this.hooks.changed([await setElement(page.id, { type: t.id })]);
+        if (this.piece) this.added.add(page.id);
+        this.who = page.id;
+        await this.redraw({ reload: true });
+      } }))
+    })));
   }
 
   setView(v) { this.p.view = v; this.save(); this.redraw(); }
@@ -182,6 +223,7 @@ export class LookWall {
     const fresh = this.controls();
     this.root.querySelector('.lw-ctl').replaceWith(fresh);
     this.root.dataset.view = this.p.view;
+    if (this.who && !this.els.some((e) => e.id === this.who)) this.who = null;
     this.renderMain();
   }
 
@@ -197,9 +239,10 @@ export class LookWall {
     if (!m) return;
     m.replaceChildren();
     this.sizeTiles();
+    this.drawSide();
     const rows = this.rows();
     if (!rows.length) {
-      m.append(make('p', 'hint lw-empty', 'No characters or places yet. Add one below, then drop or pick pictures onto its row. Pictures dropped here with a name in the file name (“Kenji v3.png”) find their row.'));
+      m.append(make('p', 'hint lw-empty', this.piece ? 'No characters or places yet. Add one below, then drop or pick pictures onto its row.' : 'No characters or places yet. Add one below, then drop or pick pictures onto its row. Pictures dropped here with a name in the file name (“Kenji v3.png”) find their row.'));
       return;
     }
     if (!rows.some((r) => r.id === this.gid)) this.gid = rows[0].id;
@@ -234,8 +277,8 @@ export class LookWall {
     const hit = this.scenes.filter((s) => s.place === id || s.cast.includes(id));
     if (!this.scenes.length) return '';
     if (!hit.length) return 'Not in a scene yet';
-    const names = hit.map((s) => s.code || s.title);
-    return `In scene${hit.length > 1 ? 's' : ''} ${names.slice(0, 8).join(', ')}${names.length > 8 ? ` and ${names.length - 8} more` : ''}`;
+    const names = hit.map((s) => s.title || s.code);
+    return `In ${names.slice(0, 6).join(', ')}${names.length > 6 ? ` and ${names.length - 6} more` : ''}`;
   }
 
   rowEl(r, big) {
@@ -243,14 +286,21 @@ export class LookWall {
     sec.dataset.row = r.id;
     sec.dataset.type = r.type;
     const h = make('div', 'lw-row-h');
-    const name = make('h2', '', r.name);
+    const name = make('h2', '');
+    if (r.el) {
+      // The name opens what's written about them.
+      const b = make('button', 'lw-name', r.name);
+      b.type = 'button';
+      b.setAttribute('aria-expanded', String(this.who === r.id));
+      b.title = `${r.name}: details`;
+      b.addEventListener('click', () => this.toggleWho(r.id));
+      name.append(b);
+    } else name.textContent = r.name;
     h.append(name);
     if (r.el) {
       h.append(make('span', 'lw-kind', kindLabel(r.type)));
-      const { pick, kept } = lookOf(r.el);
-      const p = make('span', 'lw-pick');
-      if (pick) { p.append('Pick: '); p.append(make('b', '', this.label(pick).name)); } else p.textContent = kept.length ? `No pick yet, ${kept.length} in the running` : 'No pictures yet';
-      h.append(p);
+      const by = (r.el.fields.element.playedBy || '').trim();
+      if (r.type === 'character' && by) h.append(make('span', 'lw-pick lw-by', `played by ${by}`));
       const sc = this.inScenes(r.id);
       if (sc) h.append(make('span', 'lw-pick', sc));
     } else h.append(make('span', 'lw-pick', 'No name in the file name matched a row. Move each one to its row.'));
@@ -265,10 +315,7 @@ export class LookWall {
       input.hidden = true;
       input.addEventListener('change', () => { const fs = [...input.files]; input.value = ''; this.addTo(r.id, fs); });
       add.append(input);
-      const open = make('button', 'lw-plain', 'Page');
-      open.title = `Open ${r.name}’s bible page`;
-      open.addEventListener('click', () => this.hooks.openPage(r.id));
-      h.append(add, open);
+      h.append(add);
     }
     sec.append(h);
     const items = this.items(r);
@@ -276,7 +323,8 @@ export class LookWall {
     if (big) tiles.style.setProperty('--n', String(Math.min(r.type === 'location' ? 2 : 5, Math.max(1, items.length))));
     for (const id of items) tiles.append(this.tile(r, id));
     if (items.length) sec.append(tiles);
-    else sec.append(make('p', 'lw-none', r.el && lookOf(r.el).refs.length ? 'Everything here is set aside. Tick “Show set aside” to bring one back.' : 'Drop pictures here, or Add pictures.'));
+    else sec.append(make('p', 'lw-none', r.el && lookOf(r.el).refs.length ? 'Everything here is set aside. ⋯ > Show what’s set aside brings it back.' : 'Drop pictures here, or Add pictures.'));
+    if (r.el && this.who === r.id && !this.besideNow()) sec.append(this.details(r.el));
     sec.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); sec.classList.add('over'); } });
     sec.addEventListener('dragleave', () => sec.classList.remove('over'));
     sec.addEventListener('drop', () => sec.classList.remove('over'));
@@ -529,15 +577,82 @@ export class LookWall {
     this.hooks.toast('Picture removed', { label: 'Undo', run: async () => { await putEntries([{ ...f, deleted: false, updated_at: Date.now() }]); this.unsorted.push(fileId); this.renderMain(); } });
   }
 
+  // Off the row and into the bin, with an Undo.
+  async removePic(rowId, fileId) {
+    const fresh = await getEntry(rowId);
+    const x = fresh?.fields?.element || {};
+    const before = { refs: x.refs || [], pick: x.pick ?? null, aside: x.aside || [] };
+    const items = this.items(this.rowOf(rowId));
+    const next = items[items.indexOf(fileId) + 1] || items[items.indexOf(fileId) - 1] || null;
+    const file = await getEntry(fileId);
+    if (file) { const gone = { ...file, deleted: true, updated_at: Date.now() }; await putEntries([gone]); await this.hooks.changed([gone]); }
+    this.f = next;
+    if (!next) this.closeLb();
+    await this.patch(rowId, { refs: before.refs.filter((r) => r !== fileId), pick: before.pick === fileId ? null : before.pick, aside: before.aside.filter((r) => r !== fileId) });
+    this.hooks.toast('Picture removed', { label: 'Undo', run: async () => {
+      if (file) { const back = { ...file, deleted: false, updated_at: Date.now() }; await putEntries([back]); await this.hooks.changed([back]); }
+      await this.patch(rowId, before);
+    } });
+  }
+
   async newRow(type) {
-    const title = await this.hooks.askText({ title: type === 'location' ? 'Add a place' : 'Add a character', body: 'It becomes a page in the world’s bible, with its own row here.', placeholder: type === 'location' ? 'Kitchen' : 'Kenji', ok: 'Add' });
+    const what = { location: 'a place', prop: 'a prop' }[type] || 'a character';
+    const title = await this.hooks.askText({ title: `Add ${what}`, body: 'It becomes a page in the world’s Bible, with its own row here.', placeholder: { location: 'Kitchen', prop: 'Katana' }[type] || 'Kenji', ok: 'Add' });
     if (!title?.trim()) return;
     const el = await newElement(this.world, type, title.trim());
     await this.hooks.changed([el]);
+    if (this.piece) this.added.add(el.id);
+    if (type === 'prop') this.p.more = true;
     this.gid = el.id;
     this.f = null;
     await this.redraw({ reload: true });
     this.main?.querySelector(`.lw-row[data-row="${CSS.escape(el.id)}"]`)?.scrollIntoView({ block: 'nearest' });
+  }
+
+  // ---------- details ----------
+
+  besideNow() { return this.p.details !== 'under' && roomBeside() && this.p.view !== 'together'; }
+
+  toggleWho(id) {
+    flushDetails();
+    this.who = this.who === id ? null : id;
+    this.renderMain();
+    const at = this.who && (this.besideNow() ? this.side : this.main.querySelector(`.lw-row[data-row="${CSS.escape(id)}"] .cd`));
+    at?.scrollIntoView?.({ block: 'nearest' });
+  }
+
+  details(el) {
+    return castDetails(el, {
+      changed: async (rows) => {
+        for (const row of rows.filter(Boolean)) {
+          const i = this.els.findIndex((e) => e.id === row.id);
+          // Taken out of the cast and places: off the wall at once.
+          if (i >= 0) { if (row.fields?.element) this.els[i] = row; else this.els.splice(i, 1); }
+        }
+        await this.hooks.changed(rows.filter(Boolean));
+        // The row's head shows Played by: kept in step without a redraw.
+        const row = rows[0];
+        const h = row && this.main?.querySelector(`.lw-row[data-row="${CSS.escape(row.id)}"] .lw-row-h`);
+        if (h && row.fields?.element) {
+          const by = (row.fields.element.playedBy || '').trim();
+          let s = h.querySelector('.lw-by');
+          if (by && row.fields.element.type === 'character') { if (!s) { s = make('span', 'lw-pick lw-by'); h.querySelector('.lw-kind')?.after(s); } s.textContent = `played by ${by}`; } else s?.remove();
+        }
+      },
+      redraw: () => this.redraw({ reload: true }),
+      toast: (t, a) => this.hooks.toast(t, a),
+      menu: (a, items) => this.hooks.menu(a, items),
+      openPage: (id) => { flushDetails(); this.hooks.openPage(id); },
+      close: () => { flushDetails(); this.who = null; this.renderMain(); }
+    }, { ai: this.ai });
+  }
+
+  drawSide() {
+    if (!this.side) return;
+    const el = this.who && this.besideNow() ? this.els.find((e) => e.id === this.who) : null;
+    this.grid.classList.toggle('lw-beside', !!el);
+    this.side.replaceChildren(...(el ? [this.details(el)] : []));
+    this.side.hidden = !el;
   }
 
   // ---------- the large view ----------
@@ -589,6 +704,7 @@ export class LookWall {
       btn(out ? 'Bring back' : 'Set aside', 'aside', () => this.aside(r.id, id));
     }
     btn('Next', 'next', () => this.step(1, true));
+    if (el) btn('Remove', 'remove', () => this.removePic(r.id, id));
     btn('Close', 'close', () => this.closeLb());
     lb.replaceChildren(big, cap, bar);
   }
@@ -635,8 +751,8 @@ export class LookWall {
       return;
     }
     if (k === '1' || k === '2' || k === '3') { e.preventDefault(); this.setView(VIEWS[Number(k) - 1].id); return; }
-    if (k === '-' || k === '_') { e.preventDefault(); this.p.zoom = Math.max(90, this.p.zoom - 30); this.save(); this.sizeTiles(); const z = this.root.querySelector('.lw-zoom input'); if (z) z.value = String(this.p.zoom); return; }
-    if (k === '=' || k === '+') { e.preventDefault(); this.p.zoom = Math.min(320, this.p.zoom + 30); this.save(); this.sizeTiles(); const z = this.root.querySelector('.lw-zoom input'); if (z) z.value = String(this.p.zoom); return; }
+    if (k === '-' || k === '_') { e.preventDefault(); this.p.zoom = Math.max(90, this.p.zoom - 30); this.save(); this.sizeTiles(); return; }
+    if (k === '=' || k === '+') { e.preventDefault(); this.p.zoom = Math.min(320, this.p.zoom + 30); this.save(); this.sizeTiles(); return; }
     if (this.p.view === 'together') return;
     if (k === 'ArrowRight') this.step(1);
     else if (k === 'ArrowLeft') this.step(-1);
@@ -646,6 +762,7 @@ export class LookWall {
     else if ((k === 'x' || k === 'X') && r?.el && this.f) this.aside(r.id, this.f);
     else if (k === 'Enter' && this.f && t?.closest?.('.lw-pic')) this.openLb();
     else if (k === 'Escape' && this.f) { this.f = null; this.markFocus(); }
+    else if (k === 'Escape' && this.who) { flushDetails(); this.who = null; this.renderMain(); }
     else return;
     e.preventDefault();
   }

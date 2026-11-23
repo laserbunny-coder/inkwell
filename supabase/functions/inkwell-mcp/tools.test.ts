@@ -349,7 +349,7 @@ rows.push(
   e("pp-5", "para", "ch-r", { sort: 5, text: "EXT. DOJO - DAY", fields: { el: "scene", code: "2" } }),
   e("pp-6", "para", "ch-r", { sort: 6, text: "Rain at the dojo gate.", fields: { el: "action" } }),
   e("pg-chars", "page", "wd-ninja", { title: "Characters", sort: 5 }),
-  e("pg-mom", "page", "pg-chars", { title: "Mom", fields: { element: { type: "character", also: ["Mother"], snippet: "Short, calm, grey bun", views: { front: "fi-front" }, ids: { soul: "soul_123" }, look: "mom_v2" } } }),
+  e("pg-mom", "page", "pg-chars", { title: "Mom", fields: { element: { type: "character", also: ["Mother"], snippet: "Short, calm, grey bun", views: { front: "fi-front" }, ids: { soul: "soul_123" }, look: "mom_v2", playedBy: "Ana Ruiz" } } }),
   e("pg-kitchen", "page", "wd-ninja", { title: "Kitchen", sort: 6, fields: { element: { type: "location", lighting: "Low morning sun through blinds" } } }),
   e("fi-front", "file", null, { title: "Mom front.png", fields: { type: "image/png" } }),
   e("fi-s1", "file", null, { title: "NB-E01-S01-01 a.png", fields: { type: "image/png", shot: "sh-1" } }),
@@ -366,6 +366,7 @@ const mom = pr.kit.find((k: any) => k.name === "Mom");
 assert.deepEqual(mom.tool_ids, { higgsfield_soul_id: "soul_123", comfyui_lora: "mom_v2" });
 assert.equal(mom.sheet.front, "https://files.test/fi-front?sig=1");
 assert.equal(pr.kit.find((k: any) => k.name === "Kitchen").lighting, "Low morning sun through blinds");
+assert.equal(pr.kit.find((k: any) => k.name === "Mom").played_by, "Ana Ruiz");
 assert.equal(pr.scenes.length, 2);
 assert.deepEqual(pr.scenes[0].elements, ["Mom", "Kitchen"], "Mom by another name, the kitchen in the heading");
 const s1 = pr.scenes[0].shots[0];

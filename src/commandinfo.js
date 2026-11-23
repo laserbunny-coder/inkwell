@@ -166,7 +166,7 @@ export const INFO = [
   { l: 'Read it through: just the script pages', g: 'view', h: 'The script as clean pages, to read through (Esc to stop).', w: ['read', 'preview', 'pages', 'proof'], at: ['script'], n: N.script },
   { l: 'Plot grid (the story as a table)', g: 'view', h: 'The story as a table: scenes or chapters across, threads down.', w: ['grid', 'table', 'beat sheet', 'board', 'structure', 'plot'], at: ['world'], n: 'Open a project or piece first' },
   { l: 'Back to the text from the grid', g: 'view', h: 'Back from the plot grid to the text.', w: ['grid', 'back', 'text'] },
-  { l: 'Production (shots, kit, shoot days, posting)', g: 'view', h: 'Shots, kit, shoot days and posting for this piece.', w: ['shots', 'shoot', 'kit', 'posting', 'production', 'make'], at: ['world'], n: 'Open a project or piece first' },
+  { l: 'Production (shots, cast and places, shoot days, posting)', g: 'view', h: 'Shots, cast and places, shoot days and posting for this piece.', w: ['shots', 'shoot', 'cast', 'places', 'kit', 'looks', 'posting', 'production', 'make'], at: ['world'], n: 'Open a project or piece first' },
   { l: 'Back to the text from production', g: 'view', h: 'Back from production to the text.', w: ['production', 'back', 'text'] },
   { l: 'Progress: words and pages over time (stats)', g: 'view', h: 'How many words and pages you’ve written, day by day.', w: ['stats', 'word count', 'pages', 'streak', 'progress', 'numbers'] },
   { l: 'What Claude knows: its one-line note on this, and weekly summaries', g: 'view', h: 'Claude’s one-line note on what this is, and its weekly and monthly summaries.', w: ['about', 'summary', 'second brain', 'memory', 'digest', 'weekly', 'monthly'] },

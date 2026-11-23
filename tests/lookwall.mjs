@@ -166,7 +166,8 @@ const settle = async (p) => {
 const go = (p, place) => p.evaluate((pl) => { history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); }, place);
 const el = (id) => table.get(id).fields.element;
 const shot = async (p, name) => { if (SHOTS) await p.screenshot({ path: `${SHOTS}/${name}.png` }); };
-const row = (p, id) => p.locator(`.lw-row[data-row="${id}"]`);
+// The wall on screen (the project's Make or a film; the other stays drawn, hidden).
+const row = (p, id) => p.locator(`.lw-row[data-row="${id}"]:visible`);
 const tile = (p, rowId, fileId) => row(p, rowId).locator(`.lw-tile[data-id="${fileId}"]`);
 // Waits for what's saved here to reach the pretend cloud.
 const until = async (p, fn, what) => {
@@ -178,7 +179,7 @@ async function check(name, fn) {
 }
 const openWall = async (p, world) => {
   await go(p, { view: 'stage', id: world, page: 'make', sub: 'looks' });
-  await p.waitForSelector('.lw .lw-main', { timeout: 15000 });
+  await p.waitForSelector('#stage-view .lw .lw-main', { timeout: 15000 });
 };
 
 try {
@@ -187,14 +188,18 @@ try {
   await laptop.evaluate(() => localStorage.removeItem('lookwall'));
   await openWall(laptop, 'wd_nb');
 
-  await check('Make has a Looks chip: rows for characters, then places, then props; each says its pick and its scenes', async () => {
+  await check('Make opens on Cast and places: rows for characters, then places, then props; each says its scenes by their names', async () => {
     assert.equal(await laptop.locator('.st-chips .chip[data-sub="looks"]').getAttribute('aria-selected'), 'true');
+    assert.equal((await laptop.locator('.st-chips .chip[data-sub="looks"]').innerText()).trim(), 'Cast and places');
+    assert.equal(await laptop.locator('.st-chips .chip[data-sub="kit"]').count(), 0, 'no Kit chip');
     const rows = await laptop.locator('.lw-row').evaluateAll((xs) => xs.map((x) => x.dataset.row));
     assert.deepEqual(rows, ['pg_mom', 'pg_kenji', 'pg_kitchen', 'pg_roof', 'pg_katana']);
     const head = await row(laptop, 'pg_mom').locator('.lw-row-h').innerText();
-    assert.match(head, /No pick yet, 3 in the running/);
-    assert.match(head, /In scene 1/);
-    assert.match(await row(laptop, 'pg_kenji').locator('.lw-row-h').innerText(), /In scenes 1, 2/);
+    assert.match(head, /In Mother flips a pancake/);
+    assert.doesNotMatch(head, /INT\.|KITCHEN/, 'never the slug line');
+    assert.match(await row(laptop, 'pg_kenji').locator('.lw-row-h').innerText(), /In Mother flips a pancake.*, Kenji alone on the roof/);
+    // Size, captions, set aside and the keys live in ⋯, not on the wall.
+    assert.equal(await laptop.locator('.lw-ctl input').count(), 0, 'no sliders or ticks up top');
     await row(laptop, 'pg_mom').locator('.lw-tile img').first().waitFor({ timeout: 8000 });
   });
 
@@ -208,7 +213,6 @@ try {
     assert.equal(await tile(laptop, 'pg_mom', 'fi_m2').getAttribute('data-focus'), 'true');
     await tile(laptop, 'pg_mom', 'fi_m2').locator('[data-act="star"]').click();
     await laptop.waitForSelector('.lw-row[data-row="pg_mom"] .lw-tile[data-id="fi_m2"][data-star="true"] .lw-badge');
-    assert.match(await row(laptop, 'pg_mom').locator('.lw-row-h').innerText(), /Pick: Mom bold cel/);
     await until(laptop, () => el('pg_mom').pick === 'fi_m2', 'pick saved');
     await tile(laptop, 'pg_mom', 'fi_m3').locator('.lw-pic').click();
     await tile(laptop, 'pg_mom', 'fi_m3').locator('[data-act="aside"]').click();
@@ -289,7 +293,7 @@ try {
     await main.locator('.lw-cell', { hasText: 'Mom' }).click();
     await until(laptop, () => el('pg_mom').pick && el('pg_mom').pick !== before && !el('pg_mom').aside.includes(el('pg_mom').pick), 'next kept version is the pick');
     // The roof scene: a place with a stand-in (no pick yet).
-    await laptop.locator('.lw-steps button', { hasText: 'ROOF' }).click();
+    await laptop.locator('.lw-steps button', { hasText: 'Kenji alone' }).click();
     await laptop.waitForFunction(() => /Roof/.test(document.querySelector('.lw-scene.main')?.innerText || ''));
     assert.ok(await laptop.locator('.lw-scene.main .lw-stand', { hasText: 'stand-in' }).count());
     await shot(laptop, 'together');
@@ -307,31 +311,101 @@ try {
   });
 
   await check('a new world: Add a character makes a page in the bible with its own row', async () => {
-    await laptop.locator('.lw-add button', { hasText: 'Add a character' }).click();
+    await laptop.locator('.lw-add button', { hasText: '+ Character' }).click();
     await laptop.locator('.ask-input').fill('Grandpa');
     await laptop.keyboard.press('Enter');
-    await laptop.waitForSelector('.lw-row h2:text-is("Grandpa")');
+    await laptop.waitForSelector('.lw-row .lw-name:text-is("Grandpa")');
     await until(laptop, () => [...table.values()].some((r) => r.title === 'Grandpa' && r.fields?.element?.type === 'character' && r.parent_id === 'pg_n_chars'), 'Grandpa in Characters');
   });
 
-  await check('the piece’s Kit links to the wall and shows the pick first, starred', async () => {
-    await go(laptop, { view: 'production', id: 'pr_reel', tab: 'kit' });
-    await laptop.waitForSelector('.pd-wall-link');
-    const first = laptop.locator('.pd-el[data-element="pg_kenji"] .pd-refs .pd-render').first();
-    assert.equal(await first.getAttribute('data-file'), 'fi_k2');
-    assert.match(await first.getAttribute('class'), /starred/);
-    await laptop.locator('.pd-wall-link').click();
-    await laptop.waitForSelector('.lw .lw-row[data-row="pg_mom"]');
+  await check('a name opens their details beside the wall: Played by saves to the same Bible page and shows on the row', async () => {
+    await openWall(laptop, 'wd_nb');
+    await row(laptop, 'pg_mom').locator('.lw-name').click();
+    await laptop.waitForSelector('.lw-grid.lw-beside .lw-side .cd[data-element="pg_mom"]');
+    assert.equal(await row(laptop, 'pg_mom').locator('.lw-name').getAttribute('aria-expanded'), 'true');
+    const cd = laptop.locator('.lw-side .cd');
+    assert.equal(await cd.locator('input[aria-label="Also called"]').inputValue(), 'Mother');
+    await cd.locator('input[aria-label="Played by"]').fill('Ana Ruiz');
+    await cd.locator('textarea[aria-label="Description"]').fill('Forties, flour on her sleeves');
+    await cd.locator('textarea[aria-label="Description"]').blur();
+    await until(laptop, () => el('pg_mom').playedBy === 'Ana Ruiz' && el('pg_mom').snippet === 'Forties, flour on her sleeves', 'details saved');
+    assert.match(await row(laptop, 'pg_mom').locator('.lw-row-h').innerText(), /played by Ana Ruiz/);
+    // This world's reel is generated, so For AI tools starts open; it folds away.
+    await cd.locator('.cd-ai .cd-slot').first().waitFor();
+    await cd.locator('.cd-fold').click();
+    assert.equal(await cd.locator('.cd-ai').isHidden(), true);
+    await cd.locator('.cd-fold').click();
+    await shot(laptop, 'details-beside');
+    await cd.locator('.cd-close').click();
+    await laptop.locator('.lw-side .cd').waitFor({ state: 'detached' });
+    assert.equal(await laptop.locator('.lw-grid.lw-beside').count(), 0);
   });
 
-  await check('One at a time: one row with nothing else; the choice is kept on this device', async () => {
-    await laptop.locator('.lw-scope button[data-v="one"]').click();
-    await laptop.waitForFunction(() => document.querySelectorAll('.lw-row').length === 1);
+  await check('⋯ > Details open > Under the row: details sit under the name, in one column; kept on this device', async () => {
+    await laptop.locator('.lw-more:visible').click();
+    await laptop.locator('.pop-menu .pop-item', { hasText: 'Details open' }).click();
+    await laptop.locator('.pop-menu .pop-item', { hasText: 'Under the row' }).click();
+    await row(laptop, 'pg_kenji').locator('.lw-name').click();
+    await row(laptop, 'pg_kenji').locator('.cd').waitFor();
+    assert.equal(await laptop.locator('.lw-side .cd').count(), 0);
+    assert.equal(JSON.parse(await laptop.evaluate(() => localStorage.getItem('lookwall'))).details, 'under');
+    await shot(laptop, 'details-under');
+    await laptop.keyboard.press('Escape');
+    await row(laptop, 'pg_kenji').locator('.cd').waitFor({ state: 'detached' });
+    await laptop.locator('.lw-more:visible').click();
+    await laptop.locator('.pop-menu .pop-item', { hasText: 'Details open' }).click();
+    await laptop.locator('.pop-menu .pop-item', { hasText: 'Beside the wall' }).click();
+  });
+
+  await check('Rules for every shot: folded to one line at the top, saved on the world', async () => {
+    await laptop.locator('.cd-rules-line').click();
+    await laptop.locator('.cd-rules-box textarea[aria-label="Style rules"]').fill('Warm cel, film grain');
+    await laptop.locator('.cd-rules-box textarea[aria-label="Style rules"]').blur();
+    await until(laptop, () => table.get('wd_nb').fields?.production?.style === 'Warm cel, film grain', 'style saved');
+    await laptop.locator('.cd-rules-line').click();
+  });
+
+  await check('inside a film: the Cast and places tab is the same wall, with only who and what is in it', async () => {
+    await go(laptop, { view: 'production', id: 'pr_reel', tab: 'kit' });
+    await laptop.waitForSelector('.pd-body[data-tab="kit"] .lw .lw-row');
+    assert.equal((await laptop.locator('.chip[data-tab="kit"]').innerText()).trim(), 'Cast and places');
+    const rows = await laptop.locator('.pd-body .lw-row').evaluateAll((xs) => xs.map((x) => x.dataset.row));
+    assert.deepEqual(rows, ['pg_mom', 'pg_kenji', 'pg_kitchen', 'pg_roof'], 'the katana is in no scene of this film');
+    const first = tile(laptop, 'pg_kenji', 'fi_k2');
+    assert.equal(await first.getAttribute('data-star'), 'true');
+    // Keys work here too.
+    await tile(laptop, 'pg_mom', 'fi_m1').locator('.lw-pic').click();
+    await laptop.keyboard.press('ArrowRight');
+    assert.equal(await tile(laptop, 'pg_mom', 'fi_m2').getAttribute('data-focus'), 'true');
+    await shot(laptop, 'film');
+  });
+
+  await check('Remove in the large view takes a picture off its row, with an Undo', async () => {
+    await tile(laptop, 'pg_kitchen', 'fi_p1').locator('.lw-pic').click();
+    await tile(laptop, 'pg_kitchen', 'fi_p1').locator('[data-act="open"]').click();
+    await laptop.locator('.lw-lb .lw-big').waitFor();
+    await laptop.locator('.lw-lb [data-act="remove"]').click();
+    await until(laptop, () => !el('pg_kitchen').refs.includes('fi_p1') && table.get('fi_p1').deleted, 'removed');
+    await laptop.locator('.toast button', { hasText: 'Undo' }).click();
+    await sleep(1000);
+    await until(laptop, () => el('pg_kitchen').refs.includes('fi_p1') && !table.get('fi_p1').deleted, 'back');
+  });
+
+  await check('One at a time (in ⋯): one row with nothing else; the choice is kept on this device', async () => {
+    await openWall(laptop, 'wd_nb');
+    assert.equal(await laptop.locator('.lw-lb').count(), 0, 'the film’s large view closed on leaving it');
+    await laptop.locator('.lw-more:visible').click();
+    await laptop.locator('.pop-menu .pop-item', { hasText: 'How much at once' }).click();
+    await laptop.locator('.pop-menu .pop-item', { hasText: 'One at a time' }).click();
+    await laptop.waitForFunction(() => document.querySelectorAll('#stage-view .lw-row').length === 1);
     await laptop.reload();
     await laptop.waitForSelector('#editor .ProseMirror', { state: 'attached' });
     await openWall(laptop, 'wd_nb');
-    assert.equal(await laptop.locator('.lw-row').count(), 1);
-    await laptop.locator('.lw-scope button[data-v="all"]').click();
+    await laptop.waitForSelector('#stage-view .lw-row');
+    assert.equal(await laptop.locator('#stage-view .lw-row').count(), 1);
+    await laptop.locator('.lw-more:visible').click();
+    await laptop.locator('.pop-menu .pop-item', { hasText: 'How much at once' }).click();
+    await laptop.locator('.pop-menu .pop-item', { hasText: 'Everything' }).click();
   });
 
   assert.deepEqual(laptop.errors, []);
@@ -349,6 +423,16 @@ try {
     const wide = await phone.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('#stage-view')?.scrollWidth || 0) - innerWidth);
     assert.ok(wide <= 0, `${wide}px sideways`);
     await shot(phone, 'phone');
+  });
+  await check('a phone: a name opens their details under its row, never beside', async () => {
+    await phone.locator('.lw-row[data-row="pg_mom"] .lw-name').tap();
+    await phone.locator('.lw-row[data-row="pg_mom"] .cd').waitFor();
+    assert.equal(await phone.locator('.lw-side .cd').count(), 0);
+    assert.equal(await phone.locator('.lw-row[data-row="pg_mom"] .cd input[aria-label="Played by"]').inputValue(), 'Ana Ruiz');
+    const wide = await phone.evaluate(() => Math.max(document.documentElement.scrollWidth, document.querySelector('#stage-view')?.scrollWidth || 0) - innerWidth);
+    assert.ok(wide <= 0, `${wide}px sideways`);
+    await phone.locator('.lw-row[data-row="pg_mom"] .cd').scrollIntoViewIfNeeded();
+    await shot(phone, 'phone-details');
   });
   assert.deepEqual(phone.errors, []);
 } catch (e) {

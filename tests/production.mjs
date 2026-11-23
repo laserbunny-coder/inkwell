@@ -263,24 +263,30 @@ try {
     await shot(laptop, 'production-shots');
   });
 
-  await check('the Kit: a bible page becomes an element, gets its look; the scene finds it', async () => {
+  await check('Cast and places: a Bible page joins, gets its look in words; the scene finds it', async () => {
     await laptop.locator('.gv-levels .chip[data-tab="kit"]').click();
-    await laptop.waitForSelector('.pd-el[data-element="pg_mom"]');
-    await laptop.locator('.pd-add .ghost-btn', { hasText: 'Use a bible page' }).click();
+    assert.equal((await laptop.locator('.gv-levels .chip[data-tab="kit"]').innerText()).trim(), 'Cast and places');
+    await laptop.waitForSelector('.pd-body .lw-row[data-row="pg_mom"]');
+    await laptop.locator('.pd-body .lw-more').click();
+    await laptop.locator('.pop-menu .pop-item', { hasText: 'Use a Bible page' }).click();
     await laptop.locator('.pop-menu .pop-item', { hasText: 'Katana' }).click();
     await laptop.locator('.pop-menu .pop-item', { hasText: 'Prop (likely)' }).click();
-    await laptop.waitForSelector('.pd-el[data-element="pg_katana"]');
-    await laptop.locator('.pd-el[data-element="pg_katana"] textarea[aria-label="Looks"]').fill('A battered wooden practice sword');
-    await laptop.locator('.pd-el[data-element="pg_katana"] input[aria-label="ComfyUI LoRA"]').fill('katana_v2 LoRA');
-    await laptop.locator('.pd-style').click();
+    // It joins the wall with its details open.
+    const cd = laptop.locator('.pd-body .cd[data-element="pg_katana"]');
+    await cd.waitFor();
+    await cd.locator('textarea[aria-label="Description"]').fill('A battered wooden practice sword');
+    if (await cd.locator('.cd-ai').isHidden()) await cd.locator('.cd-fold').click();
+    await cd.locator('input[aria-label="ComfyUI LoRA"]').fill('katana_v2 LoRA');
+    await laptop.locator('.pd-body .cd-rules-line').click();
+    await laptop.locator('.pd-body .cd-rules-box textarea[aria-label="Style rules"]').click();
     await laptop.keyboard.type('Flat cel shading, warm palette');
     await laptop.locator('.gv-title').click();
     await sleep(700);
     await settle(laptop);
     assert.deepEqual(row('pg_katana').fields.element, { type: 'prop', snippet: 'A battered wooden practice sword', look: 'katana_v2 LoRA' });
     assert.equal(row('wd_nb').fields.production.style, 'Flat cel shading, warm palette');
-    await laptop.locator('.pd-el[data-element="pg_mom"] .pd-refs input[type=file]').setInputFiles({ name: 'mom-ref.png', mimeType: 'image/png', buffer: PNG });
-    await laptop.waitForSelector('.pd-el[data-element="pg_mom"] .pd-refs .pd-render img');
+    await laptop.locator('.pd-body .lw-row[data-row="pg_mom"] .lw-addpics input[type=file]').setInputFiles({ name: 'mom-ref.png', mimeType: 'image/png', buffer: PNG });
+    await laptop.waitForSelector('.pd-body .lw-row[data-row="pg_mom"] .lw-tile img');
     await settle(laptop);
     assert.equal(row('pg_mom').fields.element.refs.length, 1);
     await shot(laptop, 'production-kit');

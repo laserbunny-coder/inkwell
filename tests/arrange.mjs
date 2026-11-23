@@ -199,16 +199,17 @@ try {
     await desk.waitForFunction(() => /Fourth idea/.test(document.querySelector('.st-card .st-text')?.textContent || ''));
   });
 
-  await check('desktop: Kit adds a character right there, and ⋯ takes one out of the kit', async () => {
-    await stage(desk, 'make', 'kit');
-    await desk.locator('.st-kit-add button', { hasText: '+ Character' }).click();
-    await desk.locator('.ask input').fill('Kenji’s rival');
-    await desk.locator('.ask input').press('Enter');
-    await desk.waitForFunction(() => [...document.querySelectorAll('.st-kit-name')].some((e) => e.textContent === 'Kenji’s rival'));
+  await check('desktop: Cast and places adds a character right there, and its ⋯ takes one out', async () => {
+    await stage(desk, 'make', 'looks');
+    await desk.locator('.lw-add button:visible', { hasText: '+ Character' }).click();
+    await desk.locator('.ask-input').fill('Kenji’s rival');
+    await desk.keyboard.press('Enter');
+    await desk.waitForSelector('.lw-row .lw-name:visible:text-is("Kenji’s rival")');
     const el = (await all(desk)).find((r) => r.title === 'Kenji’s rival');
     assert.equal(el.fields.element.type, 'character');
-    await menuPick(desk, desk.locator('.st-kit li', { hasText: 'Kenji’s rival' }).locator('.more-btn'), 'Take it out of the kit (the page stays)');
-    await desk.waitForFunction(() => ![...document.querySelectorAll('.st-kit-name')].some((e) => e.textContent === 'Kenji’s rival'));
+    await desk.locator('.lw-row .lw-name:visible:text-is("Kenji’s rival")').click();
+    await menuPick(desk, desk.locator(`.cd[data-element="${el.id}"] .cd-more`), 'Not in the cast and places');
+    await desk.waitForFunction(() => ![...document.querySelectorAll('.lw-name')].some((e) => e.textContent === 'Kenji’s rival'));
     assert.equal((await get(desk, el.id)).fields.element, undefined);
   });
 

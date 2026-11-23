@@ -79,7 +79,7 @@ export const STAGES = ['New idea', 'Writing', 'Boarding', 'Generating', 'Editing
 export const TOOLS = [
   { id: 'shots', label: 'Shots' },
   { id: 'board', label: 'Storyboard' },
-  { id: 'kit', label: 'Kit' },
+  { id: 'kit', label: 'Cast and places' },
   { id: 'days', label: 'Shoot days' }
 ];
 const VIDEO = ['shots', 'board', 'kit', 'days'];

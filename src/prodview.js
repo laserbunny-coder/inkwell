@@ -7,11 +7,11 @@ import { addFile, fileUrl, fileBlob, thumbUrl, isImage } from './files.js';
 import { zip } from './vault.js';
 import { download } from './export.js';
 import {
-  ELEMENT_TYPES, typeOf, elementsIn, plainPages, newElement, setElement, namesOf,
+  ELEMENT_TYPES, typeOf, elementsIn, newElement, setElement, namesOf,
   findElements, sceneElements, changeBreakdown, sceneSig, shotCode, newShot, shotStage, SHOT_STAGES, stillOf,
   withRenders, withPrompts, isVideo, shotForName, shootDays, newShootDay, shootDayTask, toCsv, toSrt, speechesIn, PLATFORMS,
   MADE_BY, madeBy, isFilmed, gotIt, shotStatus, needsFootage, AUDIO, audioOf, toPlan,
-  viewSlots, toolIdsFor, toolIdsOf, ASPECTS, RATES, rulesOf, genOf, secsOf, runsOf,
+  viewSlots, toolIdsOf, rulesOf, genOf, secsOf, runsOf,
   PRICES_ID, priceList, priceOf, pricesChecked, estimate, spent, money, toEdl, cutEvents, lookOf
 } from './production.js';
 import { make } from './dom.js';
@@ -31,7 +31,7 @@ const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch { /* full 
 export const TABS = [
   { id: 'shots', label: 'Shots' },
   { id: 'board', label: 'Storyboard' },
-  { id: 'kit', label: 'Kit' },
+  { id: 'kit', label: 'Cast and places' },
   { id: 'days', label: 'Shoot days' }
 ];
 export const DELIVER_TABS = [
@@ -482,7 +482,7 @@ export class ProductionView {
     add.setAttribute('aria-label', 'Add an element to this scene');
     add.addEventListener('click', () => this.hooks.menu(add, this.addElementMenu(s)));
     row.append(add);
-    if (!s.uses.length) row.append(make('span', 'hint pd-chips-hint', this.elements.length ? 'No elements found in this scene' : 'Characters, places and props from the Kit show here'));
+    if (!s.uses.length) row.append(make('span', 'hint pd-chips-hint', this.elements.length ? 'No elements found in this scene' : 'Characters, places and props from Cast and places show here'));
     return row;
   }
 
@@ -1474,7 +1474,7 @@ export class ProductionView {
         if (!this.missing.length) this.missing = null;
         this.hooks.changed([el]);
         await this.render();
-        this.hooks.toast(`“${m.name}” is in the kit. Add its look on the Kit tab.`);
+        this.hooks.toast(`“${m.name}” is in the cast and places. Add its look on Cast and places.`);
       });
       li.append(b);
       list.append(li);
@@ -1538,238 +1538,23 @@ export class ProductionView {
     step();
   }
 
-  // ---------- the kit ----------
+  // ---------- cast and places ----------
 
+  // The same wall as on the project's Make, with only who and what is in
+  // this film. Each name opens what's written about them.
   async drawKit(body) {
-    if (!this.world) { body.append(make('p', 'hint gv-empty', 'This piece isn’t in a world, so it has no kit. Move it into a world from the Library.')); return; }
-    // Every version of every character and place, side by side, on the world's Make page.
-    const wall = make('button', 'pd-wall-link', 'Open the look wall');
-    wall.title = 'Every version of every character and place, side by side, to star the one that stays';
-    wall.addEventListener('click', () => this.hooks.go({ view: 'stage', id: this.world.id, page: 'make', sub: 'looks' }));
-    body.append(wall);
-    const top = make('div', 'pd-kit-top');
-    const style = make('textarea', 'pd-ta pd-style');
-    style.value = this.world.fields?.production?.style || '';
-    style.placeholder = 'The look of the whole show, used in every prompt: art style, palette, lens, lighting, what to avoid…';
-    style.setAttribute('aria-label', 'Style rules');
-    style.rows = 3;
-    style.addEventListener('input', () => this.later('style', () => this.saveWorldProd({ style: style.value })));
-    style.addEventListener('blur', () => this.now('style'));
-    const label = make('div', 'pd-prompt-head');
-    label.append(make('span', 'panel-label', `Style rules for ${this.world.title || 'this world'}`));
-    top.append(label, style);
-    body.append(top, this.rulesEl());
-    for (const t of ELEMENT_TYPES) {
-      const els = this.elements.filter((e) => (e.fields.element.type || 'other') === t.id);
-      if (!els.length) continue;
-      const sec = make('section', 'pd-kit-sec');
-      sec.append(make('div', 'panel-label', t.plural));
-      const list = make('div', 'pd-kit-list');
-      for (const e of els) list.append(this.elementEl(e));
-      sec.append(list);
-      body.append(sec);
-    }
-    const acts = make('div', 'pd-add');
-    const add = make('button', 'ghost-btn', '+ Element');
-    add.addEventListener('click', async () => { const el = await this.askNewElement(); if (el) await this.render(); });
-    const use = make('button', 'ghost-btn', 'Use a bible page…');
-    use.addEventListener('click', async () => {
-      const pages = await plainPages(this.world);
-      if (!pages.length) { this.hooks.toast('Every bible page is already an element.'); return; }
-      this.hooks.menu(use, pages.slice(0, 60).map(({ page, guess }) => ({ label: page.title || 'Untitled page', sub: ELEMENT_TYPES.map((x) => ({ label: `${x.label}${x.id === guess ? ' (likely)' : ''}`, run: async () => { this.hooks.changed([await setElement(page.id, { type: x.id })]); this.render(); } })) })));
-    });
-    acts.append(add, use);
-    body.append(acts);
-    if (!this.elements.length) body.append(make('p', 'hint gv-hint', 'Elements are the bible pages a production needs to keep consistent: each character, location, prop and outfit, with reference pictures, its locked look (a LoRA or reference pack) and a few words on how it looks that go into every prompt.'));
-  }
-
-  // The show's constraint card: the frame, the frame rate, and what must
-  // always or never be true on screen. Every prompt keeps to it.
-  rulesEl() {
-    const r = rulesOf(this.world);
-    const card = make('section', 'pd-rules');
-    card.append(make('div', 'panel-label', 'Show rules'));
-    const row = make('div', 'pd-rules-row');
-    const pick = (label, values, value, key, blank) => {
-      const sel = make('select', 'pd-input');
-      if (blank) sel.append(new Option(blank, ''));
-      for (const v of values) sel.append(new Option(key === 'fps' ? `${v} fps` : v, v));
-      sel.value = value;
-      sel.setAttribute('aria-label', label);
-      sel.addEventListener('change', () => this.saveWorldProd({ [key]: sel.value }));
-      const w = make('label', 'pd-field');
-      w.append(make('span', 'pd-field-label', label), sel);
-      return w;
-    };
-    row.append(pick('Frame', ASPECTS, r.aspect, 'aspect', 'Not set'), pick('Frame rate', RATES, r.fps, 'fps'));
-    card.append(row);
-    const ta = make('textarea', 'pd-ta');
-    ta.value = r.constraints;
-    ta.rows = 3;
-    ta.placeholder = 'Always and never, one per line: Kenji is always a head shorter than Mom. Never any text or logos in frame. Night scenes stay blue.';
-    ta.setAttribute('aria-label', 'Always and never');
-    ta.addEventListener('input', () => this.later('constraints', () => this.saveWorldProd({ constraints: ta.value })));
-    ta.addEventListener('blur', () => this.now('constraints'));
-    const w = make('label', 'pd-field');
-    w.append(make('span', 'pd-field-label', 'Always and never'), ta);
-    card.append(w);
-    return card;
-  }
-
-  // A picture slot on a character sheet or a location's angles.
-  slotEl(e, slot) {
-    const x = e.fields.element;
-    const id = x.views?.[slot.id];
-    const tile = make('label', 'pd-render pd-slot' + (id ? '' : ' add'));
-    tile.dataset.slot = slot.id;
-    tile.title = id ? `${slot.label}: change the picture` : `Add the ${slot.label.toLowerCase()} view`;
-    const cap = make('span', 'pd-slot-label', slot.label);
-    if (id) fileUrl(id).then((url) => { if (url) { const img = make('img'); img.src = url; img.alt = slot.label; tile.prepend(img); } else tile.classList.add('missing'); });
-    tile.append(cap);
-    const input = make('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.hidden = true;
-    input.addEventListener('change', async () => {
-      const f = input.files[0];
-      if (!f) return;
-      const row = await addFile(f, { element: e.id, view: slot.id });
-      if (!row) { this.hooks.toast('That picture is over 50 MB.'); return; }
-      const fresh = await getEntry(e.id);
-      this.hooks.changed([await setElement(e.id, { views: { ...(fresh.fields?.element?.views || {}), [slot.id]: row.id } })]);
-      this.render();
-    });
-    tile.append(input);
-    if (id) {
-      const del = make('button', 'pd-star', '×');
-      del.setAttribute('aria-label', `Remove the ${slot.label.toLowerCase()} view`);
-      del.addEventListener('click', async (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        const fresh = await getEntry(e.id);
-        const views = { ...(fresh.fields?.element?.views || {}) };
-        delete views[slot.id];
-        this.hooks.changed([await setElement(e.id, { views })]);
-        this.render();
+    if (!this.world) { body.append(make('p', 'hint gv-empty', 'This piece isn’t in a world, so it has no cast and places. Move it into a world from the Library.')); return; }
+    if (!this.lookWall) {
+      const { LookWall } = await import('./lookwall.js');
+      this.lookWall ||= new LookWall({
+        changed: (rows) => this.hooks.changed(rows.filter(Boolean)),
+        toast: (t, a) => this.hooks.toast(t, a),
+        menu: (anchor, items) => this.hooks.menu(anchor, items),
+        askText: (o) => this.hooks.askText(o),
+        openPage: (id) => this.hooks.go({ view: 'notebook', pageId: id })
       });
-      tile.append(del);
     }
-    return tile;
-  }
-
-  // A reference taken off goes to the Trash with an Undo (taking it only off
-  // the row would have it put back by the look wall's healing).
-  async removeRef(elId, fileId) {
-    const fresh = await getEntry(elId);
-    const x = fresh?.fields?.element || {};
-    const before = { refs: x.refs || [], pick: x.pick ?? null, aside: x.aside || [] };
-    await setElement(elId, { refs: before.refs.filter((r) => r !== fileId), pick: before.pick === fileId ? null : before.pick, aside: before.aside.filter((r) => r !== fileId) });
-    const file = await getEntry(fileId);
-    if (file) await putEntries([{ ...file, deleted: true, updated_at: Date.now() }]);
-    await this.render();
-    this.hooks.toast('Reference removed', { label: 'Undo', run: async () => { if (file) await putEntries([{ ...file, deleted: false, updated_at: Date.now() }]); await setElement(elId, before); this.render(); } });
-  }
-
-  elementEl(e) {
-    const x = e.fields.element;
-    const card = make('div', 'pd-el');
-    card.dataset.element = e.id;
-    const head = make('div', 'pd-el-head');
-    const name = make('button', 'pd-el-name', e.title || 'Untitled');
-    name.title = 'Open its bible page';
-    name.addEventListener('click', () => this.hooks.openPage(e.id));
-    head.append(name, this.hooks.menuButton(() => [
-      { label: 'Open the page', run: () => this.hooks.openPage(e.id) },
-      { label: 'Type', sub: ELEMENT_TYPES.map((t) => ({ label: t.label, current: t.id === (x.type || 'other'), run: async () => { await setElement(e.id, { type: t.id }); this.render(); } })) },
-      { label: 'Not an element', run: async () => { await setElement(e.id, null); this.render(); this.hooks.toast(`“${e.title}” is a plain page again`); } }
-    ], `More for ${e.title}`));
-    card.append(head);
-    const refs = make('div', 'pd-renders pd-refs');
-    // The pick from the look wall first, starred; the rest after it.
-    const look = lookOf(e);
-    for (const id of look.pick ? [look.pick, ...look.refs.filter((r) => r !== look.pick)] : look.refs) {
-      const tile = make('div', 'pd-render' + (id === look.pick ? ' starred' : '') + (look.aside.has(id) ? ' aside' : ''));
-      tile.dataset.file = id;
-      if (id === look.pick) tile.title = 'The pick, from the look wall';
-      thumbUrl(id).then((url) => { if (url) { const img = make('img'); img.src = url; img.alt = ''; tile.prepend(img); } else tile.classList.add('missing'); });
-      const del = make('button', 'pd-star', '×');
-      del.setAttribute('aria-label', 'Remove this reference');
-      del.addEventListener('click', () => this.removeRef(e.id, id));
-      tile.append(del);
-      refs.append(tile);
-    }
-    const add = make('label', 'pd-render add');
-    add.title = 'Add reference pictures';
-    add.append(make('span', '', '+'));
-    const input = make('input');
-    input.type = 'file';
-    input.multiple = true;
-    input.accept = 'image/*';
-    input.hidden = true;
-    input.addEventListener('change', async () => {
-      const ids = [];
-      for (const f of input.files) { const row = await addFile(f, { element: e.id, look: { by: 'me', at: Date.now() } }); if (row) ids.push(row.id); }
-      const fresh = await getEntry(e.id);
-      await setElement(e.id, { refs: [...(fresh.fields?.element?.refs || []), ...ids] });
-      this.render();
-    });
-    add.append(input);
-    refs.append(add);
-    card.append(refs);
-    const field = (key, label, placeholder, multi = false) => {
-      const i = make(multi ? 'textarea' : 'input', multi ? 'pd-ta' : 'pd-input');
-      i.value = key === 'also' ? (x.also || []).join(', ') : x[key] || '';
-      i.placeholder = placeholder;
-      i.setAttribute('aria-label', label);
-      if (multi) i.rows = 2;
-      const save = () => setElement(e.id, { [key]: key === 'also' ? i.value.split(',').map((s) => s.trim()).filter(Boolean) : i.value });
-      i.addEventListener('input', () => this.later(`${e.id}:${key}`, save));
-      i.addEventListener('blur', () => this.now(`${e.id}:${key}`));
-      const wrap = make('label', 'pd-field');
-      wrap.append(make('span', 'pd-field-label', label), i);
-      return wrap;
-    };
-    // Character sheets, angles and tool IDs are for AI tools: only on AI
-    // films, or a film with a generated shot.
-    const forAi = this.aiFilm || this.anyGen;
-    const slots = forAi ? viewSlots(x.type) : [];
-    if (slots.length) {
-      const sheet = make('div', 'pd-views');
-      sheet.append(make('span', 'pd-field-label', x.type === 'character' ? 'Character sheet' : 'Angles'));
-      const row = make('div', 'pd-renders');
-      for (const slot of slots) row.append(this.slotEl(e, slot));
-      sheet.append(row);
-      card.insertBefore(sheet, refs);
-      refs.before(make('span', 'pd-field-label', 'Other references'));
-    }
-    card.append(field('snippet', 'Looks', 'How it looks, in plain words a picture model follows. Goes into every prompt it’s in.', true));
-    if (x.type === 'location') card.append(field('lighting', 'Lighting', 'One line, the same every time: late afternoon sun through blinds, warm, long shadows'));
-    card.append(field('also', 'Also called', 'Other names in the script, comma between'));
-    // Each tool's ID for it, so every prompt can call up the locked look.
-    const ids = make('div', 'pd-ids');
-    const have = toolIdsOf(e);
-    for (const t of toolIdsFor(x.type)) {
-      const i = make('input', 'pd-input');
-      i.value = have[t.id] || '';
-      i.placeholder = t.placeholder;
-      i.setAttribute('aria-label', t.label);
-      const save = async () => {
-        const fresh = await getEntry(e.id);
-        const el = fresh.fields?.element || {};
-        const v = i.value.trim();
-        if (t.id === 'lora') return setElement(e.id, { look: v });
-        const next = { ...(el.ids || {}) };
-        if (v) next[t.id] = v; else delete next[t.id];
-        return setElement(e.id, { ids: next });
-      };
-      i.addEventListener('input', () => this.later(`${e.id}:id:${t.id}`, save));
-      i.addEventListener('blur', () => this.now(`${e.id}:id:${t.id}`));
-      const w = make('label', 'pd-field');
-      w.append(make('span', 'pd-field-label', t.label), i);
-      ids.append(w);
-    }
-    if (forAi) card.append(ids);
-    return card;
+    await this.lookWall.draw(body, this.world, { piece: this.piece.id, ai: this.aiFilm || this.anyGen, view: 'production' });
   }
 
   // ---------- shoot days and call sheets ----------

@@ -694,7 +694,13 @@ export async function worldScenes(world, elements) {
     if (!st.acts.length) continue;
     const texts = new Map();
     for (const act of st.acts) for (const ch of act.chapters) for (const r of ch.rows) texts.set(r.id, r);
+    // A script's scenes go by his names (the Woven title, or the first
+    // words), never their slug lines.
+    const named = script ? new Map(at('wscene', st, piece).filter((r) => r.type === 'row' && r.kind === 'scene').map((r) => [r.id, r])) : new Map();
+    const { sceneTitle: nameOf } = script ? await import('./scenename.js') : {};
     for (const s of at(script ? 'slug' : 'scene', st, piece).filter((x) => x.type === 'row')) {
+      const w = named.get(s.id);
+      const name = w ? nameOf({ title: w.name || '', first: w.first || '' }) : '';
       const rows = s.members.map((id) => texts.get(id)).filter(Boolean);
       const text = rows.map((r) => (r.kind === 'scene' ? r.title || '' : r.text || '')).join('\n');
       const cues = rows.filter((r) => r.fields?.el === 'character').map((r) => r.text || '');
@@ -702,7 +708,7 @@ export async function worldScenes(world, elements) {
       const place = uses.find((id) => byId.get(id).fields.element.type === 'location') || null;
       const cast = uses.filter((id) => byId.get(id).fields.element.type === 'character');
       if (!place && !cast.length) continue;
-      out.push({ id: s.id, piece: piece.id, pieceTitle: piece.title || 'Untitled', code: s.code || '', title: s.title || 'Scene', place, cast });
+      out.push({ id: s.id, piece: piece.id, pieceTitle: piece.title || 'Untitled', code: s.code || '', title: name || s.title || 'Scene', slug: script ? s.title || '' : '', place, cast });
     }
   }
   return out;

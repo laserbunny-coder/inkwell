@@ -630,7 +630,7 @@ async function renderWorld() {
     b.title = 'A life project: steps, notes and pages. Click to make it a story world';
     b.addEventListener('click', () => popMenu(b, [
       { label: 'Life project: steps, notes and pages', current: true, run: () => {} },
-      { label: 'Story world: Shape, Make and the look wall too', run: () => setLife(w, false) }
+      { label: 'Story world: Shape, Make and Cast and places too', run: () => setLife(w, false) }
     ]));
     $('#wh-kind').replaceChildren(b);
   }
@@ -846,7 +846,7 @@ async function drawOutline(w, s, { life, days }) {
       const els = await elementsIn(w);
       const looked = els.filter((e) => lookOf(e.fields?.element || {}).refs.length);
       const kids = [];
-      const looks = kidLine('Looks', zoomTo('make', 'looks'), { meta: looked.length ? `${looked.length} with pictures` : 'none yet' });
+      const looks = kidLine('Cast and places', zoomTo('make', 'looks'), { meta: els.length ? `${els.length}${looked.length ? `, ${looked.length} with pictures` : ''}` : 'none yet' });
       if (looked.length) {
         const ul = make('ul', 'wo-kids');
         for (const e of looked) {
@@ -855,7 +855,7 @@ async function drawOutline(w, s, { life, days }) {
         }
         looks.append(ul);
       }
-      kids.push(looks, kidLine('Kit', zoomTo('make', 'kit'), { meta: els.length ? `${els.length} characters, places and props` : 'characters, places, props' }));
+      kids.push(looks);
       const ahead = days.filter(({ d }) => (d.fields?.date || '') >= isoToday());
       for (const { d, p } of ahead.slice(0, 4)) {
         const when = d.fields?.date ? new Date(`${d.fields.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'No date yet';
@@ -868,8 +868,8 @@ async function drawOutline(w, s, { life, days }) {
         const counts = on ? await shotCounts(filmed) : new Map();
         for (const p of filmed) kids.push(kidLine(filmed.length > 1 || s.pieces.length > 1 ? `Shots · ${p.title || 'Untitled'}` : 'Shots', () => go({ view: 'production', id: p.id }), { meta: on ? plural(counts.get(p.id) || 0, 'shot') : '' }));
       }
-      const metaBits = [looked.length && `${plural(looked.length, 'look')}`, els.length && `${els.length} in the kit`, ahead.length && plural(ahead.length, 'shoot day')].filter(Boolean);
-      lines.push(partLine(w, part, on, { count: '', meta: metaBits.join(' · ') || 'looks, kit, shoot days', kids, zoom: zoomTo('make') }));
+      const metaBits = [els.length && `${els.length} in the cast and places`, ahead.length && plural(ahead.length, 'shoot day')].filter(Boolean);
+      lines.push(partLine(w, part, on, { count: '', meta: metaBits.join(' · ') || 'cast and places, shoot days', kids, zoom: zoomTo('make') }));
     } else if (part.id === 'deliver') {
       const ready = s.pieces.filter(({ row }) => isReady(row, w)).map(({ row }) => row);
       const out = s.pieces.filter(({ row }) => isOut(row, w)).map(({ row }) => row);
