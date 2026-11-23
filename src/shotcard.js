@@ -6,15 +6,24 @@
 import { plain as make } from './dom.js';
 import { shotStage, SHOT_STAGES } from './production.js';
 
-// opts: code, scene (its name), covers (the lines it covers, said plainly), pic (element), close() or null, edit(patch
+// opts: code, scene (its name), status (its word: Planned, Got it, Still picked…),
+// got ({ on, set(on) }) for a filmed shot's Got it tick, covers (the lines it covers, said plainly), pic (element), close() or null, edit(patch
 // {text}|{framing}), done() (Enter), blur(), picture(file), make(), remove().
 export function shotCard(sh, opts) {
   const d = make('div', 'ss-detail');
   d.dataset.shot = sh.id;
   if (opts.pic) d.append(opts.pic);
   const top = make('div', 'ss-top');
-  const stage = SHOT_STAGES.find((s) => s.id === shotStage(sh))?.label || '';
+  const stage = opts.status || SHOT_STAGES.find((s) => s.id === shotStage(sh))?.label || '';
   top.append(make('span', 'ss-code', opts.code || ''), make('span', 'ss-stage', stage));
+  if (opts.got) {
+    // The same Got it as Make's: one tap, a filmed shot is in the can.
+    const g = make('button', 'ss-got', opts.got.on ? '✓ Got it' : 'Got it');
+    g.type = 'button';
+    g.setAttribute('aria-pressed', String(!!opts.got.on));
+    g.addEventListener('click', () => opts.got.set(!opts.got.on));
+    top.append(g);
+  }
   if (opts.close) {
     const x = make('button', 'ss-x', '×');
     x.type = 'button';

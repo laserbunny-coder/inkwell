@@ -222,6 +222,9 @@ const openShot = async (p, id) => {
   const box = p.locator(`.pd-shot[data-shot="${id}"]`);
   await box.locator('.pd-toggle').waitFor({ state: 'visible', timeout: 15000 });
   if (!(await box.locator('.pd-detail').count())) await box.locator('.pd-toggle').click();
+  // The settings fold into one line; Change opens them in place.
+  await p.waitForSelector(`.pd-shot[data-shot="${id}"] .pd-genline`);
+  if (!(await box.locator('.pd-gen').count())) await box.locator('.pd-genline .ghost-btn', { hasText: 'Change' }).click();
   await p.waitForSelector(`.pd-shot[data-shot="${id}"] .pd-gen`);
   return box;
 };
@@ -250,13 +253,13 @@ try {
     await laptop.waitForSelector('.pd-cost');
     const t = await costText(laptop);
     // No model yet: every shot is unpriced, and nothing is spent.
-    assert.match(t, /About \$0\s+for 3 shots, 12 s/, t);
+    assert.match(t, /About \$0\s+to make 3 generated shots, 12 s/, t);
     assert.match(t, /No price for No model/);
     assert.match(t, /Spent \$0 here/);
     assert.match(t, /Prices from Nov 3/);
     await setInput(laptop, '.pd-cost input[aria-label^="Model for finals"]', 'Kling 3.0', costIs(laptop, /About \$2\.88/));
     // 4 + 3 + 5 s at $0.08, twice; the live dojo shot isn't generated.
-    await setInput(laptop, '.pd-cost input[aria-label="Tries per shot"]', 2, costIs(laptop, /About \$1\.92\s+for 3 shots, 12 s/));
+    await setInput(laptop, '.pd-cost input[aria-label="Tries per shot"]', 2, costIs(laptop, /About \$1\.92\s+to make 3 generated shots, 12 s/));
     await settle(laptop);
     assert.deepEqual(row('pr_reel').fields.gen, { model: 'Kling 3.0', tries: 2 });
   });
@@ -286,7 +289,7 @@ try {
     await settle(laptop);
     assert.ok(row('sh_b').fields.group);
     assert.equal(row('sh_c').fields.group, row('sh_b').fields.group);
-    const codes = await scene(laptop, 'pp_1').locator('.pd-code').allTextContents();
+    const codes = await scene(laptop, 'pp_1').locator('.pd-code').evaluateAll((els) => els.map((e) => e.dataset.code));
     assert.deepEqual(codes, ['NB-E01-S01-01', 'NB-E01-S01-02', 'NB-E01-S01-03']);
     await openShot(laptop, 'sh_b');
     assert.match(await laptop.locator('.pd-shot[data-shot="sh_b"] .pd-gen-run').textContent(), /one generation with shots 2 to 3 \(8 s\)/);
@@ -404,12 +407,10 @@ try {
     assert.equal(row('pg_kitchen').fields.element.lighting, 'Low morning sun through the blinds, warm');
     assert.deepEqual(row('pg_kitchen').fields.element.ids, { kling: 'kl_kitchen' });
     await shot(laptop, 'kit');
-    // Each part can be put away.
+    // No switches: how the film is made decides what shows (an AI film shows the tool IDs).
     await laptop.locator('.gv-tools .more-btn').click();
-    await pick(laptop, 'Hide tool IDs');
-    assert.equal(await laptop.locator('.pd-ids').first().isVisible(), false);
-    await laptop.locator('.gv-tools .more-btn').click();
-    await pick(laptop, 'Show tool IDs');
+    assert.equal(await laptop.locator('.pop-menu .pop-item', { hasText: /^(Hide|Show) / }).count(), 0, 'no show and hide switches in ⋯');
+    await laptop.keyboard.press('Escape');
     assert.equal(await laptop.locator('.pd-ids').first().isVisible(), true);
   });
 
@@ -474,22 +475,31 @@ try {
     assert.match(zip, /Source clip filename/);
   });
 
-  await check('the cost and generation details can be hidden, and come back', async () => {
-    // The piece's Shots (One home: Alt + 5 is the project's Deliver now; the piece's ⋯ leads here).
+  await check('a filmed shot in an AI film: Got it in one tap, no models or prompts; the cost line stays for the rest', async () => {
     await go(laptop, { view: 'production', id: 'pr_reel' });
     await laptop.waitForFunction(() => document.documentElement.dataset.view === 'production');
     await laptop.locator('.gv-levels .chip[data-tab="shots"]').click();
     await laptop.waitForSelector('.pd-cost');
-    await laptop.locator('.gv-tools .more-btn').click();
-    await pick(laptop, 'Hide cost');
-    await laptop.locator('.pd-cost').waitFor({ state: 'hidden', timeout: 5000 });
-    await openShot(laptop, 'sh_a');
-    await laptop.locator('.gv-tools .more-btn').click();
-    await pick(laptop, 'Hide generation details');
-    await laptop.locator('.pd-gen').first().waitFor({ state: 'hidden', timeout: 5000 });
-    await shot(laptop, 'hidden');
-    for (const label of ['Show cost', 'Show generation details']) { await laptop.locator('.gv-tools .more-btn').click(); await pick(laptop, label); }
-    await laptop.locator('.pd-cost').waitFor({ state: 'visible', timeout: 5000 });
+    const live = laptop.locator('.pd-shot[data-shot="sh_d"]');
+    assert.equal(await live.locator('.pd-made').innerText(), 'Live action', 'filmed, inside an AI film, says so');
+    assert.equal(await live.locator('.pd-stage').count(), 0, 'Planned or Got it, not the five stages');
+    await live.locator('.pd-toggle').click();
+    await laptop.waitForSelector('.pd-shot[data-shot="sh_d"] .pd-detail.filmed');
+    assert.equal(await live.locator('.pd-gen, .pd-genline, textarea[aria-label="Still prompt"]').count(), 0, 'nothing about models or prompts');
+    await live.locator('.pd-note').fill('35mm, slow push in');
+    await blur(laptop);
+    assert.equal(await scene(laptop, 'pp_5').locator('.pd-left').innerText(), '1 of 1 still to get');
+    await live.locator('.pd-got').click();
+    await laptop.waitForFunction(() => document.querySelector('.pd-shot[data-shot="sh_d"] .pd-got')?.getAttribute('aria-pressed') === 'true');
+    await settle(laptop);
+    assert.ok(row('sh_d').fields.got > 0, 'Got it is when');
+    assert.equal(row('sh_d').fields.note, '35mm, slow push in');
+    assert.equal(await scene(laptop, 'pp_5').locator('.pd-left').innerText(), 'All got');
+    await shot(laptop, 'filmed');
+    await laptop.locator('.pd-shot[data-shot="sh_d"] .pd-got').click();
+    await laptop.waitForFunction(() => document.querySelector('.pd-shot[data-shot="sh_d"] .pd-got')?.getAttribute('aria-pressed') === 'false');
+    await settle(laptop);
+    assert.equal(row('sh_d').fields.got, undefined, 'a second tap: still to get');
   });
 
   assert.deepEqual(laptop.errors, []);

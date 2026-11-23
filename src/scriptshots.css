@@ -113,6 +113,8 @@ html.ss-rail .ss-tram { width: 2px; }
 .ss-sheet .ss-detail > .ss-pic { max-width: 240px; align-self: center; }
 .ss-top { display: flex; align-items: center; gap: 8px; }
 .ss-stage { margin-left: auto; font-size: 11px; color: var(--muted); }
+.ss-got { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 99px; font: 12px var(--ui); padding: 3px 10px; cursor: pointer; }
+.ss-got[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .ss-x { width: 30px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 17px; line-height: 1; cursor: pointer; }
 .ss-x:hover { background: var(--tint); color: var(--ink); }
 .ss-field { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--ink); font: 14px var(--ui); }
