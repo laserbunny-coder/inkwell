@@ -6,7 +6,8 @@ export type Note = { id: string; user_id: string; author: string | null; title: 
 export type Kind = "needs" | "review" | "week" | "month" | "notes";
 const KIND = { decision: "a decision", blocked: "blocked on you", review: "ready to review" } as Record<string, string>;
 export const APP = "https://laserbunny-coder.github.io/daybook/";
-export const INKWELL = "https://laserbunny-coder.github.io/inkwell/";
+// The app's own address: APP_URL on another copy of Inkwell (Studio, Nov 23 2026).
+export const INKWELL = (globalThis.Deno?.env.get("APP_URL") || "https://laserbunny-coder.github.io/inkwell/");
 export type App = "daybook" | "inkwell";
 export type SubRow = Sub & { app?: string | null };
 

@@ -2460,7 +2460,8 @@ async function updatePrices(args: Record<string, unknown>, db: Db) {
 
 // ---------- tasks ----------
 
-const APP = "https://laserbunny-coder.github.io/inkwell/";
+// The app's own address: APP_URL on another copy of Inkwell (Studio, Nov 23 2026).
+const APP = (globalThis.Deno?.env.get("APP_URL") || "https://laserbunny-coder.github.io/inkwell/");
 const TASKS_PAGE = "page-tasks";
 const PLAN_ID = "settings-plan";
 const FREE_HOURS = 45;

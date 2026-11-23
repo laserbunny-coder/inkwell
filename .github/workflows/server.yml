@@ -73,6 +73,7 @@ jobs:
           ACRO_CONNECTOR_URL: ${{ secrets.ACRO_CONNECTOR_URL }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
         run: |
           args=()
           [ -n "$ANTHROPIC_API_KEY" ] && args+=("ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
@@ -81,6 +82,8 @@ jobs:
           [ -n "$ACRO_CONNECTOR_URL" ] && args+=("ACRO_CONNECTOR_URL=$ACRO_CONNECTOR_URL")
           [ -n "$GOOGLE_CLIENT_ID" ] && args+=("GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID")
           [ -n "$GOOGLE_CLIENT_SECRET" ] && args+=("GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET")
+          # A copy of Inkwell's own address (repository variable APP_URL), for links the server writes.
+          [ -n "$APP_URL" ] && args+=("APP_URL=$APP_URL")
           if [ ${#args[@]} -gt 0 ]; then supabase secrets set --yes --project-ref "$PROJECT_REF" "${args[@]}"; fi
       - name: Deploy server functions
         if: steps.ready.outputs.ok == 'true'

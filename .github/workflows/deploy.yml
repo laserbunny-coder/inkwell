@@ -50,7 +50,9 @@ jobs:
         run: |
           # Both values are public by design (row level security protects the data).
           # Set them as repository variables, or they're read from Daybook's published settings.
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+          # The Daybook fallback is Michael's own server: only ever on his repository,
+          # so a copy of Inkwell (Studio, someone else's fork) can never sync to it.
+          if [ "$GITHUB_REPOSITORY" = "laserbunny-coder/inkwell" ] && { [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; }; then
             cfg=$(curl -fsSL https://laserbunny-coder.github.io/daybook/js/config.js || true)
             SUPABASE_URL=$(printf '%s' "$cfg" | sed -n "s/.*supabaseUrl: *'\([^']*\)'.*/\1/p")
             SUPABASE_ANON_KEY=$(printf '%s' "$cfg" | sed -n "s/.*supabaseAnonKey: *'\([^']*\)'.*/\1/p")
@@ -61,6 +63,13 @@ jobs:
         run: npx vite build
       - name: Test
         run: node tests/all.mjs ${{ matrix.share }}/3
+      # A copy built as Studio (repository variable INKWELL_EDITION = studio) is
+      # tested as the full app, then built again as Studio for publishing.
+      - name: Build the edition this copy publishes
+        if: matrix.share == 1 && github.ref == 'refs/heads/main' && vars.INKWELL_EDITION != ''
+        env:
+          VITE_EDITION: ${{ vars.INKWELL_EDITION }}
+        run: npx vite build
       # The first machine also packs up the site for publishing.
       - name: New cache name so phones pick up the update
         if: matrix.share == 1 && github.ref == 'refs/heads/main'
@@ -107,6 +116,8 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      # A copy of Inkwell names its own Worker (repository variable CLOUDFLARE_WORKER).
+      CLOUDFLARE_WORKER: ${{ vars.CLOUDFLARE_WORKER }}
     steps:
       - name: Skip until Cloudflare is set up here
         id: ready
@@ -126,6 +137,6 @@ jobs:
         working-directory: site
         run: |
           rm -f dist/.nojekyll
-          printf '{\n  "name": "inkwell",\n  "compatibility_date": "2026-10-01",\n  "assets": { "directory": "./dist" }\n}\n' > wrangler.jsonc
+          printf '{\n  "name": "%s",\n  "compatibility_date": "2026-10-01",\n  "assets": { "directory": "./dist" }\n}\n' "${CLOUDFLARE_WORKER:-inkwell}" > wrangler.jsonc
           [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || unset CLOUDFLARE_ACCOUNT_ID
           npx --yes wrangler@latest deploy
