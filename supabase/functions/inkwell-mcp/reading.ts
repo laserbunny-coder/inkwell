@@ -11,6 +11,18 @@ export const TRACKS: { k: "ot" | "ps" | "wi" | "nt"; name: string; books: [strin
   { k: "nt", name: "New Testament", books: NT, per: 2 },
 ];
 
+// Reading plans (Nov 23 2026, add-ons), as in src/firstlight.js: fields.reading.plan.
+const JOB = OT.findIndex(([b]) => b === "Job") + 1;
+const OT_ALL: [string, number][] = [...OT.slice(0, JOB), ["Psalms", 150], ["Proverbs", 31], ["Ecclesiastes", 12], ...OT.slice(JOB)];
+type Track = { k: string; name: string; books: [string, number][]; per: number };
+export const PLANS: Record<string, { name: string; tracks: Track[] }> = {
+  four: { name: "Four tracks", tracks: TRACKS },
+  year: { name: "Old and New Testament", tracks: [{ k: "yo", name: "Old Testament", books: OT_ALL, per: 3 }, { k: "yn", name: "New Testament", books: NT, per: 1 }] },
+  chapter: { name: "One chapter a day", tracks: [{ k: "ch", name: "The Bible", books: [...OT_ALL, ...NT], per: 1 }] },
+};
+export const planOf = (st: Record<string, unknown>) => (typeof st?.plan === "string" && PLANS[st.plan] ? st.plan : "four");
+export const tracksOf = (st: Record<string, unknown>): Track[] => PLANS[planOf(st)].tracks;
+
 const total = (books: [string, number][]) => books.reduce((a, b) => a + b[1], 0);
 export function posOf(books: [string, number][], i: number): [number, number] {
   const n = total(books);
@@ -24,8 +36,8 @@ const norm = (s: string) => s.toLowerCase().replace(/\bpsalms\b/, "psalm").repla
 
 // "2 Kings 4", "Psalm 23", "Ecclesiastes" (chapter 1) → a place in that track,
 // or an error naming the books it takes.
-export function placeIn(k: string, ref: unknown): { place: number } | { error: string } {
-  const t = TRACKS.find((x) => x.k === k);
+export function placeIn(k: string, ref: unknown, tracks: Track[] = TRACKS): { place: number } | { error: string } {
+  const t = tracks.find((x) => x.k === k);
   if (!t) return { error: `There's no reading track ${k}.` };
   const m = /^(.*?)(?:\s+(\d{1,3}))?$/.exec(String(ref ?? "").trim());
   const book = norm(m?.[1] ?? "");
@@ -38,10 +50,10 @@ export function placeIn(k: string, ref: unknown): { place: number } | { error: s
   return { place: place + ch - 1 };
 }
 
-// Today's six chapters from the places.
+// Today's chapters from the places (six on the four tracks).
 export function todays(st: Record<string, unknown>): string[] {
   const out: string[] = [];
-  for (const t of TRACKS) for (let n = 0; n < t.per; n++) out.push(refAt(t.books, (Number(st[t.k]) || 0) + n));
+  for (const t of tracksOf(st)) for (let n = 0; n < t.per; n++) out.push(refAt(t.books, (Number(st[t.k]) || 0) + n));
   return out;
 }
 

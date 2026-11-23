@@ -120,7 +120,7 @@ const blankState = () => ({ round: 0, order: [...ROUND], step: { lever: 0, planc
 // The page and its outline, written once.
 export async function seedTraining() {
   const had = await getEntry(TRAINING_PAGE);
-  if (had && !had.deleted) return upgradeSeed(had);
+  if (had && !had.deleted) return had.fields?.training?.own ? [] : upgradeSeed(had);
   const rows = [];
   const page = entry('page', { id: TRAINING_PAGE, title: 'Training', parent_id: null, sort: 0 });
   page.fields = { ...page.fields, training: { ...blankState(), seedv: SEED_V } };
@@ -142,6 +142,22 @@ export async function seedTraining() {
   });
   await putEntries(rows);
   return rows;
+}
+
+// Someone else's training (add-ons, Nov 23 2026): turned on in Look > Add-ons
+// with no Training page yet, it starts empty, with one session and one
+// exercise to write over. own: true keeps Michael's seed, goals and plan link
+// out of it.
+export async function startTraining() {
+  const had = await getEntry(TRAINING_PAGE);
+  if (had && !had.deleted) return [];
+  const page = entry('page', { id: TRAINING_PAGE, title: 'Training', parent_id: null, sort: 0 });
+  page.fields = { ...page.fields, training: { ...blankState(), order: [], step: {}, own: true, seedv: SEED_V } };
+  const line = (parent, sort, text, fields) => entry('line', { parent_id: parent, sort, text, content: [{ type: 'text', text }], tags: [], links: [], fields: { done: false, gather: null, gathered: null, mirror: null, ...fields } });
+  const top = line(TRAINING_PAGE, GAP, 'Session 1', { session: { once: false, hard: false } });
+  const ex = line(top.id, GAP, 'Your first exercise', { ex: { k: 'first', n: 3, w: 'sets' } });
+  await putEntries([page, top, ex]);
+  return [page, top, ex];
 }
 
 // A page written before the leg fix (Nov 15 evening): "Squat or split squat"
@@ -438,6 +454,8 @@ export async function deskTraining() {
   const nx = nextSession(tr, isoOf());
   const next = nx.s;
   const on = nx.day !== isoOf() && weekSet(tr) ? ` on ${WEEKDAYS[weekdayOf(nx.day) - 1]}` : '';
+  // Someone else's training: no goals of Michael's, only the next session.
+  if (tr.state.own) return { own: true, goals: [], steps: ladderSteps(tr), marks: {}, waiting: [], next: next ? `${next.name}${on}` : '' };
   return {
     goals: [
       ['Vertical over 30 inches', L.vtest != null ? `${L.vtest} inches` : after, 'vtest'],

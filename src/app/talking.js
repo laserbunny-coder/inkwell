@@ -25,6 +25,7 @@ import { writeThought, fileThought, waitingThoughts } from '../thoughts.js';
 import { dayBody, layOutDay, writeClose } from '../dayends.js';
 import { ensureTrainingLine, seedTraining, TRAINING_PAGE } from '../training.js';
 import { autoOn } from '../auto.js';
+import { addonOn } from '../addons.js';
 import { inPane, host as paneHost } from '../panes.js';
 import { events as calendarEvents } from '../calendar.js';
 import { bookType, bookOf, kindName } from '../library.js';
@@ -435,8 +436,9 @@ addCommands(() => [
   { group: 'write', label: 'Your voice modes (shared with Scribe)…', words: ['journal', 'scene', 'idea', 'email', 'mode'], run: () => openModes() },
   { group: 'plan', label: 'Now: Done with the one thing', keys: 'D', words: ['done', 'finished', 'tick', 'check', 'now', 'one thing'], run: () => plan.now.done(), when: onNow },
   { group: 'plan', label: 'Now: Not now (later today, enough for today, another day)', keys: 'N', words: ['not now', 'later', 'tomorrow', 'set aside', 'postpone', 'another day', 'worked on'], run: () => { plan.now.asking = true; plan.redraw(); }, when: () => onNow() && !!plan.now.model().cur },
-  { group: 'go', label: 'Training: the sessions and their exercises', words: ['training', 'workout', 'exercise', 'sessions', 'calisthenics', 'parkour', 'handstand', 'front lever', 'vertical'], run: async () => { await seedTraining(); openEntry(TRAINING_PAGE); } },
-  { group: 'plan', label: 'Today’s Bible reading', words: ['bible', 'reading', 'esv', 'scripture', 'first light', 'chapters', 'psalm', 'devotion', 'morning'], run: async () => { plan.now.light.open(); await go({ view: 'plan', tab: 'now' }); plan.redraw(); }, when: () => !!plan },
+  { group: 'go', label: 'Training: the sessions and their exercises', words: ['training', 'workout', 'exercise', 'sessions', 'calisthenics', 'parkour', 'handstand', 'front lever', 'vertical'], run: async () => { if (!(await addonOn('training'))) return window.dispatchEvent(new CustomEvent('open-addons')); await seedTraining(); openEntry(TRAINING_PAGE); } },
+  { group: 'view', label: 'Add-ons: Bible reading, Training', words: ['add-ons', 'addons', 'routines', 'bible', 'training', 'turn on', 'turn off'], run: () => window.dispatchEvent(new CustomEvent('open-addons')) },
+  { group: 'plan', label: 'Today’s Bible reading', words: ['bible', 'reading', 'esv', 'scripture', 'first light', 'chapters', 'psalm', 'devotion', 'morning'], run: async () => { if (!(await addonOn('bible'))) return window.dispatchEvent(new CustomEvent('open-addons')); plan.now.light.open(); await go({ view: 'plan', tab: 'now' }); plan.redraw(); }, when: () => !!plan },
   { group: 'plan', label: 'Talk the day through (what is in front of you today)', words: ['morning', 'talk', 'day', 'lay out', 'plan the day', 'say', 'brain dump', 'start', 'now'], run: async () => { await go({ view: 'plan', tab: 'now' }); plan.now.openTalk(); }, when: () => !!plan },
   { group: 'plan', label: 'Close the day (what you did, two questions, first thing tomorrow)', words: ['evening', 'close', 'end', 'day', 'reflect', 'journal', 'done', 'tomorrow', 'shutdown', 'wrap up'], run: () => closeDayFromCard(), when: () => !!plan },
   { group: 'go', label: 'Go through loose lines: the last week’s unfiled lines, one at a time', words: ['sort', 'file', 'loose', 'triage', 'review', 'inbox', 'tidy'], run: () => through.open('loose') },
@@ -630,9 +632,10 @@ function wireTalking() {
       // Not in automated test runs unless asked for (src/auto.js).
       daily: async (items, today) => {
         if (inPane) return [];
-        const rows = !autoOn('training') ? [] : await ensureTrainingLine(items, today);
+        // Each only when its add-on is on (src/addons.js).
+        const rows = !autoOn('training') || !(await addonOn('training')) ? [] : await ensureTrainingLine(items, today);
         // First light is a line of the day on the zoom (Part 2).
-        if (autoOn('firstlight')) rows.push(...(await ensureLightLine(items, today)));
+        if (autoOn('firstlight') && (await addonOn('bible'))) rows.push(...(await ensureLightLine(items, today)));
         return rows;
       },
       // The zoom's line page (Part 2): the door into a step's piece, the pieces

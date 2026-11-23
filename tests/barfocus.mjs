@@ -53,10 +53,10 @@ try {
     assert.ok(hide.includes('bullets'), 'bullets stay off');
   });
 
-  await check('the Aa panel: three tabs; Show is one short list of eight, no groups', async () => {
+  await check('the Aa panel: Look, Text, Show and Add-ons; Show is one short list of eight, no groups', async () => {
     await run('Look, page and text settings');
     await p.waitForSelector('.page-settings:not([hidden])');
-    assert.deepEqual(await p.locator('.ps-tab').allInnerTexts(), ['Look', 'Text', 'Show']);
+    assert.deepEqual(await p.locator('.ps-tab').allInnerTexts(), ['Look', 'Text', 'Show', 'Add-ons']);
     await p.locator('.ps-tab[data-pane="show"]').tap();
     assert.equal(await p.locator('.ps-show .ps-group').count(), 0, 'no folding groups');
     assert.equal(SHOWS.length, 8);

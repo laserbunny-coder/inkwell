@@ -19,6 +19,10 @@ import { steadyTitles, wovenPick } from './manuscript.js';
 import { box, writing } from './commands.js';
 import { deskPage, plan } from './talking.js';
 import { panes, syncBeside } from './beside.js';
+import { ADDONS, loadAddons, setAddon } from '../addons.js';
+import { PLANS, planOf, readReading, saveReading, lightToday, dropLine, isLight } from '../firstlight.js';
+import { startTraining, isTraining } from '../training.js';
+import { loadTasks, isoOf } from '../tasks.js';
 
 // ---------- panels revealed by edges ----------
 
@@ -54,7 +58,7 @@ function lookPanel(panel) {
   const tabs = make('div', 'ps-tabs');
   tabs.setAttribute('role', 'tablist');
   const panes = {};
-  for (const [id, label] of [['look', 'Look'], ['text', 'Text'], ['show', 'Show']]) {
+  for (const [id, label] of [['look', 'Look'], ['text', 'Text'], ['show', 'Show'], ['addons', 'Add-ons']]) {
     const b = make('button', 'ps-tab', label);
     b.type = 'button';
     b.dataset.pane = id;
@@ -68,7 +72,8 @@ function lookPanel(panel) {
   panes.look.append(panel.querySelector('.look-pick'));
   for (const el of [panel.querySelector('.woven-pick'), $('#page-width').closest('label'), $('#text-size').closest('label'), panel.querySelector('.font-pick')]) panes.text.append(el);
   panes.show.append(show);
-  panel.prepend(tabs, panes.look, panes.text, panes.show);
+  panes.addons.append(make('div', 'ps-addons'));
+  panel.prepend(tabs, panes.look, panes.text, panes.show, panes.addons);
   // Show: the short panel, eight switches in one list (shows.js).
   const list = make('div', 'ps-list');
   for (const r of SHOWS) {
@@ -84,7 +89,66 @@ function lookPanel(panel) {
   }
   show.append(list);
 }
+// Add-ons (Nov 23 2026): the routines a person turns on for themselves.
+// Bible reading asks which plan; Training starts with an empty page for
+// anyone who has none. Off takes today's open line away; the data stays.
+async function drawAddons() {
+  const box = $('.page-settings .ps-addons');
+  if (!box) return;
+  const on = await loadAddons();
+  const st = await readReading();
+  box.replaceChildren(make('p', 'hint', 'Routines that come up on Today and the Desk. Each is off until you turn it on.'));
+  for (const a of ADDONS) {
+    const label = make('label', 'switch');
+    const input = make('input');
+    input.type = 'checkbox';
+    input.dataset.addon = a.id;
+    input.checked = !!on[a.id];
+    label.classList.toggle('on', input.checked);
+    label.append(input, ` ${a.label}`);
+    box.append(label, make('p', 'hint ps-addon-about', a.about));
+    input.addEventListener('change', () => turnAddon(a.id, input.checked));
+    if (a.id === 'bible' && on.bible) {
+      const plans = make('div', 'ps-plans');
+      plans.setAttribute('role', 'radiogroup');
+      plans.setAttribute('aria-label', 'Reading plan');
+      for (const [k, p] of Object.entries(PLANS)) {
+        const l = make('label', 'ps-plan');
+        const r = make('input');
+        r.type = 'radio';
+        r.name = 'reading-plan';
+        r.value = k;
+        r.checked = planOf(st) === k;
+        r.addEventListener('change', async () => { await saveReading({ ...(await readReading()), plan: k }); plan?.redraw?.(); deskPage?.load?.({ quiet: true }); toast(`Reading plan: ${p.name}`); });
+        const t = make('span', 'ps-plan-t');
+        t.append(make('b', '', p.name), make('span', 'hint', p.words));
+        l.append(r, t);
+        plans.append(l);
+      }
+      box.append(plans);
+    }
+  }
+}
+async function turnAddon(id, on) {
+  await setAddon(id, on);
+  if (on && id === 'training') await startTraining();
+  if (!on) {
+    // Today's open line goes; anything written under it goes to the Trash.
+    const today = isoOf();
+    const items = await loadTasks();
+    const gone = items.filter((i) => !i.row.fields?.done && i.task.day === today && (id === 'bible' ? isLight(i.row) : isTraining(i.row)));
+    for (const i of gone) await dropLine(i.row.id);
+  }
+  await plan?.refresh?.();
+  deskPage?.load?.({ quiet: true });
+  const a = ADDONS.find((x) => x.id === id);
+  toast(on ? `${a.label} is on` : `${a.label} is off. Nothing of it is lost`);
+  drawAddons();
+}
+window.addEventListener('open-addons', () => { if ($('.page-settings')?.hidden) togglePageSettings('addons'); else lookTab('addons'); });
+
 function lookTab(id) {
+  if (id === 'addons') drawAddons();
   const panel = $('.page-settings');
   panel.dataset.tab = id;
   panel.querySelectorAll('.ps-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.pane === id)));

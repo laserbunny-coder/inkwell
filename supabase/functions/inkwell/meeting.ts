@@ -24,7 +24,23 @@ export async function writeOutMeeting(userId: string, body: { file?: string; ter
   }
 }
 
-const SYSTEM = `You turn a written-out meeting into notes its owner can use. The owner runs a dance and cheer business with their partner, and is also a writer and filmmaker, so a meeting is usually business or a film production meeting.
+// Michael's server has Acro HQ connected (ACRO_CONNECTOR_URL): his notes know
+// his dance and cheer business. Anyone else's (add-ons, Nov 23 2026) get the
+// same notes without it: no business areas or schools, kind business or not.
+const ACRO = !!Deno.env.get("ACRO_CONNECTOR_URL");
+const PLAIN = `You turn a written-out meeting into notes its owner can use. The owner is a writer and filmmaker, so a meeting is often a film production meeting, and may be about other work.
+
+The write-out is split by speaker (S0, S1, …) by a machine that sometimes splits one person in two or runs two together; [m:ss] is when each part starts.
+
+- speakers: a name for each speaker id, from how they address each other or what they say about themselves. The owner's own name, if given, is the person who recorded it. If you can't tell, use "Speaker 1", "Speaker 2" (by id order). Two ids that are clearly the same person get the same name.
+- title: a short name for the meeting in plain words, like "Location scout recap with Sam". No date.
+- kind: "filmmaking" for films, shows, scripts, shoots and production, "business" for other paid work, else "other".
+- summary: a few short paragraphs in plain words: what it was about, what was worked out, and anything left open. Keep their own terms and names. No Markdown.
+- decisions: each thing they agreed on or settled, one short sentence each. Only real decisions, not ideas floated.
+- tasks: each thing someone said they'd do or that clearly needs doing, as a short task title starting with a verb. owner is the name of whoever will do it (one of the speaker names), or "" if nobody took it. notes is a sentence of context if the title needs it, else "". due is a date (YYYY-MM-DD) only if one was said, based on the meeting date, else "". area and school are always "".
+- Use only what was said. Never invent tasks, decisions, names or details.`;
+
+const MICHAEL = `You turn a written-out meeting into notes its owner can use. The owner runs a dance and cheer business with their partner, and is also a writer and filmmaker, so a meeting is usually business or a film production meeting.
 
 The write-out is split by speaker (S0, S1, …) by a machine that sometimes splits one person in two or runs two together; [m:ss] is when each part starts.
 
@@ -36,6 +52,7 @@ The write-out is split by speaker (S0, S1, …) by a machine that sometimes spli
 - tasks: each thing someone said they'd do or that clearly needs doing, as a short task title starting with a verb. owner is the name of whoever will do it (one of the speaker names), or "" if nobody took it. notes is a sentence of context if the title needs it, else "". due is a date (YYYY-MM-DD) only if one was said, based on the meeting date, else "".
 - For a business meeting, each task also gets area (Content for videos and posts to make, Social for social accounts, Ads for paid ads, Live for live classes and events, Admin for everything else) and school (the business runs two online schools: "Flip & Dance" for acro and dance, "Cheer" for cheer; "Both" if it's for both or unclear). For other meetings, area and school are "".
 - Use only what was said. Never invent tasks, decisions, names or details.`;
+const SYSTEM = ACRO ? MICHAEL : PLAIN;
 
 const SCHEMA = {
   type: "object",
