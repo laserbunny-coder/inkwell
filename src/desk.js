@@ -25,6 +25,9 @@ import { GOALS } from './trainstats.js';
 import { readingLog, readReading, saveReading, toggledDay, PLANS, planOf } from './firstlight.js';
 import { addonOn } from './addons.js';
 import { readBlock } from './readview.js';
+import { STUDIO } from './edition.js';
+import { STEPS, TOURS, readSteps, stepDone, saveSteps, deleteSample } from './firststeps.js';
+import { runTour } from './tour.js';
 
 export const DESK_ID = 'settings-desk';
 const KIND = { decision: 'Decide', blocked: 'Do', review: 'Try' };
@@ -489,6 +492,8 @@ export class DeskPage {
     side.append(hist);
     head.append(side);
     const parts = [head];
+    // Studio's First steps (firststeps.js), above everything until it's done.
+    if (STUDIO) { const f = await this.firstSteps(); if (f) parts.push(f); }
 
     // The folded line: only when something is waiting or running.
     if (calls.length || crew.length || later.length) parts.push(this.crewFold({ calls, crew, later, data, now, isNew }));
@@ -773,6 +778,46 @@ export class DeskPage {
   // One quiet block: the training goals on stage with where each stands, the
   // ones waiting their turn, and the next session; the streak and a chart
   // behind each goal (Part 7), each with its own switch in Look.
+  // Six steps, each a short click-through in the sample film. Ticked when its
+  // tour is done; all six: offer to delete the sample, and the card goes.
+  async firstSteps() {
+    const st = await readSteps();
+    if (!st.made || st.hidden) return null;
+    const sec = make('section', 'dk-sec dk-first');
+    const h = make('h2', 'dk-label', 'First steps');
+    h.append(make('span', 'dk-label-more', `${st.done.length} of ${STEPS.length}${st.gone ? '' : ' · in the sample film, Salt Road'}`));
+    sec.append(h);
+    const redraw = () => this.render({ now: this.now, failed: false });
+    if (st.done.length >= STEPS.length) {
+      const p = make('p', 'hint dk-first-end', st.gone ? 'All done. “Show me around” in Go runs any of these again.' : 'All done. Keep the sample film to look back at, or delete it?');
+      sec.append(p);
+      const row = make('div', 'dk-first-acts');
+      if (!st.gone) {
+        const del = make('button', 'pill', 'Delete the sample');
+        del.type = 'button';
+        del.addEventListener('click', async () => { await deleteSample(); await saveSteps({ hidden: true }); toast('The sample film is in the Trash'); redraw(); });
+        row.append(del);
+      }
+      const keep = make('button', 'pill', st.gone ? 'Hide this' : 'Keep it');
+      keep.type = 'button';
+      keep.addEventListener('click', async () => { await saveSteps({ hidden: true }); redraw(); });
+      row.append(keep);
+      sec.append(row);
+      return sec;
+    }
+    const list = make('div', 'dk-first-list');
+    for (const s of STEPS) {
+      const b = make('button', `dk-first-step${st.done.includes(s.id) ? ' done' : ''}`);
+      b.type = 'button';
+      b.dataset.step = s.id;
+      b.append(make('span', 'dk-first-box'), make('span', 'dk-first-t', s.label));
+      b.addEventListener('click', () => runTour(TOURS[s.id], { title: s.label, go: (place) => this.go?.(place), onDone: async () => { await stepDone(s.id); await this.go?.({ view: 'desk' }); redraw(); } }));
+      list.append(b);
+    }
+    sec.append(list);
+    return sec;
+  }
+
   async readingBlock() {
     if (!(await addonOn('bible'))) return null;
     const root = document.documentElement;

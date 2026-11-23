@@ -197,3 +197,14 @@ html.has-rail .rail #desk-toggle[data-n]::after { margin-left: auto; }
 .dk-next-none { color: var(--muted); flex: 1 1 auto; }
 .dk-next .dk-when { flex: none; font-size: 12px; color: var(--muted); }
 @media (--touch) { .dk-tick { width: 22px; height: 22px; } }
+
+/* First steps (Studio onboarding, Nov 23 2026): six steps, one column, each a short tour. */
+.dk-first { margin-bottom: 8px; }
+.dk-first-list { display: flex; flex-direction: column; gap: 2px; max-width: 520px; }
+.dk-first-step { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border: 0; border-radius: 6px; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.dk-first-step:hover, .dk-first-step:focus-visible { background: var(--tint); }
+.dk-first-box { width: 14px; height: 14px; border: 1.5px solid var(--muted); border-radius: 3px; flex: none; }
+.dk-first-step.done { color: var(--muted); }
+.dk-first-step.done .dk-first-t { text-decoration: line-through; }
+.dk-first-step.done .dk-first-box { background: var(--accent); border-color: var(--accent); }
+.dk-first-acts { display: flex; gap: 8px; flex-wrap: wrap; }
