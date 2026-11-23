@@ -624,7 +624,11 @@ export class LookWall {
   details(el) {
     return castDetails(el, {
       changed: async (rows) => {
-        for (const row of rows.filter(Boolean)) { const i = this.els.findIndex((e) => e.id === row.id); if (i >= 0) this.els[i] = row; }
+        for (const row of rows.filter(Boolean)) {
+          const i = this.els.findIndex((e) => e.id === row.id);
+          // Taken out of the cast and places: off the wall at once.
+          if (i >= 0) { if (row.fields?.element) this.els[i] = row; else this.els.splice(i, 1); }
+        }
         await this.hooks.changed(rows.filter(Boolean));
         // The row's head shows Played by: kept in step without a redraw.
         const row = rows[0];
