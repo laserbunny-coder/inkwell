@@ -246,7 +246,7 @@ export class StagePage {
       ] : []),
       ...(row.fields?.filed || []).map((id) => ({ label: 'Take it back off a page…', run: async () => { const t = await getEntry(id); const ok = await this.hooks.ask({ title: `Take it off “${t?.title || 'that page'}”?`, body: 'The copy on that page goes; the line stays where it was written.', ok: 'Take it off' }); if (ok) { await this.changed(await unfile(row.id, id)); this.render(); } } })),
       ...(this.idx?.many ? [this.forItem(row)] : []),
-      ...(it.drawer ? [{ label: 'Not for this world', run: async () => { await this.changed(await pullInto(row.id, this.owner.id, false)); this.render(); } }] : []),
+      ...(it.drawer ? [{ label: 'Not for this project', run: async () => { await this.changed(await pullInto(row.id, this.owner.id, false)); this.render(); } }] : []),
       'sep',
       { label: 'Delete', keys: '⌘⇧⌫', danger: true, run: () => this.deleteIdea(row.id) }
     ];

@@ -2332,3 +2332,17 @@ html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
 .ph1-grow { align-self: flex-start; padding-left: 0; }
 @media (--narrow) { .ph1 .st-person { grid-template-columns: 1fr 1fr; } }
 .ph1-head .gv-write { display: none; }
+
+/* Deliver as one page (Studio polish, build 5) */
+.pd-group { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 18px; border-bottom: 1px solid var(--line); scroll-margin-top: 72px; }
+.pd-group:last-child { border-bottom: 0; }
+.pd-group-h { text-transform: none; letter-spacing: 0; color: var(--ink, inherit); font-family: var(--prose, inherit); font-weight: 500; font-size: 20px; margin: 0; }
+.pd-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pd-row .hint { flex: 1 1 260px; min-width: 0; }
+.pd-fold { align-self: flex-start; }
+.pd-onefile[hidden] { display: none; }
+.pd-post-x { padding-inline: 8px; }
+.pd-group .share-url { max-width: 620px; width: 100%; }
+.pd-group .hint { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--muted); }
+.pd-group > .pill { align-self: flex-start; }
+.pd-post-card .pd-prompt-head .ghost-btn:first-of-type { margin-left: auto; }

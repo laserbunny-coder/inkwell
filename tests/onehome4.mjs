@@ -135,7 +135,7 @@ try {
     assert.match(rows.find((r) => /Boarding/.test(r)), /Boarding\s*\d of \d shots? (has|have) a picked still\.\s*Opens Storyboard/);
     assert.match(rows[1], /Opens the script/);
     assert.ok(!/\bf\b/.test(rows.at(-1).split('|')[0]), 'not filled past where it is');
-    assert.match(rows.at(-1), /Not out yet\s*Opens Deliver, Posting/);
+    assert.match(rows.at(-1), /Not out yet\s*Opens Deliver, Out/);
     assert.match(rows.find((r) => /Editing/.test(r)), /Hand-off for Resolve not made yet/);
     await snap('a-path');
   });
@@ -146,7 +146,7 @@ try {
     assert.equal(await p.$eval('.ph1-way', (w) => w.hidden), false);
   });
 
-  await check('each row is a door: the text, Ideas, Shots, Share and post', async () => {
+  await check('each row is a door: the text, Ideas, Shots, Deliver', async () => {
     await door('Writing').click();
     await until(() => !document.documentElement.dataset.view && window.__editor?.getText().includes('Kenji'));
     await outlineOf('pr_nb');
@@ -161,10 +161,10 @@ try {
     await until(() => document.documentElement.dataset.view === 'production' && document.querySelector('.prod-view .chip[data-tab="shots"]')?.getAttribute('aria-selected') === 'true' && /Shots/.test(document.querySelector('#crumb')?.textContent || ''));
     await outlineOf('pr_nb');
     await door('Editing').click();
-    await until(() => document.documentElement.dataset.view === 'deliver' && document.querySelector('.prod-view .chip[data-tab="files"]')?.getAttribute('aria-selected') === 'true');
+    await until(() => document.documentElement.dataset.view === 'deliver' && document.querySelector('[data-land]')?.dataset.land === 'edit' && !!document.querySelector('.pd-group[data-group="edit"]'));
     await outlineOf('pr_nb');
     await p.locator('.ph1-way .ph1-go').last().click();
-    await until(() => document.documentElement.dataset.view === 'deliver' && document.querySelector('.prod-view .chip[data-tab="post"]')?.getAttribute('aria-selected') === 'true' && /Deliver/.test(document.querySelector('#crumb')?.textContent || ''));
+    await until(() => document.documentElement.dataset.view === 'deliver' && document.querySelector('[data-land]')?.dataset.land === 'out' && /Deliver/.test(document.querySelector('#crumb')?.textContent || ''));
   });
 
   await check('a film shot with a camera: Prepping and Shooting say what is done and left, and land on Shots and Shoot days', async () => {
