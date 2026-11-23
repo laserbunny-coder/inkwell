@@ -5,9 +5,9 @@
 import { getEntry, children, putEntries, byKind } from './db.js';
 import { entry, newId, outline } from './model.js';
 import { GAP } from './order.js';
-import { nextLevel, worldOf, worldTree, worldStats, stats, hasManuscript, bookType, kindName, stageOf, isOut, isReady, ago, newPage, pagesIn, toolsOf } from './library.js';
+import { nextLevel, worldOf, worldTree, worldStats, stats, hasManuscript, bookType, kindName, stageOf, isOut, isReady, ago, newPage, pagesIn, toolsOf, stageSetOf } from './library.js';
 import { worldPromises } from './grid.js';
-import { elementsIn, ELEMENT_TYPES, typeOf, shootDays, newElement, setElement, plainPages, newShootDay } from './production.js';
+import { typeOf, shootDays, newShootDay } from './production.js';
 import { shareId, commentsOn } from './sharelink.js';
 import { isLife, hasLineDrag, lineDragId, lineWords, partOfPage, partName } from './pages.js';
 import { pieceIndex, pickOf, setPick, fits, chipList, lineFor } from './ideapieces.js';
@@ -707,7 +707,7 @@ export class StagePage {
     }
     body.append(tools);
     if (people.length < 2) {
-      body.append(make('p', 'hint', 'Relationships are drawn between characters. Make a page for each under a “Characters” page in the bible (or mark pages as characters in Make > Kit), and they show here.'));
+      body.append(make('p', 'hint', 'Relationships are drawn between characters. Make a page for each under a “Characters” page in the bible (or add them on Make > Cast and places), and they show here.'));
       return;
     }
     const sug = this.suggest.get(`ties:${w.id}`) || [];
@@ -1127,15 +1127,17 @@ export class StagePage {
     let days = video;
     for (const { row: p } of all) { if (days) break; if ((await shootDays(p.id)).length) days = true; }
     const list = MAKE_WORLD.filter((c) => c.id !== 'days' || days);
-    const sub = this.sub(list, 'kit');
+    const sub = this.sub(list, 'looks');
     body.append(this.chips(list, sub, (id) => this.pickSub(id)));
-    if (sub === 'kit') await this.drawKit(body);
-    if (sub === 'looks') await this.drawLooks(body);
+    // For AI tools starts open when any film here is generated.
+    const ai = all.some(({ row: p }) => toolsOf(p, w).includes('shots') && (({ own, base, id }) => (own ? base : id))(stageSetOf(p, w)) !== 'live');
+    if (sub === 'looks') await this.drawLooks(body, ai);
     if (sub === 'days') await this.drawDays(body);
   }
 
-  // The look wall: every version of every character and place, side by side.
-  async drawLooks(body) {
+  // Cast and places: every version of every character and place, side by
+  // side, and each name opens what's written about them.
+  async drawLooks(body, ai = false) {
     if (!this.lookWall) {
       const { LookWall } = await import('./lookwall.js');
       this.lookWall ||= new LookWall({
@@ -1146,82 +1148,7 @@ export class StagePage {
         openPage: (id) => this.hooks.go({ view: 'notebook', pageId: id })
       });
     }
-    await this.lookWall.draw(body, this.world || this.owner);
-  }
-
-  async drawKit(body) {
-    const w = this.owner;
-    const els = await elementsIn(w);
-    const style = make('section', 'st-style');
-    style.append(make('div', 'panel-label', 'Style rules for the whole show'));
-    const ta = make('textarea', 'st-ta');
-    ta.rows = 3;
-    ta.value = w.fields?.production?.style || '';
-    ta.placeholder = 'The look every prompt keeps to: “90s anime, film grain, warm dusk palette”';
-    ta.setAttribute('aria-label', 'Style rules');
-    ta.addEventListener('input', () => this.later('style', async () => {
-      const fresh = await getEntry(w.id);
-      const row = { ...fresh, fields: { ...fresh.fields, production: { ...(fresh.fields?.production || {}), style: ta.value } }, updated_at: Date.now() };
-      await putEntries([row]);
-      this.owner = row;
-      await this.changed([row]);
-    }));
-    ta.addEventListener('blur', () => this.now('style'));
-    style.append(ta);
-    body.append(style);
-    // Add to the kit right here: a new character, place, prop or costume (a
-    // page in the bible), or a bible page that's already written.
-    const adds = make('div', 'st-kit-add');
-    for (const t of ELEMENT_TYPES.filter((x) => x.id !== 'other')) {
-      const b = make('button', 'wp-link', `+ ${t.id === 'location' ? 'Place' : t.label}`);
-      b.type = 'button';
-      b.addEventListener('click', async () => {
-        const title = await this.hooks.askText({ title: `Add ${t.id === 'location' ? 'a place' : t.id === 'wardrobe' ? 'a costume' : `a ${t.label.toLowerCase()}`} to the kit`, body: 'It becomes a page in the bible, with its own row on the look wall.', ok: 'Add' });
-        if (!title?.trim()) return;
-        const el = await newElement(w, t.id, title.trim());
-        await this.changed([el]);
-        this.hooks.toast(`“${el.title}” is in the kit`, { label: 'Open', run: () => this.hooks.go({ view: 'notebook', pageId: el.id }) });
-        this.render();
-      });
-      adds.append(b);
-    }
-    const plain = await plainPages(w);
-    if (plain.length) {
-      const b = make('button', 'wp-link', 'From a bible page…');
-      b.type = 'button';
-      b.addEventListener('click', () => this.hooks.menu(b, plain.map(({ page, guess }) => ({
-        label: page.title || 'Untitled',
-        sub: ELEMENT_TYPES.map((t) => ({ label: t.label, current: t.id === guess, run: async () => { await this.changed([await setElement(page.id, { type: t.id })]); this.render(); } }))
-      }))));
-      adds.append(b);
-    }
-    body.append(adds);
-    for (const t of ELEMENT_TYPES) {
-      const mine = els.filter((e) => (e.fields?.element?.type || 'other') === t.id);
-      if (!mine.length) continue;
-      body.append(make('div', 'panel-label ph-gap', `${t.plural} · ${mine.length}`));
-      const ul = make('ul', 'st-kit');
-      for (const e of mine) {
-        const li = make('li');
-        const b = make('button', 'st-kit-el');
-        b.append(make('span', 'st-kit-name', e.title || 'Untitled'), make('span', 'st-kit-look', snip(e.fields?.element?.look || e.fields?.element?.snippet || '', 120)));
-        b.addEventListener('click', () => this.hooks.go({ view: 'notebook', pageId: e.id }));
-        li.append(b, this.hooks.menuButton(() => [
-          { label: 'Open its page', run: () => this.hooks.go({ view: 'notebook', pageId: e.id }) },
-          { label: 'What it is', sub: ELEMENT_TYPES.map((x) => ({ label: x.label, current: x.id === (e.fields?.element?.type || 'other'), run: async () => { await this.changed([await setElement(e.id, { type: x.id })]); this.render(); } })) },
-          { label: 'Take it out of the kit (the page stays)', run: async () => {
-            await this.changed([await setElement(e.id, null)]);
-            this.undoToast(`“${e.title || 'It'}” is out of the kit`, async () => this.changed([await setElement(e.id, e.fields.element)]));
-            this.render();
-          } },
-          'sep',
-          { label: 'Move its page to Trash', danger: true, run: () => this.hooks.toTrash(e) }
-        ], `More for ${e.title || 'this'}`));
-        ul.append(li);
-      }
-      body.append(ul);
-    }
-    if (!els.length) body.append(make('p', 'hint', 'The kit is the bible pages that are characters, places, props and wardrobe. Add one above, or turn a bible page you’ve already written into one.'));
+    await this.lookWall.draw(body, this.world || this.owner, { ai });
   }
 
   async drawDays(body) {

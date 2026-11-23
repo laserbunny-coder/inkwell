@@ -290,11 +290,11 @@ try {
     assert.deepEqual((await board(page))[0].cols, ['New idea:1', 'Drafting:0', 'Polishing:0', 'Out:0']);
     await go(page, { view: 'stage', id: 'wd_poems', page: 'make' });
     await page.waitForSelector('.st-chips .chip');
-    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['kit', 'looks']);
+    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['looks']);
     await go(page, { view: 'stage', id: 'wd_nb', page: 'make' });
     // The old world's tabs can still be up for a moment; wait for this one's.
-    await page.waitForFunction(() => document.querySelectorAll('.st-chips .chip').length === 3).catch(() => {});
-    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['kit', 'looks', 'days']);
+    await page.waitForFunction(() => document.querySelectorAll('.st-chips .chip').length === 2).catch(() => {});
+    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['looks', 'days']);
   });
 
   await check('a step moves with Alt + Left; a tool turned off leaves Make; Undo brings both back', async () => {
@@ -363,7 +363,7 @@ try {
     await page.waitForSelector('#lib-new', { state: 'visible' });
     await page.waitForSelector('#lib-new-how .se-tabs .chip.on');
     assert.equal(await page.locator('#lib-new-how .se-tabs .chip.on').getAttribute('data-set'), 'ai');
-    assert.match(await page.locator('#lib-new-how .se-preview').innerText(), /New idea › Writing › Boarding › Generating › Editing › Posted[\s\S]*Make: Shots, Storyboard, Kit, Shoot days/);
+    assert.match(await page.locator('#lib-new-how .se-preview').innerText(), /New idea › Writing › Boarding › Generating › Editing › Posted[\s\S]*Make: Shots, Storyboard, Cast and places, Shoot days/);
     await shot(page, 'workflow-new-preview');
     // A book series starts as Book; a life project has no workflow.
     await page.locator('.lib-shape[data-shape="series"]').click();

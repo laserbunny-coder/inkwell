@@ -48,8 +48,7 @@ export const SHAPE_PIECE = [
 ];
 // The status board is on the project's Overview now; Make is tools only.
 export const MAKE_WORLD = [
-  { id: 'kit', label: 'Kit' },
-  { id: 'looks', label: 'Looks' },
+  { id: 'looks', label: 'Cast and places' },
   { id: 'days', label: 'Shoot days' }
 ];
 // The steps of the Develop page, small to big (the snowflake, loosely).

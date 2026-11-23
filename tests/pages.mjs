@@ -311,18 +311,22 @@ try {
 
   // ---------- Make, Deliver, Revise at the size of the world ----------
 
-  await check('Make for the world: tools only, the kit and every shoot day (the status board lives in Pieces)', async () => {
+  await check('Make for the world: tools only, Cast and places and every shoot day (the status board lives in Pieces)', async () => {
     await go(page, { view: 'world', id: 'wd_nb' });
     await page.waitForSelector('#wh-outline [data-part="make"]');
     await page.keyboard.press('Alt+Digit4');
-    await page.waitForSelector('.st-chips .chip[data-sub="kit"]');
-    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['kit', 'looks', 'days']);
+    await page.waitForSelector('.st-chips .chip[data-sub="looks"]');
+    assert.deepEqual(await page.locator('.st-chips .chip').evaluateAll((els) => els.map((e) => e.dataset.sub)), ['looks', 'days']);
     assert.equal(await page.locator('#st-board').count(), 0);
-    // Make opens on the kit.
-    await page.waitForSelector('.st-chips .chip[data-sub="kit"].on');
-    await page.waitForSelector('.st-kit-el');
+    // Make opens on Cast and places; a name opens what's written about them.
+    await page.waitForSelector('.st-chips .chip[data-sub="looks"].on');
+    await page.locator('#stage-view .lw-row[data-row="pg_kenji"] .lw-name').click();
+    await page.waitForSelector('#stage-view .cd[data-element="pg_kenji"]');
     await shot(page, 'pages-make-tools');
-    assert.match(await page.locator('.st-body').innerText(), /Characters · 2[\s\S]*Kenji[\s\S]*Nine, red headband/i);
+    // His locked look (written before the look wall) shows under For AI tools.
+    const vals = await page.locator('#stage-view .cd[data-element="pg_kenji"] input, #stage-view .cd[data-element="pg_kenji"] textarea').evaluateAll((xs) => xs.map((x) => x.value));
+    assert.ok(vals.includes('Nine, red headband'), vals.join(' | '));
+    await page.locator('#stage-view .cd[data-element="pg_kenji"] .cd-close').click();
     await page.locator('.st-chips .chip[data-sub="days"]').click();
     await page.waitForSelector('.st-days li');
     assert.match(await page.locator('.st-days').innerText(), /Sat, Jan 16, 2027 · call 07:30\s*Reel 2: Breakfast · Echo Park/);
@@ -372,7 +376,7 @@ try {
     await go(page, { view: 'production', id: 'pr_reel2' });
     await page.waitForFunction(() => document.documentElement.dataset.view === 'production');
     await page.waitForSelector('.prod-view .gv-levels .chip');
-    { const t = await page.locator('.prod-view .gv-levels .chip').allInnerTexts(); assert.deepEqual(t, ['Shots', 'Storyboard', 'Kit', 'Shoot days'], JSON.stringify(t)); }
+    { const t = await page.locator('.prod-view .gv-levels .chip').allInnerTexts(); assert.deepEqual(t, ['Shots', 'Storyboard', 'Cast and places', 'Shoot days'], JSON.stringify(t)); }
     await go(page, { view: 'deliver', id: 'pr_reel2' });
     await page.waitForFunction(() => document.documentElement.dataset.view === 'deliver');
     await page.waitForSelector('.prod-view .gv-levels .chip[data-tab="files"]');
