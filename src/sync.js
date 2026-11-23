@@ -4,6 +4,7 @@ import { getEntry, putEntries, outboxIds, clearOutbox, addConflict, getMeta, set
 import { setFileBackend, uploadPending } from './files.js';
 import { renewAlerts } from './alerts.js';
 import { STUDIO } from './edition.js';
+import { PREVIEW } from './preview.js';
 import { askText, toast } from './menu.js';
 
 // Keeps this device's entries in step with the cloud (the Supabase project
@@ -38,7 +39,8 @@ function toLocal(r) {
 
 // The real backend: Supabase. Tests swap in a fake with the same methods.
 function supabaseBackend() {
-  if (!config.supabaseUrl || !config.supabaseAnonKey) return null;
+  // A "new person" preview tab never signs in or syncs (preview.js).
+  if (PREVIEW || !config.supabaseUrl || !config.supabaseAnonKey) return null;
   const sb = createClient(config.supabaseUrl, config.supabaseAnonKey, {
     auth: { persistSession: true, detectSessionInUrl: true, flowType: 'pkce' }
   });

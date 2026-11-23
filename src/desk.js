@@ -497,7 +497,8 @@ export class DeskPage {
 
     // The folded line: only when something is waiting or running.
     if (calls.length || crew.length || later.length) parts.push(this.crewFold({ calls, crew, later, data, now, isNew }));
-    else if (!this.data) parts.push(this.note(failed));
+    // Studio has no Claude threads reporting in, so no note about them.
+    else if (!this.data && !STUDIO) parts.push(this.note(failed));
 
     const on = seats.filter((s) => s.stage === 'on');
     const steps = new Map();

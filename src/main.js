@@ -114,6 +114,7 @@ import { landShares, openAsked, openCapture, setAsking, showCapture, wireTalking
 import { besideItem, paneMoves, panes, wireBeside } from './app/beside.js';
 import { wireZoom } from './app/zoom.js';
 import { wireSeats } from './app/seats.js';
+import { PREVIEW } from './preview.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -403,6 +404,26 @@ async function startPane() {
   root.dataset.started = '1';
   paneHost()?.started(PANE_ID);
 }
+
+// "Try Studio as a new person" (preview.js): a small strip says so, with a
+// way to start over and a way back to your own Inkwell.
+function previewStrip() {
+  const bar = document.createElement('div');
+  bar.className = 'preview-strip';
+  bar.setAttribute('role', 'status');
+  const t = document.createElement('span');
+  t.className = 'pv-say';
+  t.textContent = 'New-person preview · your own writing isn’t touched';
+  const again = document.createElement('button');
+  again.type = 'button'; again.textContent = 'Start over';
+  again.addEventListener('click', () => { location.href = location.pathname + '?preview=new'; });
+  const out = document.createElement('button');
+  out.type = 'button'; out.textContent = 'Leave';
+  out.addEventListener('click', () => { location.href = location.pathname + '?preview=off'; });
+  bar.append(t, again, out);
+  document.body.appendChild(bar);
+}
+if (PREVIEW) previewStrip();
 
 start();
 
