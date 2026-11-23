@@ -490,7 +490,10 @@ try {
   });
 
   await check('phone upright: beside is a thin strip of pictures, each level with its lines', async () => {
-    await p.evaluate(() => window.__scriptShots.sitAt('beside'));
+    // Picked from ⋯ the way Michael did (Nov 23): it really moves them beside.
+    await tap('.zm-more');
+    await p.getByText('Shots beside the script').waitFor();
+    { const b = await p.getByText('Shots beside the script').boundingBox(); await p.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2); }
     await p.waitForSelector('.ss-side .ss-thumb');
     await sleep(900);
     assert.ok(await p.evaluate(() => document.documentElement.classList.contains('ss-rail')));

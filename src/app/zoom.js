@@ -351,12 +351,27 @@ function moreMenu() {
     ...toCheck,
     ...(writingNow ? [{ label: 'Notes beside the text (Ctrl + 2)', run: click('#notes-toggle') }] : []),
     ...(writingNow && planBtn && !planBtn.hidden ? [{ label: 'Plan under every scene (Ctrl + Shift + Comma)', run: click('.pv-plan') }] : []),
-    ...(writingNow && root.classList.contains('ss-able') ? [{ label: root.classList.contains('ss-on') ? 'Put the shots away (Alt + B)' : 'Shots beside the script (Alt + B)', run: () => { closeMenu(); document.dispatchEvent(new CustomEvent('inkwell:toggle-shots')); } }] : []),
+    // Shots: where they sit is a real choice here too (Nov 23: "Shots beside
+    // the script" only switched them on, so a phone showed them in the script).
+    ...(writingNow && root.classList.contains('ss-able') ? shotItems() : []),
     { label: 'Beside: a pane next to this (Ctrl + \\)', run: click('#beside-toggle') },
     'sep',
     { label: 'Every command (Ctrl + K)', run: () => { closeMenu(); document.querySelector('#palette-toggle')?.click(); } }
   ];
   popMenu(more, items);
+}
+
+function shotItems() {
+  const r = document.documentElement;
+  const sit = (where) => () => { closeMenu(); document.dispatchEvent(new CustomEvent('inkwell:shots-sit', { detail: { sit: where } })); };
+  const toggle = () => { closeMenu(); document.dispatchEvent(new CustomEvent('inkwell:toggle-shots')); };
+  if (!r.classList.contains('ss-on')) return [{ label: 'Shots (Alt + B)', run: toggle }];
+  const beside = r.classList.contains('ss-beside') || r.classList.contains('ss-rail');
+  return [
+    { label: `${beside ? '✓ ' : ''}Shots beside the script`, run: sit('beside') },
+    { label: `${r.classList.contains('ss-column') ? '✓ ' : ''}Shots in the script (one column)`, run: sit('column') },
+    { label: 'Put the shots away (Alt + B)', run: toggle }
+  ];
 }
 
 // The date and time, at the left of the top line.
