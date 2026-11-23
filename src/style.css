@@ -2383,6 +2383,17 @@ html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
 .tour-tip { position: fixed; z-index: 2000; background: var(--ink); color: var(--bg); border-radius: 10px; padding: 12px 14px; box-shadow: 0 8px 28px rgba(0,0,0,.35); display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.45; }
 .tour-tip.mid { left: 50% !important; top: auto; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); }
 .tour-say { margin: 0; }
+/* A phone: the tip spans the screen at the edge away from what it rings (tour.js). */
+.tour-tip.dock { left: 8px; right: 8px; width: auto; transform: none; }
+.tour-tip.dock-bottom { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 60px); }
+.tour-tip.dock-top { top: calc(env(safe-area-inset-top, 0px) + 50px); bottom: auto; }
+/* Folded after a tap elsewhere: one small line, the words behind Show tip. */
+.tour-tip.small { padding: 6px 8px 6px 12px; }
+.tour-tip.small .tour-say { display: none; }
+.tour-more { display: none; }
+.tour-tip.small .tour-more { display: inline-block; }
+[data-tour-target] { scroll-margin-top: 96px; }
+html.touring .preview-strip { display: none; }
 .tour-acts { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .tour-n { opacity: .7; font-size: 12.5px; }
 .tour-btns { display: flex; gap: 6px; }

@@ -126,6 +126,29 @@ try {
     assert.equal(await phone.locator('.dk-first-step.done').count(), 0);
   });
 
+  await check('on a phone: the tip never covers what it rings, and a tap elsewhere folds it out of the way', async () => {
+    await phone.locator('.dk-first-step[data-step="bible"]').click();
+    await phone.waitForSelector('.tour-tip');
+    await sleep(500);
+    const over = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+    const tip = await phone.locator('.tour-tip').boundingBox();
+    const ring = await phone.locator('.tour-ring').boundingBox();
+    assert.ok(!over(tip, ring), `tip ${JSON.stringify(tip)} ring ${JSON.stringify(ring)}`);
+    // The Bible opens under its line (the step says so): the tip folds to one line.
+    await phone.locator('[data-tour-target]').click({ position: { x: 2, y: 4 } }).catch(() => {});
+    await phone.mouse.click(5, 300);
+    await sleep(400);
+    assert.ok(await phone.locator('.tour-tip.small').count(), 'folded');
+    assert.ok(!(await phone.locator('.tour-say').isVisible()));
+    const small = await phone.locator('.tour-tip').boundingBox();
+    assert.ok(small.height < 60, `one small line: ${small.height}`);
+    await phone.locator('.tour-more').click();
+    await sleep(200);
+    assert.ok(await phone.locator('.tour-say').isVisible(), 'Show tip brings the words back');
+    await shot(phone, 'first-steps-phone-docked');
+    await phone.locator('.tour-stop').click();
+  });
+
   for (const p of [page, phone]) assert.deepEqual(p.errors, []);
 } finally {
   await browser.close();
