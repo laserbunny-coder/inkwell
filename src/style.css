@@ -1506,6 +1506,32 @@ div.pd-scene-title { cursor: default; }
 .pd-sheet-sub { color: #666; }
 .pd-sheet-shots { color: #444; font-size: 12px; }
 .pd-sheet-note { color: #1F7A6E; font-size: 12px; }
+/* Build 4: who comes on the day, and shots ticked on the sheet. */
+.pd-who { display: flex; flex-direction: column; gap: 6px; }
+.pd-who-grid { display: flex; flex-direction: column; gap: 6px; }
+.pd-who-grid:empty { display: none; }
+.pd-who-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 120px 28px; gap: 6px 8px; align-items: center; }
+.pd-who-row.cast .pd-who-name { grid-column: 1 / 3; }
+.pd-who-name { font-size: 13.5px; color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+.pd-who-name .pd-sheet-sub { color: var(--muted); }
+.pd-who-x { border: 0; background: none; color: var(--faint); font-size: 18px; line-height: 1; padding: 4px; border-radius: 6px; }
+.pd-who-x:hover { color: var(--ink); background: var(--tint); }
+.pd-who > .ghost-btn { align-self: flex-start; }
+.pd-sheet-who { border-collapse: collapse; width: 100%; max-width: 560px; }
+.pd-sheet-who td { padding: 2px 12px 2px 0; vertical-align: top; }
+.pd-sheet-person { font-weight: 600; }
+.pd-sheet-call { text-align: right; white-space: nowrap; color: #444; }
+.pd-sheet-shots .pd-sheet-shot { list-style: none; margin-left: -18px; }
+.pd-sheet-shot label { display: flex; gap: 6px; align-items: baseline; cursor: pointer; }
+.pd-sheet-shot input { width: 15px; height: 15px; margin: 0; flex: none; position: relative; top: 2px; accent-color: #1F7A6E; }
+@media (max-width: 620px), (pointer: coarse) {
+  .pd-who-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px; }
+  .pd-who-row.cast .pd-who-name { grid-column: 1 / 2; }
+  .pd-who-row.crew .pd-who-call { grid-column: 1 / 3; grid-row: 2; }
+  .pd-who-row.crew .pd-who-x { grid-column: 3; grid-row: 1; }
+  .pd-sheet { padding: 18px 16px; }
+  .pd-sheet-shot input { width: 20px; height: 20px; }
+}
 .pd-post { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
 .pd-post-card { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
 /* AI production: cost, generation details, kit locks, prices */
