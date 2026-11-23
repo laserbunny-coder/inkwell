@@ -91,7 +91,7 @@ async function toggleGrid() {
 addCommands(() => [
   { group: 'view', label: 'Plot grid (the story as a table)', keys: `${mod}⇧G`, run: toggleGrid, when: () => view() !== 'grid' && view() !== 'library' },
   { group: 'view', label: 'Back to the text from the grid', keys: `${mod}⇧G`, run: toggleGrid, when: () => view() === 'grid' },
-  { group: 'view', label: 'Production (shots, kit, shoot days, posting)', keys: `${mod}⇧S`, run: toggleProduction, when: () => view() !== 'production' && view() !== 'library' },
+  { group: 'view', label: 'Production (shots, cast and places, shoot days, posting)', keys: `${mod}⇧S`, run: toggleProduction, when: () => view() !== 'production' && view() !== 'library' },
   { group: 'view', label: 'Back to the text from production', keys: `${mod}⇧S`, run: toggleProduction, when: () => view() === 'production' }
 ]);
 
