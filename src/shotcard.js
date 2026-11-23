@@ -46,6 +46,17 @@ export function shotCard(sh, opts) {
   const where = make('p', 'ss-in', opts.scene ? `In ${opts.scene}` : '');
   const covers = opts.covers ? make('p', 'ss-covers', opts.covers) : null;
   const acts = make('div', 'ss-acts');
+  // Sketch: a blank pad; Draw over it: the frame faint beneath; Keep
+  // drawing: the sketch shown, opened again (each makes a new try).
+  if (opts.sketch) {
+    for (const [k, label] of [['blank', 'Sketch'], ['over', 'Draw over it'], ['again', 'Keep drawing']]) {
+      if (!opts.sketch[k]) continue;
+      const b = make('button', `ss-act ss-sketch-${k}`, label);
+      b.type = 'button';
+      b.addEventListener('click', () => opts.sketch[k]());
+      acts.append(b);
+    }
+  }
   if (opts.picture) {
     const add = make('label', 'ss-act', 'Add pictures');
     const file = make('input');
@@ -75,6 +86,38 @@ export function shotCard(sh, opts) {
     del.addEventListener('click', () => opts.remove());
     acts.append(del);
   }
-  d.append(top, what, framing, where, ...(covers ? [covers] : []), acts);
+  // The shot's pictures and sketches, newest first, each with its star.
+  let strip = null;
+  if (opts.frames?.list?.length > 1 || opts.frames?.list?.some((f) => f.board)) {
+    strip = make('div', 'ss-frames');
+    for (const f of opts.frames.list) {
+      const t = make('div', `ss-frame${f.shown ? ' shown' : ''}`);
+      t.dataset.file = f.id;
+      const img = make('img');
+      img.alt = f.board ? 'Sketch' : 'Picture';
+      f.url.then((u) => { if (u) img.src = u; }).catch(() => {});
+      const show = make('button', 'ss-frame-pic');
+      show.type = 'button';
+      show.setAttribute('aria-label', f.board ? 'Show this sketch' : 'Show this picture');
+      show.append(img);
+      show.addEventListener('click', () => opts.frames.show(f.id));
+      const star = make('button', 'ss-frame-star', f.star ? '★' : '☆');
+      star.type = 'button';
+      star.setAttribute('aria-pressed', String(!!f.star));
+      star.setAttribute('aria-label', f.star ? 'The picked one (tap to unpick)' : 'Pick this one');
+      star.addEventListener('click', () => opts.frames.star(f.id));
+      t.append(show, star);
+      if (f.board) t.append(make('span', 'ss-frame-kind', 'sketch'));
+      strip.append(t);
+    }
+  }
+  // For an image model by hand (Gemini, ChatGPT), and the sketch to give it.
+  let tools = null;
+  if (opts.copyPrompt || opts.savePicture) {
+    tools = make('div', 'ss-acts ss-quiet');
+    if (opts.copyPrompt) { const b = make('button', 'ss-act ss-copy', 'Copy the prompt'); b.type = 'button'; b.title = 'Words for Gemini or ChatGPT: the look, the shot, its lines, who and where. Paste with the sketch.'; b.addEventListener('click', () => opts.copyPrompt()); tools.append(b); }
+    if (opts.savePicture) { const b = make('button', 'ss-act ss-save', 'Save picture'); b.type = 'button'; b.addEventListener('click', () => opts.savePicture()); tools.append(b); }
+  }
+  d.append(top, what, framing, where, ...(covers ? [covers] : []), ...(strip ? [strip] : []), acts, ...(tools ? [tools] : []));
   return d;
 }

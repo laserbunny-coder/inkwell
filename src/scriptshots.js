@@ -30,14 +30,14 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { getEntry, getMany, putEntries } from './db.js';
 import { plain as make } from './dom.js';
-import { addFile, fileUrl, thumbUrl, isImage } from './files.js';
+import { addFile, fileUrl, fileBlob, thumbUrl, isImage } from './files.js';
 import { shotsUnder, newShot, shotCode, stillOf, withRenders, isVideo, isFilmed, gotIt, shotStatus } from './production.js';
 import { stageSetOf } from './library.js';
 import { snap, resolve, linesIn, inOrder, covering, bareLines, lanes, placeAmong } from './shotlines.js';
 import { scenesOf } from './woven.js';
 import { holdStill } from './steady.js';
 import { shotCard } from './shotcard.js';
-import { picturesOnScene, picturesOnShot, picturesText, pictureSources } from './picturesin.js';
+import { picturesOnScene, picturesOnShot, picturesText, pictureSources, sketch, tryOf, framePrompt } from './picturesin.js';
 import { popMenu } from './menu.js';
 import './scriptshots.css';
 import { screenKind, sceneName } from './scenename.js';
@@ -92,6 +92,7 @@ export class ScriptShots {
     this.last = null; // the shot picked last, for "Move shot 03 here"
     this.hover = null;
     this.lit = []; // the shots that cover the line clicked
+    this.shown = new Map(); // shot id -> the picture tapped in its open card
     this.lines = null; // the lines picked: { eid, from, to } (indexes in its scene)
     this.saving = new Map();
     this.frame = 0;
@@ -316,9 +317,8 @@ export class ScriptShots {
 
   // ---------- drawing a shot, small ----------
 
-  pic(sh, big = false) {
+  pic(sh, big = false, id = this.still(sh)) {
     const pic = make('span', 'ss-pic');
-    const id = this.still(sh);
     if (id) (big ? fileUrl(id) : thumbUrl(id)).then((url) => { if (url) { const img = make('img'); img.src = url; img.alt = ''; pic.replaceChildren(img); } }).catch(() => {});
     pic.append(make('span', 'ss-nopic', sh.fields?.framing || (id ? '' : 'No picture yet')));
     return pic;
@@ -339,6 +339,19 @@ export class ScriptShots {
       words.append(make('span', 'ss-code', code), make('span', 'ss-what', sh.text || 'What happens'), make('span', 'ss-framing', sh.fields?.framing || ''));
       if (!this.span(sh, a)) words.append(make('span', 'ss-loose', 'Not on any lines yet'));
       b.append(this.pic(sh), words);
+    }
+    // A filmed shot's Got it, right on the frame: one tap on the shoot day.
+    if (isFilmed(sh, this.setId)) {
+      const on = gotIt(sh);
+      b.classList.toggle('got', on);
+      const tick = make('span', 'ss-tick', on ? '✓' : '');
+      tick.setAttribute('role', 'button');
+      tick.setAttribute('aria-pressed', String(on));
+      tick.setAttribute('aria-label', on ? 'Got it (tap to undo)' : 'Got it');
+      tick.title = tick.getAttribute('aria-label');
+      tick.addEventListener('pointerdown', (e) => e.stopPropagation());
+      tick.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); this.setGot(sh.id, !on).then(() => this.reload()); });
+      b.querySelector('.ss-pic')?.append(tick);
     }
     b.classList.toggle('sel', this.sel === sh.id);
     b.addEventListener('mousedown', (e) => e.preventDefault()); // the caret stays where it was
@@ -621,7 +634,7 @@ export class ScriptShots {
     const btn = (label, run) => { const b = make('button', '', label); b.type = 'button'; b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); const n = now(); if (n) run(n); }); return b; };
     const kids = [btn(`+ Shot for ${linesIn(a.paras, L.from, L.to) === 1 ? 'this line' : 'these lines'}`, ({ at, l }) => this.add(at.eid, { from: l.from, to: l.to }))];
     // + Picture: a picture straight onto the picked lines (the phone's gallery).
-    const pic = btn('+ Picture', (n) => this.choosePicture(pic, (files, meta) => this.picturesOnLines(n.at, n.l, files, meta)));
+    const pic = btn('+ Picture', (n) => this.choosePicture(pic, (files, meta) => this.picturesOnLines(n.at, n.l, files, meta), { title: `A frame for ${sceneName(n.at)}` }));
     pic.classList.add('ss-barpic');
     pic.title = 'A picture for these lines: it becomes a shot covering them';
     kids.push(pic);
@@ -749,13 +762,32 @@ export class ScriptShots {
   // ---------- a shot, open ----------
 
   detail(sh, a, closeBtn) {
+    // The picture shown: the one tapped in its strip, else the frame.
+    let shown = this.shown.get(sh.id);
+    if (!shown || !tryOf(sh, shown)) shown = this.still(sh);
+    const t = shown ? tryOf(sh, shown) : null;
+    const star = sh.fields?.star || {};
+    const pics = (sh.fields?.tries || []).flatMap((tr) => (tr.files || []).filter((id) => this.kinds.get(id) !== 'video').map((id) => ({ id, tr }))).reverse();
+    const title = `Shot ${this.codeOf(sh, a)}${sh.text ? `: ${sh.text}` : ''}`;
     return shotCard(sh, {
       code: this.codeOf(sh, a),
       scene: sceneName(a),
       covers: this.coversText(sh, a),
       status: shotStatus(sh, this.setId),
       got: isFilmed(sh, this.setId) ? { on: gotIt(sh), set: (on) => this.setGot(sh.id, on) } : null,
-      pic: this.pic(sh, true),
+      pic: this.pic(sh, true, shown),
+      sketch: {
+        blank: () => this.sketchOn(sh.id, { title }),
+        over: shown && !t?.strokes ? () => this.sketchOn(sh.id, { title, under: shown, from: t?.id }) : null,
+        again: t?.strokes ? () => this.sketchOn(sh.id, { title, strokes: t.strokes, from: t.id }) : null
+      },
+      frames: {
+        list: pics.map(({ id, tr }) => ({ id, board: tr.kind === 'board', star: star.still === id || star.board === id, shown: id === shown, url: thumbUrl(id) })),
+        show: (id) => { this.shown.set(sh.id, id); this.showOpen(sh.id); },
+        star: (id) => this.starFrame(sh.id, id)
+      },
+      copyPrompt: () => this.copyPrompt(sh, a),
+      savePicture: shown ? () => this.savePicture(shown, title) : null,
       close: closeBtn ? () => this.close() : null,
       edit: (patch) => { if ('text' in patch) sh.text = patch.text; if ('framing' in patch) sh.fields = { ...sh.fields, framing: patch.framing }; this.patch(sh); this.later(sh.id); },
       done: () => { this.flush(sh.id); this.close(); },
@@ -858,7 +890,7 @@ export class ScriptShots {
     const cur = this.find(sh.id);
     const code = cur ? this.codeOf(cur.sh, cur.a) : '';
     const n = cur ? linesIn(cur.a.paras, span.from, span.to) : 1;
-    this.hooks.toast(`Shot ${code} on ${plural(n, 'line')}, with ${r.added === 1 ? 'its picture' : `${r.added} pictures`}`, { label: 'Undo', run: async () => {
+    this.hooks.toast(`Shot ${code} on ${plural(n, 'line')}, with ${meta?.source === 'sketch' ? 'its sketch' : r.added === 1 ? 'its picture' : `${r.added} pictures`}`, { label: 'Undo', run: async () => {
       const now = await getEntry(sh.id);
       if (now) await putEntries([{ ...now, deleted: true, updated_at: Date.now() }]);
       if (this.open === sh.id) this.close();
@@ -868,10 +900,62 @@ export class ScriptShots {
 
   // Where the picture comes from: straight to the only source there is
   // today, a short menu once there are more (sketch, image model).
-  choosePicture(anchor, land) {
-    const run = async (src) => { const got = await src.pick(); const files = Array.isArray(got) ? got : got?.files || []; if (files.length) land(files, got?.meta || null); };
+  choosePicture(anchor, land, ctx = {}) {
+    const run = async (src) => { const got = await src.pick(ctx); const files = Array.isArray(got) ? got : got?.files || []; if (files.length) land(files, got?.meta || null); };
     if (pictureSources.length === 1) { run(pictureSources[0]); return; }
     popMenu(anchor, pictureSources.map((src) => ({ label: src.label, run: () => run(src) })));
+  }
+
+  // ---------- sketches ----------
+
+  // A sketch onto a shot: the pad, then a new try (a board frame).
+  async sketchOn(id, ctx) {
+    await this.flush(id);
+    const got = await sketch(ctx);
+    if (!got?.files?.length) return;
+    const r = await picturesOnShot(id, got.files, got.meta);
+    if (!r.added) return;
+    await this.reload();
+    const cur = this.find(id);
+    const last = cur && (cur.sh.fields?.tries || []).at(-1)?.files?.at(-1);
+    if (last) this.shown.set(id, last);
+    this.sel = this.last = id;
+    this.showOpen(id);
+    this.hooks.toast(`Sketch kept on shot ${cur ? this.codeOf(cur.sh, cur.a) : ''}`, { label: 'Undo', run: async () => { await r.undo(); this.shown.delete(id); await this.reload(); if (this.open === id) this.showOpen(id); } });
+  }
+  // A star picks the frame: a sketch is the board frame (star.board), a
+  // picture the still. Tapping the picked one again unpicks it.
+  async starFrame(id, fileId) {
+    await this.flush(id);
+    const fresh = await getEntry(id);
+    if (!fresh) return;
+    const t = tryOf(fresh, fileId);
+    const k = t?.kind === 'board' ? 'board' : 'still';
+    const star = { ...(fresh.fields?.star || {}) };
+    if (star[k] === fileId) delete star[k]; else star[k] = fileId;
+    const row = { ...fresh, fields: { ...fresh.fields, star }, updated_at: Date.now() };
+    delete row._by;
+    await putEntries([row]);
+    this.shown.set(id, fileId);
+    await this.reload();
+    if (this.open === id) this.showOpen(id);
+  }
+  async copyPrompt(sh, a) {
+    const r = this.span(sh, a);
+    const lines = r ? a.paras.slice(r.from, r.to + 1) : [];
+    const heading = (await getEntry(a.eid))?.text || '';
+    const text = await framePrompt({ style: this.world?.fields?.production?.style || '', scene: sceneName(a), heading, code: this.codeOf(sh, a), what: sh.text, framing: sh.fields?.framing || '', lines, worldId: this.world?.id || null });
+    try { await navigator.clipboard.writeText(text); this.hooks.toast('Prompt copied. Paste it into Gemini or ChatGPT with the sketch (Save picture).'); } catch { this.hooks.toast('Couldn’t reach the clipboard here.'); }
+    return text;
+  }
+  async savePicture(fileId, title) {
+    const blob = await fileBlob(fileId).catch(() => null);
+    if (!blob) return;
+    const a = make('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${title.replace(/[^\w -]+/g, '').trim() || 'frame'}.${/png/.test(blob.type) ? 'png' : 'jpg'}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   }
 
   // "Put on lines" from the open shot: it closes, you pick the lines, and

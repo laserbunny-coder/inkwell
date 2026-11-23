@@ -513,6 +513,54 @@ try {
     assert.equal(row('sh_d').fields.got, undefined, 'a second tap: still to get');
   });
 
+  await check('Storyboard: the frames are the shooting checklist (tick, N of M got, Left to shoot); an empty frame offers Sketch and Photo', async () => {
+    await laptop.locator('.gv-levels .chip[data-tab="board"]').click();
+    await laptop.waitForSelector('.pd-board .pd-card');
+    const card = laptop.locator('.pd-card[data-shot="sh_d"]');
+    assert.equal(await card.locator('.pd-tick').count(), 1, 'a filmed shot has a tick on its frame');
+    assert.equal(await laptop.locator('.pd-card:not([data-shot="sh_d"]) .pd-tick').count(), 0, 'generated shots have none');
+    assert.match(await laptop.locator('.pd-got-count').innerText(), /^0 of 1 got$/);
+    await card.locator('.pd-tick').click();
+    await laptop.waitForFunction(() => document.querySelector('.pd-card[data-shot="sh_d"] .pd-tick')?.getAttribute('aria-pressed') === 'true');
+    await settle(laptop);
+    assert.ok(row('sh_d').fields.got > 0, 'one tap on the frame: got');
+    assert.equal(await laptop.locator('.ss-pop, .pd-shot.open').count(), 0, 'without opening the shot');
+    assert.match(await laptop.locator('.pd-got-count').innerText(), /^1 of 1 got$/);
+    await laptop.locator('.pd-leftonly').click();
+    await laptop.waitForSelector('.pd-leftonly[aria-pressed="true"]');
+    assert.equal(await laptop.locator('.pd-card[data-shot="sh_d"]').count(), 0, 'Left to shoot hides it');
+    await laptop.locator('.pd-leftonly').click();
+    await laptop.waitForSelector('.pd-card[data-shot="sh_d"]');
+    await laptop.locator('.pd-card[data-shot="sh_d"] .pd-tick').click();
+    await laptop.waitForFunction(() => document.querySelector('.pd-card[data-shot="sh_d"] .pd-tick')?.getAttribute('aria-pressed') === 'false');
+    // An empty frame: Sketch and Photo right in it; the sketch lands as its board frame.
+    const empty = laptop.locator('.pd-card:has(.pd-empty)').first();
+    const id = await empty.getAttribute('data-shot');
+    assert.deepEqual(await empty.locator('.pd-empty-btn').allTextContents(), ['Sketch', 'Photo']);
+    await empty.locator('.pd-empty-btn', { hasText: 'Sketch' }).click();
+    await laptop.waitForSelector('.sk-pad canvas');
+    await laptop.evaluate(() => {
+      const cv = document.querySelector('.sk-pad canvas');
+      const r = cv.getBoundingClientRect();
+      const at = (x, y) => ({ clientX: r.left + x * r.width, clientY: r.top + y * r.height, pointerType: 'mouse', pointerId: 1, pressure: 0.5, bubbles: true, buttons: 1 });
+      cv.dispatchEvent(new PointerEvent('pointerdown', at(0.2, 0.3)));
+      cv.dispatchEvent(new PointerEvent('pointermove', at(0.6, 0.7)));
+      cv.dispatchEvent(new PointerEvent('pointerup', at(0.6, 0.7)));
+    });
+    await laptop.locator('.sk-pad .sk-btn.go').click();
+    await laptop.waitForFunction((id) => document.querySelector(`.pd-card[data-shot="${id}"] .pd-pic img`), id);
+    await settle(laptop);
+    assert.ok(row(id).fields.star?.board, 'the sketch is its board frame');
+    // Arrow keys step frame to frame; One column shows the words beside.
+    await laptop.locator('.pd-card').first().focus();
+    await laptop.keyboard.press('ArrowRight');
+    assert.equal(await laptop.evaluate(() => [...document.querySelectorAll('.pd-card')].indexOf(document.activeElement)), 1);
+    await laptop.locator('.pd-lay').click();
+    await laptop.waitForSelector('.pd-board.column');
+    await laptop.locator('.pd-lay').click();
+    await laptop.waitForSelector('.pd-board:not(.column)');
+  });
+
   assert.deepEqual(laptop.errors, []);
 } catch (e) {
   failed += 1;

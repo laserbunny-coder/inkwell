@@ -742,6 +742,13 @@ export class ProductionView {
     input.addEventListener('change', () => this.addRenders(sh.id, [...input.files]));
     add.append(input);
     strip.append(add);
+    // A sketch, on the pad: it lands as a board frame like everywhere else.
+    const sk = make('button', 'pd-render add pd-sketch');
+    sk.type = 'button';
+    sk.title = 'Sketch this shot';
+    sk.append(make('span', '', '✎'));
+    sk.addEventListener('click', () => this.sketchShot(sh));
+    strip.append(sk);
     return strip;
   }
 
@@ -831,7 +838,7 @@ export class ProductionView {
     const f = sh.fields || {};
     const tile = make('div', 'pd-render');
     tile.dataset.file = id;
-    const starred = f.star?.still === id || f.star?.video === id;
+    const starred = f.star?.still === id || f.star?.video === id || f.star?.board === id;
     tile.classList.toggle('starred', starred);
     (async () => {
       const meta = await getEntry(id);
@@ -889,7 +896,7 @@ export class ProductionView {
       cost.addEventListener('change', () => this.setTryCost(sh.id, tr.id, cost.value));
       bar.append(cost);
     }
-    const starred = fresh?.fields?.star?.still === id || fresh?.fields?.star?.video === id;
+    const starred = fresh?.fields?.star?.still === id || fresh?.fields?.star?.video === id || fresh?.fields?.star?.board === id;
     const star = make('button', 'pill', starred ? '★ Starred' : '☆ Star');
     star.addEventListener('click', async () => { await this.star(sh.id, id); close(); });
     const save = make('button', 'pill', 'Save file');
@@ -1284,10 +1291,20 @@ export class ProductionView {
     this.hooks.toast(left.length ? `${plural(n, 'render')} found their shot; ${plural(left.length, 'file')} had no shot code in the name. Drop those on their shot.` : `${plural(n, 'render')} added to ${plural(groups.size, 'shot')}`);
   }
 
+  async sketchShot(sh) {
+    const { sketch, picturesOnShot } = await import('./picturesin.js');
+    const got = await sketch({ title: `Shot ${sh.fields?.n || ''}${sh.text ? `: ${sh.text}` : ''}` });
+    if (!got?.files?.length) return;
+    const r = await picturesOnShot(sh.id, got.files, got.meta);
+    await this.render();
+    if (r.added) this.hooks.toast('Sketch kept on the shot', { label: 'Undo', run: async () => { await r.undo(); this.render(); } });
+  }
+
   async star(shotId, fileId) {
     const fresh = await getEntry(shotId);
     const meta = await getEntry(fileId);
-    const k = isVideo(meta?.fields?.type) ? 'video' : 'still';
+    const board = (fresh.fields?.tries || []).some((t) => t.kind === 'board' && (t.files || []).includes(fileId));
+    const k = isVideo(meta?.fields?.type) ? 'video' : board ? 'board' : 'still';
     const star = { ...(fresh.fields?.star || {}) };
     if (star[k] === fileId) delete star[k]; else star[k] = fileId;
     await this.saveShotFields(shotId, { star });
@@ -1510,22 +1527,92 @@ export class ProductionView {
     const cards = [];
     for (const s of this.scenes) for (const sh of s.shots) cards.push({ s, sh });
     if (!cards.length) { body.append(make('p', 'hint gv-empty', 'The storyboard is every shot in order, showing the still you starred. Add shots on the Shots tab.')); return; }
-    const tools = make('div', 'pd-add');
+    // The same frames are the shooting checklist: tick what you got.
+    const filmed = cards.filter(({ sh }) => isFilmed(sh, this.set));
+    const got = filmed.filter(({ sh }) => gotIt(sh)).length;
+    const leftOnly = filmed.length > 0 && pref('boardLeft', '') === '1';
+    const column = pref('boardColumn', '') === '1';
+    const tools = make('div', 'pd-add pd-board-tools');
     const play = make('button', 'pill', '▶ Play');
-    play.title = 'Every still in order, two seconds each: a rough animatic';
+    play.title = 'Every frame in order, two seconds each: a rough animatic';
     play.addEventListener('click', () => this.play(cards));
     tools.append(play);
+    if (filmed.length) {
+      tools.append(make('span', 'pd-got-count', `${got} of ${filmed.length} got`));
+      const left = make('button', 'ghost-btn pd-leftonly', 'Left to shoot');
+      left.setAttribute('aria-pressed', String(leftOnly));
+      left.title = 'Hide the shots you’ve got';
+      left.addEventListener('click', () => { setPref('boardLeft', leftOnly ? '' : '1'); this.render(); });
+      tools.append(left);
+    }
+    const lay = make('button', 'ghost-btn pd-lay', column ? 'Grid' : 'One column');
+    lay.title = column ? 'Frames side by side' : 'One frame under another, with its words';
+    lay.addEventListener('click', () => { setPref('boardColumn', column ? '' : '1'); this.render(); });
+    tools.append(lay);
     body.append(tools);
-    const grid = make('div', 'pd-board');
+    const grid = make('div', `pd-board${column ? ' column' : ''}`);
+    const phone = matchMedia('(max-width: 700px)').matches;
+    const openShot = (sh) => { this.open.add(sh.id); setPref('prodTab', 'shots'); this.render().then(() => this.el.querySelector(`[data-shot="${CSS.escape(sh.id)}"]`)?.scrollIntoView({ block: 'center' })); };
+    const photo = (sh) => {
+      const input = make('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.multiple = true;
+      input.addEventListener('change', async () => { const { picturesOnShot } = await import('./picturesin.js'); const r = await picturesOnShot(sh.id, [...(input.files || [])]); await this.render(); if (r.added) this.hooks.toast(r.added === 1 ? 'Picture on the shot' : `${r.added} pictures on the shot`, { label: 'Undo', run: async () => { await r.undo(); this.render(); } }); }, { once: true });
+      input.click();
+    };
     for (const { s, sh } of cards) {
-      const c = make('button', 'pd-card');
+      const isFilm = isFilmed(sh, this.set);
+      const done = isFilm && gotIt(sh);
+      if (leftOnly && done) continue;
+      const c = make('div', `pd-card${done ? ' got' : ''}`);
       c.dataset.shot = sh.id;
+      c.tabIndex = 0;
+      c.setAttribute('role', 'button');
+      c.setAttribute('aria-label', `${this.codeOf(sh, s)}: ${sh.text || 'shot'}${done ? ', got it' : ''}`);
       const pic = make('div', 'pd-pic');
       const still = this.stillOf(sh);
-      if (still) fileUrl(still).then((url) => { if (url) { const img = make('img'); img.src = url; img.alt = ''; pic.append(img); } });
-      else pic.append(make('span', 'pd-nopic', sh.fields?.framing || ''));
-      c.append(pic, make('span', 'pd-card-code', this.codeOf(sh, s)), make('span', 'pd-card-what', sh.text || ''));
-      c.addEventListener('click', () => { this.open.add(sh.id); setPref('prodTab', 'shots'); this.render().then(() => this.el.querySelector(`[data-shot="${CSS.escape(sh.id)}"]`)?.scrollIntoView({ block: 'center' })); });
+      if (still) fileUrl(still).then((url) => { if (url) { const img = make('img'); img.src = url; img.alt = ''; pic.prepend(img); } });
+      else {
+        // An empty frame offers a sketch or a photo right in it.
+        const empty = make('div', 'pd-empty');
+        const b = (label, run, cls) => { const x = make('button', `pd-empty-btn ${cls}`, label); x.type = 'button'; x.addEventListener('click', (e) => { e.stopPropagation(); run(e); }); return x; };
+        if (phone && !column) empty.append(b('+', (e) => this.hooks.menu(e.currentTarget, [{ label: 'Sketch', run: () => this.sketchShot(sh) }, { label: 'Photo', run: () => photo(sh) }]), 'plus'));
+        else empty.append(b('Sketch', () => this.sketchShot(sh), 'sk'), b('Photo', () => photo(sh), 'ph'));
+        if (sh.fields?.framing) empty.append(make('span', 'pd-nopic', sh.fields.framing));
+        pic.append(empty);
+      }
+      if (isFilm) {
+        // A full-size tick in the corner: one tap, no need to open the shot.
+        const tick = make('button', 'pd-tick', done ? '✓' : '');
+        tick.type = 'button';
+        tick.setAttribute('aria-pressed', String(done));
+        tick.setAttribute('aria-label', done ? `Got ${this.codeOf(sh, s)} (tap to undo)` : `Got ${this.codeOf(sh, s)}`);
+        tick.title = done ? 'Got it (tap to undo)' : 'Got it';
+        tick.addEventListener('click', (e) => { e.stopPropagation(); this.setGot(sh.id, !done); });
+        pic.append(tick);
+      }
+      const words = make('div', 'pd-card-words');
+      words.append(make('span', 'pd-card-code', this.codeOf(sh, s)), make('span', 'pd-card-what', sh.text || ''));
+      if (column && sh.fields?.framing) words.append(make('span', 'pd-card-framing', sh.fields.framing));
+      c.append(pic, words);
+      c.addEventListener('click', () => openShot(sh));
+      c.addEventListener('keydown', (e) => {
+        if (e.target !== c) return;
+        const k = e.key.toLowerCase();
+        if (e.key === 'Enter') { e.preventDefault(); openShot(sh); }
+        else if (k === 'k' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); this.sketchShot(sh); }
+        else if (k === 'p' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); photo(sh); }
+        else if (k === 'g' && isFilm) { e.preventDefault(); this.setGot(sh.id, !done); }
+        else if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
+          e.preventDefault();
+          const all = [...grid.querySelectorAll('.pd-card')];
+          const i = all.indexOf(c);
+          const per = column ? 1 : Math.max(1, Math.round(grid.clientWidth / (c.offsetWidth + 12)));
+          const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: per, ArrowUp: -per }[e.key];
+          all[Math.min(all.length - 1, Math.max(0, i + step))]?.focus();
+        }
+      });
       grid.append(c);
     }
     body.append(grid);

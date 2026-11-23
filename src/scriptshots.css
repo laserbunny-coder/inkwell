@@ -144,8 +144,28 @@ html.ss-dragging, html.ss-dragging * { cursor: grabbing !important; user-select:
 .ss-act { padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: 12.5px var(--ui); cursor: pointer; }
 .ss-act:hover { background: var(--tint); color: var(--ink); }
 .ss-act.end { margin-left: auto; }
+.ss-quiet { margin-top: -4px; }
+.ss-quiet .ss-act { color: var(--faint); }
+/* A shot's pictures and sketches, with the star on the picked one. */
+.ss-frames { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 4px; }
+.ss-frame { position: relative; flex: 0 0 auto; }
+.ss-frame-pic { display: block; width: 76px; aspect-ratio: 16 / 9; padding: 0; border: 2px solid transparent; border-radius: 6px; overflow: hidden; background: var(--tint); cursor: pointer; }
+.ss-frame.shown .ss-frame-pic { border-color: var(--accent); }
+.ss-frame-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ss-frame-star { position: absolute; right: 2px; top: 2px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: color-mix(in srgb, var(--bg) 75%, transparent); color: var(--muted); font-size: 14px; line-height: 24px; cursor: pointer; }
+.ss-frame-star[aria-pressed="true"] { color: var(--accent); }
+.ss-frame-kind { position: absolute; left: 4px; bottom: 4px; padding: 0 4px; border-radius: 4px; background: color-mix(in srgb, var(--bg) 75%, transparent); color: var(--muted); font: 10px var(--ui); }
+@media (--touch) { .ss-frame-pic { width: 96px; } .ss-frame-star { width: 32px; height: 32px; line-height: 32px; } }
 @media (--touch) { .ss-act { padding: 9px 10px; font-size: 14px; } .ss-field { font-size: 16px; } }
 
 /* Beside the text, every shot and count sits at its own height. */
 .ss-side > .ss-card, .ss-side > .ss-thumb, .ss-side > .ss-head { position: absolute; left: 0; right: 0; }
 .ss-side > .ss-thumb { width: 100%; }
+
+/* Got it on the frame: a corner tick big enough for a thumb. */
+.ss-pic { position: relative; }
+.ss-tick { position: absolute; right: 3px; top: 3px; width: 26px; height: 26px; border: 2px solid color-mix(in srgb, var(--ink) 45%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--bg) 70%, transparent); color: var(--bg); font: 700 14px/22px var(--ui); text-align: center; cursor: pointer; }
+.ss-tick[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+.ss-card.got .ss-pic img, .ss-thumb.got .ss-pic img { opacity: .45; }
+.ss-card.got .ss-what { text-decoration: line-through; color: var(--faint); }
+@media (--touch) { .ss-tick { width: 34px; height: 34px; line-height: 30px; font-size: 17px; } html.ss-rail .ss-tick { width: 26px; height: 26px; line-height: 22px; font-size: 14px; } }
