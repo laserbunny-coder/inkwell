@@ -463,6 +463,13 @@ try {
     await newPiece('New screenplay', 'Salt Road', 'Script');
     await saltRoad();
     await addShots();
+    // The Shots button is in reach in the top bar, even with versions to check (those live in ⋯).
+    await p.evaluate(() => document.documentElement.classList.add('to-check'));
+    for (const sel of ['.zm-shots', '.zm-aa', '.zm-more', '.pv-seg']) {
+      const b = await p.locator(`.topbar ${sel}`).boundingBox();
+      assert.ok(b && b.x >= 0 && b.x + b.width <= 412, `${sel} is on screen`);
+    }
+    await p.evaluate(() => document.documentElement.classList.remove('to-check'));
     await p.evaluate(() => window.__scriptShots.toggle());
     await p.waitForSelector('.ss-rows .ss-card');
     await sleep(900);

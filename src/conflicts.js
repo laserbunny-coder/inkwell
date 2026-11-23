@@ -51,6 +51,9 @@ export class Conflicts {
     if (stale.length) list = await conflicts();
     const n = list.length;
     this.pill.hidden = !n;
+    // In the zoom the pill lives in ⋯ (Nov 22 2026): it marks ⋯ with a dot instead.
+    document.documentElement.classList.toggle('to-check', !!n);
+    document.dispatchEvent(new CustomEvent('inkwell:to-check', { detail: { n } }));
     this.pill.textContent = n === 1 ? '1 to check' : `${n} to check`;
     // New ones: let the top bar peek out for a moment so it's noticed.
     if (n > (this.seen || 0)) {
