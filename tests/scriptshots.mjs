@@ -328,7 +328,7 @@ try {
     await sleep(200);
     assert.equal(await p.evaluate(() => [window.__scriptShots.lines.from, window.__scriptShots.lines.to].join()), '0,1');
     assert.match(await p.locator('.ss-bar').textContent(), /\+ Shot for these lines/);
-    await p.locator('.ss-bar button', { hasText: /Move shot \S+ here/ }).click();
+    await p.locator('.ss-bar button', { hasText: /(Move|Put) shot \S+ here/ }).click();
     await sleep(800);
     assert.equal(await count(2), '1 shot · 4 lines without one');
     assert.doesNotMatch(await p.locator(card(2, 0)).textContent(), /Not on any lines/);
@@ -447,6 +447,72 @@ try {
     await sleep(600);
   });
 
+  const PNG1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==', 'base64');
+  const shotsIn = (scene) => p.evaluate((i) => { const ss = window.__scriptShots; const a = ss.anchors()[i]; return ss.ordered(a).map((sh) => ({ id: sh.id, n: sh.fields?.n, from: a.paras.findIndex((x) => x.id === sh.fields?.from), to: a.paras.findIndex((x) => x.id === sh.fields?.to), still: sh.fields?.star?.still || null })); }, scene);
+
+  await check('desktop: pick lines, + Picture: the picture becomes a shot covering exactly those lines (Undo takes it away)', async () => {
+    await p.evaluate(() => window.scrollTo(0, 0));
+    await tap(line('A bell on the door'));
+    await tap(line('June climbs onto a stool'), { shift: true });
+    await sleep(200);
+    const had = (await shotsIn(2)).map((sh) => sh.id);
+    const [chooser] = await Promise.all([p.waitForEvent('filechooser'), p.locator('.ss-bar .ss-barpic').click()]);
+    await chooser.setFiles([{ name: 'bell.png', mimeType: 'image/png', buffer: PNG1 }]);
+    await p.waitForFunction(() => /with its picture/.test(document.querySelector('.toast')?.textContent || ''));
+    await snap('13-desktop-picture-on-lines');
+    const made = (await shotsIn(2)).find((sh) => !had.includes(sh.id));
+    assert.ok(made?.still, 'its picture is its still');
+    assert.deepEqual([made.from, made.to], [0, 1], 'it covers the two picked lines');
+    await p.locator('.toast button', { hasText: 'Undo' }).click();
+    await sleep(700);
+    assert.equal((await shotsIn(2)).length, 1, 'Undo takes it away');
+  });
+
+  await check('desktop: drag a frame onto another line and it covers that line (Undo puts it back)', async () => {
+    await p.evaluate(() => { window.__scriptShots.close(); window.__scriptShots.pick(null); });
+    await p.evaluate(() => window.scrollTo(0, 0));
+    await sleep(300);
+    const before = (await shotsIn(0))[0];
+    const from = await p.locator(card(0, 0)).boundingBox();
+    const to = await line('Is it broken broken').boundingBox();
+    assert.ok(from.y > 0 && to.y + to.height < 760, `both on screen (${Math.round(from.y)}, ${Math.round(to.y)})`);
+    await p.mouse.move(from.x + 20, from.y + 20);
+    await p.mouse.down();
+    for (let i = 1; i <= 12; i += 1) await p.mouse.move(from.x + 20 + ((to.x + 40 - from.x - 20) * i) / 12, from.y + 20 + ((to.y + to.height / 2 - from.y - 20) * i) / 12);
+    assert.equal(await p.locator('.ss-ghost').count(), 1, 'a small frame follows the pointer');
+    assert.ok(await p.locator('.ss-hl.pick').count() >= 1, 'the line it would land on is lit');
+    assert.ok(await p.locator('.ss-bar').isHidden(), 'no bar while dragging');
+    await snap('14-desktop-drag-frame');
+    await p.mouse.up();
+    await p.waitForFunction(() => /now covers 1 line/.test(document.querySelector('.toast')?.textContent || ''));
+    const moved = (await shotsIn(0)).find((sh) => sh.id === before.id);
+    assert.notEqual(moved.from, before.from, 'it moved');
+    assert.equal(await p.locator('.ss-pop').count(), 0, 'a drop doesn’t open the shot');
+    await p.locator('.toast button', { hasText: 'Undo' }).click();
+    await sleep(700);
+    assert.equal((await shotsIn(0)).find((sh) => sh.id === before.id).from, before.from, 'Undo puts it back');
+  });
+
+  await check('desktop: a picture dragged from the computer onto a line becomes a shot there', async () => {
+    const n = (await shotsIn(0)).length;
+    const box = await line('Mara doesn’t look up').boundingBox();
+    await p.evaluate(async ({ x, y, b64 }) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], 'frame.png', { type: 'image/png' }));
+      const el = document.elementFromPoint(x, y);
+      for (const type of ['dragenter', 'dragover', 'drop']) el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+    }, { x: box.x + 40, y: box.y + box.height / 2, b64: PNG1.toString('base64') });
+    await p.waitForFunction(() => /with its picture/.test(document.querySelector('.toast')?.textContent || ''));
+    const list = await shotsIn(0);
+    assert.equal(list.length, n + 1);
+    assert.ok(list.some((sh) => sh.still && sh.from >= 0), 'on its line, with its picture');
+    assert.equal(await p.locator('#editor .file-node, #editor [data-type="file"]').count(), 0, 'nothing pasted into the script itself');
+    await p.locator('.toast button', { hasText: 'Undo' }).click();
+    await sleep(700);
+    assert.equal((await shotsIn(0)).length, n);
+    await p.evaluate(() => { window.__scriptShots.close(); window.__scriptShots.pick(null); });
+  });
+
   await check('desktop: a window too narrow for both columns puts the shots in the script', async () => {
     await p.setViewportSize({ width: 980, height: 800 });
     await sleep(900);
@@ -507,6 +573,63 @@ try {
     await snap('12-phone-pictures-in');
     await tap('.toast button');
     await p.waitForFunction((n) => document.querySelectorAll('.ss-card').length === n, before);
+  });
+
+  let madeHere = false;
+  let placedId = null;
+  await check('phone upright: an open shot’s Put on lines, then pick a line: the bar’s first button puts it there', async () => {
+    await p.evaluate(() => window.scrollTo(0, 0));
+    const loose = (await shotsIn(0)).find((sh) => sh.from < 0);
+    let id = loose?.id;
+    madeHere = !id;
+    if (!id) {
+      // Make one that isn't on any lines yet.
+      id = await p.evaluate(async () => { const ss = window.__scriptShots; const sh = await ss.add(ss.anchors()[0].eid, { focus: false }); ss.pick(null); return sh.id; });
+      await sleep(600);
+    }
+    await tap(`.ss-rows [data-shot="${id}"]`);
+    await tap(`.ss-rows [data-shot="${id}"]`);
+    await p.locator('.ss-sheet .ss-act', { hasText: 'Put on lines' }).waitFor();
+    await tap('.ss-sheet .ss-act >> text=Put on lines');
+    assert.equal(await p.locator('.ss-sheet').count(), 0, 'the sheet steps aside');
+    await p.waitForFunction(() => /Now pick the lines/.test(document.querySelector('.toast')?.textContent || ''));
+    await tap(line('Mara doesn’t look up'));
+    await p.waitForSelector('.ss-bar:not([hidden])');
+    await p.waitForFunction(() => /Put shot/.test(document.querySelector('.ss-bar')?.textContent || ''), null, { timeout: 3000 }).catch(() => {});
+    const first = await p.locator('.ss-bar > *').first().textContent();
+    assert.match(first, /^Put shot \S+ here$/, `first on the bar: ${first}`);
+    await snap('15-phone-put-on-lines');
+    await tap(p.locator('.ss-bar > *').first());
+    await p.waitForFunction(() => /now covers/.test(document.querySelector('.toast')?.textContent || ''));
+    assert.ok((await shotsIn(0)).find((sh) => sh.id === id).from >= 0, 'it is on the line now');
+    placedId = id;
+  });
+
+  await check('phone upright: hold a frame, drag it onto a line, and it covers that line', async () => {
+    await p.evaluate(() => window.scrollTo(0, 0));
+    await sleep(300);
+    const list = await shotsIn(0);
+    const sh = list.filter((x) => x.from >= 0).sort((a, b) => a.from - b.from)[0];
+    const from = await p.locator(`.ss-rows [data-shot="${sh.id}"]`).boundingBox();
+    const to = await line('Is it broken broken').boundingBox();
+    const cdp = await p.context().newCDPSession(p);
+    const pt = (x, y) => [{ x: Math.round(x), y: Math.round(y), id: 1 }];
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt(from.x + 30, from.y + 20) });
+    await sleep(600);
+    for (let i = 1; i <= 10; i += 1) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pt(from.x + 30 + ((to.x + 60 - from.x - 30) * i) / 10, from.y + 20 + ((to.y + to.height / 2 - from.y - 20) * i) / 10) });
+      await sleep(30);
+    }
+    assert.equal(await p.locator('.ss-ghost').count(), 1, 'the frame follows the finger');
+    assert.equal(await p.locator('.pop-menu').count(), 0, 'holding a frame opens no menu');
+    await snap('16-phone-hold-drag');
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await p.waitForFunction((code) => new RegExp(`${code} now covers`).test(document.querySelector('.toast')?.textContent || ''), await p.locator(`.ss-rows [data-shot="${sh.id}"] .ss-code`).textContent());
+    assert.notEqual((await shotsIn(0)).find((x) => x.id === sh.id).from, sh.from, 'it moved to the line');
+    // The shot made for this check goes again, so the counts below stay as they were.
+    if (madeHere && placedId) { await p.evaluate((id) => window.__scriptShots.remove(id), placedId); await sleep(600); }
+    await p.evaluate(() => { document.activeElement?.blur(); window.scrollTo(0, 0); });
+    await sleep(400);
   });
 
   await check('phone upright: beside is a thin strip of pictures, each level with its lines', async () => {

@@ -57,6 +57,12 @@ export function shotCard(sh, opts) {
     add.append(file);
     acts.append(add);
   }
+  if (opts.place) {
+    const pl = make('button', 'ss-act', opts.place.label);
+    pl.type = 'button';
+    pl.addEventListener('click', () => opts.place.run());
+    acts.append(pl);
+  }
   if (opts.make) {
     const mk = make('button', 'ss-act', 'Open in Make ›');
     mk.type = 'button';

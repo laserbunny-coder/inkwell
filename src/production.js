@@ -192,6 +192,7 @@ export async function newShot(scene, { what = '', framing = '', after = null, pi
 export function stillOf(sh, kindOf) {
   const f = sh?.fields || {};
   if (f.star?.still) return f.star.still;
+  if (f.star?.board) return f.star.board; // the picked storyboard frame
   for (const t of [...(f.tries || [])].reverse()) for (const id of [...(t.files || [])].reverse()) if (kindOf(id) === 'still') return id;
   return null;
 }
