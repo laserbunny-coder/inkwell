@@ -10,6 +10,8 @@ import { renderLinkedFrom } from '../notebook.js';
 import { ScenePop, guessAll, redraw as redrawWoven, placeList, sceneAt, scenesOf, ensureHeading, setMarker, lineKey, KINDS as SCENE_KINDS } from '../woven.js';
 import { ScenePlan } from '../sceneplan.js';
 import { NovelPlan } from '../novelplan.js';
+import { ScriptShots } from '../scriptshots.js';
+import { popMenu } from '../menu.js';
 import { shotsUnder } from '../production.js';
 import { applyLook, renderLook, renderNames, nameColour, cleanLook, DEFAULT_LOOK } from '../wovenlook.js';
 import { elementsIn, plainPages, newElement } from '../production.js';
@@ -49,6 +51,7 @@ async function openChapter(id) {
   requestAnimationFrame(placeScriptBar);
   scenePlan?.load(book?.id);
   novelPlan?.load(book?.id);
+  scriptShots?.unload();
   steadyPad(0);
   roomBelow(0);
   loadDoc(editor, doc);
@@ -62,6 +65,7 @@ async function openChapter(id) {
   // The threads and notes under the scene lines are known now.
   if (isWoven()) redrawWoven(editor);
   novelPlan?.redrawDoc();
+  await scriptShots?.load(book?.id);
   await renderChapterLinks();
   await setMeta('lastChapter', id);
   if (state.project) await setMeta(`lastChapter:${state.project.id}`, id);
@@ -191,6 +195,7 @@ function wovenPick() {
 
 let scenePop; // set in wireManuscript()
 let scenePlan; // the plan under the scene line, set in wireManuscript()
+let scriptShots; // the shots beside the script (scriptshots.js), set in wireManuscript()
 let novelPlan; // a novel's: under the chapter's name and each scene break (novelplan.js)
 // A novel (any book that isn't a script) has its chapter open in Write.
 const novelOn = () => !isScript() && !!store.chapter && !!state.project;
@@ -501,6 +506,19 @@ function wireManuscript() {
       if (change.title) { state.acts = await outline(state.project.id); renderRail(); renderCrumb(); novelPlan.drawHead(); }
     }
   });
+  scriptShots = new ScriptShots({
+    editor: () => editor,
+    sheet: $('.page .sheet'),
+    piece: () => state.project,
+    world: async () => (state.project ? worldOf(state.project) : null),
+    script: () => isScript(),
+    woven: () => isWoven(),
+    writing: () => view() === 'write' && !!state.project && (isScript() || novelOn()),
+    toast: (m, a) => toast(m, a),
+    menu: (anchor, items) => popMenu(anchor, items),
+    openInMake: (sh) => { if (state.project) go({ view: 'production', id: state.project.id, tab: 'shots', shot: sh.id }); }
+  });
+  window.__scriptShots = scriptShots;
   notes.inPlan = (n) => novelPlan.inPlan(n);
   document.addEventListener('inkwell:note-lines', (e) => { activePlan()?.showNoteLines(e.detail); });
   editor.view.dom.addEventListener('mousemove', (e) => { pointerY = e.clientY; });
@@ -510,4 +528,4 @@ function wireManuscript() {
   $('#chapter-links-chip').addEventListener('click', () => $('.chapter-links').scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
 
-export { activePlan, biblePlaces, novelPlan, scenePlan, steadyTitles, connectScribe, markScene, newAct, newChapter, numbering, openChapter, refreshWords, renderChapterLinks, sceneDetails, scenePop, syncWoven, toggleNumbering, wireManuscript, wovenPick };
+export { activePlan, biblePlaces, novelPlan, scenePlan, scriptShots, steadyTitles, connectScribe, markScene, newAct, newChapter, numbering, openChapter, refreshWords, renderChapterLinks, sceneDetails, scenePop, syncWoven, toggleNumbering, wireManuscript, wovenPick };

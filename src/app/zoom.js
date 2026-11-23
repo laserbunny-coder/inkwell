@@ -72,6 +72,7 @@ let when = null;
 let glass = null;
 let more = null;
 let aa = null;
+let shots = null;
 let np = null;
 let lit = null;
 let needs = 0;
@@ -323,6 +324,14 @@ function build() {
   aa.addEventListener('click', () => lookHere());
   const ps = document.querySelector('.page-settings');
   if (ps) new MutationObserver(() => aa.setAttribute('aria-expanded', String(!ps.hidden))).observe(ps, { attributes: true, attributeFilter: ['hidden'] });
+  // Shots (Nov 22 2026): the script with its shots beside it (scriptshots.js).
+  // Only while writing a piece with scenes (html.ss-able).
+  shots = make('button', 'zm-shots', 'Shots');
+  shots.type = 'button';
+  shots.dataset.cmd = 'shots';
+  shots.title = 'Shots: each scene’s storyboard beside the script (Alt + B)';
+  shots.setAttribute('aria-pressed', 'false');
+  document.addEventListener('inkwell:shots', (e) => shots.setAttribute('aria-pressed', String(!!e.detail?.on)));
   more = make('button', 'zm-more', '⋯');
   more.type = 'button';
   more.title = 'More: notes beside the text, Beside, every command';
@@ -337,6 +346,7 @@ function moreMenu() {
   const items = [
     ...(writingNow ? [{ label: 'Notes beside the text (Ctrl + 2)', run: click('#notes-toggle') }] : []),
     ...(writingNow && root.classList.contains('woven') ? [{ label: 'Plan under every scene (Ctrl + Shift + Comma)', run: click('.pv-plan') }] : []),
+    ...(writingNow && root.classList.contains('ss-able') ? [{ label: root.classList.contains('ss-on') ? 'Put the shots away (Alt + B)' : 'Shots beside the script (Alt + B)', run: () => { closeMenu(); document.dispatchEvent(new CustomEvent('inkwell:toggle-shots')); } }] : []),
     { label: 'Beside: a pane next to this (Ctrl + \\)', run: click('#beside-toggle') },
     'sep',
     { label: 'Every command (Ctrl + K)', run: () => { closeMenu(); document.querySelector('#palette-toggle')?.click(); } }
@@ -360,7 +370,7 @@ function place() {
   const bar = document.querySelector('.topbar');
   const left = bar?.querySelector(':scope > .tb-l');
   const right = bar?.querySelector(':scope > .tb-r');
-  if (left && right) { left.prepend(when); right.append(np, glass, aa, more); } else if (bar) { bar.prepend(when); bar.append(np, glass, aa, more); }
+  if (left && right) { left.prepend(when); right.append(np, glass, shots, aa, more); } else if (bar) { bar.prepend(when); bar.append(np, glass, shots, aa, more); }
 }
 
 function light(place) {

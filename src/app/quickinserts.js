@@ -27,7 +27,7 @@ import { touch } from './scriptbar.js';
 import { currentEditor, notebook } from './notebookview.js';
 import { go, newPageHere, openEntry, paneStep, setBesideUntil } from './routing.js';
 import { applyRemote, conflicts, sync } from './syncwiring.js';
-import { activePlan, markScene, newAct, newChapter, sceneDetails, steadyTitles, toggleNumbering } from './manuscript.js';
+import { activePlan, markScene, newAct, newChapter, sceneDetails, scriptShots, steadyTitles, toggleNumbering } from './manuscript.js';
 import { KINDS, addPiece, bookMenu, refreshViews, setKind, setLife, worldMenu } from './tidying.js';
 import { printCurrent, toggleCompare, toggleFreshEyes } from './revising.js';
 import { toggleGrid, toggleProduction } from './productionwiring.js';
@@ -413,6 +413,9 @@ addCommands(() => [
   { group: 'write', label: 'Insert the time', keys: `${mod}⇧;`, run: () => insertTime(currentEditor()), when: () => writing() || inNotebook() },
   { group: 'write', label: 'Insert today’s date', keys: `${mod};`, run: () => insertDay(currentEditor(), 0), when: () => writing() || inNotebook() },
   { group: 'view', label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: writing },
+  { group: 'view', label: 'Shots beside the script, or put away', keys: 'Alt+B', words: ['shots', 'storyboard', 'frames', 'side by side', 'make'], run: () => scriptShots?.toggle(), when: () => writing() && root.classList.contains('ss-able') },
+  { group: 'view', label: 'Shots: beside the script', keys: '', words: ['shots', 'storyboard', 'side by side', 'strip'], run: () => scriptShots?.sitAt('beside'), when: () => writing() && root.classList.contains('ss-able') },
+  { group: 'view', label: 'Shots: in the script (one column)', keys: '', words: ['shots', 'storyboard', 'inline', 'one column'], run: () => scriptShots?.sitAt('column'), when: () => writing() && root.classList.contains('ss-able') },
   { group: 'write', label: 'Move this line to another page or day…', keys: '', run: moveLinePicker, when: inNotebook },
   { group: 'write', label: 'Gather a #tag onto this page…', keys: '', run: gatherTagHere, when: inNotebook },
   { group: 'write', label: 'Add a picture or file…', keys: '', run: () => setTimeout(pickFiles, 120), when: () => writing() || inNotebook() },
@@ -493,6 +496,7 @@ function wireQuickInserts() {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePalette(); }
   });
   $('.palette-backdrop').addEventListener('click', () => closePalette());
+  document.addEventListener('inkwell:toggle-shots', () => { if (writing()) scriptShots?.toggle(); });
   document.addEventListener('notes-visibility', () => { $('#notes-toggle').setAttribute('aria-pressed', String(notes.visible)); });
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-cmd]');
@@ -500,6 +504,7 @@ function wireQuickInserts() {
     const cmd = b.dataset.cmd;
     if (cmd === 'palette') openPalette();
     if (cmd === 'notes' && writing()) toggleNotes();
+    if (cmd === 'shots' && writing()) scriptShots?.button(b);
     if (cmd === 'page') lookHere();
     if (cmd === 'history') hstrip.toggle();
     if (cmd === 'history-list') openHistory();
@@ -548,8 +553,10 @@ function wireQuickInserts() {
     else if (m && !e.shiftKey && !e.altKey && e.code === 'Backslash') { e.preventDefault(); toggleBesidePane(); }
     // Alt + T: talk it through with Claude, beside where you are.
     else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyT') { e.preventDefault(); openTalk(); }
-    // Alt + Shift + T: everything left from earlier days onto today.
+    // Alt + Bhift + T: everything left from earlier days onto today.
     else if (e.altKey && !m && e.shiftKey && e.code === 'KeyT') { e.preventDefault(); plan.bringToday(); }
+    // Alt + B: the shots beside the script, or put away.
+    else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyB' && writing() && root.classList.contains('ss-able')) { e.preventDefault(); scriptShots?.toggle(); }
     // Alt + L: Look (the Aa button), in text too.
     else if (e.altKey && !m && !e.shiftKey && e.code === 'KeyL') { e.preventDefault(); lookHere(); }
     // Alt + W: When (today, this week, next week, later…) for the line or lines here.

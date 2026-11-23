@@ -184,6 +184,15 @@ export async function newShot(scene, { what = '', framing = '', after = null, pi
   return row;
 }
 
+// The picture to show for a shot: the starred still, else the newest still.
+// kindOf(fileId) says 'still' or 'video' (from the file's type).
+export function stillOf(sh, kindOf) {
+  const f = sh?.fields || {};
+  if (f.star?.still) return f.star.still;
+  for (const t of [...(f.tries || [])].reverse()) for (const id of [...(t.files || [])].reverse()) if (kindOf(id) === 'still') return id;
+  return null;
+}
+
 // Where a shot is, worked out from what it has: planned, prompted, renders
 // in, a still picked, the take picked.
 export const SHOT_STAGES = [
