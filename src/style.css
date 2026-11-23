@@ -450,7 +450,7 @@ button.wv-mk:hover { background: var(--tint); }
 .ps-addons .switch { padding: 8px 0 0; font-size: 14px; }
 .ps-addon-about { margin: 0 0 6px; }
 .ps-plans { display: flex; flex-direction: column; gap: 2px; margin: 0 0 8px 4px; }
-.ps-plan { display: flex; gap: 8px; align-items: flex-start; padding: 6px 4px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.page-settings label.ps-plan, .ps-plan { display: flex; flex-direction: row; gap: 8px; align-items: flex-start; padding: 6px 4px; border-radius: 6px; cursor: pointer; font-size: 14px; }
 .ps-plan:hover { background: var(--hover, rgba(127,127,127,.08)); }
 .ps-plan input { margin-top: 3px; }
 .ps-plan-t { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -2356,3 +2356,14 @@ html.panes-sheet .pane-head, html.panes-sheet .pane-divider { display: none; }
 .pd-group .hint { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--muted); }
 .pd-group > .pill { align-self: flex-start; }
 .pd-post-card .pd-prompt-head .ghost-btn:first-of-type { margin-left: auto; }
+
+/* A short click-through (tour.js): the ringed thing and its tip. */
+.tour-ring { position: fixed; z-index: 1999; pointer-events: none; border: 2px solid var(--accent); border-radius: 8px; box-shadow: 0 0 0 4px var(--tint); }
+.tour-tip { position: fixed; z-index: 2000; background: var(--ink); color: var(--bg); border-radius: 10px; padding: 12px 14px; box-shadow: 0 8px 28px rgba(0,0,0,.35); display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.45; }
+.tour-tip.mid { left: 50% !important; top: auto; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); }
+.tour-say { margin: 0; }
+.tour-acts { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tour-n { opacity: .7; font-size: 12.5px; }
+.tour-btns { display: flex; gap: 6px; }
+.tour-tip button { font: inherit; font-size: 13px; border: 0; border-radius: 999px; padding: 4px 12px; cursor: pointer; background: var(--bg); color: var(--ink); }
+.tour-tip .tour-stop { background: none; color: inherit; opacity: .8; padding: 4px 6px; }

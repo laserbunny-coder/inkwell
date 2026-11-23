@@ -5,6 +5,7 @@
 // commands.js, and so on) and its wire…() function runs here, in the place
 // its code always ran. start() at the end opens the app.
 import { loadDayTools, dayOff, STUDIO } from './edition.js';
+import { ensureSample } from './firststeps.js';
 import './keyboard.js';
 import './device.js';
 import './style.css';
@@ -298,18 +299,22 @@ async function start() {
   let syncing = null;
   if (!(await getMeta('seedDecided'))) {
     if (await hasWriting()) await setMeta('seedDecided', true);
+    // Studio starts with its sample film instead (firststeps.js).
+    else if (STUDIO) await setMeta('seedDecided', true);
     else if (!sync.available) await seedNow();
     else if (await sync.backend.user?.().catch(() => null)) {
       // Nothing to type into until it opens on your own writing.
       root.classList.add('starting');
       syncing = sync.start();
       await Promise.race([syncing, new Promise((r) => setTimeout(r, 6000))]);
-      await seedIfEmpty();
+      if (!STUDIO) await seedIfEmpty();
     }
   }
   await ensureAreas();
   // Studio: the day tools as she left them (edition.js).
   await loadDayTools();
+  // Studio's sample film, once, for a new person (firststeps.js).
+  if (STUDIO) await ensureSample().catch((e) => console.warn(e));
   // If sync never answers (no signal, say), books still become worlds.
   setTimeout(migrateOnce, 6000);
   let place = null;

@@ -26,6 +26,8 @@ import { dayBody, layOutDay, writeClose } from '../dayends.js';
 import { ensureTrainingLine, seedTraining, TRAINING_PAGE } from '../training.js';
 import { autoOn } from '../auto.js';
 import { addonOn } from '../addons.js';
+import { STUDIO } from '../edition.js';
+import { saveSteps } from '../firststeps.js';
 import { inPane, host as paneHost } from '../panes.js';
 import { events as calendarEvents } from '../calendar.js';
 import { bookType, bookOf, kindName } from '../library.js';
@@ -464,6 +466,7 @@ addCommands(() => [
   { group: 'plan', label: 'Now: Done with the one thing', keys: 'D', words: ['done', 'finished', 'tick', 'check', 'now', 'one thing'], run: () => plan.now.done(), when: onNow },
   { group: 'plan', label: 'Now: Not now (later today, enough for today, another day)', keys: 'N', words: ['not now', 'later', 'tomorrow', 'set aside', 'postpone', 'another day', 'worked on'], run: () => { plan.now.asking = true; plan.redraw(); }, when: () => onNow() && !!plan.now.model().cur },
   { group: 'go', label: 'Training: the sessions and their exercises', words: ['training', 'workout', 'exercise', 'sessions', 'calisthenics', 'parkour', 'handstand', 'front lever', 'vertical'], run: async () => { if (!(await addonOn('training'))) return window.dispatchEvent(new CustomEvent('open-addons')); await seedTraining(); openEntry(TRAINING_PAGE); } },
+  { group: 'go', label: 'Show me around (First steps)', words: ['tour', 'help', 'start', 'learn', 'first steps', 'onboarding', 'how do i'], run: async () => { await saveSteps({ hidden: false }); await go({ view: 'desk' }); deskPage?.load?.({ quiet: true }); }, when: () => STUDIO },
   { group: 'view', label: 'Add-ons: Bible reading, Training', words: ['add-ons', 'addons', 'routines', 'bible', 'training', 'turn on', 'turn off'], run: () => window.dispatchEvent(new CustomEvent('open-addons')) },
   { group: 'plan', label: 'Today’s Bible reading', words: ['bible', 'reading', 'esv', 'scripture', 'first light', 'chapters', 'psalm', 'devotion', 'morning'], run: async () => { if (!(await addonOn('bible'))) return window.dispatchEvent(new CustomEvent('open-addons')); plan.now.light.open(); await go({ view: 'plan', tab: 'now' }); plan.redraw(); }, when: () => !!plan },
   { group: 'plan', label: 'Talk the day through (what is in front of you today)', words: ['morning', 'talk', 'day', 'lay out', 'plan the day', 'say', 'brain dump', 'start', 'now'], run: async () => { await go({ view: 'plan', tab: 'now' }); plan.now.openTalk(); }, when: () => !!plan },
