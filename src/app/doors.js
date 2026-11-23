@@ -28,7 +28,7 @@ export function doorKind(stage, list) {
   return 'text';
 }
 
-export const DOOR_WORDS = { ideas: 'Ideas for this', text: 'The text', revise: 'Drafts and notes', board: 'Storyboard', shots: 'Shots', days: 'Shoot days', edit: 'Deliver, for the edit', out: 'Deliver, Posting' };
+export const DOOR_WORDS = { ideas: 'Ideas for this', text: 'The text', revise: 'Drafts and notes', board: 'Storyboard', shots: 'Shots', days: 'Shoot days', edit: 'Deliver, For the edit', out: 'Deliver, Out' };
 const TAB = { board: 'board', shots: 'shots', days: 'days' };
 
 // Where a stage's door leads, as a place for go().

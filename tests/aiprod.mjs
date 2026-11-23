@@ -459,10 +459,11 @@ try {
     // The piece's Share and post (One home: Alt + 6 no longer leads there; its ⋯ does).
     await go(laptop, { view: 'deliver', id: 'pr_reel' });
     await laptop.waitForFunction(() => document.documentElement.dataset.view === 'deliver');
-    await laptop.locator('.prod-view .gv-levels .chip[data-tab="files"]').click();
-    await laptop.waitForSelector('.pd-file');
+    await laptop.waitForSelector('.pd-handoff');
+    assert.equal(await laptop.locator('.pd-file:visible').count(), 0, 'the single files start folded');
+    await laptop.locator('.pd-fold', { hasText: 'One file at a time' }).click();
     await shot(laptop, 'deliver');
-    const [edl] = await Promise.all([laptop.waitForEvent('download'), laptop.locator('.pd-file', { hasText: 'Rough cut for Resolve' }).click()]);
+    const [edl] = await Promise.all([laptop.waitForEvent('download'), laptop.locator('.pd-file', { hasText: 'Rough cut (.edl)' }).click()]);
     assert.equal(edl.suggestedFilename(), 'Reel 4- Breakfast.edl');
     const text = await readFile(await edl.path(), 'utf8');
     const lines = text.split('\r\n');
@@ -474,7 +475,7 @@ try {
     assert.match(text, /002  NB-E01-S01-02 V     C        00:00:00:00 00:00:03:00 01:00:06:00 01:00:09:00\r\n\* FROM CLIP NAME: NB-E01-S01-02\.mp4\r\n\* COMMENT: NB-E01-S01-02 Pancake/);
     assert.match(text, /003  NB-E01-S01-02 V     C        00:00:03:00 00:00:08:00 01:00:09:00 01:00:14:00\r\n\* FROM CLIP NAME: NB-E01-S01-02\.mp4\r\n\* COMMENT: NB-E01-S01-03 Kenji/);
     assert.doesNotMatch(text, /S02-01/, 'the dojo shot has nothing starred');
-    const [hand] = await Promise.all([laptop.waitForEvent('download'), laptop.locator('.pd-file', { hasText: 'Resolve hand-off' }).click()]);
+    const [hand] = await Promise.all([laptop.waitForEvent('download'), laptop.locator('.pd-handoff').click()]);
     const zip = await readFile(await hand.path(), 'latin1');
     assert.match(zip, /Rough cut\.edl/);
     assert.match(zip, /Takes\/NB-E01-S01-01\.mp4/);

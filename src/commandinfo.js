@@ -204,7 +204,7 @@ export const INFO = [
   { l: 'Share a link to read and comment…', g: 'revise', h: 'A link others can open to read and leave comments.', w: ['share', 'feedback', 'reader', 'link', 'send'], n: 'Open a piece or page first' },
 
   // ---------- Organize ----------
-  { l: 'This page: rename, move to a world or trash…', g: 'tidy', h: 'Rename this page, move it to a project, or put it in the Trash.', w: ['rename', 'move', 'delete', 'trash', 'page menu'], n: N.page },
+  { l: 'This page: rename, move to a project or trash…', g: 'tidy', h: 'Rename this page, move it to a project, or put it in the Trash.', w: ['rename', 'move', 'delete', 'trash', 'page menu'], n: N.page },
   { l: 'This piece: rename, label, stage, move or trash…', g: 'tidy', h: 'Rename this piece, change its label or stage, move it, or put it in the Trash.', w: ['rename', 'move', 'delete', 'trash', 'stage', 'label'], n: N.piece },
   { l: 'This world: rename, move to an area or trash…', g: 'tidy', h: 'Rename this project, move it to another area, or put it in the Trash.', w: ['rename', 'move', 'delete', 'trash', 'project', 'area'], at: ['world'], n: N.world },
   { l: 'Finish this project (put it away, keep everything)…', g: 'tidy', h: 'Puts this project on the Finished shelf in the Library: off the Desk, the sidebar and your plan, with everything still in it.', w: ['finish', 'done', 'complete', 'archive', 'close', 'put away', 'shelve', 'project'], at: ['world'], n: N.world },

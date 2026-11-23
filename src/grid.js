@@ -511,7 +511,9 @@ export class PlotGrid {
     back.type = 'button';
     back.title = owner.kind === 'world' ? 'Back to the world' : 'Back to the text (Ctrl + Shift + G)';
     back.addEventListener('click', () => this.hooks.leave(owner));
-    tools.append(back, this.hooks.menuButton(() => this.moreMenu(), 'More for the grid'));
+    // A piece's Write is in the top bar's Write · Outline · Grid: no second one here.
+    if (owner.kind === 'world') tools.append(back);
+    tools.append(this.hooks.menuButton(() => this.moreMenu(), 'More for the grid'));
     head.append(title, tools);
     if (this.level && (this.rows.length || owner.kind === 'project')) {
       const sw = make('div', 'gv-mode');

@@ -359,7 +359,7 @@ addCommands(() => [
     ['gather', 'Ideas for this piece', 'The ideas from your daily pages that link to this piece, to file or go through.', ['gather', 'ideas']],
     ['revise', 'Drafts and notes for this piece', 'Kept drafts, compare, Fresh eyes, Claude’s notes and readers’ comments for this piece.', ['revise', 'drafts', 'compare']],
     ['make', 'Shots for this piece (production)', 'This piece’s production: shots, storyboard, kit and shoot days.', ['make', 'production', 'storyboard']],
-    ['deliver', 'Share and post this piece', 'Files, share links and posting for this piece.', ['deliver', 'post', 'share']]
+    ['deliver', 'Deliver this piece', 'The script to readers, the hand-off for the edit, and where it goes out.', ['deliver', 'post', 'share']]
   ].map(([id, label, hint, words]) => ({ group: 'go', label, hint, keys: '', words: [...words, 'page'], run: () => (strip.ctx?.id ? piecePage(id) : null), when: () => strip.ctx?.scope === 'piece' })),
   // In a project: its home and its parts by their plain names (the old words still find them).
   { group: 'go', label: 'Project home: the whole outline', hint: 'The project’s home: one outline of its parts, with what to carry on with at the top.', keys: '⌥0', words: ['overview', 'home', 'project', 'outline'], run: () => goPage('overview'), when: () => strip.ctx?.scope === 'world' || !!strip.ctx?.world },

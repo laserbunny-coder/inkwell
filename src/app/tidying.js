@@ -317,13 +317,13 @@ async function bookMenu(book) {
       { label: 'Drafts and notes', run: () => go({ view: 'stage', id: b.id, page: 'revise' }) },
       { label: 'Fresh eyes', keys: '⌘⇧Y', run: async () => { await openBook(b.id); if (writing()) toggleFreshEyes(true); } },
       { label: 'Shots', run: () => go({ view: 'production', id: b.id }) },
-      { label: 'Share and post', run: () => go({ view: 'deliver', id: b.id }) }
+      { label: 'Deliver', run: () => go({ view: 'deliver', id: b.id }) }
     ] : []),
     'sep',
     { label: 'What it is (Gag, Episode…)…', run: () => setLabel(b) },
     { label: 'Written as', sub: KINDS.map(([id, label]) => ({ label, current: bookType(b) === id, run: () => setKind(b, id) })) },
     { label: 'Stage', sub: stagesOf(b, world).map((st) => ({ label: st, current: stageOf(b, world) === st, run: () => setStage(b, st) })) },
-    { label: `Stages: ${stageSetOf(b, world).name}`, sub: allSets().map((set) => ({ label: `${set.name}: ${set.about.toLowerCase()}`, current: stageSetOf(b, world).id === set.id, run: () => setPieceStages(b, set.id) })) },
+    { label: `Workflow: ${stageSetOf(b, world).name}`, sub: allSets().map((set) => ({ label: `${set.name}: ${set.about.toLowerCase()}`, current: stageSetOf(b, world).id === set.id, run: () => setPieceStages(b, set.id) })) },
     ...(script ? [{ label: b.fields?.numbered ? 'Scene numbers: turn off' : 'Number the scenes (for production)…', run: () => toggleNumbering(b) }] : []),
     'sep',
     { label: 'Rename…', run: () => rename(b) },
@@ -355,7 +355,7 @@ async function worldMenu(world) {
     ...(view() !== 'world' || state.worldId !== w.id ? [{ label: 'Open', run: () => go({ view: 'world', id: w.id }) }] : []),
     { label: 'Rename…', run: () => rename(w) },
     { label: 'New piece…', run: () => addPiece(w.id) },
-    { label: 'What Claude knows about this world…', run: () => showClaudeKnows(w) },
+    { label: 'What Claude knows about this project…', run: () => showClaudeKnows(w) },
     ...(!inPane && paneHost() && view() === 'world' && state.worldId === w.id ? [{ label: 'Talk it through with Claude', keys: '⌥T', run: () => openTalk() }] : []),
     { label: 'New page in its bible', run: async () => { await go({ view: 'notebook' }); await notebook.newPage(w.id); } },
     { label: 'Move to area', sub: (await areaOptions(all)).map(([id, label]) => ({ label: label.trim(), current: w.area_id === id, run: () => moveBookToArea(w, id) })) },
@@ -609,7 +609,7 @@ async function pageMenu(page) {
     { label: 'What Claude knows about this page…', run: () => showClaudeKnows(p) },
     ...(await stepItems(p)),
     ...(await pageFor(p)),
-    { label: 'Move to', sub: [{ label: 'Loose pages (no world)', current: !p.parent_id, run: () => movePage(p, null) }, ...(await homesFor(p)).map((h) => ({ label: h.label, current: p.parent_id === h.id, run: () => movePage(p, h.id) }))] },
+    { label: 'Move to', sub: [{ label: 'Loose pages (no project)', current: !p.parent_id, run: () => movePage(p, null) }, ...(await homesFor(p)).map((h) => ({ label: h.label, current: p.parent_id === h.id, run: () => movePage(p, h.id) }))] },
     'sep',
     { label: 'Move to Trash', keys: '⌘⇧⌫', danger: true, run: () => toTrash(p) }
   ];
@@ -763,7 +763,7 @@ async function renderTrash() {
 // Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
 addCommands(() => [
   { group: 'tidy', label: 'This chapter: rename, move or trash…', keys: '', run: async () => popMenu(null, await chapterMenu({ id: state.chapterId }), menuSpot()), when: () => writing() && !!state.chapterId },
-  { group: 'tidy', label: 'This page: rename, move to a world or trash…', keys: '', run: async () => popMenu(null, await pageMenu(notebook.page), menuSpot()), when: () => inNotebook() && notebook.page?.kind === 'page' },
+  { group: 'tidy', label: 'This page: rename, move to a project or trash…', keys: '', run: async () => popMenu(null, await pageMenu(notebook.page), menuSpot()), when: () => inNotebook() && notebook.page?.kind === 'page' },
   { group: 'tidy', label: 'Finish this project (put it away, keep everything)…', keys: '', run: async () => finishWorld(await getEntry(state.worldId)), when: () => !!state.worldId },
   { group: 'tidy', label: 'Reopen this project', keys: '', run: async () => reopenWorld(await getEntry(state.worldId)), when: () => !!state.worldId },
   { group: 'tidy', label: 'This area: rename, move or trash…', keys: '', run: async () => popMenu(null, await areaMenu({ id: state.libArea }), menuSpot()), when: () => view() === 'library' && !!state.libArea }

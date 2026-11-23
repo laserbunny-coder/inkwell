@@ -482,12 +482,26 @@ try {
     assert.equal(made.length, 1, 'sent again, the same task is kept up to date');
   });
 
-  await check('posting (in Deliver now): Claude drafts a caption per platform, links are kept for later', async () => {
+  await check('Out (in Deliver): only the places it goes, + adds one, × takes it off with Undo; Claude drafts a caption for each', async () => {
     // The piece's Share and post (One home: Alt + 6 no longer leads there; its ⋯ does).
     await go(laptop, { view: 'deliver', id: 'pr_reel' });
     await laptop.waitForFunction(() => document.documentElement.dataset.view === 'deliver');
-    await laptop.locator('.prod-view .gv-levels .chip[data-tab="post"]').click();
-    await laptop.locator('.pd-add .pill', { hasText: 'Draft captions' }).click();
+    await laptop.waitForSelector('.pd-group[data-group="out"]');
+    assert.equal(await laptop.locator('.pd-post-card').count(), 0, 'no places until he adds one');
+    for (const p of ['youtube', 'tiktok', 'x', 'vimeo']) {
+      await laptop.locator(`.pd-places .chip[data-platform="${p}"]`).click();
+      await laptop.waitForSelector(`.pd-post-card[data-platform="${p}"]`);
+    }
+    await laptop.locator('.pd-post-card[data-platform="vimeo"] .pd-post-x').click();
+    await laptop.waitForFunction(() => !document.querySelector('.pd-post-card[data-platform="vimeo"]'));
+    await laptop.locator('.toast button', { hasText: 'Undo' }).click();
+    await laptop.waitForSelector('.pd-post-card[data-platform="vimeo"]');
+    await laptop.locator('.pd-post-card[data-platform="vimeo"] .pd-post-x').click();
+    await laptop.waitForFunction(() => !document.querySelector('.pd-post-card[data-platform="vimeo"]'));
+    await settle(laptop);
+    assert.deepEqual(row('pr_reel').fields.postTo, ['youtube', 'tiktok', 'x']);
+    assert.equal(await laptop.locator('.pd-places .chip[data-platform="instagram"]').count(), 1, 'the rest wait as + chips');
+    await laptop.locator('.pd-group[data-group="out"] .pill', { hasText: 'Draft captions' }).click();
     await laptop.waitForFunction(() => document.querySelector('.pd-post-card[data-platform="tiktok"] textarea')?.value === 'Caption for TikTok');
     await laptop.locator('.pd-post-card[data-platform="youtube"] input').fill('https://youtu.be/abc');
     await laptop.locator('.pd-post-card[data-platform="youtube"] input').dispatchEvent('change');
@@ -557,6 +571,13 @@ try {
     const wide2 = await phone.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     assert.ok(wide2 <= 1, `kit scrolls sideways by ${wide2}px`);
     await shot(phone, 'production-phone-kit');
+    // Deliver: one column, nothing sideways.
+    await go(phone, { view: 'deliver', id: 'pr_reel', tab: 'post' });
+    await phone.waitForSelector('.pd-group[data-group="out"] .pd-post-card');
+    await sleep(300);
+    const wide3 = await phone.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    assert.ok(wide3 <= 1, `Deliver scrolls sideways by ${wide3}px`);
+    await shot(phone, 'production-phone-deliver');
     assert.deepEqual(phone.errors, []);
     await phone.context().close();
   });

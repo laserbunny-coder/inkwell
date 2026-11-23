@@ -376,7 +376,9 @@ export const PLATFORMS = [
   { id: 'instagram', label: 'Instagram' },
   { id: 'facebook', label: 'Facebook' },
   { id: 'tiktok', label: 'TikTok' },
-  { id: 'x', label: 'X' }
+  { id: 'x', label: 'X' },
+  { id: 'vimeo', label: 'Vimeo' },
+  { id: 'festival', label: 'A festival' }
 ];
 
 export { codeOrder };

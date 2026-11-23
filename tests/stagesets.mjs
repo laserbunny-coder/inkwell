@@ -84,7 +84,7 @@ const openMake = async (p) => {
 const pieceSet = async (p, name) => {
   await p.evaluate(async (n) => {
     const items = await window.__bookMenu({ id: 'pr_reel2' });
-    items.find((x) => x?.label?.startsWith('Stages:')).sub.find((x) => x.label.startsWith(n)).run();
+    items.find((x) => x?.label?.startsWith('Workflow:')).sub.find((x) => x.label.startsWith(n)).run();
   }, name);
   await sleep(600);
 };

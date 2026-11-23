@@ -145,7 +145,7 @@ try {
     const items = await p.evaluate(async () => (await window.__bookMenu({ id: 'pr_nb' })).filter((x) => x && x.label).map((x) => x.label));
     assert.ok(!items.includes('Its page'), items.join(', '));
     const first = items.slice(0, 8).join(' | ');
-    for (const w of ['Outline', 'Ideas for this', 'Drafts and notes', 'Fresh eyes', 'Shots', 'Share and post']) assert.ok(first.includes(w), `${w} in ${first}`);
+    for (const w of ['Outline', 'Ideas for this', 'Drafts and notes', 'Fresh eyes', 'Shots', 'Deliver']) assert.ok(first.includes(w), `${w} in ${first}`);
   });
 
   await check('the stage moves on from the Outline head', async () => {

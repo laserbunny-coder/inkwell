@@ -372,19 +372,18 @@ try {
     assert.equal(asked.at(-1).develop.sentence, 'Mom cooks breakfast with a sword.');
   });
 
-  await check('Make for a piece is production without Posting; Deliver has Files, Share and Posting', async () => {
+  await check('Make for a piece is production without Posting; Deliver is one page: the script, for the edit, out', async () => {
     await go(page, { view: 'production', id: 'pr_reel2' });
     await page.waitForFunction(() => document.documentElement.dataset.view === 'production');
     await page.waitForSelector('.prod-view .gv-levels .chip');
     { const t = await page.locator('.prod-view .gv-levels .chip').allInnerTexts(); assert.deepEqual(t, ['Shots', 'Storyboard', 'Cast and places', 'Shoot days'], JSON.stringify(t)); }
     await go(page, { view: 'deliver', id: 'pr_reel2' });
     await page.waitForFunction(() => document.documentElement.dataset.view === 'deliver');
-    await page.waitForSelector('.prod-view .gv-levels .chip[data-tab="files"]');
-    assert.deepEqual(await page.locator('.prod-view .gv-levels .chip').allInnerTexts(), ['Files', 'Share', 'Posting']);
-    assert.match(await page.locator('.pd-files').innerText(), /Print or PDF[\s\S]*Fountain[\s\S]*Shot list[\s\S]*subtitles/);
+    await page.waitForSelector('.pd-group[data-group="out"]');
+    assert.equal(await page.locator('.prod-view .gv-levels .chip:visible').count(), 0, 'no tabs');
+    assert.deepEqual(await page.locator('.pd-group-h').allInnerTexts(), ['The script', 'For the edit', 'Out']);
+    assert.match(await page.locator('.pd-group[data-group="edit"]').innerText(), /Hand-off for Resolve/);
     await shot(page, 'pages-deliver');
-    await page.locator('.prod-view .gv-levels .chip[data-tab="post"]').click();
-    await page.waitForSelector('.pd-post-card');
     assert.match(await page.locator('#crumb').innerText(), /Deliver/);
   });
 
