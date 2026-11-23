@@ -33,6 +33,7 @@ import { bookPlace, go, lastPlace } from './routing.js';
 import { frame } from './workpages.js';
 import { plan, deskPage } from './talking.js';
 import { lookHere, hidden } from './pagesettings.js';
+import { dayOff } from '../edition.js';
 
 const roomy = media('roomy');
 const touch = media('touch');
@@ -166,6 +167,8 @@ export function toYear(on = true) {
 }
 
 export async function toStop(id) {
+  // Studio without the day tools: only Project, Desk and Library (edition.js).
+  if (dayOff() && ['month', 'week', 'today', 'now'].includes(id)) id = 'desk';
   const from = stopOf(lastPlace);
   // Month again: the Year, and again back to the four weeks.
   if (id === 'month' && from === 'month') return toYear(!onYear());

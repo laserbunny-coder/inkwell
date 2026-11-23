@@ -4,6 +4,7 @@
 // lives in src/app/ (getting around in routing.js, the command box in
 // commands.js, and so on) and its wire…() function runs here, in the place
 // its code always ran. start() at the end opens the app.
+import { loadDayTools, dayOff, STUDIO } from './edition.js';
 import './keyboard.js';
 import './device.js';
 import './style.css';
@@ -307,6 +308,8 @@ async function start() {
     }
   }
   await ensureAreas();
+  // Studio: the day tools as she left them (edition.js).
+  await loadDayTools();
   // If sync never answers (no signal, say), books still become worlds.
   setTimeout(migrateOnce, 6000);
   let place = null;
@@ -316,12 +319,15 @@ async function start() {
   if (place?.view && phoneAway()) place = { view: 'notebook', pageId: dayId(isoToday()) };
   // A first run opens in the novel to write in, or on today's page while
   // there's nothing of yours here yet (signed out, or still catching up).
+  if (!place?.view && STUDIO) place = { view: 'desk' };
   if (!place?.view) place = (await lastChapterAnywhere()) ? { view: 'write' } : { view: 'notebook', pageId: dayId(isoToday()) };
   // A daily page opens to today; anything else opens where you left it.
   if (place.view === 'notebook' && (!place.pageId || place.pageId.startsWith('day-'))) place = { view: 'notebook', pageId: dayId(isoToday()) };
   if (place.view === 'notebook') { const p = await getEntry(place.pageId); if (!place.pageId.startsWith('day-') && gone(p)) place = { view: 'notebook', pageId: dayId(isoToday()) }; }
   if (place.view === 'project' || place.view === 'world') { const b = await getEntry(place.id); if (gone(b)) place = { view: 'library' }; }
   if (place.view === 'write' && place.chapterId) { const c = await getEntry(place.chapterId); if (gone(c)) place = { view: 'write' }; }
+  // Studio without the day tools opens on the Desk where it would open on today.
+  if (dayOff() && (place.view === 'plan' || (place.view === 'notebook' && place.pageId === dayId(isoToday())))) place = { view: 'desk' };
   if (place.view !== 'write') delete root.dataset.view;
   await go(place);
   setHistoryMode('push');

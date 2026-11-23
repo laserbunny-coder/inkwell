@@ -1,4 +1,5 @@
 // Getting around: go() and the places you can be, back and forward.
+import { dayOff } from '../edition.js';
 import { media } from '../device.js';
 import { getMeta, getEntry } from '../db.js';
 import { closeMenu } from '../menu.js';
@@ -78,6 +79,8 @@ let besideUntil = 0;
 function setBesideUntil(value) { return (besideUntil = value); }
 
 async function go(place) {
+  // Studio without the day tools: the plan's places open the Desk (edition.js).
+  if (dayOff() && place?.view === 'plan') place = { view: 'desk' };
   if (besideUntil > Date.now()) { besideUntil = 0; return openBeside(place); }
   // A menu left open belongs to the place you're leaving.
   closeMenu();
