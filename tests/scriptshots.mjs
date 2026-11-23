@@ -489,6 +489,26 @@ try {
     assert.equal(await p.locator('.ss-sheet').count(), 0);
   });
 
+  await check('phone upright: + pictures at a scene fills its shots without a picture, then makes new shots; Undo takes them back', async () => {
+    const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==', 'base64');
+    const add = p.locator('.ss-addpics').first();
+    await add.scrollIntoViewIfNeeded();
+    const b = await add.boundingBox();
+    assert.ok(b && b.height >= 28 && b.x + b.width <= 412, 'easy to tap, on screen');
+    await snap('11-phone-add-pictures');
+    const before = await p.locator('.ss-card').count();
+    await add.locator('input').setInputFiles([1, 2, 3, 4, 5, 6].map((i) => ({ name: `frame${i}.png`, mimeType: 'image/png', buffer: PNG })));
+    await p.waitForFunction(() => /6 pictures:/.test(document.querySelector('.toast')?.textContent || ''));
+    const text = await p.locator('.toast').textContent();
+    const made = Number((text.match(/(\d+) new shots?/) || [0, 0])[1]);
+    assert.ok(/on shots? without one/.test(text) || made === 6, text);
+    await p.waitForFunction((n) => document.querySelectorAll('.ss-card').length === n, before + made);
+    await sleep(300);
+    await snap('12-phone-pictures-in');
+    await tap('.toast button');
+    await p.waitForFunction((n) => document.querySelectorAll('.ss-card').length === n, before);
+  });
+
   await check('phone upright: beside is a thin strip of pictures, each level with its lines', async () => {
     // Picked from ⋯ the way Michael did (Nov 23): it really moves them beside.
     await tap('.zm-more');

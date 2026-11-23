@@ -20,7 +20,7 @@ const and = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')
 const setIdOf = (piece, world) => { const s = stageSetOf(piece, world); return s?.own ? s.base : s?.id; };
 
 // The film's scenes in order, by their names, each with its lines and shots.
-async function scenesOf(piece) {
+export async function scenesOf(piece) {
   if (!hasManuscript(piece)) return [];
   const { loadStructure, rowsAt } = await import('../grid.js');
   const st = await loadStructure(piece);

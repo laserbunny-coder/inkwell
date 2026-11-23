@@ -67,7 +67,14 @@ html.ss-sideways .ss-what { font-size: 12px; }
 .ss-addbtn { padding: 2px 8px; border: 1px dashed var(--line); border-radius: 6px; background: transparent; color: var(--muted); font: 12px var(--ui); cursor: pointer; white-space: nowrap; }
 .ss-addbtn:hover { border-color: var(--accent); color: var(--accent); }
 html.ss-rail .ss-head { padding: 0; }
-html.ss-rail .ss-head .ss-addbtn { width: 100%; padding: 3px 0; font-size: 15px; }
+html.ss-rail .ss-head { flex-direction: column; gap: 4px; }
+html.ss-rail .ss-head .ss-addbtn { width: 100%; padding: 3px 0; font-size: 15px; text-align: center; }
+/* A finger on the phone: buttons big enough to hit. */
+@media (pointer: coarse) {
+  .ss-head { align-items: center; }
+  .ss-addbtn { padding: 8px 12px; font-size: 14px; }
+  html.ss-rail .ss-head .ss-addbtn { padding: 8px 0; font-size: 13px; }
+}
 
 /* ---------- in one column: each shot right above its first line ---------- */
 .ss-rows { display: flex; flex-direction: column; gap: 2px; margin: .1em -6px .5em; font: 13px/1.35 var(--ui); text-transform: none; white-space: normal; user-select: none; }

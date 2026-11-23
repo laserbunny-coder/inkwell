@@ -17,6 +17,16 @@ const URL = `http://localhost:${PORT}/`;
 const table = new Map();
 const bucket = new Map();
 let clock = Date.parse('2026-10-20T00:00:00Z');
+// A short script with two scenes, for pictures shared from Photos.
+const put = (r) => { const at = new Date((clock += 1000)).toISOString(); table.set(r.id, { parent_id: null, sort: 0, title: '', text: '', content: null, tags: [], type: null, fields: {}, area_id: null, links: [], deleted: false, ...r, user_id: 'u1', updated_at: at }); };
+put({ id: 'area-writing', kind: 'area', title: 'Writing', sort: 1 });
+put({ id: 'wd_nb', kind: 'world', title: 'The Ninja Bunch', area_id: 'area-writing' });
+put({ id: 'pr_reel', kind: 'project', parent_id: 'wd_nb', title: 'Reel 4: Breakfast', area_id: 'area-writing', sort: 1, fields: { type: 'screenplay', levels: ['Act', 'Script', 'Scene'] } });
+put({ id: 'ac_r', kind: 'act', parent_id: 'pr_reel', title: 'Screenplay', sort: 1 });
+put({ id: 'ch_r', kind: 'chapter', parent_id: 'ac_r', title: 'Script', sort: 1 });
+[['pp_1', 'INT. KITCHEN - MORNING', 'scene'], ['pp_2', 'Mom flips a pancake.', 'action'], ['pp_3', 'EXT. DOJO - DAY', 'scene'], ['pp_4', 'Rain at the gate.', 'action']]
+  .forEach(([id, text, el], i) => put({ id, kind: 'para', parent_id: 'ch_r', sort: (i + 1) * 1024, text, content: [{ type: 'text', text }], fields: { el } }));
+put({ id: 'sh_k1', kind: 'shot', parent_id: 'pp_3', sort: 1, title: 'The gate', fields: { n: 1 } });
 function remote(op, arg) {
   if (op === 'push') {
     const stamp = new Date((clock += 1000)).toISOString();
@@ -253,6 +263,29 @@ try {
     const m = await (await fetch(`${URL}manifest.webmanifest`)).json();
     assert.equal(m.share_target.action, './share');
     assert.equal(m.share_target.method, 'POST');
+  });
+
+  await check('pictures shared from Photos: "Put on a scene…" lists the script’s scenes, fills a shot without a picture, then makes new ones; Undo brings back today’s line', async () => {
+    await share({ title: '', text: '', url: '' }, 'frame.png');
+    const isFrame = (l) => (l.content || []).some((c) => c.type === 'file' && c.attrs?.name === 'frame.png');
+    const put = page.locator('.toast button', { hasText: 'Put on a scene…' });
+    await put.waitFor({ timeout: 8000 });
+    assert.equal((await lines(page)).filter(isFrame).length, 1, 'the picture is on today’s page first');
+    await put.click();
+    const items = page.locator('.pop-menu .pop-item');
+    await items.first().waitFor();
+    const labels = await items.allTextContents();
+    assert.equal(labels.length, 2, labels.join(' | '));
+    assert.match(labels[1], /1 shot, 1 without a picture/);
+    await items.nth(1).click();
+    await page.waitForFunction(() => /picture: 1 on a shot without one/.test(document.querySelector('.toast')?.textContent || ''), null, { timeout: 8000 });
+    const shot = await page.evaluate(() => new Promise((res) => { const r = indexedDB.open('writing'); r.onsuccess = () => { const g = r.result.transaction('entries').objectStore('entries').get('sh_k1'); g.onsuccess = () => res(g.result); }; }));
+    assert.ok(shot.fields.tries?.[0]?.files?.length, 'the shot got the picture');
+    assert.ok(shot.fields.star?.still, 'and it is the picked still');
+    assert.equal((await lines(page)).filter(isFrame).length, 0, 'today’s line for it is gone');
+    await page.locator('.toast button', { hasText: 'Undo' }).click();
+    await sleep(600);
+    assert.equal((await lines(page)).filter(isFrame).length, 1, 'Undo brings today’s line back');
   });
 
   await check('no page errors', async () => { assert.deepEqual(page.errors, []); });

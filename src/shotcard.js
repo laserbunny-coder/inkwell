@@ -47,12 +47,13 @@ export function shotCard(sh, opts) {
   const covers = opts.covers ? make('p', 'ss-covers', opts.covers) : null;
   const acts = make('div', 'ss-acts');
   if (opts.picture) {
-    const add = make('label', 'ss-act', 'Add a picture');
+    const add = make('label', 'ss-act', 'Add pictures');
     const file = make('input');
     file.type = 'file';
     file.accept = 'image/*';
+    file.multiple = true;
     file.hidden = true;
-    file.addEventListener('change', () => { const f = file.files?.[0]; if (f) opts.picture(f); });
+    file.addEventListener('change', () => { const fs = [...(file.files || [])]; file.value = ''; if (fs.length) opts.picture(fs); });
     add.append(file);
     acts.append(add);
   }
