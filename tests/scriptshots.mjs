@@ -371,6 +371,7 @@ try {
     const next = await p.locator(card(0, 1, '.ss-rows')).evaluate((e) => e.closest('.ss-rows').nextElementSibling?.textContent || '');
     assert.match(next, /^MARA, thirties/);
     assert.ok(await p.locator('.ss-tram').count() >= 8, 'tramlines in the margin');
+    assert.ok(await p.evaluate(() => [...document.querySelectorAll('.ss-tram')].every((t) => t.getBoundingClientRect().right < window.__editor.view.dom.querySelector('p[data-el=action]').getBoundingClientRect().left + 9)), 'tramlines stay in the margin, off the words');
     await p.locator(card(0, 1, '.ss-rows')).scrollIntoViewIfNeeded();
     await p.evaluate(() => window.scrollBy(0, -40));
     await sleep(200);

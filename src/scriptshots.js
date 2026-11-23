@@ -396,7 +396,7 @@ export class ScriptShots {
     const rail = this.mode === 'rail';
     const gutter = side ? (rail ? 3 : 8) : 0;
     const laneW = rail ? 4 : 6;
-    const x = (lane) => (side ? textR + gutter + lane * laneW : Math.max(1, textL - 9 - lane * 5));
+    const x = (lane) => (side ? textR + gutter + lane * laneW : Math.max(2 - sheet.left, textL - 9 - lane * 5));
     const marks = [];
     const boxes = new Map(); // shot id -> its lines' box, for what's lit
     const tram = new Map(); // shot id -> its tramline
