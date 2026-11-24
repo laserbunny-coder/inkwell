@@ -169,3 +169,49 @@ html.ss-dragging, html.ss-dragging * { cursor: grabbing !important; user-select:
 .ss-card.got .ss-pic img, .ss-thumb.got .ss-pic img { opacity: .45; }
 .ss-card.got .ss-what { text-decoration: line-through; color: var(--faint); }
 @media (--touch) { .ss-tick { width: 34px; height: 34px; line-height: 30px; font-size: 17px; } html.ss-rail .ss-tick { width: 26px; height: 26px; line-height: 22px; font-size: 14px; } }
+
+/* ---------- adding lines to a frame, taking them away (shotgrips.js) ---------- */
+/* The margin beside the words: a tap picks a line (no caret), a slide picks
+   several. Beside the lit block (and a little past each end) a finger takes
+   hold of the nearer end; there the page doesn't scroll. */
+.ss-gut { position: absolute; top: 0; z-index: 3; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none; cursor: pointer; }
+.ss-gut[hidden] { display: none; }
+.ss-zone { position: absolute; left: 0; right: 0; touch-action: none; }
+.ss-zone[hidden] { display: none; }
+/* The band joins the two knobs: solid, a frame is on these lines; broken
+   with hollow knobs, lines picked and no frame yet. */
+.ss-band { position: absolute; z-index: 4; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--accent); pointer-events: none; }
+.ss-band.pk { width: 0; margin-left: -1.5px; border-left: 3px dashed var(--accent); background: transparent; }
+.ss-band[hidden], .ss-knob[hidden] { display: none; }
+.ss-knob {
+  position: absolute; z-index: 5; padding: 0; transform: translate(-50%, -50%); border: 3px solid var(--accent); border-radius: 50%;
+  background: var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, .3); cursor: ns-resize; touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+.ss-knob.pk { background: var(--bg); }
+.ss-knob.live { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 25%, transparent); }
+/* With a mouse the knob looks small but its target is bigger. */
+.ss-knob::before { content: ''; position: absolute; inset: -10px; border-radius: 50%; }
+@media (--touch) { .ss-knob::before { inset: -6px; } }
+/* The bar: what's lit, then − and + always in the same place. */
+.ss-bar .ss-say { align-self: center; min-width: 7.5em; padding: 0 8px; color: var(--bg); font: 500 12px var(--ui); white-space: nowrap; opacity: .85; }
+.ss-bar .ss-sq { min-width: 34px; padding: 5px 0; font-size: 16px; line-height: 1; }
+.ss-bar .ss-sq:disabled { opacity: .35; cursor: default; background: transparent; }
+@media (--touch) { .ss-bar .ss-say { font-size: 13px; } .ss-bar .ss-sq { min-width: 44px; min-height: 40px; font-size: 20px; } }
+/* "Tap the line shot 04 belongs to": while a shot waits for its lines. */
+.ss-banner {
+  position: fixed; left: 50%; top: calc(56px + env(safe-area-inset-top, 0px)); z-index: 55; display: flex; align-items: center; gap: 10px;
+  width: max-content; max-width: calc(100vw - 24px); transform: translateX(-50%); padding: 8px 8px 8px 14px; border-radius: 10px;
+  background: var(--ink); color: var(--bg); box-shadow: 0 6px 20px rgba(0, 0, 0, .3); font: 13px/1.35 var(--ui); box-sizing: border-box;
+}
+.ss-banner[hidden] { display: none; }
+.ss-banner button { flex: none; padding: 6px 10px; border: 1px solid color-mix(in srgb, var(--bg) 40%, transparent); border-radius: 7px; background: transparent; color: var(--bg); font: 500 13px var(--ui); cursor: pointer; }
+@media (--touch) { .ss-banner { font-size: 14px; } .ss-banner button { padding: 9px 12px; font-size: 14px; } }
+/* In the open shot: where it starts and ends, a line earlier or later. */
+.ss-ends { display: flex; flex-direction: column; gap: 2px; }
+.ss-end { display: grid; grid-template-columns: 4.6em minmax(0, 1fr) auto auto; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.ss-end-label { color: var(--faint); }
+.ss-end-words { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink); }
+.ss-step { width: 30px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--muted); font: 14px var(--ui); cursor: pointer; }
+.ss-step:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.ss-step:disabled { opacity: .35; cursor: default; }
+@media (--touch) { .ss-end { font-size: 13px; } .ss-step { width: 44px; height: 40px; font-size: 17px; } }
