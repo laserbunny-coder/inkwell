@@ -45,6 +45,25 @@ export function shotCard(sh, opts) {
   const framing = field('ss-framing-in', sh.fields?.framing, 'Framing: wide, close-up, insert…', 'framing');
   const where = make('p', 'ss-in', opts.scene ? `In ${opts.scene}` : '');
   const covers = opts.covers ? make('p', 'ss-covers', opts.covers) : null;
+  // Where it starts and ends: each end's first words, a line earlier or later.
+  let ends = null;
+  if (opts.ends) {
+    ends = make('div', 'ss-ends');
+    for (const [k, label] of [['start', 'Starts at'], ['end', 'Ends at']]) {
+      const e = opts.ends[k];
+      const row = make('div', `ss-end ss-end-${k}`);
+      row.append(make('span', 'ss-end-label', label), make('span', 'ss-end-words', `“${e.words}”`));
+      for (const [d, sym, name] of [['up', '↑', 'a line earlier'], ['down', '↓', 'a line later']]) {
+        const b = make('button', `ss-step ss-step-${d}`, sym);
+        b.type = 'button';
+        b.setAttribute('aria-label', `${label} ${name}`);
+        b.disabled = !e[d];
+        if (e[d]) b.addEventListener('click', () => e[d]());
+        row.append(b);
+      }
+      ends.append(row);
+    }
+  }
   const acts = make('div', 'ss-acts');
   // Sketch: a blank pad; Draw over it: the frame faint beneath; Keep
   // drawing: the sketch shown, opened again (each makes a new try).
@@ -69,10 +88,16 @@ export function shotCard(sh, opts) {
     acts.append(add);
   }
   if (opts.place) {
-    const pl = make('button', 'ss-act', opts.place.label);
+    const pl = make('button', 'ss-act ss-place', opts.place.label);
     pl.type = 'button';
     pl.addEventListener('click', () => opts.place.run());
     acts.append(pl);
+  }
+  if (opts.unplace) {
+    const off = make('button', 'ss-act ss-unplace', 'Take off lines');
+    off.type = 'button';
+    off.addEventListener('click', () => opts.unplace());
+    acts.append(off);
   }
   if (opts.make) {
     const mk = make('button', 'ss-act', 'Open in Make ›');
@@ -118,6 +143,6 @@ export function shotCard(sh, opts) {
     if (opts.copyPrompt) { const b = make('button', 'ss-act ss-copy', 'Copy the prompt'); b.type = 'button'; b.title = 'Words for Gemini or ChatGPT: the look, the shot, its lines, who and where. Paste with the sketch.'; b.addEventListener('click', () => opts.copyPrompt()); tools.append(b); }
     if (opts.savePicture) { const b = make('button', 'ss-act ss-save', 'Save picture'); b.type = 'button'; b.addEventListener('click', () => opts.savePicture()); tools.append(b); }
   }
-  d.append(top, what, framing, where, ...(covers ? [covers] : []), ...(strip ? [strip] : []), acts, ...(tools ? [tools] : []));
+  d.append(top, what, framing, where, ...(covers ? [covers] : []), ...(ends ? [ends] : []), ...(strip ? [strip] : []), acts, ...(tools ? [tools] : []));
   return d;
 }

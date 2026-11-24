@@ -39,6 +39,7 @@ import { holdStill } from './steady.js';
 import { shotCard } from './shotcard.js';
 import { picturesOnScene, picturesOnShot, picturesText, pictureSources, sketch, tryOf, framePrompt } from './picturesin.js';
 import { popMenu } from './menu.js';
+import { gripMethods, stepEnd } from './shotgrips.js';
 import './scriptshots.css';
 import { screenKind, sceneName } from './scenename.js';
 
@@ -108,6 +109,7 @@ export class ScriptShots {
     this.bar.hidden = true;
     this.bar.addEventListener('mousedown', (e) => e.preventDefault()); // the picked words stay picked
     hooks.sheet.append(this.marks, this.layer, this.bar);
+    this.gripsInit();
     try { const s = JSON.parse(localStorage.getItem('shotsSit') || '{}'); this.sits = { ...DEFAULT_SITS, ...Object.fromEntries(Object.entries(s).filter(([, v]) => SITS.includes(v))) }; } catch { this.sits = { ...DEFAULT_SITS }; }
     window.addEventListener('resize', () => this.refit());
     // Back in Write from Make (or anywhere): the shots as they are now.
@@ -140,15 +142,32 @@ export class ScriptShots {
     }, true);
     // While a frame is held and dragged on a phone, the page doesn't scroll.
     document.addEventListener('touchmove', (e) => { if (this.dragging) e.preventDefault(); }, { passive: false });
-    dom.addEventListener('keydown', (e) => { if (this.lines && !['Shift', 'Alt', 'Control', 'Meta'].includes(e.key)) this.dropLines(); });
+    // Typing lets go of picked lines; Shift + arrows in the words stretch the
+    // picked words, and the lines follow them.
+    const arrow = (e) => e.shiftKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp');
+    dom.addEventListener('keydown', (e) => { if (this.lines && !arrow(e) && !['Shift', 'Alt', 'Control', 'Meta'].includes(e.key)) this.dropLines(); });
+    dom.addEventListener('keyup', (e) => { if (this.lines && arrow(e)) this.pickLines(); });
+    // Shift + click on a line stretches a picked frame (or lines picked in
+    // the margin) as far as that line.
+    dom.addEventListener('mousedown', (e) => {
+      if (!e.shiftKey || e.button > 0 || this.mode === 'off') return;
+      const b = this.block();
+      if (!b || (b.kind === 'pick' && !this.lines?.margin)) return;
+      const hit = this.lineAt(e.clientX, e.clientY);
+      if (!hit || !this.stretchTo(hit)) return;
+      e.preventDefault();
+      this.dropped = Date.now();
+    }, true);
     // A click anywhere else lets go of the picked shot; nothing else changes.
     document.addEventListener('click', (e) => {
       if (!this.sel && !this.open && !this.lines) return;
-      if (e.target.closest?.('.ss-side, .ss-rows, .ss-pop, .ss-sheet, .ss-bar, .pop-menu, .toast')) return;
+      if (e.target.closest?.('.ss-side, .ss-rows, .ss-pop, .ss-sheet, .ss-bar, .ss-gut, .ss-knob, .ss-banner, .pop-menu, .toast')) return;
       if (this.lines && !dom.contains(e.target)) this.dropLines();
       if (this.sel || this.open) this.pick(null);
     });
+    document.addEventListener('keydown', (e) => { this.gripKey(e); }, true);
     document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.placing && !this.open) { e.preventDefault(); e.stopPropagation(); this.placing = null; this.paint(); return; }
       if (e.key === 'Escape' && (this.open || this.sel || this.lines)) { e.preventDefault(); e.stopPropagation(); if (this.open) this.close(); else if (this.sel) this.pick(null); else this.dropLines(); }
     }, true);
   }
@@ -163,7 +182,11 @@ export class ScriptShots {
   }
   // A scene's shots in the order they sit: on no lines first, then by line.
   ordered(a) { return inOrder(this.shots.get(a.eid) || [], a.paras); }
-  span(sh, a) { return resolve(sh, a.paras); }
+  span(sh, a) {
+    // While a knob is pulled the frame's lines follow it (saved on letting go).
+    if (this.stretch?.id === sh.id) return { from: this.stretch.from, to: this.stretch.to };
+    return resolve(sh, a.paras);
+  }
   countText(a) {
     const list = this.shots.get(a.eid) || [];
     if (!list.length) return 'No shots yet';
@@ -185,7 +208,7 @@ export class ScriptShots {
   // Before another chapter's words come in: nothing of the last one stays.
   unload() {
     this.pieceId = null;
-    this.sel = this.open = this.last = this.hover = this.lines = null;
+    this.sel = this.open = this.last = this.hover = this.lines = this.placing = null;
     this.lit = [];
     this.shots = new Map();
     this.refit(true);
@@ -235,7 +258,7 @@ export class ScriptShots {
       r.classList.toggle('ss-rail', next === 'rail');
       r.classList.toggle('ss-column', next === 'column');
       r.classList.toggle('ss-sideways', next === 'beside' && this.kind() === 'sideways');
-      if (next === 'off') { this.sel = this.open = this.lines = this.hover = null; this.lit = []; this.closeFloat(); }
+      if (next === 'off') { this.sel = this.open = this.lines = this.hover = this.placing = null; this.lit = []; this.closeFloat(); }
       this.groupsKey = '';
       this.drawSide();
       this.redrawStrips();
@@ -539,7 +562,11 @@ export class ScriptShots {
       marks.push(svg);
     }
     this.marks.replaceChildren(...marks);
-    this.placeBar(pickBox, textR, sheet);
+    this.placeGrips({ anchors, base, sheet, textL, textR, x, side });
+    const b = this.block();
+    const bt = b && this.paraBox(b.a.paras[b.from], base);
+    const bb = b && this.paraBox(b.a.paras[b.to], base);
+    this.placeBar(bt && bb ? { ...b, top: bt.top, bottom: bb.bottom } : null, textR, sheet);
     this.placeFloat();
   }
 
@@ -601,6 +628,11 @@ export class ScriptShots {
     const B = where(Math.max(from, to - 1));
     const end = B && B.a === A.a ? B.i : A.a.paras.length - 1;
     const r = snap(A.a.paras, A.i, end);
+    if (this.placing) {
+      if (Date.now() - (this.placedAt || 0) < 450) return;
+      const cur = this.find(this.placing);
+      if (cur) { this.placeOn(cur, A.a, r); return; }
+    }
     this.lines = { eid: A.a.eid, from: r.from, to: r.to };
     this.lit = covering(this.shots.get(A.a.eid) || [], A.a.paras, r.from).map((s) => s.id);
     this.paint();
@@ -620,31 +652,49 @@ export class ScriptShots {
     const b = this.paraBox(a.paras[L.to], base);
     return t && b ? { top: t.top, bottom: b.bottom, a } : null;
   }
-  // The little bar over the picked lines: above them, or under them where
-  // there's no room above. Never on the lines themselves.
+  // The little bar over the lit block: above it, or under it where there's
+  // no room above. Never on the lines themselves. − and + always come first,
+  // in the same place, so they never shift under a finger.
   placeBar(box, textR, sheet) {
     const bar = this.bar;
     if (!box) { bar.hidden = true; bar.replaceChildren(); delete bar.dataset.sig; return; }
-    if (this.dragging) { bar.hidden = true; return; }
+    if (this.dragging || this.placing) { bar.hidden = true; return; }
     const { a } = box;
-    const L = this.lines;
+    const n = this.linesNow(a, box);
+    const btn = (label, run, cls = '') => { const b = make('button', cls, label); b.type = 'button'; b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); run(); }); return b; };
     // What the buttons act on is read when they're pressed: the bar is kept
-    // while its words stay the same, and the picked lines may have changed.
+    // while its words stay the same, and the lit block may have changed.
     const now = () => { const l = this.lines; const at = l && this.anchors().find((x) => x.eid === l.eid); return at ? { at, l } : null; };
-    const btn = (label, run) => { const b = make('button', '', label); b.type = 'button'; b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); const n = now(); if (n) run(n); }); return b; };
-    const kids = [btn(`+ Shot for ${linesIn(a.paras, L.from, L.to) === 1 ? 'this line' : 'these lines'}`, ({ at, l }) => this.add(at.eid, { from: l.from, to: l.to }))];
-    // + Picture: a picture straight onto the picked lines (the phone's gallery).
-    const pic = btn('+ Picture', (n) => this.choosePicture(pic, (files, meta) => this.picturesOnLines(n.at, n.l, files, meta), { title: `A frame for ${sceneName(n.at)}` }));
-    pic.classList.add('ss-barpic');
-    pic.title = 'A picture for these lines: it becomes a shot covering them';
-    kids.push(pic);
-    const mover = this.find(this.open || this.last);
-    const r = mover ? this.span(mover.sh, mover.a) : null;
-    if (mover && mover.a.eid === a.eid && !(r && r.from === L.from && r.to === L.to)) {
-      const put = btn(`${r ? 'Move' : 'Put'} shot ${mover.sh.fields?.n || ''} here`, ({ at, l }) => { this.placing = null; this.moveTo(mover.sh.id, at, l); });
-      if (this.placing === mover.sh.id || !r) kids.unshift(put); else kids.push(put);
+    const less = btn('−', () => this.stepBlock('to', -1), 'ss-sq ss-less');
+    const more = btn('+', () => this.stepBlock('to', 1), 'ss-sq ss-more');
+    less.setAttribute('aria-label', 'Take the last line away');
+    more.setAttribute('aria-label', 'Add the next line');
+    less.disabled = !this.stepOk(box, 'to', -1);
+    more.disabled = !this.stepOk(box, 'to', 1);
+    const kids = [less, more];
+    let say;
+    if (box.kind === 'shot') {
+      say = `Shot ${box.sh.fields?.n || ''} · ${n === 1 ? '1 line' : `${n} lines`}`;
+      const id = box.sh.id;
+      kids.push(btn('Open', () => this.showOpen(id)));
+    } else {
+      say = `${n === 1 ? '1 line' : `${n} lines`} picked`;
+      const shot = btn('+ Shot', () => { const x = now(); if (x) this.add(x.at.eid, { from: x.l.from, to: x.l.to }); });
+      shot.title = `A new shot for ${n === 1 ? 'this line' : 'these lines'}`;
+      kids.push(shot);
+      // + Picture: a picture straight onto the picked lines (the phone's gallery).
+      const pic = btn('+ Picture', () => { const x = now(); if (x) this.choosePicture(pic, (files, meta) => this.picturesOnLines(x.at, x.l, files, meta), { title: `A frame for ${sceneName(x.at)}` }); }, 'ss-barpic');
+      pic.title = 'A picture for these lines: it becomes a shot covering them';
+      kids.push(pic);
+      const mover = this.find(this.open || this.last);
+      const r = mover ? this.span(mover.sh, mover.a) : null;
+      if (mover && mover.a.eid === a.eid && !(r && r.from === box.from && r.to === box.to)) {
+        kids.push(btn(`${r ? 'Move' : 'Put'} shot ${mover.sh.fields?.n || ''} here`, () => { const x = now(); if (x) this.placeOn(mover, x.at, x.l); }));
+      }
     }
-    const sig = kids.map((k) => k.textContent).join('|');
+    const label = make('span', 'ss-say', say);
+    kids.unshift(label);
+    const sig = kids.map((k) => `${k.textContent}${k.disabled ? '0' : ''}`).join('|');
     if (bar.dataset.sig !== sig) { bar.replaceChildren(...kids); bar.dataset.sig = sig; }
     bar.hidden = false;
     const h = bar.offsetHeight || 32;
@@ -657,12 +707,17 @@ export class ScriptShots {
     bar.style.top = `${roomAbove || !fitsBelow ? above : below}px`;
     bar.style.left = `${Math.max(0, textR - bar.offsetWidth)}px`;
   }
+  stepOk(box, end, d) { return !!stepEnd(box.a.paras, box, end, d); }
 
   // ---------- picking and opening (nothing moves) ----------
 
   // One click picks a shot (outlined, "Open ›" on it); a second opens it.
   clickShot(id) {
     this.last = id;
+    // A frame on no lines, tapped: it waits for one tap on its line.
+    const cur = this.find(id);
+    if (cur && !this.span(cur.sh, cur.a) && this.sel !== id && !this.open) { this.startPlacing(id); return; }
+    if (this.placing && this.placing !== id) this.placing = null;
     if (this.sel === id) { if (this.open === id) this.close(); else this.showOpen(id); return; }
     this.sel = id;
     this.paint();
@@ -692,6 +747,7 @@ export class ScriptShots {
     const cur = id && this.mode !== 'off' ? this.find(id) : null;
     if (!cur) { this.open = null; this.paint(); return; }
     this.open = id;
+    this.placing = null;
     this.sel = this.last = id;
     const phone = this.kind() !== 'computer';
     const box = make('div', phone ? `ss-sheet${this.kind() === 'sideways' ? ' side' : ''}` : 'ss-pop');
@@ -793,10 +849,21 @@ export class ScriptShots {
       done: () => { this.flush(sh.id); this.close(); },
       blur: () => this.flush(sh.id),
       picture: (files) => this.addPictures(sh.id, files),
-      place: { label: this.span(sh, a) ? 'Move to other lines' : 'Put on lines', run: () => this.startPlacing(sh.id) },
+      place: { label: this.span(sh, a) ? 'Put on other lines' : 'Put on lines', run: () => this.startPlacing(sh.id) },
+      unplace: this.span(sh, a) ? () => this.takeOff(sh.id) : null,
+      ends: this.endsOf(sh, a),
       make: () => { this.flush(sh.id); this.hooks.openInMake(sh); },
       remove: () => this.remove(sh.id)
     });
+  }
+  // Starts at / Ends at: each end's first words, with a line earlier or later.
+  endsOf(sh, a) {
+    const r = this.span(sh, a);
+    if (!r) return null;
+    const words = (i) => { const p = a.paras[i]; const t = (p?.text || '').trim(); return t.length > 40 ? `${t.slice(0, 38)}…` : t || '(an empty line)'; };
+    const lastStart = [...a.paras.keys()].filter((i) => i <= r.to && (a.paras[i].text || '').trim() && !['dialogue', 'paren'].includes(a.paras[i].el)).at(-1) ?? r.to;
+    const end = (k, i) => ({ words: words(i), up: stepEnd(a.paras, r, k, -1) ? () => this.nudge(sh.id, k, -1) : null, down: stepEnd(a.paras, r, k, 1) ? () => this.nudge(sh.id, k, 1) : null });
+    return { start: end('from', r.from), end: end('to', lastStart) };
   }
   // Got it, from the open shot: the same field Make's tick sets.
   async setGot(id, on) {
@@ -958,16 +1025,35 @@ export class ScriptShots {
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   }
 
-  // "Put on lines" from the open shot: it closes, you pick the lines, and
-  // the bar's first button puts it there.
+  // "Put on lines" from the open shot (or a tap on a frame on no lines): a
+  // banner says what to do, and one tap on a line puts it there.
   startPlacing(id) {
     const cur = this.find(id);
     if (!cur) return;
-    this.close();
+    if (this.open) this.close();
+    this.lines = null;
+    this.lit = [];
     this.sel = this.last = this.placing = id;
+    // The finger that tapped "Put on lines" lifts over the script once the
+    // sheet is gone: that ghost tap must not place it.
+    this.placedAt = Date.now();
     this.paint();
-    const touch = this.kind() !== 'computer';
-    this.hooks.toast(`Now pick the lines in ${sceneName(cur.a)} for shot ${this.codeOf(cur.sh, cur.a)}${touch ? ' (hold a word, stretch the handles)' : ' (click, or Shift + click for several)'}, or drag the frame onto them`);
+  }
+  // Off its lines, back to waiting at its scene (Undo puts it back).
+  async takeOff(id) {
+    await this.flush(id);
+    const fresh = await getEntry(id);
+    if (!fresh) return;
+    const fields = { ...fresh.fields };
+    delete fields.from;
+    delete fields.to;
+    const row = { ...fresh, fields, updated_at: Date.now() };
+    delete row._by;
+    await putEntries([row]);
+    await this.reload();
+    const cur = this.find(id);
+    if (this.open === id) this.showOpen(id);
+    this.hooks.toast(`Shot ${cur ? this.codeOf(cur.sh, cur.a) : ''} is off its lines and waits at its scene`, { label: 'Undo', run: async () => { const now = await getEntry(id); if (!now) return; const back = { ...now, fields: { ...now.fields, from: fresh.fields?.from, to: fresh.fields?.to }, updated_at: Date.now() }; delete back._by; await putEntries([back]); await this.reload(); if (this.open === id) this.showOpen(id); } });
   }
 
   // A frame dragged onto lines covers them. With a mouse it starts on a
@@ -1070,19 +1156,24 @@ export class ScriptShots {
     return sh;
   }
   // "Move shot 03 here": the shot now covers the picked lines.
+  // It lands picked: its lines lit, the knobs on them, the bar under them.
   async moveTo(id, a, L) {
     await this.flush(id);
     const fresh = await getEntry(id);
     if (!fresh || !a.paras[L.from] || !a.paras[L.to]) return;
+    const was = !!(fresh.fields?.from || fresh.fields?.to);
     const row = { ...fresh, fields: { ...fresh.fields, from: a.paras[L.from].id, to: a.paras[L.to].id }, updated_at: Date.now() };
     delete row._by;
     await putEntries([row]);
     this.lines = null;
     this.lit = [];
+    this.placing = null;
+    this.stretch = null;
     await this.reload();
     const cur = this.find(id);
     if (cur) {
-      this.hooks.toast(`Shot ${this.codeOf(cur.sh, cur.a)} now covers ${plural(linesIn(a.paras, L.from, L.to), 'line')}`, { label: 'Undo', run: async () => { const now = await getEntry(id); if (!now) return; const back = { ...now, fields: { ...now.fields, from: fresh.fields?.from || '', to: fresh.fields?.to || '' }, updated_at: Date.now() }; if (!back.fields.from) { delete back.fields.from; delete back.fields.to; } delete back._by; await putEntries([back]); await this.reload(); } });
+      this.sel = this.last = id;
+      this.hooks.toast(`Shot ${this.codeOf(cur.sh, cur.a)} ${was ? 'now covers' : 'is on'} ${plural(linesIn(a.paras, L.from, L.to), 'line')}. Pull a knob to change that.`, { label: 'Undo', run: async () => { const now = await getEntry(id); if (!now) return; const back = { ...now, fields: { ...now.fields, from: fresh.fields?.from || '', to: fresh.fields?.to || '' }, updated_at: Date.now() }; if (!back.fields.from) { delete back.fields.from; delete back.fields.to; } delete back._by; await putEntries([back]); await this.reload(); } });
       if (this.open === id) this.showOpen(id); else this.paint();
     }
   }
@@ -1123,6 +1214,8 @@ export class ScriptShots {
 }
 
 // The editor's side of it: the strips under each scene line, in one column.
+Object.assign(ScriptShots.prototype, gripMethods);
+
 export const ShotStrips = Extension.create({
   name: 'shotStrips',
   addOptions() { return { shots: () => null }; },

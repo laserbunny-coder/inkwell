@@ -219,6 +219,38 @@ async function tap(sel, opts = {}) {
   }
 }
 const sel = () => p.evaluate(() => window.__scriptShots.sel);
+// The margin beside a line (where the tramlines are): a tap there, or where it is.
+async function marginAt(words, dy = 0.5) {
+  let l = await line(words).boundingBox();
+  const vh = p.viewportSize().height;
+  if (l.y < 70 || l.y + l.height > vh - 120) { await line(words).evaluate((e) => window.scrollBy(0, e.getBoundingClientRect().top - window.innerHeight / 3)); await sleep(250); l = await line(words).boundingBox(); }
+  const g = await p.locator('.ss-gut').boundingBox();
+  return { x: g.x + g.width / 2, y: l.y + l.height * dy };
+}
+async function tapMargin(words) {
+  const { x, y } = await marginAt(words);
+  if (p.__touch) await p.touchscreen.tap(x, y); else await p.mouse.click(x, y);
+  await sleep(250);
+}
+// A finger on the screen (CDP touch events), moved through points.
+async function finger(points, { hold = 0, id = 7 } = {}) {
+  const cdp = await p.context().newCDPSession(p);
+  const pt = ([x, y]) => [{ x: Math.round(x), y: Math.round(y), id }];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt(points[0]) });
+  if (hold) await sleep(hold);
+  for (let i = 1; i < points.length; i += 1) {
+    const [x0, y0] = points[i - 1];
+    const [x1, y1] = points[i];
+    for (let k = 1; k <= 6; k += 1) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pt([x0 + ((x1 - x0) * k) / 6, y0 + ((y1 - y0) * k) / 6]) }); await sleep(16); }
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await sleep(300);
+}
+// Where line i of scene e is on the screen.
+const pbox = (e, i) => p.evaluate(([e, i]) => { const ss = window.__scriptShots; const a = ss.anchors()[e]; const r = ss.editor.view.nodeDOM(a.paras[i].pos).getBoundingClientRect(); return { top: r.top, bottom: r.bottom, mid: (r.top + r.bottom) / 2 }; }, [e, i]);
+const toastSays = (re) => p.waitForFunction((src) => [...document.querySelectorAll('.toast')].some((t) => new RegExp(src).test(t.textContent || '')), re.source, { timeout: 6000 }).catch(async (e) => { console.log('TOAST', re.source, await p.evaluate(() => [...document.querySelectorAll('.toast')].map((t) => t.textContent).join(' || ')), JSON.stringify(await block())); throw e; });
+const undo = async () => { await p.locator('.toast button', { hasText: 'Undo' }).last().click(); await sleep(700); };
+const block = () => p.evaluate(() => { const b = window.__scriptShots.block(); return b ? { kind: b.kind, from: b.from, to: b.to, n: window.__scriptShots.linesNow(b.a, b) } : null; });
 
 try {
   p = await open({ viewport: { width: 1400, height: 860 } });
@@ -295,7 +327,7 @@ try {
     assert.equal(await p.locator('.ss-side .ss-card.on').count(), 1, 'the two-shot covers it');
     assert.equal(await p.evaluate(() => window.__scriptShots.lines?.from), 2, 'a click on what June says picks her name too');
     assert.ok(await p.locator('.ss-bar').isVisible());
-    assert.match(await p.locator('.ss-bar').textContent(), /\+ Shot for this line/);
+    assert.match(await p.locator('.ss-bar').textContent(), /1 line picked.*\+ Shot/);
     const bar = await p.locator('.ss-bar').boundingBox();
     const pick = await p.locator('.ss-hl.pick').boundingBox();
     assert.ok(bar.y + bar.height <= pick.y + 1 || bar.y >= pick.y + pick.height - 1, 'the bar never covers the picked lines');
@@ -323,11 +355,17 @@ try {
 
   await check('desktop: Shift + click picks several lines, and Move shot here puts a shot on them (Undo puts it back)', async () => {
     await tap(card(2, 0));
+    // A frame on no lines waits for its line; Escape lets that go (it stays the one picked last).
+    await p.waitForSelector('.ss-banner:not([hidden])');
+    assert.match(await p.locator('.ss-banner').textContent(), /Click the line shot \S+ belongs to/);
+    await p.keyboard.press('Escape');
+    await sleep(500);
+    assert.ok(await p.locator('.ss-banner').isHidden());
     await tap(line('A bell on the door'));
     await tap(line('June climbs onto a stool'), { shift: true });
     await sleep(200);
     assert.equal(await p.evaluate(() => [window.__scriptShots.lines.from, window.__scriptShots.lines.to].join()), '0,1');
-    assert.match(await p.locator('.ss-bar').textContent(), /\+ Shot for these lines/);
+    assert.match(await p.locator('.ss-bar').textContent(), /2 lines picked/);
     await p.locator('.ss-bar button', { hasText: /(Move|Put) shot \S+ here/ }).click();
     await sleep(800);
     assert.equal(await count(2), '1 shot · 4 lines without one');
@@ -335,6 +373,101 @@ try {
     await p.locator('.toast button', { hasText: 'Undo' }).click();
     await sleep(700);
     assert.equal(await count(2), '1 shot · 6 lines without one');
+  });
+
+  await check('desktop: a picked frame has a knob at each end; pull the bottom one with the mouse and it covers more lines (Undo puts it back)', async () => {
+    await p.evaluate(() => window.scrollTo(0, 0));
+    await sleep(200);
+    await tap(card(0, 0));
+    await sleep(300);
+    const b0 = await block();
+    assert.equal(b0.kind, 'shot');
+    assert.equal(await p.locator('.ss-knob:not([hidden])').count(), 2, 'two knobs');
+    assert.ok(!/\bpk\b/.test(await p.locator('.ss-band').getAttribute('class')), 'a solid band: a frame is on these lines');
+    assert.match(await p.locator('.ss-bar').textContent(), new RegExp(`Shot \\S+ · ${b0.n} lines?`));
+    await snap('22-desktop-knobs');
+    // Two lines further down: the dipstick, then June's line.
+    const k = await p.locator('.ss-knob[data-end="to"]').boundingBox();
+    const target = await pbox(0, b0.to + 3);
+    await p.mouse.move(k.x + k.width / 2, k.y + k.height / 2);
+    await p.mouse.down();
+    for (let i = 1; i <= 8; i += 1) { await p.mouse.move(k.x + k.width / 2, k.y + k.height / 2 + ((target.mid + 2 - k.y - k.height / 2) * i) / 8); await sleep(20); }
+    assert.equal((await block()).n, b0.n + 2, 'the lines follow the knob while it is pulled');
+    await p.mouse.up();
+    await toastSays(new RegExp(`now covers ${b0.n + 2} lines`));
+    assert.equal((await block()).kind, 'shot', 'still picked');
+    await undo();
+    assert.equal((await block()).n, b0.n, 'Undo puts it back');
+  });
+
+  await check('desktop: − and + on the bar, Shift + Down / Up and Alt + Shift + Down / Up change a picked frame by one line', async () => {
+    const b0 = await block();
+    const bar0 = await p.locator('.ss-bar .ss-more').boundingBox();
+    await p.locator('.ss-bar .ss-more').click();
+    await p.waitForFunction((n) => window.__scriptShots.linesNow(window.__scriptShots.block().a, window.__scriptShots.block()) === n, b0.n + 1);
+    const bar1 = await p.locator('.ss-bar .ss-more').boundingBox();
+    assert.ok(Math.abs(bar1.x - bar0.x) < 1, '+ stays in its place');
+    await p.locator('.ss-bar .ss-less').click();
+    await p.waitForFunction((n) => window.__scriptShots.linesNow(window.__scriptShots.block().a, window.__scriptShots.block()) === n, b0.n);
+    await p.keyboard.press('Shift+ArrowDown');
+    await p.waitForFunction((to) => window.__scriptShots.block().to > to, b0.to);
+    await p.keyboard.press('Alt+Shift+ArrowDown');
+    await p.waitForFunction((from) => window.__scriptShots.block().from > from, b0.from);
+    await p.keyboard.press('Alt+Shift+ArrowUp');
+    await p.waitForFunction((from) => window.__scriptShots.block().from === from, b0.from);
+    await p.keyboard.press('Shift+ArrowUp');
+    await p.waitForFunction((to) => window.__scriptShots.block().to === to, b0.to);
+    assert.deepEqual(await block(), b0);
+  });
+
+  await check('desktop: the open shot says where it starts and ends, with a line earlier or later, and Take off lines (Undo)', async () => {
+    const b0 = await block();
+    await tap(card(0, 0));
+    await p.waitForSelector('.ss-pop .ss-ends');
+    assert.match(await p.locator('.ss-pop .ss-end-start').textContent(), /Starts at“A white pickup/);
+    assert.ok(await p.locator('.ss-pop .ss-end-start .ss-step-up').isDisabled(), 'it starts on the scene’s first line');
+    await p.locator('.ss-pop .ss-end-end .ss-step-down').click();
+    await p.waitForFunction((n) => window.__scriptShots.linesNow(window.__scriptShots.block().a, window.__scriptShots.block()) === n, b0.n + 1);
+    assert.match(await p.locator('.ss-pop .ss-end-end').textContent(), /MARA, thirties/);
+    await p.locator('.ss-pop .ss-end-end .ss-step-up').click();
+    await p.waitForFunction((n) => window.__scriptShots.linesNow(window.__scriptShots.block().a, window.__scriptShots.block()) === n, b0.n);
+    await p.locator('.ss-pop .ss-act', { hasText: 'Take off lines' }).click();
+    await toastSays(/is off its lines/);
+    assert.equal(await block(), null, 'on no lines now');
+    assert.match(await p.locator('.ss-pop .ss-act.ss-place').textContent(), /^Put on lines$/);
+    await undo();
+    assert.deepEqual(await block(), b0, 'Undo puts it back on its lines');
+    await p.evaluate(() => { window.__scriptShots.close(); window.__scriptShots.pick(null); });
+    await sleep(300);
+  });
+
+  await check('desktop: a click in the margin picks a line with no caret; a drag down it picks several; Shift + click stretches them', async () => {
+    await tapMargin('A bell on the door');
+    let b = await block();
+    assert.equal(b.kind, 'pick');
+    assert.equal(b.n, 1);
+    assert.equal(await p.evaluate(() => window.__editor.isFocused), false, 'no caret in the words');
+    assert.ok(/\bpk\b/.test(await p.locator('.ss-band').getAttribute('class')), 'a broken band: no frame yet');
+    assert.match(await p.locator('.ss-bar').textContent(), /1 line picked/);
+    await p.keyboard.press('Escape');
+    await sleep(200);
+    const a = await marginAt('A bell on the door');
+    const z = await marginAt('Long walk?');
+    await p.mouse.move(a.x, a.y);
+    await p.mouse.down();
+    for (let i = 1; i <= 8; i += 1) { await p.mouse.move(a.x, a.y + ((z.y - a.y) * i) / 8); await sleep(20); }
+    await p.mouse.up();
+    await sleep(200);
+    b = await block();
+    assert.deepEqual([b.kind, b.from, b.to], ['pick', 0, 3], 'the bell, the stool and the waitress’s line');
+    await snap('23-desktop-margin-pick');
+    await tap(line('Eleven thousand steps'), { shift: true });
+    await sleep(300);
+    b = await block();
+    assert.equal(b.to, 5, 'Shift + click reaches June’s line');
+    await p.keyboard.press('Escape');
+    await sleep(200);
+    assert.equal(await block(), null);
   });
 
   await check('desktop: Alt + Down and Alt + Up step shot to shot', async () => {
@@ -647,7 +780,7 @@ try {
 
   let madeHere = false;
   let placedId = null;
-  await check('phone upright: an open shot’s Put on lines, then pick a line: the bar’s first button puts it there', async () => {
+  await check('phone upright: an open shot’s Put on lines, then one tap in the margin puts it there, picked with its knobs', async () => {
     await p.evaluate(() => window.scrollTo(0, 0));
     const loose = (await shotsIn(0)).find((sh) => sh.from < 0);
     let id = loose?.id;
@@ -658,21 +791,84 @@ try {
       await sleep(600);
     }
     await tap(`.ss-rows [data-shot="${id}"]`);
+    await p.waitForSelector('.ss-banner:not([hidden])');
     await tap(`.ss-rows [data-shot="${id}"]`);
     await p.locator('.ss-sheet .ss-act', { hasText: 'Put on lines' }).waitFor();
     await tap('.ss-sheet .ss-act >> text=Put on lines');
     assert.equal(await p.locator('.ss-sheet').count(), 0, 'the sheet steps aside');
-    await p.waitForFunction(() => /Now pick the lines/.test(document.querySelector('.toast')?.textContent || ''));
-    await tap(line('Mara doesn’t look up'));
-    await p.waitForSelector('.ss-bar:not([hidden])');
-    await p.waitForFunction(() => /Put shot/.test(document.querySelector('.ss-bar')?.textContent || ''), null, { timeout: 3000 }).catch(() => {});
-    const first = await p.locator('.ss-bar > *').first().textContent();
-    assert.match(first, /^Put shot \S+ here$/, `first on the bar: ${first}`);
+    await p.waitForSelector('.ss-banner:not([hidden])');
+    assert.match(await p.locator('.ss-banner').textContent(), /Tap the line shot \S+ belongs to/);
+    await sleep(400);
+    assert.ok(!(await p.evaluate(() => [...document.querySelectorAll('.toast')].some((t) => /belongs to/.test(t.textContent)))), 'the finger lifting off the button places nothing');
+    assert.ok(await p.evaluate((id) => window.__scriptShots.placing === id, id), 'still waiting for its line');
     await snap('15-phone-put-on-lines');
-    await tap(p.locator('.ss-bar > *').first());
-    await p.waitForFunction(() => /now covers/.test(document.querySelector('.toast')?.textContent || ''));
+    await tapMargin('Mara doesn’t look up');
+    await p.waitForFunction(() => /is on 1 line\. Pull a knob/.test(document.querySelector('.toast')?.textContent || ''));
     assert.ok((await shotsIn(0)).find((sh) => sh.id === id).from >= 0, 'it is on the line now');
+    assert.ok(await p.locator('.ss-banner').isHidden());
+    assert.equal(await p.evaluate(() => window.__scriptShots.sel), id, 'it lands picked');
+    assert.equal(await p.locator('.ss-knob:not([hidden])').count(), 2, 'its knobs show');
+    assert.match(await p.locator('.ss-bar').textContent(), /Shot \S+ · 1 line/);
+    assert.equal(await p.evaluate(() => document.activeElement?.closest?.('.ProseMirror') ? 'editor' : 'not'), 'not', 'no caret, no keyboard');
     placedId = id;
+  });
+
+  await check('phone upright: with a finger: pull down from the top half of a one-line frame, pull up from just above it, − and + (Undo each)', async () => {
+    const b0 = await block();
+    assert.deepEqual([b0.kind, b0.n], ['shot', 1]);
+    const { x } = await marginAt('Mara doesn’t look up');
+    let me = await pbox(0, b0.from);
+    const last = await pbox(0, b0.to + 2);
+    // The first move decides: down holds the bottom end.
+    await finger([[x, me.top + 4], [x, last.mid + 4]]);
+    await toastSays(/now covers 2 lines/);
+    assert.equal((await block()).n, 2);
+    await undo();
+    assert.equal((await block()).n, 1);
+    // 18 px above the block still takes hold of its top end.
+    me = await pbox(0, b0.from);
+    const dip = await pbox(0, b0.from - 3);
+    await finger([[x, me.top - 18], [x, dip.top - 8]]); // the end keeps its distance from the finger
+    await toastSays(/now covers 3 lines/);
+    const b1 = await block();
+    assert.deepEqual([b1.from, b1.to], [b0.from - 3, b0.to], 'the dipstick, June’s line and this one');
+    await snap('24-phone-pull');
+    await undo();
+    // − and + with a finger.
+    await tap('.ss-bar .ss-more');
+    await toastSays(/now covers 2 lines/);
+    await tap('.ss-bar .ss-less');
+    await toastSays(/now covers 1 line\./);
+    assert.deepEqual(await block(), b0);
+  });
+
+  await check('phone upright: a tap anywhere across the margin takes that line’s frame; hold and slide picks lines; a flick still scrolls', async () => {
+    await p.evaluate(() => window.scrollTo(0, 0));
+    await sleep(300);
+    const g = await p.locator('.ss-gut').boundingBox();
+    const said = await pbox(0, 3);
+    await p.touchscreen.tap(g.x + 3, said.mid);
+    await sleep(300);
+    const two = await p.evaluate(() => window.__scriptShots.sel);
+    assert.ok(two, 'a frame is picked');
+    assert.ok((await shotsIn(0)).find((sh) => sh.id === two).from <= 3, 'one that covers what June says');
+    // Hold the margin, then slide: the bell, the stool and the waitress's line.
+    const bell = await marginAt('A bell on the door');
+    const walk = await marginAt('Long walk?');
+    await finger([[bell.x, bell.y], [walk.x, walk.y]], { hold: 520 });
+    let b = await block();
+    assert.deepEqual([b.kind, b.from, b.to], ['pick', 0, 3]);
+    assert.equal(await p.evaluate(() => window.__editor.isFocused), false, 'no keyboard');
+    await snap('25-phone-margin-pick');
+    // A quick flick down the margin (no hold) scrolls the page and picks nothing new.
+    const y0 = await scrollY();
+    const m = await marginAt('Eleven thousand steps');
+    await finger([[m.x, m.y], [m.x, m.y - 220]]);
+    assert.notEqual(await scrollY(), y0, 'the page scrolled');
+    b = await block();
+    assert.deepEqual([b.from, b.to], [0, 3], 'the pick is as it was');
+    await p.evaluate(() => { window.__scriptShots.dropLines(); window.__scriptShots.pick(null); window.scrollTo(0, 0); });
+    await sleep(300);
   });
 
   await check('phone upright: hold a frame, drag it onto a line, and it covers that line', async () => {
