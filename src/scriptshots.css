@@ -76,12 +76,6 @@ html.ss-rail .ss-head .ss-addbtn { width: 100%; padding: 3px 0; font-size: 15px;
   html.ss-rail .ss-head .ss-addbtn { padding: 8px 0; font-size: 13px; }
 }
 
-/* ---------- in one column: each shot right above its first line ---------- */
-.ss-rows { display: flex; flex-direction: column; gap: 2px; margin: .1em -6px .5em; font: 13px/1.35 var(--ui); text-transform: none; white-space: normal; user-select: none; }
-.ss-rows .ss-card { grid-template-columns: 96px minmax(0, 1fr); }
-.ss-headrow { margin-top: .2em; }
-@media (--touch) { .ss-rows .ss-card { grid-template-columns: 84px minmax(0, 1fr); } }
-
 /* ---------- tramlines, dotted marks and what's lit (over the page, no room taken) ---------- */
 .ss-marks { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 .ss-tram { position: absolute; width: 3px; border-radius: 2px; background: var(--faint); opacity: .55; transition: background-color .12s, opacity .12s; }

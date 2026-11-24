@@ -95,10 +95,13 @@ export const gripMethods = {
     this.placeBanner();
     if (off) { this.band.hidden = this.knobs.from.hidden = this.knobs.to.hidden = true; return; }
     const touch = matchMedia('(pointer: coarse)').matches;
-    // The strip: the margin where the tramlines are.
+    // The strip: with a mouse, the margin where the tramlines are. With a
+    // finger, the open margin left of the words: beside, the gap between the
+    // words and the shots is too thin to hit (Nov 24, beside became the only
+    // way on a phone), while the knobs stay on the frame's own tramline.
     let left;
     let width;
-    if (side) {
+    if (side && !touch) {
       left = textR;
       width = Math.max(14, this.layer.offsetLeft - textR);
     } else {
