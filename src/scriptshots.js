@@ -29,8 +29,8 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { getEntry, getMany, putEntries } from './db.js';
 import { plain as make } from './dom.js';
 import { addFile, fileUrl, fileBlob, thumbUrl, isImage } from './files.js';
-import { shotsUnder, newShot, shotCode, stillOf, withRenders, isVideo, isFilmed, gotIt, shotStatus } from './production.js';
-import { stageSetOf } from './library.js';
+import { shotsUnder, newShot, shotCode, stillOf, withRenders, isVideo, isFilmed, shotStatus } from './production.js';
+import { stageSetOf, stagesOf, stageOf } from './library.js';
 import { snap, resolve, linesIn, inOrder, covering, bareLines, lanes, placeAmong } from './shotlines.js';
 import { scenesOf } from './woven.js';
 import { holdStill } from './steady.js';
@@ -106,6 +106,8 @@ export class ScriptShots {
     this.bar.addEventListener('mousedown', (e) => e.preventDefault()); // the picked words stay picked
     hooks.sheet.append(this.marks, this.layer, this.bar);
     this.gripsInit();
+    try { this.leftOnly = localStorage.getItem('shotsLeftOnly') === '1'; } catch { this.leftOnly = false; }
+    document.documentElement.classList.toggle('ss-left-only', this.leftOnly);
     window.addEventListener('resize', () => this.refit());
     // Back in Write from Make (or anywhere): the shots as they are now.
     new MutationObserver(() => { if (this.hooks.writing() && this.on) this.reload().then(() => this.refit(true)); else this.refit(true); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-view'] });
@@ -186,7 +188,9 @@ export class ScriptShots {
     const list = this.shots.get(a.eid) || [];
     if (!list.length) return 'No shots yet';
     const bare = bareLines(list, a.paras).length;
-    return `${plural(list.length, 'shot')}${bare ? ` · ${plural(bare, 'line')} without one` : ''}`;
+    const got = list.filter((sh) => this.doneOf(sh)).length;
+    const head = !got ? plural(list.length, 'shot') : got === list.length ? `✓ all ${list.length} got` : `${got} of ${list.length} got`;
+    return `${head}${bare ? ` · ${plural(bare, 'line')} without one` : ''}`;
   }
   // The words a shot covers, said plainly for the open shot.
   coversText(sh, a) {
@@ -314,7 +318,7 @@ export class ScriptShots {
 
   pic(sh, big = false, id = this.still(sh)) {
     const pic = make('span', 'ss-pic');
-    if (id) (big ? fileUrl(id) : thumbUrl(id)).then((url) => { if (url) { const img = make('img'); img.src = url; img.alt = ''; pic.replaceChildren(img); } }).catch(() => {});
+    if (id) (big ? fileUrl(id) : thumbUrl(id)).then((url) => { if (url) { const img = make('img'); img.src = url; img.alt = ''; pic.replaceChildren(img, ...pic.querySelectorAll('.ss-check')); } }).catch(() => {});
     pic.append(make('span', 'ss-nopic', sh.fields?.framing || (id ? '' : 'No picture yet')));
     return pic;
   }
@@ -335,19 +339,12 @@ export class ScriptShots {
       if (!this.span(sh, a)) words.append(make('span', 'ss-loose', 'Not on any lines yet'));
       b.append(this.pic(sh), words);
     }
-    // A filmed shot's Got it, right on the frame: one tap on the shoot day.
-    if (isFilmed(sh, this.setId)) {
-      const on = gotIt(sh);
-      b.classList.toggle('got', on);
-      const tick = make('span', 'ss-tick', on ? '✓' : '');
-      tick.setAttribute('role', 'button');
-      tick.setAttribute('aria-pressed', String(on));
-      tick.setAttribute('aria-label', on ? 'Got it (tap to undo)' : 'Got it');
-      tick.title = tick.getAttribute('aria-label');
-      tick.addEventListener('pointerdown', (e) => e.stopPropagation());
-      tick.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); this.setGot(sh.id, !on).then(() => this.reload()); });
-      b.querySelector('.ss-pic')?.append(tick);
-    }
+    // Got (done, for a generated shot) shows on the frame itself: a green
+    // wash and a check. Hold the frame still and let go to tick it (Nov 24).
+    const on = this.doneOf(sh);
+    b.classList.toggle('got', on);
+    if (on) b.querySelector('.ss-pic')?.append(make('span', 'ss-check', '✓'));
+    b.title = `${code}: hold to mark it ${on ? 'not ' : ''}${this.gotWord(sh).toLowerCase()}`;
     b.classList.toggle('sel', this.sel === sh.id);
     b.addEventListener('mousedown', (e) => e.preventDefault()); // the caret stays where it was
     b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); if (Date.now() - (this.dropped || 0) < 500) return; this.clickShot(sh.id); });
@@ -475,7 +472,7 @@ export class ScriptShots {
         boxes.set(sh.id, box);
         const t = { left: x(lane.get(sh.id) || 0), top: box.top + 3, height: Math.max(6, box.bottom - box.top - 6) };
         tram.set(sh.id, t);
-        const m = make('span', 'ss-tram');
+        const m = make('span', `ss-tram${this.doneOf(sh) ? ' got' : ''}`);
         m.dataset.shot = sh.id;
         Object.assign(m.style, { left: `${t.left}px`, top: `${t.top}px`, height: `${t.height}px` });
         marks.push(m);
@@ -488,6 +485,27 @@ export class ScriptShots {
         marks.push(m);
       }
       for (const n of document.querySelectorAll(`.ss-count[data-eid="${CSS.escape(a.eid)}"], .ss-head[data-eid="${CSS.escape(a.eid)}"] .ss-count`)) { const t = this.countText(a); if (n.textContent !== t) n.textContent = t; }
+      // Left only: the lines only got shots cover fade where they are.
+      if (this.leftOnly) {
+        for (let i = 0; i < a.paras.length; i += 1) {
+          const on = covering(list, a.paras, i);
+          if (!geo[i] || !on.length || !on.every((sh) => this.doneOf(sh))) continue;
+          const m = make('span', 'ss-fade');
+          Object.assign(m.style, { left: `${textL - 6}px`, width: `${textR - textL + 12}px`, top: `${geo[i].top}px`, height: `${geo[i].bottom - geo[i].top}px` });
+          marks.push(m);
+        }
+      }
+      // Beside the thin strip there is no room for the scene's count: how
+      // many are got sits on the scene line's end instead ("3 of 4").
+      const gotHere = list.filter((sh) => this.doneOf(sh)).length;
+      if (rail && gotHere) {
+        const top = this.lineTop(a, base);
+        if (top != null) {
+          const m = make('span', 'ss-sgot', gotHere === list.length ? `✓ all ${list.length}` : `${gotHere} of ${list.length}`);
+          Object.assign(m.style, { left: `${textR}px`, top: `${top}px` });
+          marks.push(m);
+        }
+      }
       if (!side) continue;
       const head = headOf.get(a.eid);
       if (head) {
@@ -535,6 +553,7 @@ export class ScriptShots {
     }
     this.marks.replaceChildren(...marks);
     this.placeGrips({ anchors, base, sheet, textL, textR, x, side });
+    this.sayCount();
     const b = this.block();
     const bt = b && this.paraBox(b.a.paras[b.from], base);
     const bb = b && this.paraBox(b.a.paras[b.to], base);
@@ -758,8 +777,8 @@ export class ScriptShots {
       code: this.codeOf(sh, a),
       scene: sceneName(a),
       covers: this.coversText(sh, a),
-      status: shotStatus(sh, this.setId),
-      got: isFilmed(sh, this.setId) ? { on: gotIt(sh), set: (on) => this.setGot(sh.id, on) } : null,
+      status: this.doneOf(sh) ? this.gotWord(sh) : shotStatus(sh, this.setId),
+      got: { on: this.doneOf(sh), word: this.gotWord(sh), set: (on) => this.setGot(sh.id, on).then(() => this.reload()) },
       pic: this.pic(sh, true, shown),
       sketch: {
         blank: () => this.sketchOn(sh.id, { title }),
@@ -800,7 +819,12 @@ export class ScriptShots {
     const fresh = await getEntry(id);
     if (!fresh) return;
     const fields = { ...fresh.fields };
-    if (on) fields.got = Date.now(); else delete fields.got;
+    delete fields.got;
+    // A generated shot is done by itself once a take is picked; taking that
+    // back by hand is kept as got: false.
+    const auto = this.doneOf({ ...fresh, fields });
+    if (on && !auto) fields.got = Date.now();
+    else if (!on && auto) fields.got = false;
     const row = { ...fresh, fields, updated_at: Date.now() };
     delete row._by;
     await putEntries([row]);
@@ -808,6 +832,66 @@ export class ScriptShots {
     if (cur) { cur.sh.fields = fields; cur.sh.updated_at = row.updated_at; }
     this.showOpen?.();
   }
+  // Got it: a filmed shot when ticked; a generated one when ticked, or by
+  // itself once a take is picked (unless that was taken back by hand).
+  doneOf(sh) {
+    const g = sh?.fields?.got;
+    if (g === false) return false;
+    if (g) return true;
+    return !isFilmed(sh, this.setId) && !!sh?.fields?.star?.video;
+  }
+  gotWord(sh) { return isFilmed(sh, this.setId) ? 'Got it' : 'Done'; }
+  // How many of the piece's shots are got, for the Shots button.
+  gotCount() {
+    let got = 0;
+    let total = 0;
+    for (const list of this.shots.values()) for (const sh of list) { total += 1; if (this.doneOf(sh)) got += 1; }
+    return { got, total };
+  }
+  // A hold (or G) ticks a shot or takes the tick back, with Undo. The last
+  // shot got offers to move the piece on to its next stage, never by itself.
+  async toggleGot(id) {
+    const cur = this.find(id);
+    if (!cur) return;
+    const was = this.doneOf(cur.sh);
+    const code = this.codeOf(cur.sh, cur.a);
+    const word = this.gotWord(cur.sh).toLowerCase();
+    await this.setGot(id, !was);
+    await this.reload();
+    const undo = { label: 'Undo', run: async () => { await this.setGot(id, was); await this.reload(); } };
+    const { got, total } = this.gotCount();
+    const next = !was && total && got === total ? await this.nextStage() : null;
+    if (next) {
+      this.hooks.toast(`All ${total} shots got. Move it on to ${next}?`, { label: `Move to ${next}`, run: () => this.hooks.stage?.(next) }, { label: 'Not yet', run: () => {} });
+      return;
+    }
+    this.hooks.toast(was ? `Shot ${code} is not ${word} any more` : `Shot ${code}: ${word === 'got it' ? 'got it' : 'done'} · ${got} of ${total}`, undo);
+  }
+  async nextStage() {
+    try {
+      const piece = this.hooks.piece();
+      const list = stagesOf(piece, this.world);
+      const i = list.indexOf(stageOf(piece, this.world));
+      return i >= 0 && i < list.length - 1 ? list[i + 1] : null;
+    } catch { return null; }
+  }
+  // The piece's count beside the Shots button ("4 of 10 got"), when it changes.
+  sayCount() {
+    const { got, total } = this.mode === 'off' ? { got: 0, total: 0 } : this.gotCount();
+    const key = `${got}/${total}`;
+    if (key === this.countKey) return;
+    this.countKey = key;
+    document.dispatchEvent(new CustomEvent('inkwell:shots-got', { detail: { got, total } }));
+  }
+  // Left only: got shots and the lines only they cover fade where they are.
+  setLeftOnly(on) {
+    this.leftOnly = on;
+    try { if (on) localStorage.setItem('shotsLeftOnly', '1'); else localStorage.removeItem('shotsLeftOnly'); } catch { /* private window */ }
+    document.documentElement.classList.toggle('ss-left-only', on);
+    this.place();
+    this.hooks.toast(on ? 'Only what is left to get stands out. Got shots fade where they are.' : 'Every shot shows again.');
+  }
+
   // What happens and framing change on the frames as you type: no redraw.
   patch(sh) {
     for (const n of document.querySelectorAll(`.ss-side [data-shot="${CSS.escape(sh.id)}"]`)) {
@@ -986,7 +1070,9 @@ export class ScriptShots {
   }
 
   // A frame dragged onto lines covers them. With a mouse it starts on a
-  // small move; with a finger, after holding it still for a moment.
+  // small move; with a finger, after holding it still for a moment. Held
+  // still and let go without sliding, the frame is ticked got (Nov 24,
+  // Michael: "touch and hold checks it off"), with a mouse or a finger.
   dragShot(e, sh, a, node) {
     if (e.button > 0 || this.mode === 'off') return;
     const touch = e.pointerType !== 'mouse';
@@ -1015,7 +1101,6 @@ export class ScriptShots {
       ghost.append(make('span', 'ss-num', sh.fields?.n || ''));
       document.body.append(ghost);
       document.documentElement.classList.add('ss-dragging');
-      navigator.vibrate?.(12);
       move();
       // Near the top or bottom, the page creeps along so far lines can be reached.
       scroll = setInterval(() => {
@@ -1025,9 +1110,17 @@ export class ScriptShots {
         if (d) { window.scrollBy(0, d); move(); }
       }, 30);
     };
-    const hold = touch ? setTimeout(begin, 380) : null;
+    // The hold: only the frame shows it (a ring and a small lift, a buzz).
+    let held = false;
+    const hold = setTimeout(() => {
+      held = true;
+      this.dragging = sh.id; // a finger that slides now moves the frame, not the page
+      node.classList.add('ss-held');
+      navigator.vibrate?.(12);
+    }, 380);
     const done = () => {
       clearTimeout(hold);
+      node.classList.remove('ss-held');
       clearInterval(scroll);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
@@ -1042,7 +1135,7 @@ export class ScriptShots {
       y = ev.clientY;
       if (!live) {
         if (Math.hypot(x - x0, y - y0) < 8) return;
-        if (touch) { done(); return; } // a finger that moves first is scrolling
+        if (touch && !held) { done(); return; } // a finger that moves first is scrolling
         begin();
       }
       move();
@@ -1050,8 +1143,10 @@ export class ScriptShots {
     const onUp = async (ev) => {
       if (ev.pointerId !== e.pointerId) return;
       const was = live;
+      const still = held && !live;
       const at = hit;
       done();
+      if (still) { this.dropped = Date.now(); await this.toggleGot(sh.id); return; }
       if (!was) return;
       this.dropped = Date.now();
       this.lines = null;

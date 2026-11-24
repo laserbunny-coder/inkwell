@@ -58,6 +58,9 @@ html.zoom.ss-able:not([data-view]) .zm-shots {
 }
 html.zoom.ss-able .zm-shots:hover { color: var(--ink); background: var(--raise); }
 html.zoom.ss-able .zm-shots[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); }
+/* How many of the piece's shots are got, small under the button; it takes no room. */
+html.zoom.ss-able .zm-shots { position: relative; }
+html.zoom.ss-able .zm-shots[data-got]::after { content: attr(data-got); position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%); padding: 0 4px; border-radius: 6px; background: var(--bg); color: #3f9b6a; font: 600 9px/1.3 var(--ui); white-space: nowrap; pointer-events: none; }
 /* Versions to check (Nov 22 2026): no pill up top; ⋯ gets a dot and lists them first. */
 html.zoom #versions { display: none !important; }
 html.zoom.to-check .zm-more { position: relative; }

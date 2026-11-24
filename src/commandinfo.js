@@ -161,6 +161,7 @@ export const INFO = [
   { l: 'Close the pane you’re in', g: 'view', h: 'Closes this pane.', w: ['pane', 'side by side', 'close'] },
   { l: 'Close all the panes beside', g: 'view', h: 'Closes every pane beside.', w: ['pane', 'side by side', 'close all'] },
   { l: 'Shots beside the script, or put away', g: 'view', h: 'Each shot beside the lines it covers (Alt + B), or put them away.', w: ['shots', 'storyboard', 'frames', 'side by side', 'make'] },
+  { l: 'Shots: left only (got shots fade), or all', g: 'view', h: 'Got shots and the lines only they cover fade where they are, so what is left stands out.', w: ['shots', 'got', 'left', 'shoot day', 'done'] },
   { l: 'Next shot', g: 'view', h: 'Picks the next shot along the script (Alt + Down).', w: ['shots', 'storyboard', 'step', 'next'] },
   { l: 'Shot before', g: 'view', h: 'Picks the shot before along the script (Alt + Up).', w: ['shots', 'storyboard', 'step', 'previous'] },
   { l: 'Notes beside the text', g: 'view', h: 'Shows or hides the margin notes next to the text.', w: ['margin', 'comments', 'notes'], n: N.chapter },

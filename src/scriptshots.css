@@ -29,7 +29,7 @@ html.ss-rail.script #editor p[data-el="dialogue"] { margin-left: 9%; margin-righ
   color: var(--ink); font: 13px/1.35 var(--ui); text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 .ss-pic {
-  display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 16 / 9; overflow: hidden;
+  position: relative; display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 16 / 9; overflow: hidden;
   border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--muted); transition: border-color .12s, box-shadow .12s;
 }
 .ss-pic img { display: block; width: 100%; height: 100%; object-fit: cover; }
@@ -156,13 +156,21 @@ html.ss-dragging, html.ss-dragging * { cursor: grabbing !important; user-select:
 .ss-side > .ss-card, .ss-side > .ss-thumb, .ss-side > .ss-head { position: absolute; left: 0; right: 0; }
 .ss-side > .ss-thumb { width: 100%; }
 
-/* Got it on the frame: a corner tick big enough for a thumb. */
-.ss-pic { position: relative; }
-.ss-tick { position: absolute; right: 3px; top: 3px; width: 26px; height: 26px; border: 2px solid color-mix(in srgb, var(--ink) 45%, transparent); border-radius: 50%; background: color-mix(in srgb, var(--bg) 70%, transparent); color: var(--bg); font: 700 14px/22px var(--ui); text-align: center; cursor: pointer; }
-.ss-tick[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+/* Got: a green wash and a check over the picture (hold the frame to tick it). */
+.ss-card, .ss-thumb { --got: #3f9b6a; }
 .ss-card.got .ss-pic img, .ss-thumb.got .ss-pic img { opacity: .45; }
+.ss-card.got .ss-pic, .ss-thumb.got .ss-pic { box-shadow: inset 0 0 0 2px var(--got); background: color-mix(in srgb, var(--got) 30%, transparent); }
+.ss-check { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font: 700 22px/1 var(--ui); text-shadow: 0 1px 3px rgba(0, 0, 0, .5); pointer-events: none; }
+html.ss-rail .ss-check { font-size: 18px; }
+/* The hold: only the frame shows it, a ring that grows and a small lift. */
+.ss-card.ss-held, .ss-thumb.ss-held { transform: scale(1.04); box-shadow: 0 0 0 3px var(--accent), 0 6px 16px rgba(0, 0, 0, .3); transition: transform .12s, box-shadow .12s; }
+/* Left only: got shots and the lines only they cover fade where they are. */
+html.ss-left-only .ss-side .got { opacity: .3; }
+html.ss-left-only .ss-tram.got { opacity: .15; }
+.ss-fade { position: absolute; background: var(--bg); opacity: .6; pointer-events: none; }
+/* Beside the thin strip: how many of the scene's shots are got, on its line. */
+.ss-sgot { position: absolute; transform: translate(-100%, -50%); padding: 0 4px; background: var(--bg); color: var(--got, #3f9b6a); font: 600 11px/1.4 var(--ui); white-space: nowrap; pointer-events: none; }
 .ss-card.got .ss-what { text-decoration: line-through; color: var(--faint); }
-@media (--touch) { .ss-tick { width: 34px; height: 34px; line-height: 30px; font-size: 17px; } html.ss-rail .ss-tick { width: 26px; height: 26px; line-height: 22px; font-size: 14px; } }
 
 /* ---------- adding lines to a frame, taking them away (shotgrips.js) ---------- */
 /* The margin beside the words: a tap picks a line (no caret), a slide picks

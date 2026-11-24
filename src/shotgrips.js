@@ -396,6 +396,14 @@ export const gripMethods = {
   // Shift + Down adds the next line, Shift + Up takes the last away,
   // Alt + Shift + Up starts a line earlier, Alt + Shift + Down a line later.
   gripKey(e) {
+    // G ticks the picked shot got (or takes it back), as in Make.
+    if (this.mode !== 'off' && this.sel && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'g'
+      && !this.editor.isFocused && !e.target.closest?.('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]')) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.toggleGot(this.sel);
+      return true;
+    }
     if (this.mode === 'off' || !e.shiftKey || e.ctrlKey || e.metaKey || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return false;
     if (this.editor.isFocused || e.target.closest?.('input, textarea, [contenteditable="true"]')) return false;
     if (!this.block()) return false;
