@@ -335,6 +335,11 @@ function build() {
   shots.title = 'Shots: each scene’s storyboard beside the script (Alt + B)';
   shots.setAttribute('aria-pressed', 'false');
   document.addEventListener('inkwell:shots', (e) => shots.setAttribute('aria-pressed', String(!!e.detail?.on)));
+  // How many of the piece's shots are got, small under the button (it takes no room).
+  document.addEventListener('inkwell:shots-got', (e) => {
+    const { got = 0, total = 0 } = e.detail || {};
+    if (got) { shots.dataset.got = got === total ? `✓ ${total}` : `${got}/${total}`; shots.title = `${got} of ${total} shots got. Shots beside the script (Alt + B)`; } else delete shots.dataset.got;
+  });
   more = make('button', 'zm-more', '⋯');
   more.type = 'button';
   more.title = 'More: notes beside the text, Beside, every command';
@@ -365,9 +370,14 @@ function moreMenu() {
 }
 
 function shotItems() {
-  const on = document.documentElement.classList.contains('ss-on');
+  const r = document.documentElement;
+  const on = r.classList.contains('ss-on');
   const toggle = () => { closeMenu(); document.dispatchEvent(new CustomEvent('inkwell:toggle-shots')); };
-  return [{ label: on ? 'Put the shots away (Alt + B)' : 'Shots beside the script (Alt + B)', run: toggle }];
+  const left = () => { closeMenu(); document.dispatchEvent(new CustomEvent('inkwell:shots-left')); };
+  return [
+    { label: on ? 'Put the shots away (Alt + B)' : 'Shots beside the script (Alt + B)', run: toggle },
+    ...(on ? [{ label: `${r.classList.contains('ss-left-only') ? '✓ ' : ''}Left only: got shots fade`, run: left }] : [])
+  ];
 }
 
 // The date and time, at the left of the top line.

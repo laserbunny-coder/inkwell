@@ -414,6 +414,7 @@ addCommands(() => [
   { group: 'write', label: 'Insert today’s date', keys: `${mod};`, run: () => insertDay(currentEditor(), 0), when: () => writing() || inNotebook() },
   { group: 'view', label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: writing },
   { group: 'view', label: 'Shots beside the script, or put away', keys: 'Alt+B', words: ['shots', 'storyboard', 'frames', 'side by side', 'make'], run: () => scriptShots?.toggle(), when: () => writing() && root.classList.contains('ss-able') },
+  { group: 'view', label: 'Shots: left only (got shots fade), or all', keys: '', words: ['shots', 'got', 'left', 'shoot day', 'done'], run: () => scriptShots?.setLeftOnly(!scriptShots.leftOnly), when: () => writing() && root.classList.contains('ss-on') },
   { group: 'view', label: 'Next shot', keys: 'Alt+Down', words: ['shots', 'storyboard', 'step'], run: () => scriptShots?.step(1), when: () => writing() && root.classList.contains('ss-on') },
   { group: 'view', label: 'Shot before', keys: 'Alt+Up', words: ['shots', 'storyboard', 'step'], run: () => scriptShots?.step(-1), when: () => writing() && root.classList.contains('ss-on') },
   { group: 'write', label: 'Move this line to another page or day…', keys: '', run: moveLinePicker, when: inNotebook },
@@ -497,6 +498,7 @@ function wireQuickInserts() {
   });
   $('.palette-backdrop').addEventListener('click', () => closePalette());
   document.addEventListener('inkwell:toggle-shots', () => { if (writing()) scriptShots?.toggle(); });
+  document.addEventListener('inkwell:shots-left', () => { if (writing()) scriptShots?.setLeftOnly(!scriptShots.leftOnly); });
   document.addEventListener('notes-visibility', () => { $('#notes-toggle').setAttribute('aria-pressed', String(notes.visible)); });
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-cmd]');

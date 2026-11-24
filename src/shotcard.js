@@ -18,7 +18,8 @@ export function shotCard(sh, opts) {
   top.append(make('span', 'ss-code', opts.code || ''), make('span', 'ss-stage', stage));
   if (opts.got) {
     // The same Got it as Make's: one tap, a filmed shot is in the can.
-    const g = make('button', 'ss-got', opts.got.on ? '✓ Got it' : 'Got it');
+    const w = opts.got.word || 'Got it';
+    const g = make('button', 'ss-got', opts.got.on ? `✓ ${w}` : w);
     g.type = 'button';
     g.setAttribute('aria-pressed', String(!!opts.got.on));
     g.addEventListener('click', () => opts.got.set(!opts.got.on));

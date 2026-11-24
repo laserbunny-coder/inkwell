@@ -24,7 +24,7 @@ import { toggleSections } from './pagesettings.js';
 import { go, openEntry, remember } from './routing.js';
 import { sync } from './syncwiring.js';
 import { renderCrumb, renderRail, renderScenes } from './rail.js';
-import { nameOf, refreshViews } from './tidying.js';
+import { nameOf, refreshViews, setStage } from './tidying.js';
 import { beside, talk } from './revising.js';
 import { writing } from './commands.js';
 import { currentBook } from './quickinserts.js';
@@ -514,8 +514,9 @@ function wireManuscript() {
     script: () => isScript(),
     woven: () => isWoven(),
     writing: () => view() === 'write' && !!state.project && (isScript() || novelOn()),
-    toast: (m, a) => toast(m, a),
+    toast: (m, a, b) => toast(m, a, b),
     menu: (anchor, items) => popMenu(anchor, items),
+    stage: (st) => { if (state.project) setStage(state.project, st); },
     openInMake: (sh) => { if (state.project) go({ view: 'production', id: state.project.id, tab: 'shots', shot: sh.id }); }
   });
   window.__scriptShots = scriptShots;

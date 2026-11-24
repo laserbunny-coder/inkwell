@@ -497,6 +497,73 @@ try {
     assert.equal(await p.locator(`.ss-side .ss-card[data-eid="${E[1]}"]`).count(), 3);
   });
 
+  const doneIn = (id) => p.evaluate((x) => { const ss = window.__scriptShots; const c = ss.find(x); return !!(c && ss.doneOf(c.sh)); }, id);
+  await check('desktop: hold a frame still and let go: it is got (a check on it, the count says so); hold again takes it back; G does the same', async () => {
+    await p.evaluate(() => { window.__scriptShots.pick(null); window.scrollTo(0, 0); });
+    await sleep(300);
+    const id = await p.locator(card(0, 1)).getAttribute('data-shot');
+    const b = await p.locator(card(0, 1)).boundingBox();
+    await p.mouse.move(b.x + 40, b.y + 20);
+    await p.mouse.down();
+    await sleep(520);
+    assert.ok(await p.locator(`.ss-side [data-shot="${id}"]`).evaluate((n) => n.classList.contains('ss-held')), 'the frame shows the hold');
+    await p.mouse.up();
+    await p.waitForFunction((x) => document.querySelector(`.ss-side [data-shot="${x}"]`)?.classList.contains('got'), id);
+    assert.equal(await doneIn(id), true);
+    assert.equal(await p.locator(`.ss-side [data-shot="${id}"] .ss-check`).count(), 1, 'a check on the picture');
+    await toastSays(/: (got it|done) · 1 of 10/);
+    assert.equal(await p.locator('.ss-pop').count(), 0, 'the hold opens nothing');
+    assert.match(await count(0), /^1 of 6 got/);
+    assert.equal(await p.locator('.zm-shots').getAttribute('data-got'), '1/10', 'the piece count by the Shots button');
+    await snap('26-desktop-got');
+    // Left only: got shots and their lines fade in place; nothing moves.
+    const top = await p.locator(card(0, 2)).evaluate((e) => e.getBoundingClientRect().top);
+    await p.evaluate(() => document.dispatchEvent(new CustomEvent('inkwell:shots-left')));
+    await sleep(400);
+    assert.ok(await p.evaluate(() => document.documentElement.classList.contains('ss-left-only')));
+    assert.ok(await p.locator('.ss-fade').count() >= 1, 'its lines fade');
+    assert.equal(await p.locator(card(0, 2)).evaluate((e) => e.getBoundingClientRect().top), top, 'nothing moves');
+    await snap('27-desktop-left-only');
+    await p.evaluate(() => document.dispatchEvent(new CustomEvent('inkwell:shots-left')));
+    await sleep(300);
+    assert.equal(await p.locator('.ss-fade').count(), 0);
+    // Hold again: back to not got.
+    await p.mouse.move(b.x + 40, b.y + 20);
+    await p.mouse.down();
+    await sleep(520);
+    await p.mouse.up();
+    await p.waitForFunction((x) => !document.querySelector(`.ss-side [data-shot="${x}"]`)?.classList.contains('got'), id);
+    // G on the picked shot.
+    await p.evaluate((x) => { window.__scriptShots.pick(x); document.activeElement?.blur(); }, id);
+    await p.keyboard.press('g');
+    await p.waitForFunction((x) => document.querySelector(`.ss-side [data-shot="${x}"]`)?.classList.contains('got'), id);
+    await p.keyboard.press('g');
+    await p.waitForFunction((x) => !document.querySelector(`.ss-side [data-shot="${x}"]`)?.classList.contains('got'), id);
+    assert.equal(await count(0), '6 shots');
+  });
+
+  await check('desktop: the last shot got offers to move the piece on, and never moves it by itself', async () => {
+    const ids = await p.evaluate(() => [...window.__scriptShots.shots.values()].flat().map((sh) => sh.id));
+    const last = await p.locator(card(0, 1)).getAttribute('data-shot');
+    await p.evaluate(async (list) => { const ss = window.__scriptShots; for (const x of list) await ss.setGot(x, true); await ss.reload(); }, ids.filter((x) => x !== last));
+    const stage = await p.evaluate(() => window.__scriptShots.hooks.piece().fields?.stage || null);
+    await sleep(700); // the frames settle beside their lines again
+    const b = await p.locator(card(0, 1)).boundingBox();
+    await p.mouse.move(b.x + 40, b.y + 20);
+    await p.mouse.down();
+    await sleep(520);
+    await p.mouse.up();
+    await toastSays(/All 10 shots got\. Move it on to /);
+    assert.ok(await p.locator('.toast button', { hasText: 'Not yet' }).count() >= 1);
+    assert.ok(await p.locator('.toast button', { hasText: /^Move to / }).count() >= 1);
+    await snap('28-desktop-all-got');
+    assert.equal(await p.evaluate(() => window.__scriptShots.hooks.piece().fields?.stage || null), stage, 'the stage stays until he says');
+    await p.locator('.toast button', { hasText: 'Not yet' }).first().click();
+    await p.evaluate(async (list) => { const ss = window.__scriptShots; for (const x of list) await ss.setGot(x, false); await ss.reload(); }, ids);
+    await sleep(300);
+    assert.equal(await p.locator('.ss-side .got').count(), 0);
+  });
+
   await check('desktop: the Shots button is one tap: away, then back, with no menu', async () => {
     const shotsBtn = () => p.evaluate(() => { window.scrollTo(0, 0); document.querySelector('.zm-shots').click(); });
     await shotsBtn();
@@ -882,10 +949,37 @@ try {
     await p.waitForFunction(([id, was]) => { const ss = window.__scriptShots; const a = ss.anchors()[0]; const sh = ss.ordered(a).find((x) => x.id === id); return sh && a.paras.findIndex((x) => x.id === sh.fields?.from) !== was; }, [sh.id, sh.from], { timeout: 6000 }).catch(() => {});
     await toastSays(/now covers/);
     assert.notEqual((await shotsIn(0)).find((x) => x.id === sh.id).from, sh.from, 'it moved to the line');
+    assert.equal(await doneIn(sh.id), false, 'a hold that slides moves the frame and ticks nothing');
     // The shot made for this check goes again, so the counts below stay as they were.
     if (madeHere && placedId) { await p.evaluate((id) => window.__scriptShots.remove(id), placedId); await sleep(600); }
     await p.evaluate(() => { document.activeElement?.blur(); window.scrollTo(0, 0); });
     await sleep(400);
+  });
+
+  await check('phone upright: touch and hold a frame and let go: it is got; a short tap still only picks it', async () => {
+    await p.evaluate(() => { window.__scriptShots.pick(null); window.scrollTo(0, 0); });
+    await sleep(400);
+    const id = await p.locator(thumb(0, 1)).getAttribute('data-shot');
+    const b = await p.locator(thumb(0, 1)).boundingBox();
+    const cdp = await p.context().newCDPSession(p);
+    const pt = [{ x: Math.round(b.x + b.width / 2), y: Math.round(b.y + b.height / 2), id: 7 }];
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt });
+    await sleep(560);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await p.waitForFunction((x) => document.querySelector(`.ss-side [data-shot="${x}"]`)?.classList.contains('got'), id);
+    await sleep(500);
+    assert.equal(await p.locator('.ss-sheet').count(), 0, 'the hold opens nothing');
+    assert.equal(await p.locator('.ss-sgot').count(), 1, 'the scene line says how many are got');
+    assert.match(await p.locator('.ss-sgot').textContent(), /^1 of \d+$/);
+    await snap('29-phone-got');
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt });
+    await sleep(560);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await p.waitForFunction((x) => !document.querySelector(`.ss-side [data-shot="${x}"]`)?.classList.contains('got'), id);
+    await sleep(500);
+    await noMove(() => tap(thumb(0, 1)), 'a tap picks');
+    assert.equal(await doneIn(id), false, 'a tap ticks nothing');
+    await p.evaluate(() => window.__scriptShots.pick(null));
   });
 
   await check('phone upright: tap a line, + Picture, Sketch, draw with a finger, Done: the frame is on that line', async () => {
