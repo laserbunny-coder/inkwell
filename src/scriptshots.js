@@ -628,7 +628,11 @@ export class ScriptShots {
     const B = where(Math.max(from, to - 1));
     const end = B && B.a === A.a ? B.i : A.a.paras.length - 1;
     const r = snap(A.a.paras, A.i, end);
-    if (this.placing) { const cur = this.find(this.placing); if (cur) { this.placeOn(cur, A.a, r); return; } }
+    if (this.placing) {
+      if (Date.now() - (this.placedAt || 0) < 450) return;
+      const cur = this.find(this.placing);
+      if (cur) { this.placeOn(cur, A.a, r); return; }
+    }
     this.lines = { eid: A.a.eid, from: r.from, to: r.to };
     this.lit = covering(this.shots.get(A.a.eid) || [], A.a.paras, r.from).map((s) => s.id);
     this.paint();
@@ -1030,6 +1034,9 @@ export class ScriptShots {
     this.lines = null;
     this.lit = [];
     this.sel = this.last = this.placing = id;
+    // The finger that tapped "Put on lines" lifts over the script once the
+    // sheet is gone: that ghost tap must not place it.
+    this.placedAt = Date.now();
     this.paint();
   }
   // Off its lines, back to waiting at its scene (Undo puts it back).

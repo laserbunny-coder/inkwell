@@ -359,7 +359,7 @@ try {
     await p.waitForSelector('.ss-banner:not([hidden])');
     assert.match(await p.locator('.ss-banner').textContent(), /Click the line shot \S+ belongs to/);
     await p.keyboard.press('Escape');
-    await sleep(200);
+    await sleep(500);
     assert.ok(await p.locator('.ss-banner').isHidden());
     await tap(line('A bell on the door'));
     await tap(line('June climbs onto a stool'), { shift: true });
@@ -798,6 +798,9 @@ try {
     assert.equal(await p.locator('.ss-sheet').count(), 0, 'the sheet steps aside');
     await p.waitForSelector('.ss-banner:not([hidden])');
     assert.match(await p.locator('.ss-banner').textContent(), /Tap the line shot \S+ belongs to/);
+    await sleep(400);
+    assert.ok(!(await p.evaluate(() => [...document.querySelectorAll('.toast')].some((t) => /belongs to/.test(t.textContent)))), 'the finger lifting off the button places nothing');
+    assert.ok(await p.evaluate((id) => window.__scriptShots.placing === id, id), 'still waiting for its line');
     await snap('15-phone-put-on-lines');
     await tapMargin('Mara doesn’t look up');
     await p.waitForFunction(() => /is on 1 line\. Pull a knob/.test(document.querySelector('.toast')?.textContent || ''));
