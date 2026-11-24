@@ -194,11 +194,6 @@ html.ss-left-only .ss-tram.got { opacity: .15; }
 /* With a mouse the knob looks small but its target is bigger. */
 .ss-knob::before { content: ''; position: absolute; inset: -10px; border-radius: 50%; }
 @media (--touch) { .ss-knob::before { inset: -6px; } }
-/* The bar: what's lit, then − and + always in the same place. */
-.ss-bar .ss-say { align-self: center; min-width: 7.5em; padding: 0 8px; color: var(--bg); font: 500 12px var(--ui); white-space: nowrap; opacity: .85; }
-.ss-bar .ss-sq { min-width: 34px; padding: 5px 0; font-size: 16px; line-height: 1; }
-.ss-bar .ss-sq:disabled { opacity: .35; cursor: default; background: transparent; }
-@media (--touch) { .ss-bar .ss-say { font-size: 13px; } .ss-bar .ss-sq { min-width: 44px; min-height: 40px; font-size: 20px; } }
 /* "Tap the line shot 04 belongs to": while a shot waits for its lines. */
 .ss-banner {
   position: fixed; left: 50%; top: calc(56px + env(safe-area-inset-top, 0px)); z-index: 55; display: flex; align-items: center; gap: 10px;

@@ -328,7 +328,7 @@ try {
     assert.equal(await p.locator('.ss-side .ss-card.on').count(), 1, 'the two-shot covers it');
     assert.equal(await p.evaluate(() => window.__scriptShots.lines?.from), 2, 'a click on what June says picks her name too');
     assert.ok(await p.locator('.ss-bar').isVisible());
-    assert.match(await p.locator('.ss-bar').textContent(), /1 line picked.*\+ Shot/);
+    assert.match(await p.locator('.ss-bar').textContent(), /^\+ Shot\+ Picture/);
     const bar = await p.locator('.ss-bar').boundingBox();
     const pick = await p.locator('.ss-hl.pick').boundingBox();
     assert.ok(bar.y + bar.height <= pick.y + 1 || bar.y >= pick.y + pick.height - 1, 'the bar never covers the picked lines');
@@ -366,7 +366,7 @@ try {
     await tap(line('June climbs onto a stool'), { shift: true });
     await sleep(200);
     assert.equal(await p.evaluate(() => [window.__scriptShots.lines.from, window.__scriptShots.lines.to].join()), '0,1');
-    assert.match(await p.locator('.ss-bar').textContent(), /2 lines picked/);
+    assert.equal((await block()).n, 2, '2 lines picked');
     await p.locator('.ss-bar button', { hasText: /(Move|Put) shot \S+ here/ }).click();
     await sleep(800);
     assert.equal(await count(2), '1 shot · 4 lines without one');
@@ -385,7 +385,7 @@ try {
     assert.equal(b0.kind, 'shot');
     assert.equal(await p.locator('.ss-knob:not([hidden])').count(), 2, 'two knobs');
     assert.ok(!/\bpk\b/.test(await p.locator('.ss-band').getAttribute('class')), 'a solid band: a frame is on these lines');
-    assert.match(await p.locator('.ss-bar').textContent(), new RegExp(`Shot \\S+ · ${b0.n} lines?`));
+    assert.ok(await p.locator('.ss-bar').isHidden(), 'a picked frame has no bar: a second click opens it, the knobs change its lines');
     await snap('22-desktop-knobs');
     // Two lines further down: the dipstick, then June's line.
     const k = await p.locator('.ss-knob[data-end="to"]').boundingBox();
@@ -401,15 +401,8 @@ try {
     assert.equal((await block()).n, b0.n, 'Undo puts it back');
   });
 
-  await check('desktop: − and + on the bar, Shift + Down / Up and Alt + Shift + Down / Up change a picked frame by one line', async () => {
+  await check('desktop: Shift + Down / Up and Alt + Shift + Down / Up change a picked frame by one line', async () => {
     const b0 = await block();
-    const bar0 = await p.locator('.ss-bar .ss-more').boundingBox();
-    await p.locator('.ss-bar .ss-more').click();
-    await p.waitForFunction((n) => window.__scriptShots.linesNow(window.__scriptShots.block().a, window.__scriptShots.block()) === n, b0.n + 1);
-    const bar1 = await p.locator('.ss-bar .ss-more').boundingBox();
-    assert.ok(Math.abs(bar1.x - bar0.x) < 1, '+ stays in its place');
-    await p.locator('.ss-bar .ss-less').click();
-    await p.waitForFunction((n) => window.__scriptShots.linesNow(window.__scriptShots.block().a, window.__scriptShots.block()) === n, b0.n);
     await p.keyboard.press('Shift+ArrowDown');
     await p.waitForFunction((to) => window.__scriptShots.block().to > to, b0.to);
     await p.keyboard.press('Alt+Shift+ArrowDown');
@@ -451,7 +444,8 @@ try {
     assert.equal(b.n, 1);
     assert.equal(await p.evaluate(() => window.__editor.isFocused), false, 'no caret in the words');
     assert.ok(/\bpk\b/.test(await p.locator('.ss-band').getAttribute('class')), 'a broken band: no frame yet');
-    assert.match(await p.locator('.ss-bar').textContent(), /1 line picked/);
+    assert.equal((await block()).n, 1);
+    assert.match(await p.locator('.ss-bar').textContent(), /\+ Shot/);
     await p.keyboard.press('Escape');
     await sleep(200);
     const a = await marginAt('A bell on the door');
@@ -864,12 +858,12 @@ try {
     assert.ok(await p.locator('.ss-banner').isHidden());
     assert.equal(await p.evaluate(() => window.__scriptShots.sel), id, 'it lands picked');
     assert.equal(await p.locator('.ss-knob:not([hidden])').count(), 2, 'its knobs show');
-    assert.match(await p.locator('.ss-bar').textContent(), /Shot \S+ · 1 line/);
+    assert.ok(await p.locator('.ss-bar').isHidden(), 'no bar on a picked frame');
     assert.equal(await p.evaluate(() => document.activeElement?.closest?.('.ProseMirror') ? 'editor' : 'not'), 'not', 'no caret, no keyboard');
     placedId = id;
   });
 
-  await check('phone upright: with a finger: pull down from the top half of a one-line frame, pull up from just above it, − and + (Undo each)', async () => {
+  await check('phone upright: with a finger: pull down from the top half of a one-line frame, pull up from just above it (Undo each)', async () => {
     const b0 = await block();
     assert.deepEqual([b0.kind, b0.n], ['shot', 1]);
     const { x } = await marginAt('Mara doesn’t look up');
@@ -890,11 +884,6 @@ try {
     assert.deepEqual([b1.from, b1.to], [b0.from - 3, b0.to], 'the dipstick, June’s line and this one');
     await snap('24-phone-pull');
     await undo();
-    // − and + with a finger.
-    await tap('.ss-bar .ss-more');
-    await toastSays(/now covers 2 lines/);
-    await tap('.ss-bar .ss-less');
-    await toastSays(/now covers 1 line\./);
     assert.deepEqual(await block(), b0);
   });
 
@@ -916,6 +905,13 @@ try {
     assert.deepEqual([b.kind, b.from, b.to], ['pick', 0, 3]);
     assert.equal(await p.evaluate(() => window.__editor.isFocused), false, 'no keyboard');
     await snap('25-phone-margin-pick');
+    // The bar over picked lines fits the phone, whatever it offers.
+    assert.ok(await p.evaluate(() => { const ss = window.__scriptShots; const a = ss.block().a; ss.last = ss.ordered(a).at(-1)?.id; ss.paint(); return ss.last; }), 'a shot in that scene to move');
+    await sleep(300);
+    const bb = await p.locator('.ss-bar').boundingBox();
+    assert.ok(bb && bb.x >= 0 && bb.x + bb.width <= 412, `the bar fits the screen (${Math.round(bb?.x)}..${Math.round(bb?.x + bb?.width)})`);
+    assert.match(await p.locator('.ss-bar').textContent(), /\+ Shot\+ Picture(Move|Put) shot \S+ here/);
+    await snap('30-phone-line-bar');
     // A quick flick down the margin (no hold) scrolls the page and picks nothing new.
     const y0 = await scrollY();
     const m = await marginAt('Eleven thousand steps');

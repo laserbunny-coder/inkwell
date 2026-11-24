@@ -607,41 +607,29 @@ export class ScriptShots {
     const bar = this.bar;
     if (!box) { bar.hidden = true; bar.replaceChildren(); delete bar.dataset.sig; return; }
     if (this.dragging || this.placing) { bar.hidden = true; return; }
+    // A picked frame has no bar (Nov 24, Michael): a second tap opens it and
+    // its knobs add or take away lines. Picked lines get only what makes
+    // something of them, short enough for a phone.
+    if (box.kind === 'shot') { bar.hidden = true; bar.replaceChildren(); delete bar.dataset.sig; return; }
     const { a } = box;
     const n = this.linesNow(a, box);
     const btn = (label, run, cls = '') => { const b = make('button', cls, label); b.type = 'button'; b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); run(); }); return b; };
     // What the buttons act on is read when they're pressed: the bar is kept
     // while its words stay the same, and the lit block may have changed.
     const now = () => { const l = this.lines; const at = l && this.anchors().find((x) => x.eid === l.eid); return at ? { at, l } : null; };
-    const less = btn('−', () => this.stepBlock('to', -1), 'ss-sq ss-less');
-    const more = btn('+', () => this.stepBlock('to', 1), 'ss-sq ss-more');
-    less.setAttribute('aria-label', 'Take the last line away');
-    more.setAttribute('aria-label', 'Add the next line');
-    less.disabled = !this.stepOk(box, 'to', -1);
-    more.disabled = !this.stepOk(box, 'to', 1);
-    const kids = [less, more];
-    let say;
-    if (box.kind === 'shot') {
-      say = `Shot ${box.sh.fields?.n || ''} · ${n === 1 ? '1 line' : `${n} lines`}`;
-      const id = box.sh.id;
-      kids.push(btn('Open', () => this.showOpen(id)));
-    } else {
-      say = `${n === 1 ? '1 line' : `${n} lines`} picked`;
-      const shot = btn('+ Shot', () => { const x = now(); if (x) this.add(x.at.eid, { from: x.l.from, to: x.l.to }); });
-      shot.title = `A new shot for ${n === 1 ? 'this line' : 'these lines'}`;
-      kids.push(shot);
-      // + Picture: a picture straight onto the picked lines (the phone's gallery).
-      const pic = btn('+ Picture', () => { const x = now(); if (x) this.choosePicture(pic, (files, meta) => this.picturesOnLines(x.at, x.l, files, meta), { title: `A frame for ${sceneName(x.at)}` }); }, 'ss-barpic');
-      pic.title = 'A picture for these lines: it becomes a shot covering them';
-      kids.push(pic);
-      const mover = this.find(this.open || this.last);
-      const r = mover ? this.span(mover.sh, mover.a) : null;
-      if (mover && mover.a.eid === a.eid && !(r && r.from === box.from && r.to === box.to)) {
-        kids.push(btn(`${r ? 'Move' : 'Put'} shot ${mover.sh.fields?.n || ''} here`, () => { const x = now(); if (x) this.placeOn(mover, x.at, x.l); }));
-      }
+    const kids = [];
+    const shot = btn('+ Shot', () => { const x = now(); if (x) this.add(x.at.eid, { from: x.l.from, to: x.l.to }); });
+    shot.title = `A new shot for ${n === 1 ? 'this line' : `these ${n} lines`}`;
+    kids.push(shot);
+    // + Picture: a picture straight onto the picked lines (the phone's gallery).
+    const pic = btn('+ Picture', () => { const x = now(); if (x) this.choosePicture(pic, (files, meta) => this.picturesOnLines(x.at, x.l, files, meta), { title: `A frame for ${sceneName(x.at)}` }); }, 'ss-barpic');
+    pic.title = 'A picture for these lines: it becomes a shot covering them';
+    kids.push(pic);
+    const mover = this.find(this.open || this.last);
+    const r = mover ? this.span(mover.sh, mover.a) : null;
+    if (mover && mover.a.eid === a.eid && !(r && r.from === box.from && r.to === box.to)) {
+      kids.push(btn(`${r ? 'Move' : 'Put'} shot ${mover.sh.fields?.n || ''} here`, () => { const x = now(); if (x) this.placeOn(mover, x.at, x.l); }, 'ss-barmove'));
     }
-    const label = make('span', 'ss-say', say);
-    kids.unshift(label);
     const sig = kids.map((k) => `${k.textContent}${k.disabled ? '0' : ''}`).join('|');
     if (bar.dataset.sig !== sig) { bar.replaceChildren(...kids); bar.dataset.sig = sig; }
     bar.hidden = false;
@@ -653,7 +641,9 @@ export class ScriptShots {
     const below = box.bottom + 6;
     const fitsBelow = sheet.top + below + h < window.innerHeight - (ruler?.offsetHeight || 0);
     bar.style.top = `${roomAbove || !fitsBelow ? above : below}px`;
-    bar.style.left = `${Math.max(0, textR - bar.offsetWidth)}px`;
+    // Kept on the screen: never past its right edge, never off its left.
+    const right = Math.min(textR, window.innerWidth - 8 - sheet.left);
+    bar.style.left = `${Math.max(8 - sheet.left, right - bar.offsetWidth)}px`;
   }
   stepOk(box, end, d) { return !!stepEnd(box.a.paras, box, end, d); }
 
