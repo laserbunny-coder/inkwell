@@ -414,10 +414,8 @@ addCommands(() => [
   { group: 'write', label: 'Insert today’s date', keys: `${mod};`, run: () => insertDay(currentEditor(), 0), when: () => writing() || inNotebook() },
   { group: 'view', label: 'Notes beside the text', keys: `${mod}2`, run: () => toggleNotes(), when: writing },
   { group: 'view', label: 'Shots beside the script, or put away', keys: 'Alt+B', words: ['shots', 'storyboard', 'frames', 'side by side', 'make'], run: () => scriptShots?.toggle(), when: () => writing() && root.classList.contains('ss-able') },
-  { group: 'view', label: 'Shots: beside the script', keys: '', words: ['shots', 'storyboard', 'side by side', 'strip'], run: () => scriptShots?.sitAt('beside'), when: () => writing() && root.classList.contains('ss-able') },
   { group: 'view', label: 'Next shot', keys: 'Alt+Down', words: ['shots', 'storyboard', 'step'], run: () => scriptShots?.step(1), when: () => writing() && root.classList.contains('ss-on') },
   { group: 'view', label: 'Shot before', keys: 'Alt+Up', words: ['shots', 'storyboard', 'step'], run: () => scriptShots?.step(-1), when: () => writing() && root.classList.contains('ss-on') },
-  { group: 'view', label: 'Shots: in the script (one column)', keys: '', words: ['shots', 'storyboard', 'inline', 'one column'], run: () => scriptShots?.sitAt('column'), when: () => writing() && root.classList.contains('ss-able') },
   { group: 'write', label: 'Move this line to another page or day…', keys: '', run: moveLinePicker, when: inNotebook },
   { group: 'write', label: 'Gather a #tag onto this page…', keys: '', run: gatherTagHere, when: inNotebook },
   { group: 'write', label: 'Add a picture or file…', keys: '', run: () => setTimeout(pickFiles, 120), when: () => writing() || inNotebook() },
@@ -499,7 +497,6 @@ function wireQuickInserts() {
   });
   $('.palette-backdrop').addEventListener('click', () => closePalette());
   document.addEventListener('inkwell:toggle-shots', () => { if (writing()) scriptShots?.toggle(); });
-  document.addEventListener('inkwell:shots-sit', (e) => { if (writing()) scriptShots?.sitAt(e.detail?.sit); });
   document.addEventListener('notes-visibility', () => { $('#notes-toggle').setAttribute('aria-pressed', String(notes.visible)); });
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-cmd]');

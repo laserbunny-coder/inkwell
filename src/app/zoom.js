@@ -365,16 +365,9 @@ function moreMenu() {
 }
 
 function shotItems() {
-  const r = document.documentElement;
-  const sit = (where) => () => { closeMenu(); document.dispatchEvent(new CustomEvent('inkwell:shots-sit', { detail: { sit: where } })); };
+  const on = document.documentElement.classList.contains('ss-on');
   const toggle = () => { closeMenu(); document.dispatchEvent(new CustomEvent('inkwell:toggle-shots')); };
-  if (!r.classList.contains('ss-on')) return [{ label: 'Shots (Alt + B)', run: toggle }];
-  const beside = r.classList.contains('ss-beside') || r.classList.contains('ss-rail');
-  return [
-    { label: `${beside ? '✓ ' : ''}Shots beside the script`, run: sit('beside') },
-    { label: `${r.classList.contains('ss-column') ? '✓ ' : ''}Shots in the script (one column)`, run: sit('column') },
-    { label: 'Put the shots away (Alt + B)', run: toggle }
-  ];
+  return [{ label: on ? 'Put the shots away (Alt + B)' : 'Shots beside the script (Alt + B)', run: toggle }];
 }
 
 // The date and time, at the left of the top line.

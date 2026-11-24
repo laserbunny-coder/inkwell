@@ -1,7 +1,8 @@
 // The script with its shots beside it (Nov 22 2026). Part 1: a Shots switch
 // on a script (Alt + B) shows the shots beside the text on a computer with
-// room, in the script in one column, a thin strip of pictures beside a phone
-// held upright and two columns on a phone held sideways. A click picks a
+// room, a thin strip of pictures beside a phone held upright (or a narrow
+// window) and two columns on a phone held sideways. The one-column way went
+// on Nov 24 2026 (Michael): the Shots button is a plain on and off. A click picks a
 // shot and a second opens it floating over the page; neither ever scrolls
 // the page. Scenes go by their own names, never by slug lines. Shots added
 // here are ordinary shots, so Make sees them.
@@ -260,9 +261,9 @@ try {
     await saltRoad();
     assert.ok(await p.evaluate(() => document.documentElement.classList.contains('ss-able')));
     assert.ok(await p.locator('.zm-shots').isVisible(), 'the Shots button is on the top line');
-    assert.equal(await p.locator('.ss-side .ss-card, .ss-rows, .ss-tram').count(), 0);
+    assert.equal(await p.locator('.ss-side .ss-card, .ss-side .ss-thumb, .ss-tram').count(), 0);
     await addShots();
-    assert.equal(await p.locator('.ss-side .ss-card, .ss-rows, .ss-tram').count(), 0, 'still put away');
+    assert.equal(await p.locator('.ss-side .ss-card, .ss-side .ss-thumb, .ss-tram').count(), 0, 'still put away');
   });
 
   await check('desktop: Alt + B puts each shot beside its first line, with tramlines, and the words keep their place', async () => {
@@ -494,35 +495,20 @@ try {
     assert.equal(await p.locator(`.ss-side .ss-card[data-eid="${E[1]}"]`).count(), 3);
   });
 
-  await check('desktop: in the script (one column), each shot right above its first line', async () => {
-    await run('Shots: in the script');
-    await p.waitForSelector('.ss-rows .ss-card');
-    await sleep(900);
-    assert.equal(await p.locator('.ss-side .ss-card').count(), 0);
-    assert.equal(await p.locator('.ss-rows .ss-card').count(), 10);
-    // The two-shot's row is right before Mara in the engine.
-    const next = await p.locator(card(0, 1, '.ss-rows')).evaluate((e) => e.closest('.ss-rows').nextElementSibling?.textContent || '');
-    assert.match(next, /^MARA, thirties/);
-    assert.ok(await p.locator('.ss-tram').count() >= 8, 'tramlines in the margin');
-    assert.ok(await p.evaluate(() => [...document.querySelectorAll('.ss-tram')].every((t) => t.getBoundingClientRect().right < window.__editor.view.dom.querySelector('p[data-el=action]').getBoundingClientRect().left + 9)), 'tramlines stay in the margin, off the words');
-    await p.locator(card(0, 1, '.ss-rows')).scrollIntoViewIfNeeded();
-    await p.evaluate(() => window.scrollBy(0, -40));
-    await sleep(200);
-    await noMove(() => tap(card(0, 1, '.ss-rows')), 'pick in the script');
-    await noMove(() => tap(card(0, 1, '.ss-rows')), 'open in the script');
-    assert.equal(await p.locator('.ss-pop').count(), 1);
-    await snap('5-desktop-column');
-    await p.keyboard.press('Escape');
-    await p.keyboard.press('Escape');
-    // Typing in the script still works with the rows there.
-    await tap(line('A white pickup sits dead'));
-    await p.waitForFunction(() => window.__editor.state.selection.$from.parent.textContent.startsWith('A white pickup'), null, { timeout: 3000 }).catch(() => {});
-    assert.ok(await p.evaluate(() => window.__editor.state.selection.$from.parent.textContent.startsWith('A white pickup')), 'the click put the caret in the line');
-    await p.evaluate(() => { const { state } = window.__editor; const $f = state.selection.$from; window.__editor.commands.setTextSelection($f.end()); });
-    await p.keyboard.type(' Wind.');
-    assert.match(await p.locator('#editor p[data-el="action"] >> nth=0').textContent(), /sky\. Wind\.$/);
-    await run('Shots: beside the script');
+  await check('desktop: the Shots button is one tap: away, then back, with no menu', async () => {
+    const shotsBtn = () => p.evaluate(() => { window.scrollTo(0, 0); document.querySelector('.zm-shots').click(); });
+    await shotsBtn();
+    await sleep(700);
+    assert.equal(await p.locator('.pop-menu').count(), 0, 'no menu');
+    assert.equal(await p.locator('.ss-side .ss-card, .ss-side .ss-thumb, .ss-tram').count(), 0, 'put away');
+    assert.equal(await p.locator('.zm-shots').getAttribute('aria-pressed'), 'false');
+    await shotsBtn();
     await p.waitForSelector('.ss-side .ss-card');
+    assert.equal(await p.locator('.pop-menu').count(), 0, 'no menu');
+    assert.ok(await p.evaluate(() => document.documentElement.classList.contains('ss-beside')));
+    assert.equal(await p.locator('.zm-shots').getAttribute('aria-pressed'), 'true');
+    // Every command (Ctrl + K) has no one-column choice any more.
+    assert.equal(await p.evaluate(() => document.body.textContent.includes('one column')), false);
   });
 
   await check('desktop: a shot whose lines are deleted goes back to its scene, never lost', async () => {
@@ -535,16 +521,18 @@ try {
     await sleep(900);
     assert.equal(await p.locator(`.ss-side .ss-card[data-eid="${E[0]}"]`).count(), 6, 'still six shots in Scene 1');
     assert.match(await p.locator(card(0, 0)).textContent(), /dipstick[\s\S]*Not on any lines yet/, 'the dipstick shot waits at the scene line');
+    await p.evaluate(() => window.__editor.commands.focus());
     await p.keyboard.press('Control+z');
     await sleep(900);
     assert.equal(await count(0), '6 shots', 'Undo puts the line back, and the shot on it');
+    assert.ok(!/Not on any lines yet/.test(await p.locator(card(0, 0)).textContent()), 'and the dipstick shot is on its line again');
   });
 
   await check('desktop: Alt + B puts them away again, and that is remembered for this script', async () => {
     await p.locator('#editor p[data-el="action"] >> nth=0').click();
     await p.keyboard.press('Alt+b');
     await sleep(900);
-    assert.equal(await p.locator('.ss-side .ss-card, .ss-rows, .ss-tram').count(), 0);
+    assert.equal(await p.locator('.ss-side .ss-card, .ss-side .ss-thumb, .ss-tram').count(), 0);
     assert.equal(await p.evaluate(() => localStorage.getItem(`shotsOn:${window.__scriptShots.pieceId}`)), null);
     await p.keyboard.press('Alt+b');
     await p.waitForSelector('.ss-side .ss-card');
@@ -716,17 +704,18 @@ try {
     await sleep(500);
   });
 
-  await check('desktop: a window too narrow for both columns puts the shots in the script', async () => {
+  await check('desktop: a window too narrow for both columns keeps the shots beside, as a thin strip of pictures', async () => {
     await p.setViewportSize({ width: 980, height: 800 });
     await sleep(900);
-    assert.ok(await p.evaluate(() => document.documentElement.classList.contains('ss-column')));
-    assert.equal(await p.locator('.ss-rows .ss-card').count(), 10);
+    assert.ok(await p.evaluate(() => document.documentElement.classList.contains('ss-rail')));
+    assert.equal(await p.locator('.ss-side .ss-thumb').count(), 10);
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'no sideways scroll');
     await p.setViewportSize({ width: 1400, height: 860 });
     await sleep(900);
     assert.ok(await p.evaluate(() => document.documentElement.classList.contains('ss-beside')));
   });
 
-  await check('phone upright: in the script by default; the sheet opens over the page and steps shot to shot', async () => {
+  await check('phone upright: beside as a thin strip; the sheet opens over the page and steps shot to shot', async () => {
     p = await open({ ...devices['Pixel 7'], colorScheme: 'dark' });
     p.__touch = true;
     await newPiece('New screenplay', 'Salt Road', 'Script');
@@ -740,15 +729,13 @@ try {
     }
     await p.evaluate(() => document.documentElement.classList.remove('to-check'));
     await p.evaluate(() => window.__scriptShots.toggle());
-    await p.waitForSelector('.ss-rows .ss-card');
+    await p.waitForSelector('.ss-side .ss-thumb');
     await sleep(900);
-    assert.ok(await p.evaluate(() => document.documentElement.classList.contains('ss-column')));
-    await p.locator(card(0, 1, '.ss-rows')).scrollIntoViewIfNeeded();
-    await p.evaluate(() => window.scrollBy(0, 80));
+    assert.ok(await p.evaluate(() => document.documentElement.classList.contains('ss-rail')));
+    await p.locator(thumb(0, 1)).scrollIntoViewIfNeeded();
     await sleep(200);
-    await snap('6-phone-column');
-    await noMove(() => tap(card(0, 1, '.ss-rows')), 'pick');
-    await noMove(() => tap(card(0, 1, '.ss-rows')), 'open');
+    await noMove(() => tap(thumb(0, 1)), 'pick');
+    await noMove(() => tap(thumb(0, 1)), 'open');
     assert.equal(await p.locator('.ss-sheet').count(), 1);
     assert.match(await p.locator('.ss-sheet .ss-where').textContent(), /Shot 2 of 9/);
     await snap('7-phone-sheet');
@@ -765,17 +752,17 @@ try {
     const b = await add.boundingBox();
     assert.ok(b && b.height >= 28 && b.x + b.width <= 412, 'easy to tap, on screen');
     await snap('11-phone-add-pictures');
-    const before = await p.locator('.ss-card').count();
+    const before = await p.locator('.ss-card, .ss-thumb').count();
     await add.locator('input').setInputFiles([1, 2, 3, 4, 5, 6].map((i) => ({ name: `frame${i}.png`, mimeType: 'image/png', buffer: PNG })));
     await p.waitForFunction(() => /6 pictures:/.test(document.querySelector('.toast')?.textContent || ''));
     const text = await p.locator('.toast').textContent();
     const made = Number((text.match(/(\d+) new shots?/) || [0, 0])[1]);
     assert.ok(/on shots? without one/.test(text) || made === 6, text);
-    await p.waitForFunction((n) => document.querySelectorAll('.ss-card').length === n, before + made);
+    await p.waitForFunction((n) => document.querySelectorAll('.ss-card, .ss-thumb').length === n, before + made);
     await sleep(300);
     await snap('12-phone-pictures-in');
     await tap('.toast button');
-    await p.waitForFunction((n) => document.querySelectorAll('.ss-card').length === n, before);
+    await p.waitForFunction((n) => document.querySelectorAll('.ss-card, .ss-thumb').length === n, before);
   });
 
   let madeHere = false;
@@ -790,9 +777,9 @@ try {
       id = await p.evaluate(async () => { const ss = window.__scriptShots; const sh = await ss.add(ss.anchors()[0].eid, { focus: false }); ss.pick(null); return sh.id; });
       await sleep(600);
     }
-    await tap(`.ss-rows [data-shot="${id}"]`);
+    await tap(`.ss-side [data-shot="${id}"]`);
     await p.waitForSelector('.ss-banner:not([hidden])');
-    await tap(`.ss-rows [data-shot="${id}"]`);
+    await tap(`.ss-side [data-shot="${id}"]`);
     await p.locator('.ss-sheet .ss-act', { hasText: 'Put on lines' }).waitFor();
     await tap('.ss-sheet .ss-act >> text=Put on lines');
     assert.equal(await p.locator('.ss-sheet').count(), 0, 'the sheet steps aside');
@@ -876,7 +863,7 @@ try {
     await sleep(300);
     const list = await shotsIn(0);
     const sh = list.filter((x) => x.from >= 0).sort((a, b) => a.from - b.from)[0];
-    const from = await p.locator(`.ss-rows [data-shot="${sh.id}"]`).boundingBox();
+    const from = await p.locator(`.ss-side [data-shot="${sh.id}"]`).boundingBox();
     const to = await line('Is it broken broken').boundingBox();
     const cdp = await p.context().newCDPSession(p);
     const pt = (x, y) => [{ x: Math.round(x), y: Math.round(y), id: 1 }];
@@ -890,7 +877,8 @@ try {
     assert.equal(await p.locator('.pop-menu').count(), 0, 'holding a frame opens no menu');
     await snap('16-phone-hold-drag');
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    await p.waitForFunction((code) => new RegExp(`${code} now covers`).test(document.querySelector('.toast')?.textContent || ''), await p.locator(`.ss-rows [data-shot="${sh.id}"] .ss-code`).textContent());
+    await p.waitForFunction(([id, was]) => { const ss = window.__scriptShots; const a = ss.anchors()[0]; const sh = ss.ordered(a).find((x) => x.id === id); return sh && a.paras.findIndex((x) => x.id === sh.fields?.from) !== was; }, [sh.id, sh.from], { timeout: 6000 }).catch(() => {});
+    await toastSays(/now covers/);
     assert.notEqual((await shotsIn(0)).find((x) => x.id === sh.id).from, sh.from, 'it moved to the line');
     // The shot made for this check goes again, so the counts below stay as they were.
     if (madeHere && placedId) { await p.evaluate((id) => window.__scriptShots.remove(id), placedId); await sleep(600); }
@@ -940,11 +928,26 @@ try {
     await sleep(400);
   });
 
-  await check('phone upright: beside is a thin strip of pictures, each level with its lines', async () => {
-    // Picked from ⋯ the way Michael did (Nov 23): it really moves them beside.
+  await check('phone upright: one tap on Shots puts them away and one brings them back; ⋯ does the same', async () => {
+    await tap('.zm-shots');
+    await sleep(700);
+    assert.equal(await p.locator('.pop-menu').count(), 0, 'no menu');
+    assert.equal(await p.locator('.ss-side .ss-thumb').count(), 0, 'put away');
+    await tap('.zm-shots');
+    await p.waitForSelector('.ss-side .ss-thumb');
+    await tap('.zm-more');
+    await p.getByText('Put the shots away').waitFor();
+    assert.equal(await p.getByText('one column').count(), 0);
+    { const b = await p.getByText('Put the shots away').boundingBox(); await p.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2); }
+    await sleep(700);
+    assert.equal(await p.locator('.ss-side .ss-thumb').count(), 0, 'put away from ⋯');
     await tap('.zm-more');
     await p.getByText('Shots beside the script').waitFor();
     { const b = await p.getByText('Shots beside the script').boundingBox(); await p.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2); }
+    await p.waitForSelector('.ss-side .ss-thumb');
+  });
+
+  await check('phone upright: beside is a thin strip of pictures, each level with its lines', async () => {
     await p.waitForSelector('.ss-side .ss-thumb');
     await sleep(900);
     assert.ok(await p.evaluate(() => document.documentElement.classList.contains('ss-rail')));

@@ -13,13 +13,12 @@
 // without one". Click a line (Shift + click or drag for several) and a small
 // bar offers "+ Shot for these lines" and "Move shot 03 here".
 //
-// Where the shots sit, per device (one Shots switch on the script):
+// Where the shots sit (the Shots button turns them on and off; Nov 24 2026
+// Michael dropped the one-column way: beside is the only one):
 //   - beside: a column to the right of the text, each scene's frames level
 //     with the scene's line (a computer with room; a phone held sideways);
-//   - rail: a phone held upright, "beside": a thin strip of picture-only
-//     frames down the right edge;
-//   - column: one column, a strip of the scene's frames under its line that
-//     scrolls sideways (the phone's default, a choice on a computer).
+//   - rail: a thin strip of picture-only frames down the right edge (a
+//     phone held upright, or a computer window too narrow for the column).
 //
 // Michael's rules (Nov 22): a click only lights things up, it never scrolls
 // or reflows the page; a shot opens floating over the page (a popover on a
@@ -27,7 +26,6 @@
 // slug lines.
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { getEntry, getMany, putEntries } from './db.js';
 import { plain as make } from './dom.js';
 import { addFile, fileUrl, fileBlob, thumbUrl, isImage } from './files.js';
@@ -44,8 +42,6 @@ import './scriptshots.css';
 import { screenKind, sceneName } from './scenename.js';
 
 const KEY = new PluginKey('scriptShots');
-const SITS = ['beside', 'column'];
-const DEFAULT_SITS = { computer: 'beside', phone: 'column', sideways: 'beside' };
 // Room the column beside the text takes (its width plus the gap to the text).
 const ROOM = { computer: 372, sideways: 262, phone: 88 };
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -110,7 +106,6 @@ export class ScriptShots {
     this.bar.addEventListener('mousedown', (e) => e.preventDefault()); // the picked words stay picked
     hooks.sheet.append(this.marks, this.layer, this.bar);
     this.gripsInit();
-    try { const s = JSON.parse(localStorage.getItem('shotsSit') || '{}'); this.sits = { ...DEFAULT_SITS, ...Object.fromEntries(Object.entries(s).filter(([, v]) => SITS.includes(v))) }; } catch { this.sits = { ...DEFAULT_SITS }; }
     window.addEventListener('resize', () => this.refit());
     // Back in Write from Make (or anywhere): the shots as they are now.
     new MutationObserver(() => { if (this.hooks.writing() && this.on) this.reload().then(() => this.refit(true)); else this.refit(true); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-view'] });
@@ -161,7 +156,7 @@ export class ScriptShots {
     // A click anywhere else lets go of the picked shot; nothing else changes.
     document.addEventListener('click', (e) => {
       if (!this.sel && !this.open && !this.lines) return;
-      if (e.target.closest?.('.ss-side, .ss-rows, .ss-pop, .ss-sheet, .ss-bar, .ss-gut, .ss-knob, .ss-banner, .pop-menu, .toast')) return;
+      if (e.target.closest?.('.ss-side, .ss-pop, .ss-sheet, .ss-bar, .ss-gut, .ss-knob, .ss-banner, .pop-menu, .toast')) return;
       if (this.lines && !dom.contains(e.target)) this.dropLines();
       if (this.sel || this.open) this.pick(null);
     });
@@ -224,23 +219,21 @@ export class ScriptShots {
     if (this.on) await this.reload();
   }
   saveOn() { try { if (this.on) localStorage.setItem(`shotsOn:${this.pieceId}`, '1'); else localStorage.removeItem(`shotsOn:${this.pieceId}`); } catch { /* private window */ } }
-  saveSits() { try { localStorage.setItem('shotsSit', JSON.stringify(this.sits)); } catch { /* private window */ } }
 
   // Where the shots sit now, from the switch, this screen and the room there is.
   modeNow() {
     if (!this.on || !this.pieceId || !this.hooks.writing()) return 'off';
     const k = this.kind();
-    const sit = this.sits[k] || 'column';
-    if (sit === 'column') return 'column';
     if (k === 'phone') return 'rail';
     if (k === 'sideways') return 'beside';
-    // A computer: beside only when the text keeps its full width next to it.
+    // A computer: the full column beside when the text keeps its full width
+    // next to it, else the thin strip of pictures (as on a phone upright).
     const page = this.hooks.sheet.parentElement;
     const cs = getComputedStyle(page);
     const room = page.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     const width = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--page-width')) || 660;
     const notes = document.body.classList.contains('notes-on') && window.innerWidth > 900 ? 300 : 0;
-    return room >= width + ROOM.computer + notes ? 'beside' : 'column';
+    return room >= width + ROOM.computer + notes ? 'beside' : 'rail';
   }
 
   // Draws the shots where they sit now (after a resize, a turn of the phone,
@@ -256,12 +249,10 @@ export class ScriptShots {
       r.classList.toggle('ss-on', next !== 'off');
       r.classList.toggle('ss-beside', next === 'beside');
       r.classList.toggle('ss-rail', next === 'rail');
-      r.classList.toggle('ss-column', next === 'column');
       r.classList.toggle('ss-sideways', next === 'beside' && this.kind() === 'sideways');
       if (next === 'off') { this.sel = this.open = this.lines = this.hover = this.placing = null; this.lit = []; this.closeFloat(); }
       this.groupsKey = '';
       this.drawSide();
-      this.redrawStrips();
       this.closeFloat();
       this.showOpen();
     };
@@ -282,29 +273,10 @@ export class ScriptShots {
     if (this.on) await this.reload(false);
     this.refit();
     const key = this.kind() === 'computer' ? ' Alt + B puts them away.' : '';
-    this.hooks.toast(this.on ? `${this.mode === 'column' ? 'Shots in the script.' : 'Shots beside the script.'}${key}` : 'Shots put away. The script is only text.');
+    this.hooks.toast(this.on ? `Shots beside the script.${key}` : 'Shots put away. The script is only text.');
   }
-  // Beside or in the script, for this kind of screen.
-  async sitAt(sit) {
-    if (!SITS.includes(sit)) return;
-    this.sits[this.kind()] = sit;
-    this.saveSits();
-    if (!this.on) { this.on = true; this.saveOn(); await this.reload(false); }
-    this.refit();
-  }
-  // The Shots button: off, it turns them on; on, a small menu says where they sit.
-  button(anchor) {
-    if (!this.on) { this.toggle(); return; }
-    const k = this.kind();
-    const sit = this.sits[k];
-    const beside = k === 'phone' ? 'Beside: a strip of pictures' : 'Beside the script';
-    this.hooks.menu(anchor, [
-      { label: `${sit === 'beside' ? '✓ ' : ''}${beside}`, run: () => this.sitAt('beside') },
-      { label: `${sit === 'column' ? '✓ ' : ''}In the script (one column)`, run: () => this.sitAt('column') },
-      'sep',
-      { label: 'Put the shots away', run: () => this.toggle() }
-    ]);
-  }
+  // The Shots button: one tap turns the shots on, the next puts them away.
+  button() { this.toggle(); }
 
   // ---------- the shots ----------
 
@@ -327,7 +299,7 @@ export class ScriptShots {
     this.shots = shots;
     if (this.open && !this.find(this.open)) { this.open = null; this.closeFloat(); }
     if (this.sel && !this.find(this.sel)) this.sel = null;
-    if (draw) { this.groupsKey = ''; this.drawSide(); this.redrawStrips(); this.place(); }
+    if (draw) { this.groupsKey = ''; this.drawSide(); this.place(); }
   }
   // The shot and the scene it's in.
   find(id) {
@@ -570,49 +542,6 @@ export class ScriptShots {
     this.placeFloat();
   }
 
-  // In one column: each shot is a row right above its first line; the scene
-  // line has its count, "+ shot" and the shots on no lines yet. Each is a
-  // widget, redrawn only when what it shows changes.
-  rowsEl(a, list, head) {
-    const box = make('div', `ss-rows${head ? ' ss-headrow' : ''}`);
-    box.contentEditable = 'false';
-    box.dataset.eid = a.eid;
-    if (head) {
-      const h = make('div', 'ss-head');
-      h.dataset.eid = a.eid;
-      const count = make('span', 'ss-count', this.countText(a));
-      count.dataset.eid = a.eid;
-      h.append(count, this.picsEl(a), this.addEl(a));
-      box.append(h);
-      box.setAttribute('aria-label', `Shots in ${sceneName(a)}`);
-    }
-    for (const sh of list) box.append(this.cardEl(sh, a));
-    return box;
-  }
-  decorations(doc) {
-    if (this.mode !== 'column') return null;
-    const decos = [];
-    const opts = (key) => ({ key, ignoreSelection: true, stopEvent: () => true });
-    for (const a of anchorsOf(doc, this.hooks.script())) {
-      const list = inOrder(this.shots.get(a.eid) || [], a.paras);
-      const at = new Map();
-      const loose = [];
-      for (const sh of list) { const r = resolve(sh, a.paras); if (r) { if (!at.has(r.from)) at.set(r.from, []); at.get(r.from).push(sh); } else loose.push(sh); }
-      const v = this.version(a.eid);
-      decos.push(Decoration.widget(a.pos + a.size, () => this.rowsEl(a, loose, true), { side: -2, ...opts(`ssh:${a.eid}:${v}:${a.n}:${loose.map((s) => s.id).join()}`) }));
-      for (const [i, shots] of at) decos.push(Decoration.widget(a.paras[i].pos, () => this.rowsEl(a, shots, false), { side: -1, ...opts(`ssr:${a.eid}:${v}:${a.n}:${shots.map((s) => s.id).join()}`) }));
-    }
-    return DecorationSet.create(doc, decos);
-  }
-  // Only when rows show, or just stopped showing: a transaction of its own
-  // otherwise would wake other plugins for nothing.
-  redrawStrips() {
-    const want = this.mode === 'column';
-    if (!want && !this.stripsShown) return;
-    this.stripsShown = want;
-    const view = this.editor?.view;
-    if (view) view.dispatch(view.state.tr.setMeta(KEY, { redraw: true }).setMeta('addToHistory', false));
-  }
   // The words changed: the shots follow their lines.
   docChanged() { if (this.mode !== 'off') this.place(); }
 
@@ -730,7 +659,7 @@ export class ScriptShots {
     this.paint();
   }
   paint() {
-    for (const n of document.querySelectorAll('.ss-side [data-shot], .ss-rows [data-shot]')) {
+    for (const n of document.querySelectorAll('.ss-side [data-shot]')) {
       n.classList.toggle('sel', n.dataset.shot === this.sel);
       n.classList.toggle('opened', n.dataset.shot === this.open);
       n.classList.toggle('on', n.dataset.shot === this.hover || this.lit.includes(n.dataset.shot));
@@ -774,7 +703,7 @@ export class ScriptShots {
   placeFloat(first = false) {
     const pop = this.float;
     if (!pop || !pop.classList.contains('ss-pop')) return;
-    const node = document.querySelector(`.ss-side [data-shot="${CSS.escape(this.open)}"], .ss-rows [data-shot="${CSS.escape(this.open)}"]`);
+    const node = document.querySelector(`.ss-side [data-shot="${CSS.escape(this.open)}"]`);
     if (!node) return;
     const sheet = this.hooks.sheet.getBoundingClientRect();
     const r = node.getBoundingClientRect();
@@ -806,7 +735,7 @@ export class ScriptShots {
     const to = list[(i < 0 ? (dir > 0 ? 0 : list.length - 1) : i + dir + list.length) % list.length];
     this.sel = this.last = to.sh.id;
     if (this.open) this.showOpen(to.sh.id); else this.paint();
-    const node = document.querySelector(`.ss-side [data-shot="${CSS.escape(to.sh.id)}"], .ss-rows [data-shot="${CSS.escape(to.sh.id)}"]`);
+    const node = document.querySelector(`.ss-side [data-shot="${CSS.escape(to.sh.id)}"]`);
     if (!node) return;
     const r = node.getBoundingClientRect();
     const sheet = document.querySelector('.ss-sheet');
@@ -881,7 +810,7 @@ export class ScriptShots {
   }
   // What happens and framing change on the frames as you type: no redraw.
   patch(sh) {
-    for (const n of document.querySelectorAll(`.ss-side [data-shot="${CSS.escape(sh.id)}"], .ss-rows [data-shot="${CSS.escape(sh.id)}"]`)) {
+    for (const n of document.querySelectorAll(`.ss-side [data-shot="${CSS.escape(sh.id)}"]`)) {
       const w = n.querySelector('.ss-what');
       if (w) w.textContent = sh.text || 'What happens';
       const f = n.querySelector('.ss-nopic');
@@ -1213,8 +1142,9 @@ export class ScriptShots {
   }
 }
 
-// The editor's side of it: the strips under each scene line, in one column.
 Object.assign(ScriptShots.prototype, gripMethods);
+
+// The editor's side of it: the shots follow their lines as the words change.
 
 export const ShotStrips = Extension.create({
   name: 'shotStrips',
@@ -1223,7 +1153,6 @@ export const ShotStrips = Extension.create({
     const opts = this.options;
     return [new Plugin({
       key: KEY,
-      props: { decorations: (state) => opts.shots()?.decorations(state.doc) || null },
       view: () => ({ update: (view, prev) => { if (!view.state.doc.eq(prev.doc)) opts.shots()?.docChanged(); } })
     })];
   }
