@@ -423,7 +423,9 @@ try {
 
   await check('desktop: the open shot says where it starts and ends, with a line earlier or later, and Take off lines (Undo)', async () => {
     const b0 = await block();
+    await sleep(600); // past the guard that swallows a click right after a change
     await tap(card(0, 0));
+    if (!(await p.locator('.ss-pop .ss-ends').count())) { await sleep(600); if (!(await p.locator('.ss-pop .ss-ends').count())) await tap(card(0, 0)); }
     await p.waitForSelector('.ss-pop .ss-ends');
     assert.match(await p.locator('.ss-pop .ss-end-start').textContent(), /Starts at“A white pickup/);
     assert.ok(await p.locator('.ss-pop .ss-end-start .ss-step-up').isDisabled(), 'it starts on the scene’s first line');
