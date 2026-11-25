@@ -134,7 +134,8 @@ try {
   });
 
   await check('a line on today, opened from Today, is Now zoomed in', async () => {
-    await p.locator('.pl-words', { hasText: 'Board scene 3' }).first().click();
+    const r = p.locator('.pl-task', { hasText: 'Board scene 3' }).first(); // the six dots zoom in (a click on the words types)
+    await r.hover(); await r.locator('.pl-grip').click();
     await zoomedOn(p, '^Board scene 3');
     await strip(p).waitFor();
   });
@@ -172,7 +173,10 @@ try {
   await check('phone: tapping a task on Today is Now; the strip sits over the ruler and fits', async () => {
     await ph.locator('.zm-stop[data-stop="today"]').tap();
     await at(ph, 'today');
-    await ph.locator('.pl-words', { hasText: 'Rewrite the cold open' }).first().tap();
+    const id = await ph.locator('.pl-task', { hasText: 'Rewrite the cold open' }).first().getAttribute('data-task');
+    const t = ph.locator(`.pl-task[data-task="${id}"]`).first(); // tap the words, then the dots on that line zoom in
+    await t.locator('.pl-words').tap();
+    await t.locator('.pl-grip').tap();
     await zoomedOn(ph, '^Rewrite the cold open');
     await strip(ph).waitFor();
     assert.ok(await ph.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll');
