@@ -168,7 +168,8 @@ try {
   });
 
   await check('a click on a task in the plan beside opens it in the main view, zoomed in on its line', async () => {
-    await f.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).locator('.pl-words').click();
+    await f.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).hover();
+    await f.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).locator('.pl-grip').click(); // the dots zoom in (the words take the cursor)
     await page.waitForFunction(() => /second verse/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''));
     assert.ok(await page.locator('#outline-editor li[data-eid="ln_song_n"]').isVisible(), 'its notes are right there');
     assert.equal(await f.evaluate(() => document.documentElement.dataset.view), 'plan', 'the plan stays beside');
@@ -200,14 +201,15 @@ try {
   });
 
 
-  await check('a triangle shows a task’s lines in the plan; a click on one zooms into the task there, and Alt + Left comes back', async () => {
+  await check('a triangle shows a task’s lines in the plan; written right there; the dots zoom into the task, and Alt + Left comes back', async () => {
     const r = page.locator('#plan .pl-task', { hasText: 'second verse' });
     assert.equal(await r.locator('.pl-fold').count(), 1);
     assert.equal(await page.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-fold').count(), 0, 'none without lines under it');
     await r.locator('.pl-fold').click();
     await page.waitForFunction(() => /Rhymes with katana/.test(document.querySelector('#plan .pl-kids')?.textContent || ''));
     assert.equal(await page.locator('#plan .pl-task', { hasText: 'second verse' }).locator('.pl-fold').getAttribute('aria-expanded'), 'true');
-    await page.locator('#plan .pl-kid-text', { hasText: 'Rhymes with katana' }).click();
+    await page.locator('#plan .pl-task', { hasText: 'second verse' }).hover();
+    await page.locator('#plan .pl-task', { hasText: 'second verse' }).locator('.pl-grip').click(); // its lines are written in place; the dots zoom in
     await page.waitForFunction(() => /second verse/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''));
     assert.ok(await page.locator('#outline-editor li[data-eid="ln_song_n"]').isVisible());
     assert.equal(await count(page), 1, 'Beside is as it was');

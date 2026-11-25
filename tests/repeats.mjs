@@ -81,7 +81,7 @@ const add = async (p, text, box = '#plan input[data-add]') => {
   await input.press('Enter');
   await sleep(400);
 };
-const menu = async (p, text, more = '') => { await row(p, text, more).first().hover(); await row(p, text, more).first().locator('.pl-more').click(); await p.waitForSelector('.pop-menu'); };
+const menu = async (p, text, more = '') => { await row(p, text, more).first().hover(); await row(p, text, more).first().locator('.pl-grip').click({ button: 'right' }); await p.waitForSelector('.pop-menu'); };
 const shot = async (p, name) => { if (SHOTS) { await p.evaluate(() => document.querySelector('.toast')?.remove()); await still(p); await sleep(250); await p.screenshot({ path: `${SHOTS}/${name}.png` }); } };
 
 let failed = 0;

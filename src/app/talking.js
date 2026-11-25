@@ -35,7 +35,7 @@ import { bookType, bookOf, kindName } from '../library.js';
 import { isoToday } from '../dates.js';
 import { addCommands } from './commandlist.js';
 import { $, editor, inNotebook, state, store, view } from '../main.js';
-import { currentEditor, notebook } from './notebookview.js';
+import { currentEditor, notebook, planLinesFocus } from './notebookview.js';
 import { go, historyMode, lastPlace, openBook, openEntry, placeOf, setHistoryMode } from './routing.js';
 import { applyRemote, setCaretAfter, sync } from './syncwiring.js';
 import { drawNextStep, nextDate, renderWorld } from './libraryview.js';
@@ -642,6 +642,8 @@ function wireTalking() {
         if (inPane && view() === 'plan') return paneHost()?.hooks.goMain(place);
         return go(place);
       },
+      // Lines under a task, written in Today's outline: the phone's outline row works on them.
+      onLines: (ed, lines) => planLinesFocus(ed, lines),
       // Where a task opens zoomed in (the zoom's Now: Today and Now as one, Nov 25 2026).
       taskPlace: async (id) => {
         const at = await placeOf(id);

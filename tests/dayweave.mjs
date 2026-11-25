@@ -82,7 +82,7 @@ try {
     assert.equal(await page.locator('#plan .pl-left').count(), 0, 'no hours left today');
     assert.equal(await page.locator('#plan .pl-task .pl-est:visible').count(), 0, 'no lengths on the rows');
     assert.equal((await named(page, 'Cut the trailer')).fields.task.est, 120);
-    await row(page, 'Cut the trailer').locator('.pl-more').click();
+    await row(page, 'Cut the trailer').locator('.pl-grip').click({ button: 'right' }); // the menu: a right-click on the dots
     await page.waitForSelector('.pop-menu .pop-item');
     assert.equal(await page.locator('.pop-menu .pop-item', { hasText: /How long it takes|Takes/ }).count(), 0, 'and the menu doesn’t ask');
     await page.mouse.click(5, 450);

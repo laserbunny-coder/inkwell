@@ -20,6 +20,7 @@ import { drawYear } from './year.js';
 import { drawMonth } from './month.js';
 import { isLight, lineName } from './firstlight.js';
 import { isTraining } from './training.js';
+import { PlanLines } from './planlines.js';
 import { zoomTo } from './nowpage.js';
 import { inPane } from './panes.js';
 import { Pick, Shelf, unplannedOf, timeOf, parseKey, moveTo, stopKey, rulerDrops } from './zoomtime.js';
@@ -213,6 +214,7 @@ export class Plan {
     }
     this.zpick?.paint();
     this.shelf?.draw();
+    this.lines?.sweep();
     this.hooks.redrawn?.();
   }
 
@@ -415,14 +417,14 @@ export class Plan {
     cal.setAttribute('aria-label', 'On your calendar');
     for (const e of top) cal.append(this.eventLine(e, 'pl-ev'));
     cal.hidden = !top.length;
-    const row = (i) => this.taskRow(i, { next: day === today && i === p.next, inplace: !!i.row.fields?.done });
+    const row = (i) => this.taskRow(i, { next: day === today && i === p.next, inplace: !!i.row.fields?.done, outline: true });
     // Done tasks stay where they were in your order; with "Done tasks in the
     // list" off they're out of sight, under one faint "3 done" line.
     const { list: open, hid } = this.withDone(p.open, p.done, (i) => i.task.day === day || (i.ghost && i.occ === day));
     const above = [
-      ...missed.flatMap((i) => this.taskRow(i, { carried: true, next: day === today && i === p.next })),
+      ...missed.flatMap((i) => this.taskRow(i, { carried: true, next: day === today && i === p.next, outline: true })),
       ...(early ? [early.el] : []),
-      ...(showOld ? old.flatMap((i) => this.taskRow(i, { carried: true, next: day === today && i === p.next })) : []),
+      ...(showOld ? old.flatMap((i) => this.taskRow(i, { carried: true, next: day === today && i === p.next, outline: true })) : []),
       ...(timed.length ? weave(open, timed, day, Date.now(), today).flatMap((x) => (x.event ? [this.wovenEvent(x.event, x.at)] : row(x.item))) : open.flatMap(row))
     ];
     const below = hid ? [this.doneLine(hid)] : [];
@@ -864,7 +866,7 @@ export class Plan {
     return row;
   }
 
-  taskRow(i, { carried = false, next = false, when = false, drag = true, place = null, tag = '', inplace = false }) {
+  taskRow(i, { carried = false, next = false, when = false, drag = true, place = null, tag = '', inplace = false, outline = false }) {
     const t = i.task;
     const id = i.row.id;
     const done = !!i.row.fields?.done;
@@ -873,6 +875,9 @@ export class Plan {
     const row = make('div', `pl-task${done ? ' done' : ''}${next ? ' next' : ''}${t.run ? ' timing' : ''}${carried ? ' carried' : ''}${this.just === id && !ghost ? ' justdone' : ''}${ghost ? ' ghost' : ''}${t.habit ? ' habit' : ''}`);
     row.dataset.task = id;
     if (inplace) row.classList.add('inplace');
+    // Today as an outline (Nov 25 2026): the words take the cursor, the dots zoom in.
+    const ol = outline && !ghost && !i.occ;
+    if (ol) row.classList.add('pl-ol');
     if (this.sel?.has(id)) row.classList.add('sel');
     if (i.occ) row.dataset.occ = i.occ;
     if (ghost) row.dataset.ghost = i.ghost;
@@ -883,6 +888,10 @@ export class Plan {
       const grip = make('span', 'pl-grip', '⠿');
       grip.setAttribute('aria-hidden', 'true');
       grip.title = hover.matches ? 'Drag to move it (or Alt + Up / Alt + Down)' : 'Press and hold, then slide to move it';
+      if (ol) {
+        grip.dataset.act = 'zoom';
+        grip.title = hover.matches ? 'Click to zoom in (Alt + Right) · drag to move it · right-click for its menu' : 'Tap to zoom in; slide to move it; hold for its menu';
+      }
       row.append(grip);
     }
     const check = make('button', 'pl-check');
@@ -895,11 +904,11 @@ export class Plan {
     const title = make('div', 'pl-title');
     const words = make('button', 'pl-words', lineName(i.row));
     words.dataset.act = t.habit ? 'history' : 'words';
-    words.title = t.habit ? 'A habit: click for how it’s going' : hover.matches && plainLine(i.row) ? 'Click to open it, double-click to change the words' : 'Open it';
+    words.title = t.habit ? 'A habit: click for how it’s going' : ol && plainLine(i.row) ? 'Click to write in it; the dots zoom in' : hover.matches && plainLine(i.row) ? 'Click to open it, double-click to change the words' : 'Open it';
     title.append(words);
     // Lines written under a task are its notes. As in an outliner, a small
     // triangle shows them right here, under the task, and hides them again.
-    const open = !!i.notes && !ghost && this.unfolded(id);
+    const open = (!!i.notes || (ol && this.startUnder === id)) && !ghost && this.unfolded(id);
     if (i.notes) {
       const n = make('button', `pl-fold${open ? ' open' : ''}`, open ? '▾' : '▸');
       n.dataset.act = 'fold';
@@ -988,7 +997,7 @@ export class Plan {
     if (open) row.classList.add('opened');
     row.append(check, title, meta);
     const out = [row];
-    if (open) out.push(this.kidsBox(id));
+    if (open) out.push(ol ? this.linesBox(id) : this.kidsBox(id));
     return out;
   }
 
@@ -1033,6 +1042,26 @@ export class Plan {
     return box;
   }
 
+
+  focusWords(id) {
+    const root = this.pageShown ? this.sheet : this.box;
+    root?.querySelector(`.pl-ol[data-task="${CSS.escape(id)}"] .pl-words`)?.focus({ preventScroll: true });
+  }
+
+  // Today as an outline (Nov 25 2026): the lines under a task, opened in
+  // place, are written right here, as on any page (Enter, Tab, [] , fold).
+  // The same small editor the plan under a scene line uses (planlines.js).
+  linesBox(id) {
+    this.lines ||= new PlanLines({ openRef: (rid) => this.hooks.openEntry?.(rid), onFocus: (ed) => this.hooks.onLines?.(ed, this.lines) });
+    const start = this.startUnder === id;
+    if (start) this.startUnder = null;
+    const words = () => (this.sheet.isConnected && this.pageShown ? this.sheet : this.box)?.querySelector(`.pl-ol[data-task="${CSS.escape(id)}"] .pl-words`);
+    const { sub } = this.lines.mount(id, { start, folds: false, top: () => words(), leave: () => words()?.focus() });
+    const box = make('div', 'pl-kids pl-lines');
+    box.dataset.kidsOf = id;
+    box.append(sub);
+    return box;
+  }
 
   // Where a task lives, said short. Nothing for the Tasks page, or for the
   // very day page the plan sits on.
@@ -1534,6 +1563,12 @@ export class Plan {
     if (act === 'more') return this.menu(i, el);
     if (act === 'open') return this.hooks.openEntry(i.row.id);
     if (act === 'fold') { this.fold(i.row.id, !this.unfolded(i.row.id)); return this.redraw(); }
+    if (act === 'zoom') return this.open(i);
+    // Today as an outline: a click on the words puts the cursor in them (the dots zoom in).
+    if (act === 'words' && row?.classList.contains('pl-ol') && plainLine(i.row) && !this.picking && !e.shiftKey && !e.ctrlKey && !e.metaKey && !el.closest('.now-list')) {
+      clearTimeout(this.opening);
+      return this.rename(i, el, { at: e.clientX ? { x: e.clientX, y: e.clientY } : null, outline: true });
+    }
     if (act === 'words' && e.shiftKey && !i.ghost && !i.occ) { clearTimeout(this.opening); return this.select(i.row.id, row); }
     // In Now's list: make it the one thing, or open it.
     if (act === 'words' && !e.ctrlKey && !e.metaKey && el.closest('.now-list') && !i.row.fields?.done) return this.now.rowMenu(i, el);
@@ -1775,6 +1810,19 @@ export class Plan {
       next.querySelector('.pl-words')?.focus();
       return;
     }
+    // Today as an outline: on a task, Ctrl + Down / Up opens or closes its lines in place, Alt + Right zooms in.
+    if (onTask && onTask.classList.contains('pl-ol') && !e.shiftKey && !e.metaKey) {
+      const id = onTask.dataset.task;
+      const it = this.item(id);
+      if (it && e.ctrlKey && !e.altKey && !this.zpick?.id && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault();
+        this.fold(id, e.key === 'ArrowDown');
+        // Its lines as they are now (written here a moment ago, perhaps), and the keyboard stays on it.
+        this.refresh().then(() => this.focusWords(id));
+        return;
+      }
+      if (it && e.altKey && !e.ctrlKey && e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); this.open(it); return; }
+    }
     if (e.key === 'Escape' && (this.sel?.size || this.picking) && !e.target.closest?.('input')) { if (this.picking) this.stopPicking(); else this.unselect(); return; }
     // Ctrl + Z right after a delete here brings it back.
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && this.lastGone && !e.target.closest?.('input, textarea, [contenteditable="true"]')) {
@@ -1877,6 +1925,8 @@ export class Plan {
       items.push('sep', { label: 'How it’s going', sub: this.historyItems(i) }, { label: 'Open it where it’s written', run: () => this.hooks.openEntry(i.row.id) });
       return popMenu(anchor, items, at);
     }
+    // Zoom in first (Today as an outline: the menu the dots and a hold bring up).
+    if (!i.ghost) items.push({ label: 'Zoom in', run: () => this.open(i) });
     if (done) items.push({ label: 'Not done after all', run: () => this.tick(i, false) });
     else {
       items.push({ label: 'Done', run: () => this.tick(i, true) });
@@ -1991,29 +2041,51 @@ export class Plan {
   }
 
   // New words for a task, right in the plan.
-  rename(i, el) {
-    const input = make('input', 'pl-rename');
+  rename(i, el, { at = null, outline = false } = {}) {
+    // Where the click landed in the words, for the cursor to go there.
+    let caret = null;
+    if (at) {
+      const pos = document.caretPositionFromPoint?.(at.x, at.y);
+      const r = !pos && document.caretRangeFromPoint?.(at.x, at.y);
+      const node = pos?.offsetNode || r?.startContainer;
+      if (node && el.contains(node)) caret = pos ? pos.offset : r.startOffset;
+    }
+    const input = make('input', `pl-rename${outline ? ' pl-ol-in' : ''}`);
     input.type = 'text';
     input.value = i.row.text || '';
     input.setAttribute('aria-label', 'The task’s words');
+    input.enterKeyHint = 'done';
     this.renaming = true;
     let over = false;
-    const finish = async (save) => {
+    const id = i.row.id;
+    const finish = async (save, then = null) => {
       if (over) return;
       over = true;
       this.renaming = false;
       const text = input.value.trim();
-      if (save && text && text !== i.row.text) await this.wrote(await renameTask(i.row.id, text));
+      if (then) then();
+      if (save && text && text !== i.row.text) await this.wrote(await renameTask(id, text));
+      else if (then) await this.refresh();
       else await this.refresh();
     };
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); finish(true); }
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+      if (!outline) return;
+      // The outline's keys, on the task's own line.
+      const k = e.key;
+      if (k === 'Tab' && !e.shiftKey) { e.preventDefault(); finish(true, () => { this.fold(id, true); this.startUnder = id; }); }
+      else if (e.ctrlKey && !e.altKey && (k === 'ArrowDown' || k === 'ArrowUp')) { e.preventDefault(); finish(true, () => this.fold(id, k === 'ArrowDown')); }
+      else if (e.altKey && !e.ctrlKey && k === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); finish(true).then(() => this.open(this.item(id) || i)); }
+      else if (e.ctrlKey && k === 'Enter') { e.preventDefault(); finish(true).then(() => { const it = this.item(id); if (it) this.tick(it, !it.row.fields?.done); }); }
+      else if (k === 'ArrowDown' && !e.ctrlKey && !e.altKey && !e.shiftKey && this.unfolded(id) && this.lines?.editorFor(id)) { e.preventDefault(); const ed = this.lines.editorFor(id); finish(true).then(() => ed.isDestroyed || ed.commands.focus('start')); }
     });
     input.addEventListener('blur', () => finish(true));
     el.replaceWith(input);
     input.focus();
-    input.select();
+    if (caret != null) input.setSelectionRange(caret, caret);
+    else if (outline) input.setSelectionRange(input.value.length, input.value.length);
+    else input.select();
   }
 
   // ---------- dragging ----------

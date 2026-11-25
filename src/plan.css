@@ -724,3 +724,20 @@ html.has-rail .pl-switches { flex-direction: row; align-items: center; }
 .mo-add, .yr-add { margin: 2px 0 0; min-height: 28px; padding: 2px 8px; }
 .mo-add input, .yr-add input { font-size: 14px; }
 .mo-add .pl-check, .yr-add .pl-check { transform: scale(.8); }
+
+/* Today as an outline (Nov 25 2026): the words take the cursor; the faded six
+   dots zoom in on a click (or a tap) and move the task on a drag. On a phone
+   the dots show on the line you're on; the others are still there to tap. */
+.pl-ol .pl-words { cursor: text; }
+.pl-ol .pl-grip { pointer-events: auto; cursor: pointer; left: -14px; width: 18px; padding: 4px 0; }
+.pl-ol .pl-grip:hover { color: var(--accent); }
+.pl-rename.pl-ol-in { border-bottom-color: transparent; caret-color: var(--accent); }
+.pl-lines { margin: -2px 0 6px 32px; color: var(--ink); }
+.pl-lines .wv-sub { padding: 0; }
+@media (--touch) {
+  .pl-ol .pl-grip { opacity: 0; left: -14px; width: 22px; padding: 0; }
+  .pl-ol:focus-within .pl-grip, .pl-ol.sel .pl-grip, .pl-ol:has(+ .pl-lines :focus) .pl-grip { opacity: .75; }
+}
+.pl-lines .wv-lines .bullet::after { display: none; } /* no bullets in Today (his word) */
+/* The menu is a right-click on the dots (or a hold on a phone): no ⋯ on Today's lines. */
+.pl-ol .pl-more { display: none; }
