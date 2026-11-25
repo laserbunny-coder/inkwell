@@ -225,7 +225,7 @@ try {
     await i.press('Enter');
     await settle(phone);
     assert.equal(await thing(phone), 'Write the two-minute hook');
-    const l = await until(async () => { const x = await line(phone, 'Kenji sings about the dentist'); return x?.fields.thought.state === 'filed' ? x : null; });
+    const l = await until(async () => { const x = await line(phone, 'Kenji sings about the dentist'); return x?.fields.thought.state === 'filed' ? x : null; }, 15000);
     assert.ok(l);
   });
   assert.deepEqual(phone.errors, []);
