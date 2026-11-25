@@ -246,6 +246,20 @@ try {
     await ph.evaluate(() => window.__outline.view.dispatch(window.__outline.state.tr.setMeta(window.__foldKey, { zoom: null })));
   });
 
+  await check('a double tap on a line’s words zooms into it; one tap only puts the cursor there', async () => {
+    await setOutline(ph, START);
+    await blurred();
+    const c = await centre(words('Board reel 2'));
+    await ph.touchscreen.tap(c.x, c.y);
+    await sleep(500);
+    assert.equal(await ph.locator('#outline-editor li.zoom-root').count(), 0, 'one tap: no zoom');
+    await ph.touchscreen.tap(c.x, c.y);
+    await sleep(120);
+    await ph.touchscreen.tap(c.x, c.y);
+    await ph.waitForFunction(() => /Board reel 2/.test(document.querySelector('#outline-editor li.zoom-root > p')?.textContent || ''));
+    await ph.evaluate(() => window.__outline.view.dispatch(window.__outline.state.tr.setMeta(window.__foldKey, { zoom: null })));
+  });
+
   await check('no page errors', async () => {
     assert.deepEqual(errors, []);
   });
