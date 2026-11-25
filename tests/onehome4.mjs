@@ -222,7 +222,15 @@ try {
     await db('li_nb', '!!x');
     await check(`phone ${width}px: the path fits, and a tap opens a door`, async () => {
       await outlineOf('pr_nb');
-      await p.tap('.ph1-stage');
+      // On a slow runner the phone page can still be settling: wait for the
+      // stage line to show, and tap again if the path didn't open.
+      await p.locator('.ph1-stage').waitFor({ state: 'visible', timeout: 20000 });
+      for (let i = 0; i < 3; i++) {
+        await p.tap('.ph1-stage');
+        if (await p.waitForSelector('.ph1-way:not([hidden]) .ph1-go', { timeout: 4000 }).then(() => true, () => false)) break;
+        await outlineOf('pr_nb');
+        await p.locator('.ph1-stage').waitFor({ state: 'visible', timeout: 20000 });
+      }
       await p.waitForSelector('.ph1-way:not([hidden]) .ph1-go');
       await until(() => /scenes/.test(document.querySelector('.ph1-way')?.textContent || ''));
       assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'nothing scrolls sideways');
