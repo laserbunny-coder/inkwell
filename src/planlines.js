@@ -16,7 +16,7 @@ import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { TextSelection } from '@tiptap/pm/state';
 import { Extension } from '@tiptap/core';
-import { OutlineDoc, OutlineItem, OutlineKeys, LineIds, OutlineFold, TagMarks, EntryRef, OutlineStore, descendants, toOutlineDoc, foldKey, indentLines, outdentLines, moveLine } from './outline.js';
+import { OutlineDoc, OutlineItem, OutlineKeys, LineIds, OutlineFold, TagMarks, EntryRef, LineChecks, OutlineStore, descendants, toOutlineDoc, foldKey, indentLines, outdentLines, moveLine } from './outline.js';
 import { Suggest } from './suggest.js';
 import { getEntry, putEntries } from './db.js';
 import { plain as make } from './dom.js';
@@ -159,7 +159,7 @@ export class PlanLines {
         element: host,
         extensions: [
           StarterKit.configure({ document: false, listItem: false, codeBlock: false, code: false, horizontalRule: false, heading: false, blockquote: false, trailingNode: false }),
-          OutlineDoc, OutlineItem, OutlineKeys, LineIds, OutlineFold, TagMarks,
+          OutlineDoc, OutlineItem, OutlineKeys, LineIds, OutlineFold, TagMarks, LineChecks,
           EntryRef.configure({ onOpen: (id) => this.hooks.openRef?.(id) }), Suggest,
           PlanKeys.configure({ toTop, leave: goBack })
         ],

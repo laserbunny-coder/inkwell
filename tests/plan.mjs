@@ -214,7 +214,9 @@ try {
   });
 
   await check('a click on a task zooms into it (Now), Alt + Left goes back out to the day’s page, Ctrl + click opens it beside', async () => {
-    await row(page, 'Order the 8 TB').locator('.pl-words').click();
+    // Today as an outline (Nov 25 2026): the words take the cursor, the six dots zoom in.
+    await row(page, 'Order the 8 TB').hover();
+    await row(page, 'Order the 8 TB').locator('.pl-grip').click();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && /Order the 8 TB/.test((window.__plan.items || []).find((i) => i.row.id === history.state?.zoom)?.row.text || ''));
     assert.equal(await page.locator('.pane-frame').count(), 0, 'nothing opened beside');
     await page.evaluate(() => document.activeElement?.blur());
@@ -245,7 +247,7 @@ try {
 
   await check('the ⋯ menu: “Open it where it’s written” goes to the Tasks page, which has no plan of its own', async () => {
     await row(page, 'Board Reel 2').hover();
-    await row(page, 'Board Reel 2').locator('.pl-more').click();
+    await row(page, 'Board Reel 2').locator('.pl-grip').click({ button: 'right' }); // the menu: a right-click on the dots
     await sleep(250);
     await pick(page, 'Open it where it’s written');
     await page.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Tasks');
@@ -425,7 +427,7 @@ try {
     assert.equal(await page.locator('#outline-editor .task-chip').innerText(), 'Today');
     await today(page);
     const r = row(page, 'Pick Kenji’s second verse');
-    await r.locator('.pl-more').click();
+    await r.locator('.pl-grip').click({ button: 'right' });
     await page.waitForSelector('.pop-menu');
     assert.match(await page.locator('.pop-menu').innerText(), /In The Ninja Bunch/i);
     await pick(page, 'Open it where it’s written');
@@ -467,7 +469,8 @@ try {
     await add(phone, 'Call Dana', '#plan-sheet input[data-add]');
     await add(phone, 'Order the storage drive', '#plan-sheet input[data-add]');
     assert.deepEqual(await words(phone, '#plan-sheet'), ['Call Dana', 'Order the storage drive']);
-    assert.ok(await phone.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('.pl-more').isVisible());
+    // No ⋯ on Today's lines (Nov 25 2026): a hold brings up the line's options.
+    assert.equal(await phone.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('.pl-more').isVisible(), false);
     const w = await phone.evaluate(() => [document.documentElement.scrollWidth, innerWidth]);
     assert.ok(w[0] <= w[1], `no sideways scroll (${w[0]} in ${w[1]})`);
     if (SHOTS) await phone.screenshot({ path: `${SHOTS}/plan-phone-day.png` });
@@ -476,7 +479,7 @@ try {
     await phone.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('.pl-check').tap();
     await sleep(400);
     assert.equal((await taskNamed(phone, 'Call Dana')).fields.done, true);
-    await phone.locator('#plan-sheet .pl-task', { hasText: 'Order the storage drive' }).locator('.pl-more').tap();
+    await phone.locator('#plan-sheet .pl-task', { hasText: 'Order the storage drive' }).locator('.pl-more').evaluate((b) => b.click());
     await sleep(300);
     await pick(phone, 'Tomorrow');
     await sleep(400);

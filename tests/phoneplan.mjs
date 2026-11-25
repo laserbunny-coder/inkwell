@@ -151,10 +151,11 @@ try {
 
   await check('phone: six dots show on every task that can move, and a tap opens the task on Now and Back comes out again', async () => {
     assert.equal(await phone.locator('#plan-sheet .pl-task[data-move] .pl-grip').count(), 3);
-    assert.ok(Number(await phone.locator('#plan-sheet .pl-grip').first().evaluate((g) => getComputedStyle(g).opacity)) > 0.5, 'no hover on a phone: always there');
+    // Today as an outline (Nov 25 2026): the dots show on the line you're on; the others still take a tap.
+    assert.equal(Number(await phone.locator('#plan-sheet .pl-grip').first().evaluate((g) => getComputedStyle(g).opacity)), 0, 'faded off the line you are on');
     assert.equal(await phone.locator('.pane-frame').count(), 0, 'sliding a task opened nothing');
     assert.ok(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'nothing spills');
-    await phone.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('.pl-words').tap();
+    await phone.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('.pl-grip').tap();
     await phone.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && /Call Dana/.test((window.__plan.items || []).find((i) => i.row.id === history.state?.zoom)?.row.text || ''));
     assert.equal(await phone.locator('.pane-frame').count(), 0, 'it opens in place, zoomed in');
     await phone.goBack();

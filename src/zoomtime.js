@@ -245,7 +245,7 @@ export class Pick {
       make('span', 'zm-mb-sp'),
       b('out', `↑ ${t.out ? sayTime(t.out, today, small) : 'Furthest out'}`, 'Ctrl ↑', t.out, 'Further out'),
       b('in', `↓ ${t.in ? sayTime(t.in, today, small) : 'Closest in'}`, 'Ctrl ↓', t.in, 'Closer in'),
-      b('open', 'Open', 'Enter', undefined, 'Open its page'),
+      b('open', 'Zoom in', 'Enter', undefined, 'Zoom into it'),
       b('more', '⋯', '', undefined, 'More: When, rename, delete'),
       b('let', '✕', 'Esc', undefined, 'Let go')
     );
@@ -268,6 +268,8 @@ export class Pick {
   }
   context(e) {
     if (!this.active()) return;
+    // Today as an outline: a right-click on the six dots is the task's menu (as in Tana).
+    if (e.target.closest?.('.pl-ol .pl-grip')) return;
     const row = e.target.closest?.('[data-task]:not([data-part]):not([data-ghost])');
     if (!row || !this.plan.sheet.contains(row) || typing(e.target)) return;
     e.preventDefault();
