@@ -10,7 +10,7 @@ import { make } from './dom.js';
 import { autoOn } from './auto.js';
 import { tracksOf, posOf, placeOf, readReading, saveReading, todays, advanced, readYesterday, missedYesterday, esvLink, keyState, kept, chapter, tickBibleHabit } from './firstlight.js';
 import { readStreak, doneLine } from './readstats.js';
-import { tickLight, lightToday, dropLine } from './firstlight.js';
+import { tickLight, dropLights } from './firstlight.js';
 
 export class LightNow {
   constructor(now) {
@@ -183,8 +183,13 @@ export class LightNow {
   async read() {
     const was = { ...this.st };
     const today = this.p.today;
-    this.st = advanced(this.st, today);
-    await saveReading(this.st);
+    // Read once a day: a second "I read it" ticks what's left but never
+    // moves the places on again (Nov 25 2026).
+    const again = this.st.read === today;
+    if (!again) {
+      this.st = advanced(this.st, today);
+      await saveReading(this.st);
+    }
     // One quiet line on the next screen (Part 8), with the streak switch on.
     const root = document.documentElement;
     this.note = doneLine(readStreak(this.st.days, today));
@@ -220,8 +225,8 @@ export class LightNow {
     this.st = { ...this.st, skip: this.p.today };
     await saveReading(this.st);
     // Its line for today goes too: a reading set aside never piles up.
-    const line = lightToday(this.p.items || [], this.p.today);
-    if (line && !line.row.fields?.done) await this.p.wrote(await dropLine(line.row.id));
+    const gone = await dropLights(this.p.items || [], this.p.today);
+    if (gone.length) await this.p.wrote(gone);
     this.leave();
     this.p.redraw();
   }

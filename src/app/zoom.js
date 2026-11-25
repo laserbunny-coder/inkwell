@@ -173,7 +173,9 @@ export async function toStop(id) {
   const from = stopOf(lastPlace);
   // The Project stop again from inside a piece: out to the project's own page.
   // Today again while zoomed into a task (Now): out to the day.
-  const inNow = from === 'today' && lastPlace?.view === 'notebook' && !!lastPlace.zoom && nowState.zoom === lastPlace.zoom;
+  // So is the Now page (Bible reading, Training, a lesson, Talk, Close): Today
+  // from there always gets out to the day (Nov 25 2026: he was stuck in it).
+  const inNow = from === 'today' && ((lastPlace?.view === 'notebook' && !!lastPlace.zoom && nowState.zoom === lastPlace.zoom) || (lastPlace?.view === 'plan' && lastPlace.tab === 'now'));
   if (id === from && id !== 'project' && !inNow) return;
   const place = await placeOfStop(id);
   if (id === 'today') faceTo(todayFace());
@@ -186,6 +188,7 @@ export async function zoomOut() {
   const p = lastPlace;
   const s = stopOf(p);
   if (s === 'today' && p?.view === 'notebook' && p.zoom && nowState.zoom === p.zoom) return toStop('today');
+  if (s === 'today' && p?.view === 'plan' && p.tab === 'now') return toStop('today');
   if (s === 'today' && p?.view === 'plan' && p.day) { const w = weekOf(p.day)[0]; return zoomGo({ view: 'plan', tab: 'week', ...(w === weekOf(isoOf())[0] ? {} : { week: w }) }, 'out'); }
   if (s === 'today') return toStop('week');
   if (s === 'week' && p?.week && p.week > weekOf(isoOf())[0]) return zoomGo({ view: 'plan', tab: 'ahead', week: p.week }, 'out');

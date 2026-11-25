@@ -121,6 +121,31 @@ try {
     assert.equal(await light(page), 0, 'once a day');
   });
 
+  await check('a second copy of today’s line from another device goes once read; I read it twice never moves the places twice', async () => {
+    const rows = await all(page);
+    const done = rows.find((r) => r.fields?.firstlight && r.fields?.task?.day === MON && !r.deleted);
+    assert.ok(done?.fields?.done, 'today’s line is done');
+    const copy = { ...done, id: 'li_copy', created_at: done.created_at + 1000, updated_at: Date.now(), fields: { ...done.fields, done: false, task: { ...done.fields.task, done_at: null } } };
+    await page.evaluate((x) => new Promise((res) => { const r = indexedDB.open('writing'); r.onsuccess = () => { const tx = r.result.transaction('entries', 'readwrite'); tx.objectStore('entries').put(x); tx.oncomplete = () => res(); }; }), copy);
+    const before = await reading(page);
+    await page.reload(); await started(page); await toNow(page);
+    assert.equal(await light(page), 0, 'the reading doesn’t come back');
+    const open = (await all(page)).filter((r) => r.fields?.firstlight && !r.deleted && !r.fields?.done && r.fields?.task?.day === MON);
+    assert.equal(open.length, 0, 'the extra copy went');
+    // A second I read it on the same day ticks but never moves on.
+    await page.evaluate(() => window.__plan.now.light.read());
+    await settle(page);
+    const after = await reading(page);
+    assert.deepEqual([after.ot, after.ps, after.wi, after.nt], [before.ot, before.ps, before.wi, before.nt]);
+  });
+
+  await check('Today on the ruler from the Now page gets out to the day', async () => {
+    await toNow(page);
+    await page.locator('.zm-stop[data-stop="today"]').click();
+    await page.waitForFunction(() => history.state?.view === 'plan' && ['day', 'calday'].includes(history.state?.tab) || history.state?.view === 'notebook');
+    assert.notEqual(await page.evaluate(() => document.querySelector('#plan-sheet')?.dataset.tab), 'now');
+  });
+
   await check('Not this morning (Esc) moves nothing, and a missed day changes nothing', async () => {
     await dayIs(page, TUE);
     assert.deepEqual(await refs(page), ['Genesis 3', 'Genesis 4', 'Psalm 2', 'Proverbs 2', 'Matthew 3', 'Matthew 4']);

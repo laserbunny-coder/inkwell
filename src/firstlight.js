@@ -169,11 +169,25 @@ export const isLight = (row) => !!row?.fields?.firstlight && row?.kind === 'line
 // Nov 18 2026 say "First light", and past days keep their words.
 export const LIGHT_NAME = 'Bible reading';
 export const lineName = (row) => (isLight(row) ? LIGHT_NAME : row?.text || 'Untitled');
-export const lightToday = (items, today) => items.find((i) => isLight(i.row) && !i.ghost && !i.occ && (i.task.day === today || (i.row.fields?.done && isoOf(i.task.done_at || 0) === today)));
+const lightsToday = (items, today) => items.filter((i) => isLight(i.row) && !i.ghost && !i.occ && (i.task.day === today || (i.row.fields?.done && isoOf(i.task.done_at || 0) === today)));
+// Today's line: a done one first (read is read), else the oldest open one.
+export const lightToday = (items, today) => {
+  const all = lightsToday(items, today);
+  return all.find((i) => i.row.fields?.done) || all.sort((a, b) => (a.row.created_at || 0) - (b.row.created_at || 0))[0];
+};
+// Two devices can each make today's line before they sync (Nov 25 2026: the
+// second copy kept bringing the reading back after he had read). One a day:
+// if any is done the open ones go, else the oldest open one stays.
+export async function extraLights(items, today = isoOf()) {
+  const keep = lightToday(items, today);
+  const out = [];
+  for (const i of lightsToday(items, today)) if (i !== keep && !i.row.fields?.done) out.push(...(await dropLine(i.row.id)));
+  return out;
+}
 
 // → rows written: stale lines gone, today's made (once a day, unless read or set aside already).
 export async function ensureLightLine(items, today = isoOf()) {
-  const out = [...(await lapseLight(items, today))];
+  const out = [...(await lapseLight(items, today)), ...(await extraLights(items, today))];
   const has = lightToday(items, today);
   if (has) {
     // Today's line, still open, from before the new name: it takes the new name.
@@ -213,8 +227,15 @@ export async function dropLine(id) {
 }
 
 // Read: today's line is ticked too (wherever he marked it).
+// Ticking: every open copy of today's line (there should be one; see extraLights).
 export async function tickLight(items, today = isoOf(), on = true) {
-  const i = lightToday(items, today);
-  if (!i || !!i.row.fields?.done === on) return [];
-  return tickTask(i.row.id, on);
+  const out = [];
+  for (const i of lightsToday(items, today)) if (!!i.row.fields?.done !== on) { const r = await tickTask(i.row.id, on); if (r) out.push(...[].concat(r)); }
+  return out;
+}
+// Set aside: every open copy of today's line goes.
+export async function dropLights(items, today = isoOf()) {
+  const out = [];
+  for (const i of lightsToday(items, today)) if (!i.row.fields?.done) out.push(...(await dropLine(i.row.id)));
+  return out;
 }
