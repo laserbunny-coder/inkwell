@@ -1324,7 +1324,7 @@ export const OutlineFold = Extension.create({
         const undouble = doubleTaps(view.dom, (el) => {
           if (!isTouch() || el.closest?.('.line-gutter, .line-box, a, button, [contenteditable="false"]')) return null;
           const li = el.closest?.('li');
-          if (!li || !view.dom.contains(li) || li.classList.contains('zoom-root') || !li.querySelector(':scope > p')?.contains(el)) return null;
+          if (!li || !view.dom.contains(li) || li.classList.contains('zoom-root') || li.querySelector(':scope > ul, :scope > ol')?.contains(el)) return null; // anywhere on the line itself, not the lines under it
           return li.querySelector(':scope > .line-gutter')?.dataset.eid || null;
         }, (eid) => { view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid })); view.dom.blur(); });
         return {

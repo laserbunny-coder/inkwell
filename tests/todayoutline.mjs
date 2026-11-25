@@ -164,6 +164,26 @@ try {
     await ph.waitForFunction(() => document.querySelector('#plan-sheet')?.dataset.tab === 'day' && document.querySelectorAll('#plan-sheet .pl-ol').length === 2);
     await sleep(400);
   });
+  await check('phone: a double tap anywhere on the line zooms, not only on its words', async () => {
+    // A spot on the row that isn't the words, the tick box or a button.
+    const spot = await ph.evaluate(() => {
+      const r = [...document.querySelectorAll('#plan-sheet .pl-task.pl-ol')].find((x) => /Rewrite the dojo/.test(x.textContent));
+      const b = r.getBoundingClientRect();
+      for (let x = b.right - 4; x > b.left; x -= 6) {
+        const el = document.elementFromPoint(x, b.top + b.height / 2);
+        if (el && r.contains(el) && !el.closest('.pl-words, .pl-rename, .pl-check, button, a, input')) return { x, y: b.top + b.height / 2 };
+      }
+      return null;
+    });
+    assert.ok(spot, 'an empty spot on the row');
+    await ph.touchscreen.tap(spot.x, spot.y);
+    await sleep(150);
+    await ph.touchscreen.tap(spot.x, spot.y);
+    await zoomedOn(ph, 'Rewrite the dojo scene');
+    await ph.goBack();
+    await ph.waitForFunction(() => document.querySelector('#plan-sheet')?.dataset.tab === 'day' && document.querySelectorAll('#plan-sheet .pl-ol').length === 2);
+    await sleep(400);
+  });
   await check('phone: two taps further apart than a double tap only type', async () => {
     const b = await row(ph, 'Find the script').locator('.pl-words').boundingBox();
     const x = b.x + 20, y = b.y + b.height / 2;

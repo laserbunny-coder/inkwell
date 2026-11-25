@@ -97,7 +97,8 @@ export class Plan {
       // On a phone: a tap types in a task's words, a double tap zooms into it.
       if (el !== steps) doubleTaps(el, (t) => {
         const row = t.closest?.('.pl-task.pl-ol[data-task]');
-        return row && t.closest('.pl-words, .pl-rename') && !this.picking ? row.dataset.task : null;
+        // Anywhere on the line counts, but the tick box, the buttons and the lines under it.
+        return row && !this.picking && !t.closest('.pl-check, .pl-kids, .pl-play, a, button:not(.pl-grip, .pl-words)') ? row.dataset.task : null;
       }, (id) => {
         const i = this.item(id);
         if (!i) return;
