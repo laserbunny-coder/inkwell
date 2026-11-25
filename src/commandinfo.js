@@ -146,12 +146,12 @@ export const INFO = [
   { l: 'Scene numbers: turn off', g: 'write', h: 'Takes the scene numbers away.', w: ['scene numbers', 'unlock', 'numbering'] },
 
   // ---------- View ----------
-  { l: 'Now, from anywhere', g: 'go', h: 'The one thing you’re on, from wherever you are, even while you type (Alt + `).', w: ['now', 'one thing', 'ruler', 'zoom', 'current'] },
-  { l: 'Month: the next four weeks', g: 'go', h: 'Four weeks ahead, a lane for each project on stage (1). Press 1 again, or tap Month again, for the Year.', w: ['month', 'four weeks', 'weeks', 'ahead', 'zoom', 'ruler'] },
-  { l: 'Year: twelve months from now', g: 'go', h: 'The furthest out in time, on the Month stop (1 twice): each month’s planned lines and dates to hit, and what’s for sometime this year.', w: ['year', 'months', 'zoom', 'ruler', 'sometime this year', 'later'] },
-  { l: 'Zoom out one step', g: 'go', h: 'One stop further out on the ruler: Now to Today to Week to Month to Year, or a piece to its project to the Desk to the Library.', w: ['zoom', 'out', 'step out', 'further', 'ruler', 'back'] },
+  { l: 'Now: zoom into the one thing, from anywhere', g: 'go', h: 'Zooms into the task you’re on (or the next on today), from wherever you are, even while you type (Alt + `). Next and the way back to Today sit at the foot.', w: ['now', 'one thing', 'ruler', 'zoom', 'current'] },
+  { l: 'Month: the next four weeks', g: 'go', h: 'Four weeks ahead, a lane for each project on stage (2).', w: ['month', 'four weeks', 'weeks', 'ahead', 'zoom', 'ruler'] },
+  { l: 'Year: twelve months from now', g: 'go', h: 'The furthest out in time, its own stop on the ruler (1): each month’s planned lines and dates to hit, and what’s for sometime this year.', w: ['year', 'months', 'zoom', 'ruler', 'sometime this year', 'later'] },
+  { l: 'Zoom out one step', g: 'go', h: 'One stop further out on the ruler: a task (Now) to Today to Week to Month to Year, or a piece to its project to the Desk to the Library.', w: ['zoom', 'out', 'step out', 'further', 'ruler', 'back'] },
   { l: 'Get it out of your head: a thought, filed', g: 'new', h: 'A small box from anywhere, even while writing (Alt + J). Enter puts the thought on today’s page and files it; you stay where you were.', w: ['thought', 'capture', 'out of your head', 'note', 'idea', 'inbox', 'jot'] },
-  { l: 'Zoom in one step', g: 'go', h: 'One stop closer to Now on the ruler.', w: ['zoom', 'in', 'step in', 'closer', 'ruler'] },
+  { l: 'Zoom in one step', g: 'go', h: 'One stop closer to Today on the ruler, and from Today into the one thing (Now).', w: ['zoom', 'in', 'step in', 'closer', 'ruler'] },
   { l: 'Typewriter mode: the line you’re on stays put', g: 'view', h: 'Keeps the line you’re typing in the middle of the screen.', w: ['scroll', 'center', 'middle', 'typewriter'] },
   { l: 'Beside: today’s plan next to this page (again: put it away)', g: 'view', h: 'Today’s plan in a pane next to what you’re doing. Again puts it away.', w: ['pane', 'side by side', 'split', 'beside', 'plan', 'tasks', 'today'], n: N.pane },
   { l: 'Talk it through with Claude, beside where you are', g: 'view', h: 'Talk your plan or a problem over with Claude in a pane beside you.', w: ['claude', 'talk', 'think', 'plan', 'week', 'moves', 'ask', 'beside', 'overwhelmed', 'too much', 'chat'], at: ['desk', 'today'], n: N.pane },

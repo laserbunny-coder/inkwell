@@ -209,11 +209,13 @@ try {
     assert.ok((await chips(page)).includes('Email Dana the boards'));
   });
 
-  await check('a click on a block opens the task on its page, and Alt + Left comes back to the calendar', async () => {
+  await check('a click on a block zooms into the task, and Alt + Left comes back to the calendar', async () => {
     await blk(page, 'Call the print shop').click();
-    await page.waitForFunction(() => /Call the print shop/.test(document.querySelector('#plan-sheet .np-tx')?.textContent || ''), null, { timeout: 15000 });
+    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && /Call the print shop/.test((window.__plan.items || []).find((i) => i.row.id === history.state?.zoom)?.row.text || ''), null, { timeout: 15000 });
+    await page.evaluate(() => document.activeElement?.blur());
     await page.keyboard.press('Alt+ArrowLeft');
     await page.waitForFunction(() => document.documentElement.dataset.view === 'plan' && !!document.querySelector('#plan-sheet .dc-grid'));
+    await sleep(1200); // the page it was zoomed into saves as it closes, and the hours redraw once
   });
 
   const px = () => page.evaluate(() => parseFloat(document.querySelector('#plan-sheet .dc-grid').style.getPropertyValue('--px')));

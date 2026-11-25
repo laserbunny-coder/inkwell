@@ -122,9 +122,9 @@ try {
     assert.deepEqual(await p.locator('.zd-wings .zd-chip').allInnerTexts(), ['Two Blood']);
   });
 
-  await check('a step on the Desk opens as its own page', async () => {
+  await check('a step on the Desk opens zoomed in, the way any line does', async () => {
     await p.locator('.zd-step', { hasText: 'Board Reel 2' }).click();
-    await p.waitForFunction(() => /Board Reel 2/.test(document.querySelector('.np-tx')?.textContent || ''));
+    await p.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && !!history.state?.zoom && /Board Reel 2/.test(document.querySelector('#outline-editor')?.textContent || ''));
     await stop(p, 'desk');
   });
 

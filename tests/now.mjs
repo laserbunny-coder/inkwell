@@ -32,13 +32,15 @@ const all = (p) => p.evaluate(() => new Promise((res) => {
 }));
 const task = async (p, text) => (await all(p)).find((r) => r.text === text && r.fields?.task);
 const pointer = async (p) => (await all(p)).find((r) => r.id === 'settings-plan')?.fields?.now || null;
-const go = async (p, place) => {
+const go = async (p, place, wait = true) => {
   await p.evaluate((x) => { history.pushState(x, ''); dispatchEvent(new PopStateEvent('popstate', { state: x })); }, place);
-  await p.waitForFunction((x) => document.documentElement.dataset.view === 'plan' && document.querySelector('#plan-sheet')?.dataset.tab === x.tab, place);
+  if (wait && place.tab !== 'now') await p.waitForFunction((x) => document.documentElement.dataset.view === 'plan' && document.querySelector('#plan-sheet')?.dataset.tab === x.tab, place);
   await settle(p);
 };
 const onNow = async (p) => { await go(p, { view: 'plan', tab: 'now' }); await p.waitForSelector('#plan-sheet .now-view'); };
 const heading = (p) => p.locator('#plan-sheet .np-tx').first().innerText();
+// Today and Now as one (Nov 25 2026): Now is the zoom into the one thing, with the strip at the foot.
+const zoomedOn = (p, text) => p.waitForFunction((t) => document.documentElement.dataset.view === 'notebook' && (window.__plan.items || []).find((i) => i.row.id === history.state?.zoom)?.row.text === t && !window.__nowZoom.el.hidden, text, { timeout: 8000 });
 const thing = (p) => p.locator('#plan-sheet .now-thing').first().innerText();
 const settle = async (p) => { await sleep(350); await still(p); };
 const press = async (p, key) => { await p.evaluate(() => document.activeElement?.blur?.()); await p.keyboard.press(key); await settle(p); };
@@ -69,23 +71,22 @@ try {
     assert.equal(await row.locator('.pl-est').isVisible(), false, 'no estimate or timer on the row');
   });
 
-  await check('Now is simply the first thing: no Begin step', async () => {
-    await onNow(page);
-    assert.equal(await heading(page), 'Two-minute hook');
-    assert.equal(await page.locator('#plan-sheet [data-now="begin"]').count(), 0, 'no gate');
+  await check('Now is simply the first thing, zoomed in: no Begin step', async () => {
+    await press(page, 'Alt+Backquote');
+    await zoomedOn(page, 'Two-minute hook');
+    assert.equal(await page.locator('[data-now="begin"]').count(), 0, 'no gate');
     await shot(page, 'now-page');
   });
 
   await check('a calendar event takes over five minutes before it starts, then the thing is picked back up', async () => {
     await page.clock.setSystemTime(new Date(`${TODAY}T14:56:00-08:00`));
-    await page.evaluate(() => window.__plan.redraw());
-    await settle(page);
+    await onNow(page);
     assert.equal(await thing(page), 'Private lesson');
     assert.equal(await page.locator('#plan-sheet .now-eyebrow').innerText(), 'IN 4 MINUTES');
     await shot(page, 'now-event');
     await page.locator('#plan-sheet .now-btn', { hasText: 'It is over' }).click();
     await settle(page);
-    await page.waitForSelector('#plan-sheet .np-tx');
+    await zoomedOn(page, 'Two-minute hook');
     assert.equal(await page.locator('#plan-sheet [data-event]').count(), 0, 'the event has let go');
     await page.clock.setSystemTime(new Date(`${TODAY}T16:10:00-08:00`));
     assert.deepEqual(page.errors, []);
@@ -94,12 +95,12 @@ try {
 
   // ---------- phone ----------
   const { page: phone } = await open({ width: 412, height: 915 }, { hasTouch: true, isMobile: true });
-  await check('phone: the Now page fits, nothing spills', async () => {
+  await check('phone: Now fits, nothing spills', async () => {
     await go(phone, { view: 'plan', tab: 'day' });
     for (const t of ['Two-minute hook', 'Reply to Nate']) await add(phone, t);
     await phone.evaluate(() => document.activeElement?.blur());
-    await onNow(phone);
-    assert.equal(await heading(phone), 'Two-minute hook');
+    await go(phone, { view: 'plan', tab: 'now' });
+    await zoomedOn(phone, 'Two-minute hook');
     const w = await phone.evaluate(() => [document.documentElement.scrollWidth, innerWidth]);
     assert.ok(w[0] <= w[1], `no sideways scroll (${w[0]} in ${w[1]})`);
     assert.deepEqual(phone.errors, []);

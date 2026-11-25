@@ -384,7 +384,8 @@ export function stopKey(stop, today = isoOf()) {
   if (stop === 'now') return 'now';
   if (stop === 'today') return `day:${today}`;
   if (stop === 'week') return `week:${weekOf(today)[0]}`;
-  if (stop === 'month') return document.querySelector('.zm-ruler [data-stop="month"] .zm-word')?.textContent === 'Year' ? 'year' : `month:${ym(today)}`;
+  if (stop === 'month') return `month:${ym(today)}`;
+  if (stop === 'year') return 'year';
   return null;
 }
 

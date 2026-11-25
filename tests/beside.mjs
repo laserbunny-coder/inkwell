@@ -225,6 +225,7 @@ try {
     assert.equal(await count(page), 1);
     await page.locator('.pane .pane-tab', { hasText: 'Plan' }).click();
     f = await pane(page, 'plan', 'day');
+    await sleep(1000); // the page zoomed into a moment ago saves as it closes, and the plan beside redraws once
     // On the zoom a right click picks a line; its ⋯ has the menu.
     await f.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).locator('.pl-more').evaluate((b) => b.click());
     await f.waitForSelector('.pop-menu .pop-item');

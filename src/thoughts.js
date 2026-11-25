@@ -146,7 +146,7 @@ export async function fileThought(lineId, { ask, items = [], today = isoOf(), du
         const back = [];
         for (const u of undo.reverse()) back.push(...(await u()));
         const r = await getEntry(lineId);
-        if (r) { const kept = { ...r, deleted: false, updated_at: Date.now() }; await putEntries([kept]); back.push(kept); }
+        if (r) { const kept = { ...r, deleted: false, fields: { ...r.fields, thought: { ...(r.fields?.thought || {}), state: 'kept' } }, updated_at: Date.now() }; await putEntries([kept]); back.push(kept); }
         await wrote(back);
       }
     });

@@ -72,7 +72,7 @@ try {
   await blur(p);
 
   await check('Today has two quiet dividers, Afternoon and Evening, as places in the order', async () => {
-    await p.keyboard.press('3');
+    await p.keyboard.press('4');
     await at(p, 'today');
     await p.waitForSelector('#plan-sheet .pl-part');
     assert.deepEqual(await p.locator('#plan-sheet .pl-part').allTextContents(), ['Afternoon', 'Evening']);
@@ -160,7 +160,7 @@ try {
   });
 
   await check('a day goes into its own page and back out to its week', async () => {
-    await p.keyboard.press('2');
+    await p.keyboard.press('3');
     await at(p, 'week');
     const day = await p.evaluate(() => { const t = window.__plan.today; const d = new Date(`${t}T12:00:00`); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); });
     await p.evaluate((d) => window.__plan.intoDay(d), day);
@@ -180,7 +180,7 @@ try {
   });
 
   await check('Month is four weeks, with days as dots, and a line dropped on a week goes there', async () => {
-    await p.keyboard.press('1');
+    await p.keyboard.press('2');
     await at(p, 'month');
     await p.waitForSelector('.mo-weeks');
     assert.equal(await p.locator('.mo-week').count(), 4);
@@ -314,8 +314,8 @@ try {
   await check('phone: on the Year a held line slides onto another month', async () => {
     const { id } = await task(ph, 'Board scene 3');
     await ph.evaluate(async (id) => { const t = window.__plan.today; await window.__plan.applyWhen([id], { span: { kind: 'month', start: `${t.slice(0, 7)}-01` } }, 'month'); }, id);
-    await ph.locator('.zm-stop[data-stop="month"]').tap();
-    // Month was the stop already: Month again is the Year.
+    // The Year has its own stop again (Today and Now as one, Nov 25 2026).
+    await ph.locator('.zm-stop[data-stop="year"]').tap();
     await ph.waitForFunction(() => document.querySelector('#plan-sheet')?.dataset.tab === 'year' && document.querySelector('.yr-month .yr-line'));
     await sleep(600);
     assert.ok(await ph.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'no sideways scroll');

@@ -34,23 +34,26 @@ import { frame } from './workpages.js';
 import { plan, deskPage } from './talking.js';
 import { lookHere, hidden } from './pagesettings.js';
 import { dayOff } from '../edition.js';
+import { nowState, goNow } from '../nowzoom.js';
 
 const roomy = media('roomy');
 const touch = media('touch');
 const calm = matchMedia('(prefers-reduced-motion: reduce)');
 
 // The seven stops, in order; the number keys follow the list.
+// Today and Now as one (Nov 25 2026): Today sits in the middle, and Now is
+// Today zoomed into a task (nowzoom.js). The Year has its stop back.
 export const STOPS = [
-  { id: 'month', word: 'Month', title: 'Month: the next four weeks (again for the Year)' },
+  { id: 'year', word: 'Year', title: 'Year: twelve months from now' },
+  { id: 'month', word: 'Month', title: 'Month: the next four weeks' },
   { id: 'week', word: 'Week', title: 'Week: seven days and what’s for any day this week' },
-  { id: 'today', word: 'Today', title: 'Today: the list, the day’s page or the hours' },
-  { id: 'now', word: 'Now', title: 'Now: the one thing you’re on' },
+  { id: 'today', word: 'Today', title: 'Today: the day; zoom into a task and it’s Now' },
   { id: 'project', word: 'Project', title: 'Project: the one you’re in, or the last one you were in' },
   { id: 'desk', word: 'Desk', title: 'Desk: your projects, what needs you and who’s working' },
   { id: 'library', word: 'Library', title: 'Library: every area and project' }
 ];
 const at = (id) => STOPS.findIndex((s) => s.id === id);
-const NOW = at('now'); // everything about sides counts from Now, wherever it sits in the list
+const NOW = at('today'); // everything about sides counts from Today, the middle
 
 const PIECE_VIEWS = ['world', 'project', 'write', 'grid', 'production', 'deliver', 'stage', 'compare'];
 // The stop a place belongs to.
@@ -58,8 +61,10 @@ export function stopOf(place) {
   const v = place?.view || 'write';
   if (v === 'plan') {
     const t = place.tab || 'week';
-    return t === 'now' ? 'now' : t === 'year' || t === 'ahead' || t === 'pace' ? 'month' : t === 'week' ? 'week' : 'today';
+    return t === 'year' ? 'year' : t === 'ahead' || t === 'pace' ? 'month' : t === 'week' ? 'week' : 'today';
   }
+  // Zoomed into a task on today: that's Now, which is Today's.
+  if (v === 'notebook' && place.zoom && nowState.zoom === place.zoom) return 'today';
   if (v === 'notebook') return !place.pageId || String(place.pageId).startsWith('day-') ? 'today' : 'project';
   if (v === 'desk') return 'desk';
   if (['library', 'drawer', 'tags'].includes(v)) return 'library';
@@ -102,10 +107,10 @@ async function projectPlace() {
 
 async function placeOfStop(id) {
   const today = isoToday();
+  if (id === 'year') return { view: 'plan', tab: 'year' };
   if (id === 'month') return { view: 'plan', tab: 'ahead' };
   if (id === 'week') return { view: 'plan', tab: 'week' };
   if (id === 'today') return facePlace(todayFace(), today);
-  if (id === 'now') return { view: 'plan', tab: 'now' };
   if (id === 'project') return projectPlace();
   if (id === 'desk') return { view: 'desk' };
   return { view: 'library', area: null };
@@ -160,21 +165,16 @@ function dayWordOf(p) {
   const dt = new Date(`${d}T12:00`);
   return `${dt.toLocaleDateString('en-US', { weekday: 'short' })} ${dt.getDate()}`;
 }
-const onYear = (p = lastPlace) => p?.view === 'plan' && p.tab === 'year';
-// The Year, from the Month stop (or back to the four weeks with on false).
-export function toYear(on = true) {
-  return zoomGo(on ? { view: 'plan', tab: 'year' } : { view: 'plan', tab: 'ahead' }, on ? 'out' : 'in');
-}
-
 export async function toStop(id) {
   // Studio without the day tools: only Project, Desk and Library (edition.js).
-  if (dayOff() && ['month', 'week', 'today', 'now'].includes(id)) id = 'desk';
+  if (dayOff() && ['year', 'month', 'week', 'today', 'now'].includes(id)) id = 'desk';
+  // Now is Today zoomed into the one thing.
+  if (id === 'now') return goNow();
   const from = stopOf(lastPlace);
-  // Month again: the Year, and again back to the four weeks.
-  if (id === 'month' && from === 'month') return toYear(!onYear());
   // The Project stop again from inside a piece: out to the project's own page.
-  // Now again while a line is open: back to the one thing.
-  if (id === from && id !== 'project' && !(id === 'now' && lastPlace?.line)) return;
+  // Today again while zoomed into a task (Now): out to the day.
+  const inNow = from === 'today' && lastPlace?.view === 'notebook' && !!lastPlace.zoom && nowState.zoom === lastPlace.zoom;
+  if (id === from && id !== 'project' && !inNow) return;
   const place = await placeOfStop(id);
   if (id === 'today') faceTo(todayFace());
   if (JSON.stringify(place) === JSON.stringify(lastPlace)) return;
@@ -185,12 +185,12 @@ export async function toStop(id) {
 export async function zoomOut() {
   const p = lastPlace;
   const s = stopOf(p);
-  if (s === 'now') return toStop('today');
+  if (s === 'today' && p?.view === 'notebook' && p.zoom && nowState.zoom === p.zoom) return toStop('today');
   if (s === 'today' && p?.view === 'plan' && p.day) { const w = weekOf(p.day)[0]; return zoomGo({ view: 'plan', tab: 'week', ...(w === weekOf(isoOf())[0] ? {} : { week: w }) }, 'out'); }
   if (s === 'today') return toStop('week');
   if (s === 'week' && p?.week && p.week > weekOf(isoOf())[0]) return zoomGo({ view: 'plan', tab: 'ahead', week: p.week }, 'out');
   if (s === 'week') return toStop('month');
-  if (s === 'month') return onYear(p) ? null : toYear(true);
+  if (s === 'month') return toStop('year');
   if (s === 'project') {
     if (p?.view === 'world') return toStop('desk');
     let w = state.worldId && (await liveWorld(state.worldId));
@@ -203,13 +203,13 @@ export async function zoomOut() {
 }
 // In one step: toward Now.
 export function zoomIn() {
-  if (onYear()) return toYear(false);
   const i = at(stopOf(lastPlace));
+  // On the day: in to Now, the one thing zoomed into.
+  if (i === NOW && lastPlace?.view === 'plan') return goNow();
   if (i < 0 || i === NOW) return null;
   return toStop(STOPS[i + (i < NOW ? 1 : -1)].id);
 }
 function walk(dir) {
-  if (onYear() && dir > 0) return toStop('week');
   const i = at(stopOf(lastPlace));
   const to = STOPS[(i < 0 ? NOW : i) + dir];
   return to ? toStop(to.id) : null;
@@ -287,7 +287,7 @@ function build() {
   const halfR = make('div', 'zm-half r');
   halfL.append(make('span', 'zm-cap', 'when'));
   STOPS.forEach((s, i) => {
-    const b = make('button', `zm-stop${s.id === 'now' ? ' home' : ''}`);
+    const b = make('button', `zm-stop${s.id === 'today' ? ' home' : ''}`);
     b.type = 'button';
     b.dataset.stop = s.id;
     b.title = `${s.title} (${i + 1})`;
@@ -402,20 +402,14 @@ function place() {
 function light(place) {
   lit = stopOf(place);
   if (!ruler) return;
-  // On the Year the Month stop reads Year, and stays lit.
-  const word = ruler.querySelector('[data-stop="month"] .zm-word');
-  if (word) word.textContent = onYear(place) ? 'Year' : 'Month';
   // Another day on Today's stop: the stop says which (Part 3).
   const tw = ruler.querySelector('[data-stop="today"] .zm-word');
   if (tw) tw.textContent = dayWordOf(place);
   for (const b of ruler.querySelectorAll('.zm-stop')) {
     if (b.dataset.stop === lit) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   }
-  // Visiting a line (not the one thing): the Now dot is hollow (Part 2).
-  const home = ruler.querySelector('[data-stop="now"]');
-  const away = lit === 'now' && !!place?.line;
-  home?.classList.toggle('away', away);
-  if (home) home.title = away ? 'Back to the one thing (4)' : `${STOPS[NOW].title} (${NOW + 1})`;
+  // Zoomed into a task on today: Today reads Now.
+  if (tw && lit === 'today' && place?.view === 'notebook' && place.zoom && nowState.zoom === place.zoom) tw.textContent = 'Now';
   body.classList.toggle('in-piece', !!place && (!place.view || place.view === 'write' || (place.view === 'notebook' && !!place.pageId && !String(place.pageId).startsWith('day-'))));
 }
 
@@ -491,7 +485,7 @@ function key(e) {
   // Alt + J: the thought box, from anywhere, in text too.
   if (e.altKey && !m && !e.shiftKey && e.code === 'KeyJ') { e.preventDefault(); thoughtBox(); return; }
   // Alt + ` (the key left of 1): Now, from anywhere, in text too.
-  if (e.altKey && !m && !e.shiftKey && e.code === 'Backquote') { e.preventDefault(); toStop('now'); return; }
+  if (e.altKey && !m && !e.shiftKey && e.code === 'Backquote') { e.preventDefault(); goNow(); return; }
   if (e.defaultPrevented) return;
   if (m || e.altKey) return;
   if (inText(t) || inText(document.activeElement) || busy() || e.repeat && /^[1-7]$/.test(e.key)) return;
@@ -560,9 +554,9 @@ function edges() {
 }
 
 addCommands(() => [
-  { group: 'go', label: 'Now, from anywhere', keys: 'Alt+`', words: ['now', 'one thing', 'ruler', 'zoom', 'current'], run: () => toStop('now'), when: () => !inPane },
-  { group: 'go', label: 'Month: the next four weeks', keys: '1', words: ['month', 'four weeks', 'weeks', 'ahead', 'zoom', 'ruler'], run: () => (onYear() ? toYear(false) : toStop('month')), when: () => !inPane },
-  { group: 'go', label: 'Year: twelve months from now', keys: '1 twice', words: ['year', 'months', 'zoom', 'ruler', 'sometime this year', 'later'], run: () => toYear(true), when: () => !inPane },
+  { group: 'go', label: 'Now: zoom into the one thing, from anywhere', keys: 'Alt+`', words: ['now', 'one thing', 'ruler', 'zoom', 'current'], run: () => goNow(), when: () => !inPane },
+  { group: 'go', label: 'Month: the next four weeks', keys: '2', words: ['month', 'four weeks', 'weeks', 'ahead', 'zoom', 'ruler'], run: () => toStop('month'), when: () => !inPane },
+  { group: 'go', label: 'Year: twelve months from now', keys: '1', words: ['year', 'months', 'zoom', 'ruler', 'sometime this year', 'later'], run: () => toStop('year'), when: () => !inPane },
   { group: 'new', label: 'Get it out of your head: a thought, filed', keys: 'Alt+J', words: ['thought', 'capture', 'out of your head', 'note', 'idea', 'inbox', 'jot'], run: () => thoughtBox(), when: () => !inPane },
   { group: 'go', label: 'Zoom out one step', keys: 'Esc', words: ['zoom', 'out', 'step out', 'further', 'ruler', 'back'], run: () => zoomOut(), when: () => !inPane },
   { group: 'go', label: 'Zoom in one step', keys: 'Enter', words: ['zoom', 'in', 'step in', 'closer', 'ruler'], run: () => zoomIn(), when: () => !inPane }
@@ -579,6 +573,8 @@ export function wireZoom() {
   queueMicrotask(() => setTimeout(place, 0));
   roomy.addEventListener('change', () => setTimeout(place, 0));
   document.addEventListener('inkwell:place', (e) => light(e.detail));
+  // Now came or went under the same place (nowzoom.js decides a moment later).
+  document.addEventListener('inkwell:nowzoom', () => light(lastPlace));
   document.addEventListener('inkwell:needs', (e) => count(e.detail || 0));
   // Places inside the stops ask for the zoom's motion (nowpage.js zoomTo).
   document.addEventListener('inkwell:zoomto', (e) => {

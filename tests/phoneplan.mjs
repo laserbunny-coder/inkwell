@@ -155,8 +155,8 @@ try {
     assert.equal(await phone.locator('.pane-frame').count(), 0, 'sliding a task opened nothing');
     assert.ok(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'nothing spills');
     await phone.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('.pl-words').tap();
-    await phone.waitForFunction(() => /Call Dana/.test(document.querySelector('#plan-sheet .np-tx')?.textContent || ''));
-    assert.equal(await phone.locator('.pane-frame').count(), 0, 'it opens in place, as a page');
+    await phone.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && /Call Dana/.test((window.__plan.items || []).find((i) => i.row.id === history.state?.zoom)?.row.text || ''));
+    assert.equal(await phone.locator('.pane-frame').count(), 0, 'it opens in place, zoomed in');
     await phone.goBack();
     await phone.waitForFunction(() => document.querySelector('#plan-sheet')?.dataset.tab === 'day' && document.querySelectorAll('#plan-sheet .pl-task').length === 3);
   });

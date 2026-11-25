@@ -179,9 +179,12 @@ try {
     await until(() => sheet(page).locator('.now-heard').count());
     await settle(page);
     await press(page, 'b');
-    assert.equal(await thing(page), 'Storyboard scene three');
-    await press(page, 'd');
-    await press(page, 'd');
+    // The one thing is Now zoomed in (Today and Now as one, Nov 25 2026).
+    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && (window.__plan.items || []).find((i) => i.row.id === history.state?.zoom)?.row.text === 'Storyboard scene three', null, { timeout: 8000 });
+    await page.evaluate(() => window.__plan.now.done());
+    await settle(page);
+    await page.evaluate(() => window.__plan.now.done());
+    await settle(page);
     await toToday(page);
     assert.equal(await sheet(page).locator('[data-now="talkday"]').count(), 0);
   });
@@ -289,6 +292,7 @@ try {
     await phone.clock.setSystemTime(new Date(at('21:10')));
     await phone.reload();
     await phone.waitForFunction(() => document.documentElement.dataset.started === '1');
+    await sleep(1500); // it opens on Now, which zooms into the one thing a moment later
     await toToday(phone);
     await sheet(phone).locator('[data-now="closeday"]').first().tap();
     await onNow(phone);
