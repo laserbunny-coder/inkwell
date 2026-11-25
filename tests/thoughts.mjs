@@ -63,8 +63,10 @@ const all = (p) => p.evaluate(() => new Promise((res) => {
   const r = indexedDB.open('writing');
   r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').getAll(); q.onsuccess = () => res(q.result); };
 }));
-const onNow = (p) => p.waitForFunction(() => document.documentElement.dataset.view === 'plan' && document.querySelector('#plan-sheet')?.dataset.tab === 'now' && !!document.querySelector('#plan-sheet .now-view'));
-const thing = (p) => p.locator('#plan-sheet .np-tx').first().innerText();
+// Now is the zoom into the one thing (Today and Now as one, Nov 25 2026).
+const onNow = (p) => p.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && !!history.state?.zoom && window.__nowZoom && !window.__nowZoom.el.hidden, null, { timeout: 8000 });
+const nowStill = (p) => p.evaluate(() => document.documentElement.dataset.view === 'notebook' && !!history.state?.zoom && !window.__nowZoom.el.hidden);
+const thing = (p) => p.evaluate(() => (window.__plan.items || []).find((i) => i.row.id === history.state?.zoom)?.row.text || '');
 const go = async (p, place) => { await p.evaluate((pl) => { history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); }, place); await p.waitForFunction((pl) => document.documentElement.dataset.view === pl.view, place); await settle(p); };
 const toNow = async (p) => { await go(p, { view: 'plan', tab: 'now' }); await onNow(p); };
 const toPage = (p) => go(p, { view: 'notebook', pageId: `day-${TODAY}` });
@@ -106,13 +108,13 @@ try {
     await shot(page, 'out-line');
     await page.locator('#zm-thought-in').press('Escape');
     assert.equal(await page.locator('.zm-thought').isHidden(), true, 'Esc closes it');
-    assert.equal(await page.evaluate(() => document.querySelector('#plan-sheet').dataset.tab), 'now', 'and stays on Now');
+    assert.equal(await nowStill(page), true, 'and stays on Now');
   });
 
   await check('a thought goes on today’s page with the time, in his words, and Now stays', async () => {
     await think(page, 'Kenji sings about the dentist');
     assert.equal(await thing(page), 'Write the two-minute hook');
-    assert.equal(await page.evaluate(() => document.querySelector('#plan-sheet').dataset.tab), 'now');
+    assert.equal(await nowStill(page), true);
     const l = await until(() => line(page, 'Kenji sings about the dentist'));
     assert.equal(l.text, '9:04 am Kenji sings about the dentist');
     assert.equal(await page.locator('.zm-thought').isHidden(), true, 'the box goes');
@@ -198,7 +200,7 @@ try {
     await page.waitForFunction(() => !document.querySelector('.capture')?.hidden);
     await page.keyboard.press('Escape');
     await settle(page);
-    assert.equal(await page.evaluate(() => document.querySelector('#plan-sheet').dataset.tab), 'now');
+    assert.equal(await nowStill(page), true);
   });
 
   await check('their switches went: both are simply on', async () => {

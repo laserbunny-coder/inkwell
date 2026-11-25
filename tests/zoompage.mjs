@@ -1,4 +1,5 @@
-// The zoom, Part 2 (Nov 2026): Now as a page. The one thing as its own page
+// Today and Now as one (Nov 25 2026): Now is the zoom into a task on today,
+// with the strip at the foot. Before that (Nov 2026), Now was a page: The one thing as its own page
 // (where-line, heading, circle, notes, Not now, "N more today"); First light
 // as the first line of the day; any line opens there without moving
 // ("Bring to today", "Back to", a hollow Now dot); the door into a step's
@@ -61,9 +62,19 @@ try {
   await add(p, 'Color pass on the trailer next week', true);
   await blur(p);
 
-  await check('Bible reading is the first line of the day, and Now opens on it as a page', async () => {
-    await p.keyboard.press('4');
-    await at(p, 'now');
+  const strip = (p) => p.locator('.nz-strip:not([hidden])');
+  const zoomedOn = async (p, re) => {
+    await p.waitForFunction((src) => {
+      const st = history.state;
+      const t = document.querySelector('.zoom-root, .notebook [data-zoom-root]');
+      return st?.view === 'notebook' && st?.zoom && new RegExp(src).test(window.__plan.items.find((i) => i.row.id === st.zoom)?.row.text || '');
+    }, re, { timeout: 8000 });
+    await sleep(300);
+  };
+
+  await check('Bible reading is the first line of the day, and Now opens on it as its own page', async () => {
+    await p.keyboard.press('Alt+Backquote');
+    await at(p, 'today');
     await p.waitForSelector('.np-tx');
     assert.equal(await heading(p), 'Bible reading');
     assert.match(await p.locator('.np-crumb').innerText(), /Every day/);
@@ -71,83 +82,75 @@ try {
     assert.ok(await task(p, '^Bible reading$'), 'a line of the day');
   });
 
-  await check('read: Bible reading is done and the next line simply is the one thing (no gate)', async () => {
+  await check('read: Bible reading is done, and Now is the zoom into the next task, with the strip at the foot', async () => {
     await p.keyboard.press('i');
-    await p.waitForFunction(() => document.querySelector('.np-tx')?.textContent === 'Rewrite the cold open');
+    await zoomedOn(p, '^Rewrite the cold open');
     assert.equal((await task(p, '^Bible reading$')).done, true);
-    assert.equal(await p.locator('.now-acts .now-btn.go', { hasText: 'Begin' }).count(), 0, 'no Begin gate');
-    assert.match(await p.locator('.np-foot').innerText(), /Not now/);
-    assert.match(await p.locator('.np-foot').innerText(), /1 more today/);
+    await strip(p).waitFor();
+    const s = await strip(p).innerText();
+    assert.match(s, /Today/);
+    assert.match(s, /Not now/);
+    assert.match(s, /\d of \d/);
+    assert.match(s, /Next/);
+    assert.equal(await p.evaluate(() => document.querySelector('.zm-stop[aria-current]')?.dataset.stop), 'today');
+    assert.equal(await p.locator('.zm-stop[data-stop="today"]').innerText(), 'Now');
   });
 
-  await check('Write a note puts a line under it, and it shows on the page', async () => {
-    await p.fill('.np-notein', 'Start on the rooftop');
+  await check('the title is the line itself: the cursor goes in, and [] makes a box under it', async () => {
+    const title = p.locator('.notebook .ProseMirror [data-zoom-root], .notebook .ProseMirror .zoom-root').first();
+    await title.click();
+    await p.keyboard.press('End');
     await p.keyboard.press('Enter');
-    await p.waitForFunction(() => /Start on the rooftop/.test(document.querySelector('.np-notes .pl-kids')?.textContent || ''));
+    await p.keyboard.type('[] Find the rooftop location');
+    await sleep(600);
+    assert.ok(await p.evaluate(() => /Find the rooftop location/.test(document.querySelector('.notebook')?.textContent || '')));
+    assert.ok(await p.locator('#outline-editor [role="checkbox"]').count() >= 1, 'a box');
     await blur(p);
+  });
+
+  await check('Alt + Down is the next task on today, Alt + Up the one before', async () => {
+    await blur(p);
+    await p.keyboard.press('Alt+ArrowDown');
+    await zoomedOn(p, '^Board scene 3');
+    await p.keyboard.press('Alt+ArrowUp');
+    await zoomedOn(p, '^Rewrite the cold open');
   });
 
   await check('Not now: later today, enough for today, or any day this week (3)', async () => {
-    await p.keyboard.press('n');
-    await p.waitForSelector('.now-choice');
-    assert.deepEqual((await p.locator('.now-choice .nc-l').allInnerTexts()), ['Later today', 'Enough for today', 'Any day this week']);
+    await strip(p).locator('[data-nz="notnow"]').click();
+    await p.waitForSelector('.menu, [role="menu"]');
+    const txt = await p.locator('.menu, [role="menu"]').first().innerText();
+    for (const w of ['Later today', 'Enough for today', 'Any day this week']) assert.match(txt, new RegExp(w));
     await p.keyboard.press('Escape');
-    await p.waitForSelector('.now-choice', { state: 'detached' });
   });
 
-  await check('a line from another week only opens: nothing moves, the Now dot is hollow, Back to and Bring to today', async () => {
+  await check('Alt + Left from the task goes out to the day', async () => {
+    await p.keyboard.press('Escape');
+    await blur(p);
+    await p.keyboard.press('Alt+ArrowLeft');
+    await at(p, 'today');
+    await p.waitForFunction(() => history.state?.view === 'plan');
+    assert.equal(await strip(p).count(), 0);
+  });
+
+  await check('a line on today, opened from Today, is Now zoomed in', async () => {
+    await p.locator('.pl-words', { hasText: 'Board scene 3' }).first().click();
+    await zoomedOn(p, '^Board scene 3');
+    await strip(p).waitFor();
+  });
+
+  await check('a line from another week opens zoomed in, with no Now strip, and nothing moves', async () => {
     const before = await task(p, 'Color pass');
     assert.ok(before.span || before.day, 'planned for later');
     await p.evaluate((id) => window.__plan.openLine(id), before.id);
-    await p.waitForFunction(() => history.state?.line);
-    await at(p, 'now');
-    assert.equal(await heading(p), 'Color pass on the trailer');
-    assert.equal(await p.locator('.zm-stop.home.away').count(), 1, 'hollow dot');
-    const foot = await p.locator('.np-foot').innerText();
-    assert.match(foot, /Bring to today/);
-    assert.match(foot, /Back to: Rewrite the cold open/);
+    await zoomedOn(p, '^Color pass');
+    await sleep(400);
+    assert.equal(await strip(p).count(), 0);
     assert.deepEqual(await task(p, 'Color pass'), before, 'it stays where it was');
   });
 
-  await check('4 goes back to the one thing', async () => {
-    await blur(p);
-    await p.keyboard.press('4');
-    await p.waitForFunction(() => !history.state?.line && document.querySelector('.np-tx')?.textContent === 'Rewrite the cold open');
-    assert.equal(await p.locator('.zm-stop.home.away').count(), 0);
-  });
-
-  await check('Bring to today (B): on today, after the one thing, and he is on it', async () => {
-    const id = (await task(p, 'Color pass')).id;
-    await p.evaluate((x) => window.__plan.openLine(x), id);
-    await p.waitForFunction(() => history.state?.line);
-    await blur(p);
-    await p.keyboard.press('b');
-    await p.waitForFunction(() => !history.state?.line && document.querySelector('.np-tx')?.textContent === 'Color pass on the trailer');
-    assert.equal((await task(p, 'Color pass')).day, await p.evaluate(() => window.__plan.today));
-  });
-
-  await check('a line on today, opened from Today, becomes the one thing', async () => {
-    await p.keyboard.press('3');
-    await at(p, 'today');
-    await p.locator('.pl-words', { hasText: 'Board scene 3' }).first().click();
-    await p.waitForFunction(() => history.state?.tab === 'now' && !history.state?.line && document.querySelector('.np-tx')?.textContent === 'Board scene 3', null, { timeout: 8000 });
-  });
-
-  await check('a step added inside a piece shows the piece under its heading; Enter is in its text, at the end', async () => {
-    const t = await task(p, 'Polish the ending');
-    assert.ok(t?.for, 'tied to the piece it was added in');
-    await p.evaluate((x) => window.__plan.openLine(x), t.id);
-    await p.waitForSelector('.np-door');
-    await p.waitForFunction(() => document.querySelector('.np-door-h b')?.textContent !== '…');
-    await blur(p);
-    await p.keyboard.press('Enter');
-    await p.waitForFunction(() => document.documentElement.dataset.view !== 'plan', null, { timeout: 8000 });
-    await p.waitForFunction(() => document.activeElement?.isContentEditable, null, { timeout: 4000 });
-    await sleep(400); // the editor settles its cursor a frame or two later
-  });
-
   await check('Alt + J opens the thought box anywhere; Enter files it and it closes', async () => {
-    await p.keyboard.press('Escape');
+    await blur(p);
     await p.keyboard.press('Alt+KeyJ');
     await p.waitForSelector('.zm-thought:not([hidden]) input');
     await p.keyboard.type('Call about the grade');
@@ -166,14 +169,17 @@ try {
   await sleep(350);
   await ph.keyboard.press('Enter');
   await sleep(500);
-  await check('phone: Now is the same page, and Not now fits without sideways scroll', async () => {
-    await ph.locator('.zm-stop[data-stop="now"]').tap();
-    await at(ph, 'now');
-    await ph.waitForSelector('.np-tx');
-    await ph.locator('[data-now="notnow"]').tap();
-    await ph.waitForSelector('.now-choice');
+  await check('phone: tapping a task on Today is Now; the strip sits over the ruler and fits', async () => {
+    await ph.locator('.zm-stop[data-stop="today"]').tap();
+    await at(ph, 'today');
+    await ph.locator('.pl-words', { hasText: 'Rewrite the cold open' }).first().tap();
+    await zoomedOn(ph, '^Rewrite the cold open');
+    await strip(ph).waitFor();
     assert.ok(await ph.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll');
     assert.equal(await ph.locator('.zm-ruler').isVisible(), true);
+    const s = await strip(ph).boundingBox();
+    const r = await ph.locator('.zm-ruler').boundingBox();
+    assert.ok(s.y + s.height <= r.y + 1, 'the strip sits above the ruler');
   });
   await pctx.close();
 } finally {

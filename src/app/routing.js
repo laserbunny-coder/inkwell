@@ -171,7 +171,8 @@ async function go(place) {
     } else if (!notebook.page) await notebook.openDay();
     else {
       if (place.line) notebook.focusLine(place.line);
-      remember({ view: 'notebook', pageId: notebook.page.id });
+      // Still zoomed in where it was going: the place keeps its zoom.
+      remember({ view: 'notebook', pageId: notebook.page.id, ...(place.zoom && place.zoom === notebook.zoom ? { zoom: place.zoom } : {}) });
       // Back on a page that stayed open: its plan may have changed meanwhile.
       plan?.showDay(notebook.page);
     }

@@ -16,7 +16,7 @@
 
 import { popMenu } from './menu.js';
 import { getEntry } from './db.js';
-import { dayPlan, weave, addDays, isoOf, setTask, tickTask, weekOf, PLAN_ID, savePlanSettings, TASKS_PAGE } from './tasks.js';
+import { loadTasks, dayPlan, weave, addDays, isoOf, setTask, tickTask, weekOf, PLAN_ID, savePlanSettings, TASKS_PAGE } from './tasks.js';
 import { clockWord } from './calendar.js';
 import { media } from './device.js';
 import { make } from './dom.js';
@@ -24,6 +24,8 @@ import { talkView, heardView, closeView } from './nowends.js';
 import { TrainNow } from './nowtrain.js';
 import { LightNow } from './nowlight.js';
 import { isLight, lineName } from './firstlight.js';
+import { isTraining } from './training.js';
+import { inPane } from './panes.js';
 import { pageView, pageTarget, zoomTo, tieMenu, forOf } from './nowpage.js';
 import './now.css';
 
@@ -176,6 +178,16 @@ export class Now {
     p.restore(sheet, held);
     if (typing) sheet.querySelector(`#${CSS.escape(typing)}`)?.focus({ preventScroll: true });
     p.just = null;
+    // Today and Now as one (Nov 25 2026): when the one thing is a plain task,
+    // Now is the zoom into it (nowzoom.js), not this page. First light,
+    // Training, a lesson or meeting, Talk and Close keep the page.
+    const row = m.cur?.item.row;
+    const plain = row && !visit && !mode && !m.active && !isLight(row) && !isTraining(row);
+    // Once per arrival: the page redraws often while it is up.
+    if (plain && !inPane && p.tab === 'now' && !(this.zoomed?.id === row.id && Date.now() - this.zoomed.at < 1500)) {
+      this.zoomed = { id: row.id, at: Date.now() };
+      document.dispatchEvent(new CustomEvent('inkwell:now-go'));
+    }
   }
 
 
@@ -394,6 +406,8 @@ export class Now {
     this.ctxOpen = false;
     await this.save({ task: null, since: 0, last });
     await this.p.refresh();
+    // Zoomed into the task (Now as the zoom), the plan isn't drawn and refresh leaves its lines as they were.
+    if (!this.p.dayShown && !this.p.pageShown && !this.p.stepsShown) this.p.items = await loadTasks();
     const m = this.model();
     if (m.cand && !m.active) await this.begin(m.cand.item.row.id);
   }

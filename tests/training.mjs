@@ -69,6 +69,7 @@ async function dayIs(p, day, time = '13:30') { await p.clock.setSystemTime(new D
 async function beginTraining(p) {
   const id = (await lines(p, await p.evaluate(() => window.__plan.today)))[0].id;
   await p.evaluate((id) => window.__plan.now.begin(id), id);
+  await toNow(p); // a plain task as the one thing is Now zoomed in (Nov 25 2026); Training keeps its page
   await settle(p);
 }
 const skipTo = async (p, name) => { for (let n = 0; n < 20; n++) { if ((await thing(p)).startsWith(name)) return; await press(p, 's'); } throw new Error(`never reached ${name}`); };

@@ -21,6 +21,7 @@ import { looseOn } from '../loose.js';
 import { addTask, stepsHome, loadTasks, dayPlan } from '../tasks.js';
 import { readNow } from '../now.js';
 import { EventWarn } from '../eventwarn.js';
+import { NowZoom } from '../nowzoom.js';
 import { writeThought, fileThought, waitingThoughts } from '../thoughts.js';
 import { dayBody, layOutDay, writeClose } from '../dayends.js';
 import { ensureTrainingLine, seedTraining, TRAINING_PAGE } from '../training.js';
@@ -46,6 +47,7 @@ import { openBeside, openEntryBeside, openInMain, openTalk, pull, pullFromProjec
 let tagsPage = null; // the Tags page (set up with capture, below)
 let deskPage = null; // the Desk: every project, what needs you (below)
 let plan = null; // the plan: tasks by day, on a day's page and as Week and Pace (below)
+let nowZoom = null; // Next, Not now and the way back while zoomed into a task on today (nowzoom.js)
 let nowStrip = null; // the warning before a lesson or meeting (eventwarn.js, below)
 let projectPage = null; // what a project's page borrows from the Desk (below)
 let through = null; // Go through: loose lines and the Desk's calls, one at a time (below)
@@ -92,9 +94,11 @@ async function thoughtFromNow(text) {
 }
 // Filed one at a time, in the order they came.
 let filing = Promise.resolve();
+const queued = new Set(); // a thought already on its way isn't filed twice
 function fileSoon(id, { dump = false } = {}) {
-  if (!canAskServer()) return filing;
-  filing = filing.then(() => fileThought(id, { ask: askServer, items: plan?.items || [], today: isoToday(), dump, wrote: (rows) => applyRemote(rows).then(() => notebook.redrawMarks()), toast })).catch((e) => console.warn(e));
+  if (!canAskServer() || queued.has(id)) return filing;
+  queued.add(id);
+  filing = filing.then(() => fileThought(id, { ask: askServer, items: plan?.items || [], today: isoToday(), dump, wrote: (rows) => applyRemote(rows).then(() => notebook.redrawMarks()), toast })).catch((e) => console.warn(e)).finally(() => queued.delete(id));
   return filing;
 }
 // Today's thoughts that didn't get an answer (offline): once there's a way to ask.
@@ -638,6 +642,11 @@ function wireTalking() {
         if (inPane && view() === 'plan') return paneHost()?.hooks.goMain(place);
         return go(place);
       },
+      // Where a task opens zoomed in (the zoom's Now: Today and Now as one, Nov 25 2026).
+      taskPlace: async (id) => {
+        const at = await placeOf(id);
+        return at && at.view === 'notebook' && at.line ? { view: 'notebook', pageId: at.pageId, zoom: at.line } : null;
+      },
       go: (place) => go(place),
       goThrough: () => through.open('carried'),
       off: (name) => hidden().has(name),
@@ -653,7 +662,7 @@ function wireTalking() {
       pull: inPane ? null : () => pullFromProject(),
       pulling: () => !!pull?.isOpen,
       floor: () => pull?.floor() || 0,
-      redrawn: () => { pull?.soon(); nowStrip?.soon(); },
+      redrawn: () => { pull?.soon(); nowStrip?.soon(); nowZoom?.soon(); },
       thought: (text) => thoughtFromNow(text),
       mic: (kind) => micFromNow(kind),
       talkDay: (words) => talkDayFromNow(words),
@@ -682,10 +691,12 @@ function wireTalking() {
   window.__plan = plan;
   // Five minutes before a calendar event, a quiet line at the top (not in a pane).
   if (!inPane) window.__nowStrip = nowStrip = new EventWarn({ plan, off: (name) => hidden().has(name) });
+  // Zoomed into a task on today, that's Now: Next and the way back at the foot (nowzoom.js).
+  if (!inPane) window.__nowZoom = nowZoom = new NowZoom({ plan, notebook: () => notebook, here: () => inNotebook() });
   if (inNotebook() && notebook.page) plan.showDay(notebook.page);
 }
 
-export { nowStrip, openToday, todayOpensOnNow, askServer, asking, blankOnce, canAskServer, capture, captureHere,  deskBackend, deskPage, inToday, landShares, openAsked, openCapture, plan, projectPage, scribeKept, setAsking, showCapture, tagsPage, wireTalking, writeOut };
+export { nowStrip, nowZoom, openToday, todayOpensOnNow, askServer, asking, blankOnce, canAskServer, capture, captureHere,  deskBackend, deskPage, inToday, landShares, openAsked, openCapture, plan, projectPage, scribeKept, setAsking, showCapture, tagsPage, wireTalking, writeOut };
 
 // ---------- the zoom's line page (Part 2) ----------
 

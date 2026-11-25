@@ -213,12 +213,13 @@ try {
     assert.equal((await taskNamed(page, 'Board Reel 2')).fields.task.order < (await taskNamed(page, 'Order the 8 TB storage drive')).fields.task.order, true, 'the order is saved');
   });
 
-  await check('a click on a task opens it on its own page (Now), Alt + Left comes back to the day, Ctrl + click opens it beside', async () => {
+  await check('a click on a task zooms into it (Now), Alt + Left goes back out to the day’s page, Ctrl + click opens it beside', async () => {
     await row(page, 'Order the 8 TB').locator('.pl-words').click();
-    await page.waitForFunction(() => /Order the 8 TB/.test(document.querySelector('#plan-sheet .np-tx')?.textContent || ''));
-    assert.equal(await viewOf(page), 'plan');
+    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && /Order the 8 TB/.test((window.__plan.items || []).find((i) => i.row.id === history.state?.zoom)?.row.text || ''));
     assert.equal(await page.locator('.pane-frame').count(), 0, 'nothing opened beside');
+    await page.evaluate(() => document.activeElement?.blur());
     await page.keyboard.press('Alt+ArrowLeft');
+    // Out to the day: the face he came from (here, the day's page).
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && document.querySelectorAll('#plan .pl-task').length >= 2);
     await row(page, 'Order the 8 TB').locator('.pl-words').click({ modifiers: ['Control'] });
     await page.waitForFunction(() => {

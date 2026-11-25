@@ -204,7 +204,7 @@ function wireNotebook() {
     onOpen: openEntry,
     onStatus: (s) => {
       if (inNotebook()) statusEl.textContent = s === 'saving' ? 'Saving…' : s === 'error' ? 'Not saved — check storage' : 'Saved';
-      if (s === 'saved') { listSoon(); plan?.soon(); }
+      if (s === 'saved') { listSoon(); plan?.soon(); document.dispatchEvent(new CustomEvent('inkwell:nowzoom-check')); }
     },
     onTaskChip: (eid, el) => (el?.dataset.train ? amountsMenu(eid, el, { wrote: (rows) => applyRemote(rows).then(() => notebook.redrawMarks()) }) : plan?.chipMenu(eid, el)),
     onTasks: () => plan?.soon(),
@@ -225,6 +225,7 @@ function wireNotebook() {
     onZoom: (zoom) => {
       if (!inNotebook() || !notebook.page) return;
       remember({ view: 'notebook', pageId: notebook.page.id, ...(zoom ? { zoom } : {}) });
+      document.dispatchEvent(new CustomEvent('inkwell:nowzoom-check'));
       if (inPane) renderCrumb();
       pull?.setShown(planningView());
     }

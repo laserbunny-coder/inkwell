@@ -19,6 +19,7 @@ import { Now } from './now.js';
 import { drawYear } from './year.js';
 import { drawMonth } from './month.js';
 import { isLight, lineName } from './firstlight.js';
+import { isTraining } from './training.js';
 import { zoomTo } from './nowpage.js';
 import { inPane } from './panes.js';
 import { Pick, Shelf, unplannedOf, timeOf, parseKey, moveTo, stopKey, rulerDrops } from './zoomtime.js';
@@ -1558,7 +1559,7 @@ export class Plan {
 
   // The zoom (Part 2): whatever he clicks opens on the Now stop. A line on
   // today becomes the one thing; any other only opens, and nothing moves.
-  async openLine(iOrId) {
+  async openLine(iOrId, { begin = true, still = null } = {}) {
     const find = () => (typeof iOrId === 'string' ? (this.items || []).find((x) => x.row.id === iOrId && !x.ghost && !x.occ) : iOrId);
     let i = find();
     // Not drawn yet (the plan loads when a time stop first opens): load it.
@@ -1566,6 +1567,18 @@ export class Plan {
     if (!i) return typeof iOrId === 'string' ? this.hooks.openEntry(iOrId) : null;
     const today = this.today;
     const onToday = !i.row.fields?.done && !!i.task.day && i.task.day <= today && !i.ghost;
+    // Today and Now as one (Nov 25 2026): a line opens zoomed in, the same
+    // zoom as anywhere (its words, its lines, every key). A task on today
+    // zoomed into is Now: it becomes the one thing, and Next sits at the foot
+    // (nowzoom.js). First light and Training keep their own page.
+    const own = isLight(i.row) || isTraining(i.row);
+    const place = !own && !i.ghost ? await this.hooks.taskPlace?.(i.row.id) : null;
+    if (still && !still()) return undefined; // he moved on while it looked
+    if (place) {
+      // Now, from anywhere, shows the one thing without starting it (the morning talk stays offered).
+      if (onToday && begin) { await this.now.load(); await this.now.begin(i.row.id); }
+      return zoomTo({ place, way: 'in' });
+    }
     if (onToday) {
       await this.now.load();
       await this.now.begin(i.row.id);
