@@ -153,6 +153,29 @@ try {
     await sleep(400);
     assert.ok(await ph.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll');
   });
+  await check('phone: a double tap on a task’s words zooms into it', async () => {
+    const b = await row(ph, 'Rewrite the dojo').locator('.pl-words').boundingBox();
+    const x = b.x + 20, y = b.y + b.height / 2;
+    await ph.touchscreen.tap(x, y);
+    await sleep(120);
+    await ph.touchscreen.tap(x, y);
+    await zoomedOn(ph, 'Rewrite the dojo scene');
+    await ph.goBack();
+    await ph.waitForFunction(() => document.querySelector('#plan-sheet')?.dataset.tab === 'day' && document.querySelectorAll('#plan-sheet .pl-ol').length === 2);
+    await sleep(400);
+  });
+  await check('phone: two taps further apart than a double tap only type', async () => {
+    const b = await row(ph, 'Find the script').locator('.pl-words').boundingBox();
+    const x = b.x + 20, y = b.y + b.height / 2;
+    await ph.touchscreen.tap(x, y);
+    await sleep(600);
+    await ph.touchscreen.tap(x, y);
+    await sleep(500);
+    assert.equal(await ph.evaluate(() => document.querySelector('#plan-sheet')?.dataset.tab), 'day');
+    assert.equal(await ph.locator('#plan-sheet .pl-ol-in').count(), 1, 'still typing in it');
+    await ph.locator('#plan-sheet .pl-ol-in').press('Enter');
+    await sleep(400);
+  });
   await check('phone: hold the line and let go: it is picked, with its options, Zoom in among them', async () => {
     const b = await row(ph, 'Find the script').locator('.pl-words').boundingBox();
     const cdp = await pctx.newCDPSession(ph);

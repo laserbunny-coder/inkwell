@@ -1,4 +1,5 @@
 import { Node, Extension, InputRule, mergeAttributes } from '@tiptap/core';
+import { doubleTaps } from './doubletap.js';
 import Document from '@tiptap/extension-document';
 import { ListItem } from '@tiptap/extension-list';
 import { Fragment, Slice } from '@tiptap/pm/model';
@@ -1319,13 +1320,20 @@ export const OutlineFold = Extension.create({
       view: (view) => {
         openViews.add(view);
         const unhold = holdDrags(view);
+        // A double tap on a line's words zooms into it (Nov 25 2026).
+        const undouble = doubleTaps(view.dom, (el) => {
+          if (!isTouch() || el.closest?.('.line-gutter, .line-box, a, button, [contenteditable="false"]')) return null;
+          const li = el.closest?.('li');
+          if (!li || !view.dom.contains(li) || li.classList.contains('zoom-root') || !li.querySelector(':scope > p')?.contains(el)) return null;
+          return li.querySelector(':scope > .line-gutter')?.dataset.eid || null;
+        }, (eid) => { view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid })); view.dom.blur(); });
         return {
           update(view, prev) {
             const a = foldKey.getState(view.state);
             const b = foldKey.getState(prev);
             if (a.zoom !== b.zoom) onZoom(a.zoom);
           },
-          destroy() { openViews.delete(view); unhold(); }
+          destroy() { openViews.delete(view); unhold(); undouble(); }
         };
       },
       // Keep the caret where you can see it: arrows skip over folded lines,

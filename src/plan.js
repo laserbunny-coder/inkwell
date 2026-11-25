@@ -5,6 +5,7 @@
 // ordinary lines with a day (see tasks.js), gathered here from wherever they
 // live. Plain text on hairlines; nothing is copied.
 
+import { doubleTaps } from './doubletap.js';
 import { popMenu, askText } from './menu.js';
 import { trash, restore } from './trash.js';
 import { loadTasks, dayPlan, weekPlan, planSettings, savePlanSettings, setTask, unTask, tickTask, tookTask, startTimer, stopTimer, addTask, renameTask, arrange, arrangeCarried, weave, plainLine, timed, span, hours, isoOf, addDays, dateOf, weekOf, dayWord, TASKS_PAGE, stepsPage, stepsHome, moveTask, isStretch, stretchWord, isRepeat, repeatWord, readDays, parseAdd, history, occItem, setRepeat, skipTask, rollTicked, dow, setWhen, whenSnap, whenBack, rankAll, horizon, whenHeadings, whenOf, whenWord, spanOf, taskOf } from './tasks.js';
@@ -93,6 +94,16 @@ export class Plan {
         this.menu(this.item(row.dataset.task), row, { left: e.clientX, top: e.clientY });
       });
       if (el !== steps) this.drags(el);
+      // On a phone: a tap types in a task's words, a double tap zooms into it.
+      if (el !== steps) doubleTaps(el, (t) => {
+        const row = t.closest?.('.pl-task.pl-ol[data-task]');
+        return row && t.closest('.pl-words, .pl-rename') && !this.picking ? row.dataset.task : null;
+      }, (id) => {
+        const i = this.item(id);
+        if (!i) return;
+        if (document.activeElement?.classList?.contains('pl-rename')) document.activeElement.blur(); // keeps what was typed
+        this.open(i);
+      });
     }
     // On a phone: Page, Plan, When, Week, Ahead, in one row above the day.
     this.phoneSw = make('nav', 'tp-switch');
