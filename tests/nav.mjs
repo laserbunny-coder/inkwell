@@ -88,7 +88,7 @@ try {
     await p.waitForSelector('.palette', { state: 'hidden' });
     await toToday(p);
     assert.equal(await p.locator('.rail').isVisible(), false, 'no rail any more');
-    assert.deepEqual(await p.locator('.zm-ruler .zm-stop .zm-word').allInnerTexts(), ['Month', 'Week', 'Today', 'Now', 'Project', 'Desk', 'Library']);
+    assert.deepEqual(await p.locator('.zm-ruler .zm-stop .zm-word').allInnerTexts(), ['Year', 'Month', 'Week', 'Today', 'Project', 'Desk', 'Library']);
     const r = await p.locator('.zm-ruler').boundingBox();
     assert.ok(r.y + r.height >= 800 - 2, 'the ruler sits at the bottom');
     await p.locator('.zm-ruler [data-stop="library"]').click();
@@ -160,7 +160,7 @@ try {
   await check('on a phone the same ruler runs along the bottom, with Go; a stop lights where you are', async () => {
     await settle(ph);
     assert.equal(await ph.locator('.zm-ruler').isVisible(), true);
-    assert.deepEqual(await ph.locator('.zm-ruler .zm-stop .zm-word').allInnerTexts(), ['Month', 'Week', 'Today', 'Now', 'Project', 'Desk', 'Library']);
+    assert.deepEqual(await ph.locator('.zm-ruler .zm-stop .zm-word').allInnerTexts(), ['Year', 'Month', 'Week', 'Today', 'Project', 'Desk', 'Library']);
     await ph.locator('.zm-ruler [data-stop="library"]').tap();
     await ph.waitForFunction(() => document.documentElement.dataset.view === 'library');
     await ph.waitForFunction(() => document.querySelector('.zm-ruler [data-stop="library"]')?.getAttribute('aria-current') === 'page');

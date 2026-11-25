@@ -173,7 +173,7 @@ export async function toStop(id) {
   const from = stopOf(lastPlace);
   // The Project stop again from inside a piece: out to the project's own page.
   // Today again while zoomed into a task (Now): out to the day.
-  const inNow = from === 'today' && lastPlace?.view === 'notebook';
+  const inNow = from === 'today' && lastPlace?.view === 'notebook' && !!lastPlace.zoom && nowState.zoom === lastPlace.zoom;
   if (id === from && id !== 'project' && !inNow) return;
   const place = await placeOfStop(id);
   if (id === 'today') faceTo(todayFace());
@@ -185,7 +185,7 @@ export async function toStop(id) {
 export async function zoomOut() {
   const p = lastPlace;
   const s = stopOf(p);
-  if (s === 'today' && p?.view === 'notebook') return toStop('today');
+  if (s === 'today' && p?.view === 'notebook' && p.zoom && nowState.zoom === p.zoom) return toStop('today');
   if (s === 'today' && p?.view === 'plan' && p.day) { const w = weekOf(p.day)[0]; return zoomGo({ view: 'plan', tab: 'week', ...(w === weekOf(isoOf())[0] ? {} : { week: w }) }, 'out'); }
   if (s === 'today') return toStop('week');
   if (s === 'week' && p?.week && p.week > weekOf(isoOf())[0]) return zoomGo({ view: 'plan', tab: 'ahead', week: p.week }, 'out');
@@ -409,7 +409,7 @@ function light(place) {
     if (b.dataset.stop === lit) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   }
   // Zoomed into a task on today: Today reads Now.
-  if (tw && lit === 'today' && place?.view === 'notebook') tw.textContent = 'Now';
+  if (tw && lit === 'today' && place?.view === 'notebook' && place.zoom && nowState.zoom === place.zoom) tw.textContent = 'Now';
   body.classList.toggle('in-piece', !!place && (!place.view || place.view === 'write' || (place.view === 'notebook' && !!place.pageId && !String(place.pageId).startsWith('day-'))));
 }
 

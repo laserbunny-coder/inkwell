@@ -76,7 +76,7 @@ try {
     await page.locator('.page-settings [data-addon="daytools"]').check();
     await sleep(500);
     await page.keyboard.press('Escape');
-    assert.deepEqual(await stops(page), ['Month', 'Week', 'Today', 'Now', 'Project', 'Desk', 'Library']);
+    assert.deepEqual(await stops(page), ['Year', 'Month', 'Week', 'Today', 'Project', 'Desk', 'Library']);
     await goto(page, { view: 'plan', tab: 'week' });
     assert.equal(await view(page), 'plan');
     assert.equal(await boxHas(page, 'Talk the day through'), true);
@@ -104,7 +104,7 @@ try {
 
   const full = await open({ width: 1400, height: 900 }, false);
   await check('the full edition: no Day tools switch, seven stops', async () => {
-    assert.deepEqual(await stops(full), ['Month', 'Week', 'Today', 'Now', 'Project', 'Desk', 'Library']);
+    assert.deepEqual(await stops(full), ['Year', 'Month', 'Week', 'Today', 'Project', 'Desk', 'Library']);
     await full.evaluate(() => dispatchEvent(new CustomEvent('open-addons')));
     await full.waitForSelector('.page-settings [data-addon="bible"]');
     assert.equal(await full.locator('.page-settings [data-addon="daytools"]').count(), 0);
