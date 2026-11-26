@@ -157,18 +157,58 @@ try {
     assert.ok((await readOutline(ph)).split('\n').find((l) => l.includes('Call')).includes('|'), 'the cursor is in “Call Dana”');
   });
 
-  await check('in the line you are typing in, a hold is left to the phone (for picking words)', async () => {
+  // Nov 26 2026: a hold always picks the line, and it stays picked.
+  const pickedText = () => ph.evaluate(() => [...document.querySelectorAll('#outline-editor li > p')].filter((p) => getComputedStyle(p).backgroundColor !== 'rgba(0, 0, 0, 0)').map((p) => p.textContent));
+  await check('in the line you are typing in, a hold picks it up too, and the keyboard goes down', async () => {
     await setOutline(ph, START);
     const c = await centre(words('Call Dana'));
     await ph.touchscreen.tap(c.x, c.y);
     await sleep(300);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: c.x, y: c.y }] });
     await sleep(500);
-    const lifted = await ph.locator('.line-lift').count();
+    assert.equal(await ph.locator('.line-lift').count(), 1, 'it lifts');
+    assert.equal(await ph.evaluate(() => !!document.activeElement?.closest?.('.ProseMirror')), false, 'out of typing');
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    await sleep(200);
-    assert.equal(lifted, 0);
+    await ph.waitForSelector('.as-sheet, .hm-menu, .handle-menu, [role="menu"]', { timeout: 3000 });
     assert.equal((await readOutline(ph)).replace(/\|/g, ''), START.trim());
+    assert.deepEqual(await pickedText(), ['Call Dana'], 'it stays picked while its menu is up');
+    await ph.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await sleep(300);
+  });
+
+  await check('a finger that drifts a little while it holds still picks the line up', async () => {
+    await setOutline(ph, START);
+    await blurred();
+    const c = await centre(words('Order rope'));
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: c.x, y: c.y }] });
+    for (const [dx, dy] of [[3, 2], [6, -3], [9, 4], [5, 7]]) { await sleep(70); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: c.x + dx, y: c.y + dy }] }); }
+    await sleep(250);
+    assert.equal(await ph.locator('.line-lift').count(), 1, 'it lifts');
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await sleep(300);
+    assert.equal((await readOutline(ph)).replace(/\|/g, ''), START.trim(), 'a drift moves nothing');
+    await ph.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await sleep(300);
+  });
+
+  await check('after a move the line stays picked; a slide on it moves it again at once; a tap elsewhere lets it go', async () => {
+    await setOutline(ph, START);
+    await blurred();
+    const from = await centre(words('Order rope'));
+    const to = await centre(words('Board reel 2'));
+    await drag(from, { x: from.x, y: to.b.y + 3 }, { wait: 500 });
+    assert.deepEqual(await pickedText(), ['Order rope'], 'still picked after it lands');
+    // Picked: no hold needed, a slide moves it.
+    const again = await centre(words('Order rope'));
+    const top = await centre(words("Kenji's verse"));
+    await drag(again, { x: again.x, y: top.b.y + 3 }, { wait: 30 });
+    assert.equal((await readOutline(ph)).replace(/\|/g, '').split('\n')[0], 'Order rope', 'moved at once');
+    assert.deepEqual(await pickedText(), ['Order rope']);
+    const other = await centre(words('Call Dana'));
+    await ph.touchscreen.tap(other.x, other.y);
+    await sleep(300);
+    assert.deepEqual(await pickedText(), [], 'a tap elsewhere lets it go');
+    await blurred();
   });
 
   await check('after a move it stays a move: no cursor or keyboard, nothing picked, and the next line can be held straight away', async () => {
