@@ -30,6 +30,17 @@ const at = async (p, stop) => {
   await sleep(300);
 };
 const blur = (p) => p.evaluate(() => document.activeElement?.blur());
+// On Today a right-click is the line's menu now, so a line is picked from the keyboard (Up / Down).
+async function pickLine(p, words) {
+  const want = await p.evaluate((w) => window.__plan.items.find((x) => x.row.text.includes(w))?.row.id, words);
+  if (await p.evaluate(() => document.querySelector('.zm-picked')?.dataset.task) === want) return;
+  await p.keyboard.press('Escape');
+  await blur(p);
+  await p.keyboard.press('ArrowDown');
+  await p.waitForSelector('.zm-picked');
+  for (let k = 0; k < 20 && (await p.evaluate(() => document.querySelector('.zm-picked')?.dataset.task)) !== want; k += 1) await p.keyboard.press('ArrowDown');
+  assert.equal(await p.evaluate(() => document.querySelector('.zm-picked')?.dataset.task), want, `picked ${words}`);
+}
 const task = (p, re) => p.evaluate((src) => { const i = window.__plan.items.find((x) => new RegExp(src).test(x.row.text)); return i ? { id: i.row.id, day: i.task.day || null, span: i.task.span || null, done: !!i.row.fields?.done } : null; }, re);
 const SHOTS = process.env.SHOTS;
 const today = (p) => p.evaluate(() => window.__plan.today);
@@ -139,8 +150,7 @@ try {
   });
 
   await check('Ctrl + Right moves a picked line to the next day; Space ticks it', async () => {
-    await p.locator('#plan-sheet .pl-task', { hasText: 'Board scene 3' }).first().click({ button: 'right' });
-    await p.waitForSelector('.zm-picked');
+    await pickLine(p, 'Board scene 3');
     await p.keyboard.press('Control+ArrowRight');
     await sleep(800);
     const r = await task(p, 'Board scene 3');
@@ -149,7 +159,7 @@ try {
     await p.keyboard.press('Control+ArrowLeft');
     await sleep(800);
     assert.equal((await task(p, 'Board scene 3')).day, t);
-    await p.locator('#plan-sheet .pl-task', { hasText: 'Board scene 3' }).first().click({ button: 'right' });
+    await pickLine(p, 'Board scene 3');
     await p.keyboard.press(' ');
     await sleep(700);
     assert.equal((await task(p, 'Board scene 3')).done, true);

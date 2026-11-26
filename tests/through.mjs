@@ -260,7 +260,9 @@ try {
 
   await check('a line typed just now is loose once it’s saved; Esc stops and leaves it so', async () => {
     await page.locator('#outline-editor').click();
+    await sleep(100); // a click on a line puts the cursor there once the editor has settled
     await page.keyboard.press('Control+End');
+    await sleep(100);
     await page.keyboard.press('Enter');
     await page.keyboard.type('Fresh thought about the harbor');
     await page.waitForFunction(() => new Promise((res) => { const r = indexedDB.open('writing'); r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').getAll(); q.onsuccess = () => res(q.result.some((x) => x.text === 'Fresh thought about the harbor')); }; }));
@@ -334,7 +336,9 @@ try {
   await check('every look draws the card; motion off shows it at once; no page errors', async () => {
     await today(page);
     await page.locator('#outline-editor').click();
+    await sleep(100); // a click on a line puts the cursor there once the editor has settled
     await page.keyboard.press('Control+End');
+    await sleep(100);
     await page.keyboard.press('Enter');
     await page.keyboard.type('One more loose thing');
     await sleep(1200);

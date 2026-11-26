@@ -51,6 +51,21 @@ try {
     assert.equal(shown, false);
   });
 
+  await check('after a click, the keys move the cursor from there (Ctrl + End, Enter, type)', async () => {
+    await fresh();
+    const a = await at('Alpha');
+    await p.mouse.click(a.x, a.y);
+    await sleep(80); // as fast as a person: the editor settles its focus in 20 ms
+    await p.keyboard.press('Control+End');
+    await sleep(100);
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('Delta');
+    await sleep(200);
+    const lines = (await plain()).split('\n').map((l) => l.trim());
+    assert.equal(lines.at(-1), 'Delta', lines.join(' / '));
+    assert.ok(lines.includes('Alpha'), lines.join(' / '));
+  });
+
   await check('a click on a line puts the cursor where it lands', async () => {
     await fresh();
     const a = await at('Charlie');
