@@ -70,6 +70,7 @@ export function menuButton(items, label = 'More') {
   b.setAttribute('aria-label', label);
   b.setAttribute('aria-haspopup', 'menu');
   b.addEventListener('click', async (e) => { e.stopPropagation(); e.preventDefault(); popMenu(b, await items()); });
+  b.menuItems = items; // a right-click or a hold on its row opens the same menu (listkit.js)
   return b;
 }
 export function onContextMenu(target, items) {

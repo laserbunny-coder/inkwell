@@ -236,9 +236,13 @@ export function deskDrags(root, { drop, busy }) {
   root.addEventListener('touchend', (e) => {
     if (!d?.touch) return;
     if (!d.moving) {
-      // Held still and let go: it settles back, and nothing underneath is tapped.
+      // Held still and let go: it settles back, nothing underneath is tapped,
+      // and the row hears it (its menu comes up, where it has one).
+      const held = d.armed && d.el;
+      const at = { x: d.lastX, y: d.lastY };
       if (d.armed) e.preventDefault();
       end();
+      if (held) held.dispatchEvent(new CustomEvent('row-held', { bubbles: true, detail: at }));
       return;
     }
     e.preventDefault();

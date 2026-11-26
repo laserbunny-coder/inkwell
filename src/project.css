@@ -184,6 +184,16 @@ span.wo-item { cursor: default; color: var(--muted); }
 .wo-about .wp-two { margin: 10px 0 0; }
 .wo-about .wp-part { margin-top: 24px; }
 
+/* One way everywhere (Nov 26 2026): no dots and no bullets on a line; the
+   fold triangle sits at the far right, on a computer and on a phone. */
+.wo-kids > li::before { content: none; }
+.wo-row { position: relative; padding-right: 34px; }
+.wo-row > .wo-tog { position: absolute; right: -4px; top: 6px; margin: 0; }
+.wo-kids > li.wo-piece > .wo-ptog, .wo-line.wo-one > .wo-ptog { position: absolute; right: 34px; top: 3px; margin: 0; }
+.wo-line.wo-one > .wo-ptog { top: 8px; }
+.wo-kids > li.wo-piece:has(> .wo-ptog), .wo-line.wo-one:has(> .wo-ptog) { padding-right: 66px; }
+@media (--narrow) { .wo-line > .wo-row > .wo-meta { padding-left: 0; } }
+
 /* The Steps zoom: the same page, only its steps. */
 .wh-back, .st-back { border: 0; background: none; padding: 4px 0; margin: 0 0 8px; color: var(--muted); font: 13.5px var(--ui); cursor: pointer; align-self: flex-start; }
 .wh-back:hover, .st-back:hover { color: var(--ink); }
