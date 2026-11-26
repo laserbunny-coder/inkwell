@@ -122,9 +122,10 @@ try {
   await check('a line held by its words carries what is under it, and can go under another line', async () => {
     await setOutline(ph, START);
     await blurred();
+    // A whole step to the right of where it was picked up: one level in.
     const from = await centre(words("Kenji's verse"));
     const to = await centre(words('Call Dana'));
-    await drag(from, { x: to.b.x + 90, y: to.b.y + to.b.height - 3 }, { wait: 500 });
+    await drag(from, { x: from.x + 60, y: to.b.y + to.b.height - 3 }, { wait: 500 });
     assert.equal((await readOutline(ph)).replace(/\|/g, ''), ['Board reel 2', 'Call Dana', "  Kenji's verse", '    Rhymes for the chorus', 'Order rope'].join('\n'));
   });
 

@@ -568,40 +568,101 @@ export function setLineDragOut(hooks) { dragOut = hooks; }
 // let go further to the right, as the first line under it (as in Workflowy).
 // With a finger the line lifts and follows it, and near the top or bottom of
 // the screen the page scrolls along for as long as the finger stays there.
-const NEST = 44; // px right of a line's words that drops a line under it
+// Where a dragged line will land (Nov 26 2026, his ask: "every line should
+// have a little bit of cushion", "it bounces all over the place"). The drop
+// is one of the gaps between the lines on screen, at a depth. It starts in
+// the line's own gap, so a small wobble moves nothing; it only goes to the
+// next gap once the pointer is past the middle of the line beyond, and a few
+// px more. Sideways, a full step right is one level in, a full step left one
+// level out; less than that keeps the level it has.
+const STEP = 40; // px sideways for one level in or out
+const STAY = 6; // px of cushion past a line's middle before the drop moves on
 // One move of a line, fed by a mouse, by the dots under a finger, or by a
 // finger held on the line's words: begin() lifts it, move() follows, end() lands it.
 function lineDrag(view, dragged, touch) {
   const eid = dragged.querySelector(':scope > .line-gutter')?.dataset.eid;
   let mark = null, drop = null, lift = null, fade = null, dy = 0, raf = 0, last = null;
+  let x0 = 0, depth0 = 0, home = null, lvl = 0, ind = 28, liftLeft = 0;
   // The editor may draw the line afresh while it moves, so it's found by its id.
-  const live = () => [...view.dom.querySelectorAll('li')].find((l) => l.querySelector(':scope > .line-gutter')?.dataset.eid === eid) || dragged;
-  const find = (e) => {
-    let hit = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('li');
-    // A finger on the dots is in the margin: look across the words at that height too.
-    if (!hit && touch) {
-      const r = view.dom.getBoundingClientRect();
-      hit = document.elementFromPoint(r.left + Math.min(r.width / 2, 120), e.clientY)?.closest?.('li');
+  const idOf = (li) => li?.querySelector(':scope > .line-gutter')?.dataset.eid || null;
+  const live = () => [...view.dom.querySelectorAll('li')].find((l) => idOf(l) === eid) || dragged;
+  const depthOf = (li) => { let d = 0; for (let n = li.parentElement; n && n !== view.dom; n = n.parentElement) if (n.tagName === 'LI') d++; return d; };
+  // The lines you can see, top to bottom, leaving out the one that moves (and what's under it).
+  const lines = () => {
+    const me = live();
+    const out = [];
+    for (const li of view.dom.querySelectorAll('li')) {
+      if (li.classList.contains('zoom-root') || li.classList.contains('zoom-path') || me.contains(li) || !idOf(li)) continue;
+      const r = li.querySelector(':scope > p')?.getBoundingClientRect();
+      if (r?.height) out.push({ li, r, depth: depthOf(li), folded: li.classList.contains('folded') });
     }
-    if (!hit || !view.dom.contains(hit) || live().contains(hit)) return null;
-    const box = hit.querySelector(':scope > p')?.getBoundingClientRect() || hit.getBoundingClientRect();
-    const after = e.clientY > box.top + box.height / 2;
-    // Further right than the line's words start: under it, as its first line (not into a folded one).
-    const into = after && e.clientX > box.left + NEST && !hit.classList.contains('folded') && !hit.classList.contains('zoom-root');
-    return { li: hit, after, into, box };
+    return out;
+  };
+  const root = () => view.dom.querySelector('li.zoom-root');
+  const slotOf = (L, k) => {
+    const A = L[k - 1] || null, B = L[k] || null;
+    const min = root() ? depthOf(root()) + 1 : 0;
+    const lo = B ? B.depth : min;
+    const hi = A ? (A.folded ? A.depth : A.depth + 1) : lo;
+    return { k, A, B, lo: Math.min(lo, hi), hi };
+  };
+  const mid = (x) => (x.r.top + x.r.bottom) / 2;
+  const find = (e) => {
+    const box = view.dom.getBoundingClientRect();
+    if (e.clientX < box.left - 80 || e.clientX > box.right + 80 || dragOut?.over(e)) return null;
+    const L = lines();
+    if (!L.length) return null;
+    // Stay in the gap it's in while the pointer is still within reach of it.
+    let k = -1;
+    if (drop) {
+      const i = drop.B ? L.findIndex((x) => x.li === drop.B.li) : L.length;
+      const j = drop.A ? L.findIndex((x) => x.li === drop.A.li) : -1;
+      if (i === j + 1 && i >= 0) {
+        const top = j >= 0 ? mid(L[j]) - STAY : -Infinity;
+        const bottom = i < L.length ? mid(L[i]) + STAY : Infinity;
+        if (e.clientY >= top && e.clientY <= bottom) k = i;
+      }
+    }
+    if (k < 0) { k = 0; while (k < L.length && mid(L[k]) < e.clientY) k++; }
+    const slot = slotOf(L, k);
+    // Sideways: a whole step to change level, and a whole step back to undo it.
+    const dx = e.clientX - x0;
+    if (dx >= (lvl + 1) * STEP || dx <= (lvl - 1) * STEP) lvl = Math.round(dx / STEP);
+    slot.depth = Math.max(slot.lo, Math.min(slot.hi, depth0 + lvl));
+    slot.home = !!home && slot.k === home.k && slot.depth === depth0;
+    return slot;
   };
   const place = (e) => {
     drop = find(e);
     const away = !drop && !!dragOut?.over(e);
     document.body.classList.toggle('line-drag-away', away);
     mark.hidden = !drop;
-    if (drop) {
-      const indent = drop.into ? 24 : 0;
-      Object.assign(mark.style, { left: `${drop.box.left + indent}px`, width: `${drop.box.width - indent}px`, top: `${(drop.after ? drop.box.bottom : drop.box.top) - 1}px` });
-    }
+    if (!drop) return;
+    const { A, B, depth } = drop;
+    const y = A && B ? (A.r.bottom + B.r.top) / 2 : A ? A.r.bottom + 2 : B.r.top - 2;
+    const ref = A || B;
+    const left = ref.r.left + (depth - ref.depth) * ind;
+    const right = view.dom.getBoundingClientRect().right;
+    Object.assign(mark.style, { left: `${left}px`, width: `${Math.max(40, right - left)}px`, top: `${y - 1}px` });
+    mark.classList.toggle('home', drop.home);
+    if (lift) lift.style.left = `${liftLeft + (depth - depth0) * ind}px`;
   };
   const begin = (e) => {
     last = e;
+    x0 = e.clientX; lvl = 0; depth0 = depthOf(dragged);
+    {
+      const L = lines();
+      const top = (dragged.querySelector(':scope > p') || dragged).getBoundingClientRect().top;
+      let k = 0; while (k < L.length && L[k].r.top < top) k++;
+      home = { k };
+      drop = slotOf(L, k); drop.depth = depth0; drop.home = true;
+      // How far one level in sits to the right, measured on the page.
+      for (const x of L) {
+        const kid = x.li.querySelector(':scope > ul > li > p, :scope > ol > li > p');
+        const r = kid?.getBoundingClientRect();
+        if (r?.height) { ind = Math.max(12, r.left - x.r.left); break; }
+      }
+    }
     mark = document.createElement('div');
     mark.className = 'line-drop';
     mark.hidden = true;
@@ -621,10 +682,12 @@ function lineDrag(view, dragged, touch) {
     lift.setAttribute('aria-hidden', 'true');
     lift.textContent = p?.textContent || '';
     if (kidsCount(dragged)) lift.dataset.more = `+${kidsCount(dragged)}`;
-    Object.assign(lift.style, { left: `${b.left}px`, width: `${Math.min(b.width, innerWidth - b.left - 8)}px`, top: `${b.top}px` });
+    liftLeft = b.left + (touch ? 0 : 14);
+    Object.assign(lift.style, { left: `${liftLeft}px`, width: `${Math.min(b.width, innerWidth - liftLeft - 8)}px`, top: `${b.top}px` });
     document.body.append(lift);
-    // It rides just above the finger, so the line where it will land stays in sight.
-    dy = touch ? b.height + 22 : b.height / 2;
+    // It rides just above the finger, or just below the mouse, so the orange
+    // line where it will land is never under it.
+    dy = touch ? b.height + 22 : -14;
     lift.style.top = `${e.clientY - dy}px`;
     if (touch) navigator.vibrate?.(8);
     const box = scroller(view.dom);
@@ -652,10 +715,18 @@ function lineDrag(view, dragged, touch) {
     document.body.classList.remove('line-dragging', 'line-drag-away');
     if (touch) calm(view);
     if (off || !e) return;
-    drop = find(e);
+    // It lands where the orange line showed.
     // Let go over a pane beside: it moves there.
     if (!drop) { if (dragOut) Promise.resolve(dragOut.drop(e, eid)).catch((err) => console.error(err)); return; }
-    dropLineAt(view, eid, drop.li.querySelector(':scope > .line-gutter')?.dataset.eid, drop.after, drop.into);
+    if (drop.home) return;
+    const { A, B, depth } = drop;
+    if (A && depth === A.depth + 1) return dropLineAt(view, eid, idOf(A.li), true, true);
+    if (A) {
+      let at = A.li;
+      while (at && depthOf(at) > depth) at = at.parentElement?.closest('li');
+      if (at && view.dom.contains(at)) return dropLineAt(view, eid, idOf(at), true);
+    }
+    if (B) dropLineAt(view, eid, idOf(B.li), false);
   };
   return { begin, move, end, started: () => !!mark };
 }

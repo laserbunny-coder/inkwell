@@ -953,6 +953,8 @@ body.block-dragging, body.block-dragging * { cursor: grabbing !important; user-s
 #outline-editor .bullet { cursor: grab; touch-action: none; }
 #outline-editor li.dragging { opacity: .35; }
 .line-drop { position: fixed; height: 2px; background: var(--accent); border-radius: 1px; z-index: 70; pointer-events: none; }
+/* Still in its own place: it stays where it is if let go. */
+.line-drop.home { opacity: .4; }
 :is(#outline-editor, .wv-lines) li[data-done] > p { text-decoration: line-through; text-decoration-color: var(--faint); color: var(--muted); }
 :is(#outline-editor, .wv-lines) li[data-done] > ul { opacity: .55; }
 /* Tick boxes: the lines right under a checklist line, or any line given one. */
