@@ -151,6 +151,20 @@ try {
     assert.deepEqual(await titles(desk, 'wd_nb'), ['Kenji', 'Mom', 'Grandpa', 'The bakery', 'Running gags']);
   });
 
+  await check('desktop: one way: no dots or bullets, a right-click on a page is its menu', async () => {
+    const row = desk.locator('.st-bible li', { hasText: 'Mom' }).first();
+    await row.hover();
+    await sleep(200);
+    assert.equal(await desk.locator('.lk-dots').count(), 0, 'no six dots');
+    assert.equal(await desk.evaluate(() => [...document.querySelectorAll('.wo-kids > li')].filter((li) => getComputedStyle(li, '::before').content.includes('•')).length), 0, 'no bullets');
+    await row.locator('.loose-title, .wo-item').first().click({ button: 'right' });
+    await desk.waitForSelector('.pop-menu .pop-item');
+    const items = await desk.locator('.pop-menu .pop-item').allInnerTexts();
+    assert.ok(items.some((t) => t.startsWith('Move to Trash')), items.join(' | '));
+    await desk.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await sleep(300);
+  });
+
   await check('desktop: a page’s ⋯ has Move up, Move down, Move to the top, Move to and Move to Trash, with the keys', async () => {
     const more = desk.locator('.st-bible li', { hasText: 'The bakery' }).locator('.more-btn');
     await more.click();
@@ -285,6 +299,21 @@ try {
     await holdDrag(from, { x: from.x, y: to.b.y + 2 });
     await phone.waitForFunction(() => document.querySelector('#wh-outline .wo-page .wo-item')?.textContent === 'Running gags');
     assert.deepEqual(await titles(phone, 'wd_nb'), ['Running gags', 'Kenji', 'Mom', 'The bakery']);
+  });
+
+  await check('phone: one way: the fold triangle at the far right, and a hold let go on a page is its menu', async () => {
+    const row = phone.locator('#wh-outline [data-part="bible"] > .wo-row');
+    const tri = await row.locator('.wo-tog').boundingBox();
+    const box = await row.boundingBox();
+    assert.ok(tri.x + tri.width > box.x + box.width - 8, `triangle at the right (${Math.round(tri.x)} of ${Math.round(box.x + box.width)})`);
+    const at = await centre(phone.locator('#wh-outline .wo-page', { hasText: 'Mom' }).locator('.wo-item'));
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: at.x, y: at.y }] });
+    await sleep(550);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await phone.waitForSelector('.pop-menu .pop-item', { timeout: 3000 });
+    assert.deepEqual(await titles(phone, 'wd_nb'), ['Running gags', 'Kenji', 'Mom', 'The bakery'], 'nothing moved');
+    await phone.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await sleep(300);
   });
 
   await check('phone: an idea’s ⋯ on the home deletes it, with Undo', async () => {
