@@ -704,7 +704,9 @@ function seedZoom(state, from, to, caret = false) {
 // click puts the cursor there. In the line you're typing in, the mouse
 // picks words as usual. A double-click zooms in (below).
 const wordsLine = (view, el) => {
-  if (el?.closest?.('.line-gutter, .line-box, a, button, [contenteditable="false"]')) return null;
+  // (Only inside this editor: a small one can sit in a widget of a bigger one.)
+  const off = el?.closest?.('.line-gutter, .line-box, a, button, [contenteditable="false"]');
+  if (off && view.dom.contains(off)) return null;
   const li = el?.closest?.('li');
   if (!li || !view.dom.contains(li) || li.classList.contains('zoom-root') || li.classList.contains('zoom-path')) return null;
   if (!li.querySelector(':scope > p')?.contains(el)) return null;
@@ -713,7 +715,10 @@ const wordsLine = (view, el) => {
 const eidOf = (li) => li?.querySelector(':scope > .line-gutter')?.dataset.eid || null;
 const typingIn = (view, li) => li.classList.contains('here') && view.hasFocus();
 // Only the notebook hears 'line-menu' (the small editors under a task or a scene don't).
-const hasMenu = (view) => !!view.dom.closest('#outline-editor');
+// Every outline has the line menu (a page's, and the small ones under a scene
+// line or a task); only a page zooms, since only a page has room to show it.
+const hasMenu = (view) => !!view.dom.closest('#outline-editor, .wv-lines');
+const canZoom = (view) => !!view.dom.closest('#outline-editor');
 function pressLine(view, li, event) {
   const x0 = event.clientX, y0 = event.clientY;
   const eid = eidOf(li);
@@ -771,7 +776,8 @@ function holdDrags(view) {
     stop();
     if (e.touches.length !== 1 || !isTouch()) return;
     const el = e.target;
-    if (el.closest?.('.line-gutter, .line-box, a, button, [contenteditable="false"]')) return;
+    const off = el.closest?.('.line-gutter, .line-box, a, button, [contenteditable="false"]');
+    if (off && view.dom.contains(off)) return;
     const li = el.closest?.('li');
     if (!li || !view.dom.contains(li) || !li.querySelector(':scope > p')?.contains(el)) return;
     if (li.classList.contains('zoom-root') || !li.querySelector(':scope > .line-gutter')?.dataset.eid) return;
@@ -1435,7 +1441,7 @@ export const OutlineFold = Extension.create({
         const unhold = holdDrags(view);
         // A double tap on a line's words zooms into it (Nov 25 2026).
         const undouble = doubleTaps(view.dom, (el) => {
-          if (!isTouch() || el.closest?.('.line-gutter, .line-box, a, button, [contenteditable="false"]')) return null;
+          if (!isTouch() || !canZoom(view) || el.closest?.('.line-gutter, .line-box, a, button, [contenteditable="false"]')) return null;
           const li = el.closest?.('li');
           if (!li || !view.dom.contains(li) || li.classList.contains('zoom-root') || li.querySelector(':scope > ul, :scope > ol')?.contains(el)) return null; // anywhere on the line itself, not the lines under it
           return li.querySelector(':scope > .line-gutter')?.dataset.eid || null;
@@ -1523,7 +1529,7 @@ export const OutlineFold = Extension.create({
           },
           // A double-click on a line zooms into it, as a double tap does.
           dblclick(view, event) {
-            if (isTouch()) return false;
+            if (isTouch() || !canZoom(view)) return false;
             const li = wordsLine(view, event.target);
             if (!li) return false;
             event.preventDefault();

@@ -389,7 +389,7 @@ export class Now {
     return null;
   }
 
-  focusFirst(sel) { if (hover.matches) zoomed().then(() => this.p.sheet.querySelector(sel)?.focus()); }
+  focusFirst(sel) { if (hover.matches) this.focusIn(sel); }
 
   async begin(id) {
     if (!id) return;
@@ -474,7 +474,14 @@ export class Now {
   // From 5 pm, until the day is closed.
   evening() { return new Date().getHours() >= 17 && !this.st.closed; }
 
-  focusIn(sel) { zoomed().then(() => this.p.sheet.querySelector(sel)?.focus()); }
+  focusIn(sel) {
+    // After the zoom settles; never take the caret back from a field outside the sheet that got it meanwhile.
+    zoomed().then(() => {
+      const a = document.activeElement;
+      if (a && a !== document.body && !this.p.sheet.contains(a)) return;
+      this.p.sheet.querySelector(sel)?.focus();
+    });
+  }
 
   openTalk() {
     this.mode = 'talk';

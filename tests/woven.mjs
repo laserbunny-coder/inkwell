@@ -418,6 +418,42 @@ try {
     await p.waitForFunction(() => !document.querySelector('.wv-plan'));
   });
 
+  await check('one way: in the lines under a scene line, no dots, a right-click or a hold is the line\'s menu, a double-click adds nothing', async () => {
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.m').click();
+    await p.waitForFunction(() => document.querySelector('.wv-sumi .wv-lines')?.textContent.includes('He counts twice'));
+    const words = p.locator('.wv-sumi .wv-lines li > p', { hasText: 'He counts twice' }).first();
+    const count = () => p.evaluate(() => document.querySelectorAll('.wv-sumi .wv-lines li').length);
+    await sleep(700); // the plan settles (it may hand the caret to its first field)
+    const before = await count();
+    assert.equal(await p.evaluate(() => [...document.querySelectorAll('.wv-lines .grip')].some((g) => g.getBoundingClientRect().width && getComputedStyle(g).display !== 'none')), false, 'no dots');
+    await p.evaluate(() => document.activeElement?.blur());
+    await words.click({ button: 'right', position: { x: 12, y: 8 } });
+    await p.waitForSelector('.handle-menu', { state: 'visible' });
+    const labels = await p.locator('.handle-menu .item > span:first-child').allInnerTexts();
+    assert.equal(labels[0], 'Mark done', labels.join(' | '));
+    assert.ok(labels.some((l) => /^Delete line/.test(l)), labels.join(' | '));
+    await p.locator('.handle-menu .item', { hasText: 'Mark done' }).click();
+    await p.waitForFunction(() => [...document.querySelectorAll('.wv-sumi .wv-lines li[data-done] > p')].some((x) => x.textContent.startsWith('He counts twice')));
+    // Held still and let go: the same menu.
+    await p.waitForFunction(() => !document.querySelector('.handle-menu'));
+    await p.evaluate(() => document.activeElement?.blur());
+    await sleep(200);
+    const b = await words.boundingBox();
+    await p.mouse.move(b.x + 12, b.y + b.height / 2); await p.mouse.down(); await sleep(650); await p.mouse.up();
+    await p.waitForSelector('.handle-menu', { state: 'visible' });
+    await p.locator('.handle-menu .item', { hasText: 'Not done' }).click();
+    await p.waitForFunction(() => ![...document.querySelectorAll('.wv-sumi .wv-lines li[data-done] > p')].some((x) => x.textContent.startsWith('He counts twice')));
+    // A double-click picks a word, as before; it doesn't make a line.
+    await p.evaluate(() => document.activeElement?.blur());
+    await sleep(200);
+    await words.dblclick({ position: { x: 12, y: 8 } });
+    await sleep(400);
+    assert.equal(await count(), before, 'no new line');
+    await p.keyboard.press('Escape');
+    await p.locator('.wv-line').nth(1).locator('.wv-zone.m').click();
+    await p.waitForFunction(() => !document.querySelector('.wv-plan'));
+  });
+
   await check('the right end: notes for the scene, + note in your own category', async () => {
     await p.locator('.wv-line').nth(0).locator('.wv-zone.r').click();
     await p.waitForSelector('.wv-notes');
