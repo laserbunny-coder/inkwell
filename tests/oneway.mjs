@@ -146,6 +146,19 @@ try {
     assert.equal(await plain(), ['Alpha', 'Bravo', '  Bravo kid', 'Charlie', '  Charlie kid'].join('\n'));
   });
 
+  await check('typing straight after a double-click writes under the title, not in it', async () => {
+    await fresh();
+    const a = await at('Alpha');
+    await p.mouse.dblclick(a.x, a.y);
+    await p.waitForFunction(() => document.querySelector('#outline-editor li.zoom-root > p')?.textContent === 'Alpha');
+    await sleep(100);
+    await p.keyboard.type('Alpha kid');
+    await p.evaluate(() => document.activeElement?.blur());
+    await p.evaluate(() => window.__outline.view.dispatch(window.__outline.state.tr.setMeta(window.__foldKey, { zoom: null })));
+    await sleep(300);
+    assert.equal(await plain(), ['Alpha', '  Alpha kid', 'Bravo', '  Bravo kid', 'Charlie'].join('\n'));
+  });
+
   await check('left empty, that line goes again when you zoom out', async () => {
     await fresh();
     const a = await at('Alpha');

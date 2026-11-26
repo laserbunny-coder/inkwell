@@ -645,7 +645,7 @@ function startDrag(view, dragged, event, { onClick, onHold } = {}) {
 
 // Lines zoomed into that had nothing under them, given an empty line to write in.
 const seeded = new Set();
-function seedZoom(state, from, to) {
+function seedZoom(state, from, to, caret = false) {
   if (from === to) return null;
   const at = (id) => { let r = null; if (!id) return r; state.doc.descendants((n, pos) => { if (r) return false; if (n.type.name === 'listItem' && n.attrs.eid === id) { r = { n, pos }; return false; } return true; }); return r; };
   let tr = null;
@@ -667,7 +667,10 @@ function seedZoom(state, from, to) {
     if (t && !kidsOf(t.n)) {
       const { schema } = state;
       tr = tr || state.tr;
-      tr.insert(t.pos + t.n.nodeSize - 1, schema.nodes.bulletList.create(null, schema.nodes.listItem.create(null, schema.nodes.paragraph.create())));
+      const at0 = t.pos + t.n.nodeSize - 1;
+      tr.insert(at0, schema.nodes.bulletList.create(null, schema.nodes.listItem.create(null, schema.nodes.paragraph.create())));
+      // Zoomed in with a double-click, the cursor waits in it, so typing writes under the title.
+      if (caret) tr.setSelection(TextSelection.create(tr.doc, at0 + 3));
       seeded.add(to);
     }
   }
@@ -1433,7 +1436,7 @@ export const OutlineFold = Extension.create({
         // ready for a tap or a click, and goes again if left empty (Nov 25 2026).
         const zm = trs.map((t) => t.getMeta(foldKey)).filter((m) => m && 'zoom' in m).pop();
         if (zm) {
-          const tr = seedZoom(state, foldKey.getState(oldState).zoom, st.zoom);
+          const tr = seedZoom(state, foldKey.getState(oldState).zoom, st.zoom, trs.some((t) => t.getMeta('zoomCaret')));
           if (tr) return tr;
         }
         if (!st.folded.size && !st.zoom) return null;
@@ -1503,7 +1506,7 @@ export const OutlineFold = Extension.create({
             const li = wordsLine(view, event.target);
             if (!li) return false;
             event.preventDefault();
-            view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eidOf(li) }));
+            view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eidOf(li) }).setMeta('zoomCaret', true));
             return true;
           }
         }
