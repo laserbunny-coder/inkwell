@@ -1,7 +1,8 @@
 // A double tap zooms in, on a phone (Michael, Nov 25 2026): one tap puts the
 // cursor in a line's words, a second tap on the same line within DOUBLE ms
-// zooms into it. Android's own double-tap window is 300 ms.
-export const DOUBLE = 300;
+// zooms into it. Android's own double-tap window is 300 ms; a little more
+// is kinder to a thumb, and a single tap never waits for it.
+export const DOUBLE = 400;
 
 // Hears quick taps on root; when two land on the same key in time, run(key).
 // keyOf(target) → the line's key, or null where a tap means nothing here.

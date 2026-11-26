@@ -226,6 +226,12 @@ try {
     await settle(phone);
     assert.equal(await thing(phone), 'Write the two-minute hook');
     const l = await until(async () => { const x = await line(phone, 'Kenji sings about the dentist'); return x?.fields.thought.state === 'filed' ? x : null; }, 15000);
+    if (!l) {
+      // What happened instead, so a failure on a slow runner says why.
+      const rows = (await all(phone)).filter((r) => r.kind === 'line' && /Kenji sings/.test(JSON.stringify(r.fields?.thought || '') + r.text));
+      console.log('thought rows:', JSON.stringify(rows.map((r) => ({ parent: r.parent_id, text: r.text, thought: r.fields?.thought, deleted: r.deleted }))));
+      console.log('asked:', JSON.stringify(phone.asked.map((b) => b.text)), 'errors:', JSON.stringify(phone.errors));
+    }
     assert.ok(l);
   });
   assert.deepEqual(phone.errors, []);
