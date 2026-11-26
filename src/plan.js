@@ -914,7 +914,24 @@ export class Plan {
     check.setAttribute('aria-label', done ? 'Done; click to untick' : ghost ? 'It comes round on this day' : 'Tick when done');
     if (ghost) check.setAttribute('aria-disabled', 'true');
     const title = make('div', 'pl-title');
-    const words = make('button', 'pl-words', lineName(i.row));
+    // On a phone the words of a plain line are a box to type in, so a tap
+    // lands the phone's own cursor and keyboard there; a button that turns
+    // into a box only after the tap left Android without a keyboard
+    // (Michael, Nov 25 2026). A double tap still zooms in (doubletap.js).
+    const typeIn = ol && !t.habit && !this.picking && !hover.matches && plainLine(i.row);
+    const words = make(typeIn ? 'textarea' : 'button', `pl-words${typeIn ? ' pl-words-in' : ''}`, typeIn ? i.row.text || '' : lineName(i.row));
+    if (typeIn) {
+      words.rows = 1;
+      words.placeholder = 'Untitled';
+      words.enterKeyHint = 'done';
+      words.setAttribute('aria-label', 'The task’s words');
+      words.addEventListener('focus', () => this.rename(i, words, { outline: true }));
+      if (!CSS.supports?.('field-sizing', 'content')) {
+        const fit = () => { words.style.height = 'auto'; words.style.height = `${words.scrollHeight}px`; };
+        words.addEventListener('input', fit);
+        requestAnimationFrame(fit);
+      }
+    }
     words.dataset.act = t.habit ? 'history' : 'words';
     words.title = t.habit ? 'A habit: click for how it’s going' : ol && plainLine(i.row) ? 'Click to write in it; the dots zoom in' : hover.matches && plainLine(i.row) ? 'Click to open it, double-click to change the words' : 'Open it';
     title.append(words);
@@ -1582,6 +1599,7 @@ export class Plan {
     if (act === 'fold') { this.fold(i.row.id, !this.unfolded(i.row.id)); return this.redraw(); }
     if (act === 'zoom') return this.open(i);
     // Today as an outline: a click on the words puts the cursor in them (the dots zoom in).
+    if (act === 'words' && el.tagName === 'TEXTAREA') return; // already the cursor, from the tap itself
     if (act === 'words' && row?.classList.contains('pl-ol') && plainLine(i.row) && !this.picking && !e.shiftKey && !e.ctrlKey && !e.metaKey && !el.closest('.now-list')) {
       clearTimeout(this.opening);
       return this.rename(i, el, { at: e.clientX ? { x: e.clientX, y: e.clientY } : null, outline: true });
@@ -2059,6 +2077,9 @@ export class Plan {
 
   // New words for a task, right in the plan.
   rename(i, el, { at = null, outline = false } = {}) {
+    // On a phone the words are already the box (taskRow): it's wired once, on focus.
+    const own = el.tagName === 'TEXTAREA';
+    if (own && el.classList.contains('pl-rename')) return;
     // Where the click landed in the words, for the cursor to go there.
     let caret = null;
     if (at) {
@@ -2067,9 +2088,9 @@ export class Plan {
       const node = pos?.offsetNode || r?.startContainer;
       if (node && el.contains(node)) caret = pos ? pos.offset : r.startOffset;
     }
-    const input = make('input', `pl-rename${outline ? ' pl-ol-in' : ''}`);
-    input.type = 'text';
-    input.value = i.row.text || '';
+    const input = own ? el : make('input', `pl-rename${outline ? ' pl-ol-in' : ''}`);
+    if (own) input.classList.add('pl-rename', 'pl-ol-in');
+    else { input.type = 'text'; input.value = i.row.text || ''; }
     input.setAttribute('aria-label', 'The task’s words');
     input.enterKeyHint = 'done';
     this.renaming = true;
@@ -2098,6 +2119,12 @@ export class Plan {
       else if (k === 'ArrowDown' && !e.ctrlKey && !e.altKey && !e.shiftKey && this.unfolded(id) && this.lines?.editorFor(id)) { e.preventDefault(); const ed = this.lines.editorFor(id); finish(true).then(() => ed.isDestroyed || ed.commands.focus('start')); }
     });
     input.addEventListener('blur', () => finish(true));
+    if (own) {
+      // One line of words: Enter (or a pasted line break) ends it, as in the box.
+      input.addEventListener('beforeinput', (e) => { if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') { e.preventDefault(); finish(true); } });
+      input.addEventListener('input', () => { if (/[\r\n]/.test(input.value)) input.value = input.value.replace(/\s*[\r\n]+\s*/g, ' '); });
+      return;
+    }
     el.replaceWith(input);
     input.focus();
     if (caret != null) input.setSelectionRange(caret, caret);

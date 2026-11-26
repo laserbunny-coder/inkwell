@@ -55,7 +55,7 @@ const headIs = (p, lit, title) => p.waitForFunction(([l, t]) => {
 }, [lit, title ?? null]);
 const count = (p) => p.evaluate(() => window.__panes.count);
 const beside = (p) => p.evaluate(() => ({ pressed: document.querySelector('#beside-toggle').getAttribute('aria-pressed'), has: document.documentElement.classList.contains('has-panes'), w: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panes-w')) || 0 }));
-const words = (f) => f.locator('#plan-sheet .pl-task .pl-words').allInnerTexts();
+const words = (f) => f.locator('#plan-sheet .pl-task .pl-words').evaluateAll((xs) => xs.map((x) => (x.tagName === 'TEXTAREA' ? x.value : x.innerText)));
 const notes = (f) => f.evaluate(() => [...document.querySelectorAll('#side-notes .sn-card')].map((c) => `${c.querySelector('.sn-kind').textContent}: ${c.querySelector('.sn-text').textContent}`));
 const toast = (p) => p.evaluate(() => document.querySelector('.toast')?.textContent || '');
 

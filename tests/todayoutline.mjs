@@ -196,6 +196,31 @@ try {
     await ph.locator('#plan-sheet .pl-ol-in').press('Enter');
     await sleep(400);
   });
+  await check('phone: the words are the box itself, so the tap lands the phone’s own cursor (and keyboard) there', async () => {
+    const w = row(ph, 'Find the script').locator('.pl-words');
+    assert.equal(await w.evaluate((x) => x.tagName), 'TEXTAREA', 'a box to type in, not a button swapped for one');
+    await w.evaluate((x) => { x.dataset.same = '1'; });
+    const b = await w.boundingBox();
+    await ph.touchscreen.tap(b.x + 20, b.y + b.height / 2);
+    await sleep(500);
+    assert.equal(await ph.evaluate(() => document.activeElement?.dataset?.same), '1', 'the very box that was tapped has the cursor');
+    await ph.keyboard.press('End');
+    await ph.keyboard.type(' today');
+    await ph.keyboard.press('Enter');
+    await ph.waitForFunction(() => [...document.querySelectorAll('#plan-sheet .pl-words')].some((x) => x.value === 'Find the script today'));
+    await ph.waitForFunction(() => document.activeElement?.tagName === 'BODY' && !document.querySelector('#plan-sheet .pl-ol-in'), null, { timeout: 4000 }).catch(() => {});
+    assert.equal(await ph.evaluate(() => document.activeElement?.tagName), 'BODY', 'Enter ends it');
+    // Back as it was, for the checks after this one.
+    const w2 = row(ph, 'Find the script').locator('.pl-words');
+    const b2 = await w2.boundingBox();
+    await ph.touchscreen.tap(b2.x + 20, b2.y + b2.height / 2);
+    await sleep(400);
+    await ph.keyboard.press('End');
+    for (let k = 0; k < 6; k++) await ph.keyboard.press('Backspace');
+    await ph.keyboard.press('Enter');
+    await ph.waitForFunction(() => [...document.querySelectorAll('#plan-sheet .pl-words')].some((x) => x.value === 'Find the script'));
+    await sleep(300);
+  });
   await check('phone: hold the line and let go: it is picked, with its options, Zoom in among them', async () => {
     const b = await row(ph, 'Find the script').locator('.pl-words').boundingBox();
     const cdp = await pctx.newCDPSession(ph);

@@ -743,3 +743,8 @@ html.has-rail .pl-switches { flex-direction: row; align-items: center; }
 .pl-ol .pl-more { display: none; }
 /* A task's triangle on a phone: at the far right of the row, a thumb's width. */
 .pl-fold.at-end { min-width: 36px; min-height: 32px; margin: 0; padding: 0; font-size: 14px; text-align: center; }
+
+/* On a phone the words of a plain Today line are the box itself (plan.js taskRow). */
+textarea.pl-words-in { display: block; flex: 1 1 auto; width: 100%; resize: none; overflow: hidden; field-sizing: content; min-height: 0; cursor: text; caret-color: var(--accent); -webkit-appearance: none; appearance: none; outline: none; border-radius: 0; box-shadow: none; }
+textarea.pl-words-in::placeholder { color: var(--faint); }
+.pl-task.done textarea.pl-words-in { text-decoration: line-through; text-decoration-color: var(--faint); }
