@@ -94,6 +94,8 @@ html.zoom body:is(.typing, .kb-up, .script-bar-on, .outline-bar-on, .go-on) .zm-
 .zm-faces button[aria-current="page"] { color: var(--ink); background: var(--raise); }
 .tp-switch .zm-faces { margin: 0 0 4px -11px; }
 .zm-today-top { margin-bottom: 14px; }
+.zm-dayside { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 2px 10px; align-self: flex-end; }
+.zm-dayside .zm-faces { align-self: auto; }
 
 /* ---------- Year ---------- */
 .yr-months { display: grid; grid-auto-rows: min-content; align-content: start; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 14px; margin: 18px 0 26px; font-family: var(--ui); }

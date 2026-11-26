@@ -19,7 +19,7 @@ const browser = withoutSync(await chromium.launch());
 const errors = [];
 let failed = 0;
 async function check(name, fn) {
-  try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message}`); }
+  try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message}`); if (process.env.STACK) console.log(e.stack); }
 }
 const place = (p) => p.evaluate(() => history.state);
 const lit = (p) => p.evaluate(() => document.querySelector('.zm-stop[aria-current]')?.dataset.stop || null);
@@ -157,6 +157,40 @@ try {
     assert.equal((await place(p)).view, 'notebook', 'Today opens on the Page face again');
     await p.locator('.notebook .zm-faces [data-face="list"]').click();
     await p.waitForFunction(() => history.state?.tab === 'day');
+  });
+
+  // Nov 26 2026: every day has its faces, and the list and hours step through the days.
+  await check('any day: the page has its faces, the list and hours have ‹ › and Shift + Left / Right, and the faces keep the day', async () => {
+    const day = (n) => p.evaluate((k) => { const d = new Date(); d.setDate(d.getDate() + k); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }, n);
+    await blur(p);
+    await p.keyboard.press('4');
+    await at(p, 'today');
+    assert.equal((await place(p)).tab, 'day');
+    // Today's list has the arrows too, and no Today button (it is today).
+    assert.equal(await p.locator('#plan-sheet .zm-today-top [data-act="day-next"]').count(), 1);
+    assert.equal(await p.locator('#plan-sheet .zm-today-top [data-act="day-today"]').count(), 0);
+    await p.locator('#plan-sheet [data-act="day-next"]').click();
+    await p.waitForFunction((d) => history.state?.tab === 'day' && history.state?.day === d, await day(1));
+    await p.waitForFunction(() => document.querySelector('#plan-sheet h1')?.textContent === 'Tomorrow');
+    // Tomorrow's page has the faces too, and List brings tomorrow's list back.
+    await p.locator('#plan-sheet .zm-faces [data-face="page"]').click();
+    await p.waitForFunction((d) => history.state?.view === 'notebook' && String(history.state?.pageId) === `day-${d}`, await day(1));
+    await p.waitForSelector('.notebook .tp-switch:not([hidden]) .zm-faces [data-face="page"][aria-current="page"]');
+    await p.locator('.notebook .zm-faces [data-face="hours"]').click();
+    await p.waitForFunction((d) => history.state?.tab === 'calday' && history.state?.day === d, await day(1));
+    await p.waitForSelector('#plan-sheet .zm-faces [data-face="hours"][aria-current="page"]');
+    assert.equal(await p.locator('#plan-sheet h1').innerText(), 'Tomorrow');
+    // Shift + Left on the hours: today's hours.
+    await blur(p);
+    await p.keyboard.press('Shift+ArrowLeft');
+    await p.waitForFunction(() => history.state?.tab === 'calday' && !history.state?.day);
+    await p.keyboard.press('Shift+ArrowLeft');
+    await p.waitForFunction((d) => history.state?.tab === 'calday' && history.state?.day === d, await day(-1));
+    await p.locator('#plan-sheet .zm-faces [data-face="list"]').click();
+    await p.waitForFunction((d) => history.state?.tab === 'day' && history.state?.day === d, await day(-1));
+    assert.equal(await p.locator('#plan-sheet h1').innerText(), 'Yesterday');
+    await p.locator('#plan-sheet [data-act="day-today"]').click();
+    await p.waitForFunction(() => history.state?.tab === 'day' && !history.state?.day);
   });
 
   await check('Alt + ` is Now from anywhere, even while typing', async () => {
@@ -310,6 +344,18 @@ try {
     await ph.waitForSelector('.notebook .tp-switch:not([hidden]) .zm-faces');
     assert.equal(await ph.evaluate(() => document.querySelector('.notebook').dataset.tp), 'page');
     assert.equal(await ph.locator('#outline-editor').isVisible(), true);
+  });
+  await check('phone: the next day’s page keeps the faces, and its list has ‹ ›', async () => {
+    await ph.locator('.notebook [aria-label="Day after"]').first().tap();
+    await ph.waitForFunction(() => /day-/.test(String(history.state?.pageId)) && !String(history.state?.pageId).endsWith(new Date().getDate().toString().padStart(2, '0')));
+    await ph.waitForSelector('.notebook .tp-switch:not([hidden]) .zm-faces');
+    await ph.locator('.notebook .zm-faces [data-face="list"]').tap();
+    await ph.waitForFunction(() => history.state?.tab === 'day' && !!history.state?.day);
+    await ph.waitForSelector('#plan-sheet .zm-today-top [data-act="day-prev"]');
+    const w = await ph.evaluate(() => { const r = document.querySelector('#plan-sheet .zm-today-top').getBoundingClientRect(); return { r: r.right, sw: document.documentElement.scrollWidth, vw: innerWidth }; });
+    assert.ok(w.r <= w.vw && w.sw <= w.vw, 'fits the phone');
+    await ph.locator('#plan-sheet [data-act="day-prev"]').tap();
+    await ph.waitForFunction(() => history.state?.tab === 'day' && !history.state?.day);
   });
   await pctx.close();
 } finally {

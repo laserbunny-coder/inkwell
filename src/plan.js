@@ -45,7 +45,8 @@ export const tabFor = (tab) => (tab === 'when' || tab === 'plan' ? 'day' : ['now
 export const FACES = [['list', 'List', 'Today’s list, with the events of the day'], ['page', 'Page', 'Today’s page'], ['hours', 'Hours', 'Today by the hour']];
 export function todayFace() { try { const f = localStorage.getItem('todayFace'); return FACES.some((x) => x[0] === f) ? f : 'list'; } catch { return 'list'; } }
 export function faceTo(face) { try { localStorage.setItem('todayFace', face); } catch { /* no storage here */ } }
-export const facePlace = (face, today) => (face === 'page' ? { view: 'notebook', pageId: `day-${today}` } : face === 'hours' ? { view: 'plan', tab: 'calday' } : { view: 'plan', tab: 'day' });
+// Any day's face (Nov 26 2026): the list, the page and the hours of the day shown, not only today.
+export const facePlace = (face, day, today = day) => (face === 'page' ? { view: 'notebook', pageId: `day-${day}` } : { view: 'plan', tab: face === 'hours' ? 'calday' : 'day', ...(day !== today ? { day } : {}) });
 const clip = (t, n = 40) => { const s = String(t || 'Untitled').replace(/\s+/g, ' ').trim() || 'Untitled'; return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
 const hover = media('mouse');
 const long = (iso, opts) => dateOf(iso).toLocaleDateString('en-US', opts);
@@ -161,7 +162,8 @@ export class Plan {
     // The zoom (Part 2): a line opened on the Now stop without moving it.
     this.lineId = this.tab === 'now' ? place.line || null : null;
     // The zoom (Part 3): another day, gone into from the Week (Today's stop).
-    this.dayAt = this.tab === 'day' && place.day && place.day !== this.today ? place.day : null;
+    // Any day's list or hours (Nov 26 2026: the arrows step through the days).
+    this.dayAt = (this.tab === 'day' || this.tab === 'calday') && place.day && place.day !== this.today ? place.day : null;
     this.sheet.dataset.tab = this.tab;
     await this.refresh();
   }
@@ -236,7 +238,7 @@ export class Plan {
   // latest follows when it differs.
   loadCalendar(turn) {
     const week = this.pageShown && this.tab === 'week' ? weekOf(this.week || this.today) : null;
-    const range = this.dayShown ? [this.day, this.day] : week ? [week[0], week[6]] : this.pageShown && ['now', 'day', 'calday', 'plan'].includes(this.tab) ? [this.today, this.today] : null;
+    const range = this.dayShown ? [this.day, this.day] : week ? [week[0], week[6]] : this.pageShown && ['day', 'calday'].includes(this.tab) ? [this.dayAt || this.today, this.dayAt || this.today] : this.pageShown && ['now', 'plan'].includes(this.tab) ? [this.today, this.today] : null;
     if (!range || !this.hooks.calendar) { this.cal = []; this.calKey = ''; return; }
     const key = range.join('|');
     const got = this.hooks.calendar(range[0], range[1]);
@@ -319,7 +321,7 @@ export class Plan {
   // The zoom's quiet strip under Today's date: the list, the day's page and the
   // hours. Anything that isn't one of Today's faces has no strip: the ruler at
   // the bottom says where you are.
-  facesRow(current) {
+  facesRow(current, day = this.dayAt || this.today) {
     const here = current === 'page' ? 'page' : current === 'calday' ? 'hours' : current === 'day' ? 'list' : null;
     if (!here) { const none = make('span', 'zm-nofaces'); none.hidden = true; return none; }
     const row = make('nav', 'zm-faces');
@@ -330,38 +332,37 @@ export class Plan {
       b.dataset.face = id;
       b.title = title;
       if (id === here) b.setAttribute('aria-current', 'page');
-      b.addEventListener('click', () => { faceTo(id); if (id !== here) this.hooks.go(facePlace(id, this.today)); });
+      b.addEventListener('click', () => { faceTo(id); if (id !== here) this.hooks.go(facePlace(id, day, this.today)); });
       row.append(b);
     }
     return row;
   }
-  // Today's list on the zoom: the date, Today, and its faces.
-  zoomTop() {
-    if (this.dayAt) return this.dayTop(this.dayAt);
-    const head = make('header', 'pl-top zm-today-top');
+  // The top of a day's list or hours: its date and name, the arrows to the
+  // days on either side (Shift + Left and Right), and its faces. Today's also
+  // has the two ends of the day.
+  zoomTop(face = 'day') {
+    const day = this.dayAt || this.today;
+    const isToday = day === this.today;
+    const head = make('header', face === 'day' ? 'pl-top zm-today-top' : 'pl-top');
     const left = make('div');
-    left.append(make('div', 'pl-eyebrow', long(this.today, { weekday: 'long', month: 'long', day: 'numeric' })), make('h1', '', 'Today'));
-    // The two ends of the day live here now (and in Ctrl + K).
-    const ends = make('div', 'zm-ends');
-    const n = this.now;
-    if (n.morning({ dp: dayPlan(this.items || [], this.today, this.today) })) ends.append(n.btn('talkday', 'Talk the day through', 'link', 'T'));
-    if (n.evening()) ends.append(n.btn('closeday', 'Close the day', 'link', 'C'));
-    if (ends.childElementCount) left.append(ends);
-    head.append(left, this.facesRow('day'));
-    return head;
-  }
-
-  // Another day, on Today's stop: its name, and the days on either side
-  // (Shift + Left and Right). The ruler's Today stop takes you back to today.
-  dayTop(day) {
-    const head = make('header', 'pl-top zm-today-top');
-    const left = make('div');
-    const word = day === addDays(this.today, 1) ? 'Tomorrow' : day === addDays(this.today, -1) ? 'Yesterday' : long(day, { weekday: 'long' });
+    const word = isToday ? 'Today' : day === addDays(this.today, 1) ? 'Tomorrow' : day === addDays(this.today, -1) ? 'Yesterday' : long(day, { weekday: 'long' });
     left.append(make('div', 'pl-eyebrow', long(day, { weekday: 'long', month: 'long', day: 'numeric' })), make('h1', '', word));
-    const nav = make('div', 'pl-nav');
-    const btn = (act, label, aria) => { const b = make('button', 'ghost-btn', label); b.dataset.act = act; b.setAttribute('aria-label', aria); return b; };
-    nav.append(btn('day-prev', '‹', 'The day before (Shift + Left)'), btn('day-today', 'Today', 'Back to today (3)'), btn('day-next', '›', 'The day after (Shift + Right)'));
-    head.append(left, nav);
+    if (isToday && face === 'day') {
+      // The two ends of the day live here now (and in Ctrl + K).
+      const ends = make('div', 'zm-ends');
+      const n = this.now;
+      if (n.morning({ dp: dayPlan(this.items || [], this.today, this.today) })) ends.append(n.btn('talkday', 'Talk the day through', 'link', 'T'));
+      if (n.evening()) ends.append(n.btn('closeday', 'Close the day', 'link', 'C'));
+      if (ends.childElementCount) left.append(ends);
+    }
+    const nav = make('div', 'pl-nav zm-daynav');
+    const btn = (act, label, aria) => { const b = make('button', 'ghost-btn', label); b.type = 'button'; b.dataset.act = act; b.setAttribute('aria-label', aria); b.title = aria; return b; };
+    nav.append(btn('day-prev', '‹', 'The day before (Shift + Left)'));
+    if (!isToday) nav.append(btn('day-today', 'Today', 'Back to today'));
+    nav.append(btn('day-next', '›', 'The day after (Shift + Right)'));
+    const side = make('div', 'zm-dayside');
+    side.append(nav, this.facesRow(face, day));
+    head.append(left, side);
     return head;
   }
   // Into a day from the Week (the zoom): today is the Today stop; another day
@@ -372,7 +373,8 @@ export class Plan {
   }
   dayStep(n) {
     const d = addDays(this.dayAt || this.today, n);
-    return zoomTo({ place: d === this.today ? { view: 'plan', tab: 'day' } : { view: 'plan', tab: 'day', day: d }, way: n < 0 ? 'prev' : 'next' });
+    const tab = this.tab === 'calday' ? 'calday' : 'day';
+    return zoomTo({ place: d === this.today ? { view: 'plan', tab } : { view: 'plan', tab, day: d }, way: n < 0 ? 'prev' : 'next' });
   }
 
   switchRow(current) { return this.facesRow(current); }
@@ -385,8 +387,8 @@ export class Plan {
     // plan is the List face), with the faces under the title on both devices.
     nb.classList.toggle('tp-on', !!on);
     if (on) nb.dataset.tp = 'page'; else delete nb.dataset.tp;
-    const today = !!this.day && this.day === this.today;
-    if (sw) { sw.hidden = !today; if (today) sw.replaceChildren(this.facesRow('page')); }
+    // Every day's page has its faces (Nov 26 2026), not only today's.
+    if (sw) { sw.hidden = !this.day; if (this.day) sw.replaceChildren(this.facesRow('page', this.day)); }
   }
   // Open one of Today's faces: Now, the day's page, its list, or by the hour.
   goTab(id) {
@@ -620,15 +622,15 @@ export class Plan {
 
   // A calendar's Day: today's hours, with the tasks placed on them by hand.
   drawCalDay() {
-    const day = this.today;
-    const p = dayPlan(this.items, day, day);
+    const day = this.dayAt || this.today;
+    const p = dayPlan(this.items, day, this.today);
     const evs = this.cal.filter((e) => e.day === day);
     const woven = true;
     const top = woven ? evs.filter((e) => e.allDay) : evs;
     const cal = make('div', 'pl-cal');
     for (const e of top) cal.append(this.eventLine(e, 'pl-ev'));
     cal.hidden = !top.length;
-    this.sheet.replaceChildren(this.calHead('calday', long(day, { weekday: 'long', month: 'long', day: 'numeric' })), cal, drawCalendar(this, day, [...p.carried, ...p.open], evs));
+    this.sheet.replaceChildren(this.zoomTop('calday'), cal, drawCalendar(this, day, [...p.carried, ...p.open], evs));
     this.just = null;
   }
   // The top of a calendar zoom (and of Plan): its name, then From a project and the switch.
@@ -1557,7 +1559,8 @@ export class Plan {
     if (act === 'open-day') return this.intoDay(el.closest('[data-day]').dataset.day);
     if (act === 'day-prev') return this.dayStep(-1);
     if (act === 'day-next') return this.dayStep(1);
-    if (act === 'day-today') return zoomTo({ stop: 'today' });
+    // Back to today on the same face (the ruler's Today stop is already lit, so it wouldn't move).
+    if (act === 'day-today') return zoomTo({ place: { view: 'plan', tab: this.tab === 'calday' ? 'calday' : 'day' }, way: (this.dayAt || this.today) < this.today ? 'next' : 'prev' });
     if (act === 'open-plan') { if (el.dataset.bucket) this.planFold(el.dataset.bucket, true); return this.hooks.go({ view: 'plan', tab: 'day' }); }
     if (act === 'thru-carried') return this.hooks.goThrough?.();
     if (act === 'open-today') return this.hooks.go({ view: 'notebook', pageId: `day-${this.today}` });

@@ -181,7 +181,7 @@ export async function zoomGo(place, way = 'rise') {
 }
 
 function dayWordOf(p) {
-  const d = p?.view === 'plan' && p.tab === 'day' ? p.day : null;
+  const d = p?.view === 'plan' && (p.tab === 'day' || p.tab === 'calday') ? p.day : null;
   const today = isoOf();
   if (!d || d === today) return 'Today';
   if (d === addDays(today, 1)) return touch.matches ? 'Tmrw' : 'Tomorrow';
@@ -249,9 +249,10 @@ function pan(dir) {
     return zoomGo({ view: 'plan', tab: 'week', ...(next === weekOf(isoOf())[0] ? {} : { week: next }) }, dir > 0 ? 'next' : 'prev');
   }
   // A day on Today's stop: the day before or after (Part 3).
-  if (p?.view === 'plan' && p.tab === 'day') {
+  // Its list or its hours (Nov 26 2026: the hours step through the days too).
+  if (p?.view === 'plan' && (p.tab === 'day' || p.tab === 'calday')) {
     const d = addDays(p.day || isoOf(), dir);
-    return zoomGo({ view: 'plan', tab: 'day', ...(d === isoOf() ? {} : { day: d }) }, dir > 0 ? 'next' : 'prev');
+    return zoomGo({ view: 'plan', tab: p.tab, ...(d === isoOf() ? {} : { day: d }) }, dir > 0 ? 'next' : 'prev');
   }
   // The four weeks: four weeks on (Part 3).
   if (p?.view === 'plan' && p.tab === 'ahead') {
