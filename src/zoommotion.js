@@ -77,6 +77,7 @@ export function zoomRun(way, update, { before, after } = {}) {
       running = null;
       delete root.dataset.zt;
       for (const el of document.querySelectorAll('[data-zm-anchor]')) { el.style.viewTransitionName = ''; delete el.dataset.zmAnchor; }
+      anchorRule.textContent = '';
     };
     t.finished.then(end, end);
     // A quick second step skips this one: that's fine, not an error.
@@ -87,6 +88,22 @@ export function zoomRun(way, update, { before, after } = {}) {
     delete root.dataset.zt;
     return Promise.resolve(update());
   }
+}
+
+// Once the page a zoom is bringing is in place (at once when none is under
+// way): focus and the like wait for it, or they land on the page that's going.
+export function zoomed() {
+  const t = running;
+  const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+  return t ? t.updateCallbackDone.then(frame, frame) : frame();
+}
+
+// Mark a lift's end by a CSS rule, for words inside the editor: a style
+// written on its own elements counts as an edit there and loses the caret.
+const anchorRule = document.createElement('style');
+document.head.append(anchorRule);
+export function anchorBy(selector) {
+  anchorRule.textContent = selector ? `${selector} { view-transition-name: zm-anchor; }` : '';
 }
 
 // Mark one end of a lift (the line, then its title).

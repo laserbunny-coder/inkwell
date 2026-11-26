@@ -27,6 +27,7 @@ import { isLight, lineName } from './firstlight.js';
 import { isTraining } from './training.js';
 import { inPane } from './panes.js';
 import { pageView, pageTarget, zoomTo, tieMenu, forOf } from './nowpage.js';
+import { zoomed } from './zoommotion.js';
 import './now.css';
 
 export const SMALLS = 'smalls';
@@ -388,7 +389,7 @@ export class Now {
     return null;
   }
 
-  focusFirst(sel) { if (hover.matches) requestAnimationFrame(() => this.p.sheet.querySelector(sel)?.focus()); }
+  focusFirst(sel) { if (hover.matches) zoomed().then(() => this.p.sheet.querySelector(sel)?.focus()); }
 
   async begin(id) {
     if (!id) return;
@@ -473,7 +474,7 @@ export class Now {
   // From 5 pm, until the day is closed.
   evening() { return new Date().getHours() >= 17 && !this.st.closed; }
 
-  focusIn(sel) { requestAnimationFrame(() => this.p.sheet.querySelector(sel)?.focus()); }
+  focusIn(sel) { zoomed().then(() => this.p.sheet.querySelector(sel)?.focus()); }
 
   openTalk() {
     this.mode = 'talk';

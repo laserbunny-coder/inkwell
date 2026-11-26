@@ -12,7 +12,7 @@ import { placeSorts, bySort } from './order.js';
 import { walKey } from './panes.js';
 import { lineDecos, changedRangeOf, insertsNodes, unitsIn } from './linedecos.js';
 import { isTouch } from './device.js';
-import { zoomRun, anchor, aimAt } from './zoommotion.js';
+import { zoomRun, anchorBy, aimAt } from './zoommotion.js';
 
 // The notebook's pages (daily pages and named pages) are outlines: lines you
 // can nest, Workflowy-style. Every line is its own entry whose parent is the
@@ -360,13 +360,13 @@ export function zoomLine(view, eid) {
   if (document.documentElement.dataset.zt) { view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid || null })); return; }
   const words = (id) => (id ? [...view.dom.querySelectorAll('li')].find((l) => l.getAttribute('data-eid') === id)?.querySelector(':scope > p') : null);
   // Into a line: it lifts from where it is. Out: it settles back into place.
-  const end = words(eid || was);
+  const id = eid || was;
+  const end = words(id);
   const shown = end && end.getBoundingClientRect().height > 0;
   aimAt(null);
   zoomRun(shown ? 'line' : 'rise', () => {
     view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid || null }));
-    if (shown) anchor(words(eid || was));
-  }, { before: () => { if (shown) anchor(end); } });
+  }, { before: () => { if (shown) anchorBy(`.ProseMirror li[data-eid="${CSS.escape(id)}"] > p`); } });
 }
 
 // Folding and zooming, Workflowy-style. The arrow beside a line with lines
