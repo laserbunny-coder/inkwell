@@ -110,7 +110,7 @@ try {
   });
 
   await check('Delete in the ⋯ menu; Ctrl + Z in the plan takes it back; it leaves the page it was written on', async () => {
-    await row(page, 'Call the print shop').locator('.pl-grip').click({ button: 'right' }); // the menu: a right-click on the dots
+    await row(page, 'Call the print shop').locator('.pl-words').click({ button: 'right' }); // the menu: a right-click on the dots
     await page.locator('.pop-menu .pop-item', { hasText: /^Delete$/ }).click();
     await page.waitForFunction(() => ![...document.querySelectorAll('#plan .pl-words')].some((w) => w.textContent === 'Call the print shop'));
     const line = await named(page, 'Call the print shop');

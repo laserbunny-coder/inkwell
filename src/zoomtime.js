@@ -268,8 +268,8 @@ export class Pick {
   }
   context(e) {
     if (!this.active()) return;
-    // Today as an outline: a right-click on the six dots is the task's menu (as in Tana).
-    if (e.target.closest?.('.pl-ol .pl-grip')) return;
+    // Today as an outline: a right-click anywhere on a line is the task's menu (as in Tana).
+    if (e.target.closest?.('.pl-ol')) return;
     const row = e.target.closest?.('[data-task]:not([data-part]):not([data-ghost])');
     if (!row || !this.plan.sheet.contains(row) || typing(e.target)) return;
     e.preventDefault();

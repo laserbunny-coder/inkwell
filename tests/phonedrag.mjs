@@ -1,9 +1,8 @@
 // Moving lines on a phone, as in Workflowy: hold a finger still on a line's
 // words and it lifts, then follows the finger (with what's under it), before
 // or after another line, or, let go further right, as the first line under it.
-// A tap on the words puts the cursor there; a quick swipe scrolls. Every line
-// also shows faint six dots: a slide there moves it at once, a tap zooms in,
-// and holding them still brings up the line's menu.
+// Held still and let go, its menu comes up. A tap on the words puts the
+// cursor there; a quick swipe scrolls. No six dots (one way everywhere).
 import { createRequire } from 'node:module';
 import { setTimeout as sleep } from 'node:timers/promises';
 import assert from 'node:assert/strict';
@@ -60,59 +59,35 @@ try {
   };
   const blurred = async () => { await ph.evaluate(() => document.activeElement?.blur()); await sleep(200); };
 
-  await check('every line shows faint six dots on a phone, and nothing spills', async () => {
+  await check('no six dots on any line on a phone, and nothing spills', async () => {
     await setOutline(ph, START);
     await blurred();
-    for (const t of ['Board reel 2', 'Call Dana', 'Order rope']) {
-      const d = dots(t);
-      assert.ok(await d.isVisible(), `dots on “${t}”`);
-      assert.ok(Number(await d.locator('.grip').evaluate((g) => getComputedStyle(g).opacity)) > 0.2, `faintly visible on “${t}”`);
-    }
+    for (const t of ['Board reel 2', 'Call Dana', 'Order rope']) assert.equal(await dots(t).isVisible(), false, `no dots on “${t}”`);
     assert.ok(await ph.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'nothing spills');
   });
 
-  await check('a finger on the dots slides the line at once, with what is under it, and a copy rides under the finger', async () => {
+  // Held by the start of its words, so letting go straight below stays at the same depth.
+  const startOf = async (loc) => { const b = await loc.boundingBox(); return { x: b.x + 10, y: b.y + b.height / 2, b }; };
+  await check('a line held by its words slides, with what is under it, and a copy rides under the finger', async () => {
     await setOutline(ph, START);
     await blurred();
-    const from = await centre(dots("Kenji's verse"));
+    const from = await startOf(words("Kenji's verse"));
     const to = await centre(words('Call Dana'));
     let lifted = 0;
-    await drag(from, { x: from.x, y: to.b.y + to.b.height - 3 }, { lookMid: async () => { lifted = await ph.locator('.line-lift').count(); } });
+    await drag(from, { x: from.x, y: to.b.y + to.b.height - 3 }, { wait: 500, lookMid: async () => { lifted = await ph.locator('.line-lift').count(); } });
     assert.equal(lifted, 1, 'the line lifts and follows the finger');
     assert.equal(await ph.locator('.line-lift').count(), 0, 'and is gone once it lands');
-    const plain = (await readOutline(ph)).replace(/\|/g, '');
-    assert.equal(plain, ['Board reel 2', 'Call Dana', "Kenji's verse", '  Rhymes for the chorus', 'Order rope'].join('\n'));
+    assert.equal((await readOutline(ph)).replace(/\|/g, ''), ['Board reel 2', 'Call Dana', "Kenji's verse", '  Rhymes for the chorus', 'Order rope'].join('\n'));
     assert.equal(await ph.evaluate(() => document.activeElement?.closest?.('.ProseMirror') ? 'editor' : 'none'), 'none', 'the keyboard stays down');
-  });
-
-  await check('let go further to the right, and the line goes under the one above, as its first line', async () => {
-    await setOutline(ph, START);
-    await blurred();
-    const from = await centre(dots('Order rope'));
-    const to = await centre(words('Board reel 2'));
-    await drag(from, { x: to.b.x + 90, y: to.b.y + to.b.height - 3 });
-    assert.equal((await readOutline(ph)).replace(/\|/g, ''), ["Kenji's verse", '  Rhymes for the chorus', 'Board reel 2', '  Order rope', 'Call Dana'].join('\n'));
   });
 
   await check('a line can go to the very top', async () => {
     await setOutline(ph, START);
     await blurred();
-    const from = await centre(dots('Call Dana'));
+    const from = await startOf(words('Call Dana'));
     const to = await centre(words("Kenji's verse"));
-    await drag(from, { x: from.x, y: to.b.y + 3 });
+    await drag(from, { x: from.x, y: to.b.y + 3 }, { wait: 500 });
     assert.equal((await readOutline(ph)).replace(/\|/g, ''), ['Call Dana', "Kenji's verse", '  Rhymes for the chorus', 'Board reel 2', 'Order rope'].join('\n'));
-  });
-
-  await check('a quick tap on the dots still zooms into the line', async () => {
-    await setOutline(ph, START);
-    await blurred();
-    const d = await centre(dots("Kenji's verse"));
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: d.x, y: d.y }] });
-    await sleep(80);
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    await ph.waitForFunction(() => /Kenji/.test(document.querySelector('#outline-editor li.zoom-root > p')?.textContent || ''));
-    await ph.evaluate(() => window.__outline.view.dispatch(window.__outline.state.tr.setMeta(window.__foldKey, { zoom: null })));
-    assert.equal((await readOutline(ph)).replace(/\|/g, ''), START.trim());
   });
 
   await check('hold a finger on a line’s words: it pops out, then follows the finger to its new place', async () => {
@@ -153,16 +128,18 @@ try {
     assert.equal((await readOutline(ph)).replace(/\|/g, ''), ['Board reel 2', 'Call Dana', "  Kenji's verse", '    Rhymes for the chorus', 'Order rope'].join('\n'));
   });
 
-  await check('held still and let go, the line settles back and nothing changes', async () => {
+  await check('held still and let go, the line settles back, nothing changes, and its menu comes up', async () => {
     await setOutline(ph, START);
     await blurred();
     const at = await centre(words('Call Dana'));
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: at.x, y: at.y }] });
     await sleep(550);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    await sleep(300);
+    await ph.waitForSelector('.as-sheet, .hm-menu, .handle-menu, [role="menu"]', { timeout: 3000 });
     assert.equal((await readOutline(ph)).replace(/\|/g, ''), START.trim());
     assert.equal(await ph.locator('.line-lift, .line-drop').count(), 0);
+    await ph.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await sleep(300);
   });
 
   await check('a quick swipe over the words scrolls and moves nothing, and a tap puts the cursor there', async () => {
@@ -222,28 +199,6 @@ try {
     await ph.touchscreen.tap(t.x, t.y);
     await sleep(300);
     assert.ok((await readOutline(ph)).split('\n').find((l) => l.includes('Board')).includes('|'), 'a tap puts the cursor there');
-  });
-
-  await check('holding the dots still brings up the line’s menu; a tap on the dots of the line you are on zooms in', async () => {
-    await setOutline(ph, START);
-    await blurred();
-    const d = await centre(dots('Board reel 2'));
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: d.x, y: d.y }] });
-    await sleep(600);
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    await ph.waitForSelector('.as-sheet, .hm-menu, .handle-menu, [role="menu"]', { timeout: 3000 });
-    assert.equal((await readOutline(ph)).replace(/\|/g, ''), START.trim(), 'nothing moved');
-    await ph.keyboard.press('Escape');
-    await sleep(300);
-    const c = await centre(words('Call Dana'));
-    await ph.touchscreen.tap(c.x, c.y);
-    await sleep(300);
-    const cd = await centre(dots('Call Dana'));
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cd.x, y: cd.y }] });
-    await sleep(80);
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    await ph.waitForFunction(() => /Call Dana/.test(document.querySelector('#outline-editor li.zoom-root > p')?.textContent || ''));
-    await ph.evaluate(() => window.__outline.view.dispatch(window.__outline.state.tr.setMeta(window.__foldKey, { zoom: null })));
   });
 
   await check('a double tap on a line’s words zooms into it; one tap only puts the cursor there', async () => {

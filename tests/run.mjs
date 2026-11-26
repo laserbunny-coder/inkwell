@@ -629,13 +629,13 @@ try {
     await p.keyboard.press('Control+J');
   });
 
-  await check('lines fold away and a bullet zooms in', async () => {
+  await check('lines fold away and a double-click zooms in', async () => {
     if (!(await p.locator('.notebook').isVisible())) await p.keyboard.press('Control+J');
     await p.waitForSelector('.notebook', { state: 'visible' });
     await p.waitForFunction(() => document.querySelector('#nb-kind').textContent === 'Today');
     const top = p.locator('#outline-editor li:visible', { hasText: 'Call the harbourmaster' }).first();
-    // Bullets are off by default: the dot only shows under the pointer.
-    assert.equal(await top.locator(':scope > .line-gutter .bullet').evaluate((b) => getComputedStyle(b, '::after').opacity), '0');
+    // Bullets are off by default, and there are no dots to aim for (one way everywhere).
+    assert.equal(await top.locator(':scope > .line-gutter .bullet').isVisible(), false);
     const storm = p.locator('#outline-editor li p', { hasText: 'Ask about the 1912 storm' });
     await top.locator(':scope > p').click({ position: { x: 12, y: 10 } }); // away from the #tag
     await sleep(150);
@@ -648,25 +648,30 @@ try {
     assert.equal(await storm.isVisible(), false, 'arrow folds');
     await top.locator(':scope > .line-gutter .fold').click();
     assert.equal(await storm.isVisible(), true, 'arrow unfolds');
-    await top.locator(':scope > .line-gutter .bullet').click();
+    await top.locator(':scope > p').dblclick({ position: { x: 12, y: 10 } });
     await p.waitForSelector('.notebook.zoomed');
     assert.equal(await p.locator('#nb-zoom').isVisible(), true);
     assert.equal(await p.locator('#nb-title').isVisible(), false);
     assert.equal(await storm.isVisible(), true);
     await p.keyboard.press('Escape');
     await p.waitForFunction(() => !document.querySelector('.notebook.zoomed'));
-    await top.locator(':scope > .line-gutter .bullet').click();
+    await top.locator(':scope > p').dblclick({ position: { x: 12, y: 10 } });
     await p.waitForSelector('.notebook.zoomed');
     await p.goBack();
     await p.waitForFunction(() => !document.querySelector('.notebook.zoomed'));
     assert.equal(await p.locator('#nb-title').isVisible(), true);
   });
 
-  await check('a notebook line shows six dots on hover; a right-click opens its menu', async () => {
+  await check('a right-click on a notebook line (one you are not typing in) opens its menu', async () => {
     const top = p.locator('#outline-editor li:visible', { hasText: 'Call the harbourmaster' }).first();
-    await top.locator(':scope > p').hover({ position: { x: 12, y: 10 } });
-    await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li')].find((li) => li.querySelector(':scope > p')?.textContent.startsWith('Call the harbourmaster'))?.querySelector(':scope > .line-gutter .grip') && getComputedStyle([...document.querySelectorAll('#outline-editor li')].find((li) => li.querySelector(':scope > p')?.textContent.startsWith('Call the harbourmaster')).querySelector(':scope > .line-gutter .grip')).opacity === '1');
-    await top.locator(':scope > .line-gutter .bullet').click({ button: 'right' });
+    const rc = async () => {
+      await p.waitForFunction(() => !document.querySelector('.handle-menu'));
+      await sleep(300); // the line settles after a change (done lines restyle)
+      await p.evaluate(() => document.activeElement?.blur());
+      await top.locator(':scope > p').click({ button: 'right', position: { x: 12, y: 10 } });
+      await p.waitForSelector('.handle-menu', { state: 'visible' });
+    };
+    await rc();
     await p.waitForSelector('.handle-menu', { state: 'visible' });
     assert.equal(await p.locator('.notebook.zoomed').count(), 0, 'a right-click does not zoom');
     assert.match(await p.locator('.handle-menu .head').innerText(), /^LINE · \d+ LINES? UNDER IT$/);
@@ -677,10 +682,10 @@ try {
     assert.match(labels.at(-1), /^Delete line and the \d+ lines? under it$/);
     await p.locator('.handle-menu .item', { hasText: 'Mark done' }).click();
     await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li[data-done] > p')].some((x) => x.textContent.startsWith('Call the harbourmaster')));
-    await top.locator(':scope > .line-gutter .bullet').click({ button: 'right' });
+    await rc();
     await p.locator('.handle-menu .item', { hasText: 'Not done' }).click();
     await p.waitForFunction(() => ![...document.querySelectorAll('#outline-editor li[data-done] > p')].some((x) => x.textContent.startsWith('Call the harbourmaster')));
-    await top.locator(':scope > .line-gutter .bullet').click({ button: 'right' });
+    await rc();
     await p.keyboard.press('Escape');
     assert.equal(await p.locator('.handle-menu').count(), 0);
   });
@@ -870,13 +875,15 @@ try {
     // from the bottom (a tap zooms in, as on every line). Move down keeps the
     // sheet open so it can be tapped again.
     const touchCdp = await phoneCtx.newCDPSession(ph);
+    // Held still on its words (out of typing), a line brings up its sheet (no dots any more).
     const hold = async (loc) => {
+      await ph.evaluate(() => document.activeElement?.blur());
       const b = await loc.boundingBox();
-      await touchCdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: b.x + b.width / 2, y: b.y + b.height / 2 }] });
+      await touchCdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: b.x + 14, y: b.y + b.height / 2 }] });
       await sleep(650);
       await touchCdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     };
-    const here = ph.locator('#outline-editor li.here > .line-gutter .bullet');
+    const here = ph.locator('#outline-editor li.here > p');
     await here.waitFor({ state: 'visible' });
     await hold(here);
     await ph.waitForSelector('.handle-menu.as-sheet', { state: 'visible' });
@@ -976,7 +983,7 @@ try {
     await caret.tap();
     await ph.waitForSelector('#outline-editor li.folded');
     // The caret stepped up onto the folded line, so its handle is there now; Unfold leads its menu.
-    await hold(ph.locator('#outline-editor li.here.folded > .line-gutter .bullet'));
+    await hold(ph.locator('#outline-editor li.here.folded > p'));
     await ph.waitForSelector('.handle-menu.as-sheet', { state: 'visible' });
     assert.match(await ph.locator('.handle-menu .item').first().innerText(), /^Unfold the \d+ lines under it/);
     await ph.locator('.handle-menu .item').first().tap();
@@ -984,7 +991,7 @@ try {
     await phoneCtx.close();
   });
 
-  await check('a notebook line moves with Alt+Shift+arrows and by dragging its dot', async () => {
+  await check('a notebook line moves with Alt+Shift+arrows and by dragging its words', async () => {
     await sleep(300);
     if (!(await p.locator('.notebook').isVisible())) await p.keyboard.press('Control+J');
     await p.waitForFunction(() => document.querySelector('#nb-kind')?.textContent === 'Today');
@@ -999,10 +1006,12 @@ try {
     await sleep(150);
     await p.keyboard.press('Alt+Shift+ArrowUp');
     await p.waitForFunction(() => { const t = [...document.querySelectorAll('#outline-editor li > p')].map((x) => x.textContent); return t.indexOf('Beta') === t.indexOf('Alpha') - 1; });
-    // Drag Alpha's dot above Beta.
+    // Drag Alpha by its words above Beta (out of typing first).
+    await p.evaluate(() => document.activeElement?.blur());
     const alpha = p.locator('#outline-editor li', { has: p.locator(':scope > p', { hasText: /^Alpha$/ }) });
     const beta = p.locator('#outline-editor li > p', { hasText: /^Beta$/ });
-    const dot = await alpha.locator(':scope > .line-gutter .bullet').boundingBox();
+    const aw = await alpha.locator(':scope > p').boundingBox();
+    const dot = { x: aw.x + 4, y: aw.y, width: 12, height: aw.height };
     const tgt = await beta.boundingBox();
     await p.mouse.move(dot.x + dot.width / 2, dot.y + dot.height / 2);
     await p.mouse.down();

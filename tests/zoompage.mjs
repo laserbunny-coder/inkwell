@@ -134,8 +134,8 @@ try {
   });
 
   await check('a line on today, opened from Today, is Now zoomed in', async () => {
-    const r = p.locator('.pl-task', { hasText: 'Board scene 3' }).first(); // the six dots zoom in (a click on the words types)
-    await r.hover(); await r.locator('.pl-grip').click();
+    const r = p.locator('.pl-task', { hasText: 'Board scene 3' }).first(); // a double-click zooms in (a click on the words types)
+    await r.locator('.pl-words').dblclick();
     await zoomedOn(p, '^Board scene 3');
     await strip(p).waitFor();
   });

@@ -42,7 +42,8 @@ try {
     }
   });
   const menu = ph.locator('.handle-menu.as-sheet');
-  const handle = ph.locator('#outline-editor li.here > .line-gutter .bullet');
+  // No handle any more (one way everywhere, Nov 25 2026): the line's own words, held still.
+  const handle = ph.locator('#outline-editor li.here > p');
   const done = () => ph.evaluate(() => [...document.querySelectorAll('#outline-editor li[data-done] > p')].map((p) => p.textContent));
   // Puts the line you're on at a height on the screen, then holds its handle
   // the way a finger does (down, still until the sheet comes, up, then the
@@ -55,10 +56,11 @@ try {
       window.scrollBy(0, p.getBoundingClientRect().top - y);
     }, y);
     await sleep(150);
+    await ph.evaluate(() => document.activeElement?.blur());
     await handle.waitFor({ state: 'visible' });
     const b = await handle.boundingBox();
-    const x0 = b.x + b.width / 2, y0 = b.y + b.height / 2;
-    const clear = await ph.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('li.here > .line-gutter .bullet'), [x0, y0]);
+    const x0 = b.x + 12, y0 = b.y + b.height / 2;
+    const clear = await ph.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('li.here > p'), [x0, y0]);
     if (!clear) return false;
     await ph.evaluate(() => { window.__pe = []; });
     // Held still, the menu comes up under the thumb before it lifts.
@@ -103,8 +105,8 @@ try {
   });
 
   // A line with lines folded inside shows the arrow on every line, the one
-  // you're on too, with its handle just beside it (not in its place).
-  await check('the line you are on keeps its fold arrow, with the handle beside it', async () => {
+  // you're on too, at the far right; there's no handle (held still, the words bring the sheet).
+  await check('the line you are on keeps its fold arrow at the far right, and no handle', async () => {
     // Puts the caret at the end of a line (by its text) and, if asked, tucks it under the line above.
     const at = (text, indent) => ph.evaluate(([text, indent]) => {
       const ed = window.__notebook.editor;
@@ -125,15 +127,14 @@ try {
     await touch(fold);
     await ph.waitForSelector('#outline-editor li.here.folded');
     assert.equal(await ph.locator(fold).isVisible(), true, 'arrow shows');
-    assert.equal(await ph.locator(grip).isVisible(), true, 'handle shows');
-    const [a, h] = [await ph.locator(fold).boundingBox(), await ph.locator(grip).boundingBox()];
-    assert.ok(h.x + h.width / 2 < a.x + a.width / 2 - 10, `handle sits left of the arrow (${JSON.stringify({ a, h })})`);
+    assert.equal(await ph.locator(grip).isVisible(), false, 'no handle');
+    const a = await ph.locator(fold).boundingBox();
+    const line = await ph.locator('#outline-editor li.here > p').boundingBox();
+    assert.ok(a.x + a.width >= line.x + line.width - 4, `the arrow is at the far right (${JSON.stringify({ a, line })})`);
     const hit = (b) => ph.evaluate(([x, y]) => document.elementFromPoint(x, y)?.className, [b.x + b.width / 2, b.y + b.height / 2]);
     assert.equal(await hit(a), 'fold', 'the middle of the arrow is the arrow');
-    assert.equal(await hit(h), 'bullet', 'the middle of the handle is the handle');
-    const colour = (sel) => ph.locator(sel).evaluate((g) => getComputedStyle(g).color);
-    assert.equal(await colour(`${grip} .grip`), await ph.locator('#outline-editor li:not(.folded) > .line-gutter .grip').first().evaluate((g) => getComputedStyle(g).color), 'the handle keeps its usual colour');
-    { const b = await ph.locator(grip).boundingBox(); await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: b.x + b.width / 2, y: b.y + b.height / 2 }] }); await sleep(650); await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); }
+    await ph.evaluate(() => document.activeElement?.blur());
+    { const b = await ph.locator('#outline-editor li.here > p').boundingBox(); await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: b.x + 12, y: b.y + b.height / 2 }] }); await sleep(650); await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); }
     await menu.waitFor({ state: 'visible' });
     await ph.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     await ph.waitForSelector('.handle-menu', { state: 'detached' });
