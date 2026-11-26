@@ -96,10 +96,13 @@ try {
     await p.mouse.down();
     // A wobble up and down, and a little sideways: still its own place.
     for (const [dx, dy] of [[0, 7], [3, -8], [-4, 9], [18, -6], [-18, 4], [0, -10]]) await p.mouse.move(from.x + dx, from.y + dy, { steps: 2 });
-    assert.equal(await p.evaluate(() => document.querySelector('.line-drop')?.classList.contains('home')), true, 'still home');
-    // The card rides below the pointer, never over the orange line.
-    const over = await p.evaluate(() => { const a = document.querySelector('.line-lift').getBoundingClientRect(); const b = document.querySelector('.line-drop').getBoundingClientRect(); return a.top < b.bottom && a.bottom > b.top && a.left < b.right && a.right > b.left; });
+    assert.equal(await p.evaluate(() => { const m = document.querySelector('.line-drop'); return m?.classList.contains('home') && m.hidden; }), true, 'still home: no orange line');
+    // Past the next line's middle, the orange line shows; the card rides below the pointer, never over it.
+    const nb = await at('Bravo kid');
+    await p.mouse.move(from.x, nb.b.y + 3, { steps: 4 });
+    const over = await p.evaluate(() => { const a = document.querySelector('.line-lift').getBoundingClientRect(); const m = document.querySelector('.line-drop'); const b = m.getBoundingClientRect(); return m.hidden || (a.top < b.bottom && a.bottom > b.top && a.left < b.right && a.right > b.left); });
     assert.equal(over, false, 'the card is clear of the orange line');
+    await p.mouse.move(from.x, from.y, { steps: 4 });
     await p.mouse.up();
     await sleep(300);
     assert.equal(await plain(), START.trim(), 'a wobble moves nothing');

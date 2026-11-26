@@ -573,8 +573,10 @@ export function setLineDragOut(hooks) { dragOut = hooks; }
 // is one of the gaps between the lines on screen, at a depth. It starts in
 // the line's own gap, so a small wobble moves nothing; it only goes to the
 // next gap once the pointer is past the middle of the line beyond, and a few
-// px more. Sideways, a full step right is one level in, a full step left one
-// level out; less than that keeps the level it has.
+// px more. Moving up and down it keeps its own level where the gap allows
+// (the nearest one where it doesn't); sideways, a full step right is one
+// level in from what it shows, a full step left one level out, and that
+// stays with it; less than a step keeps the level.
 const STEP = 40; // px sideways for one level in or out
 const STAY = 6; // px of cushion past a line's middle before the drop moves on
 // One move of a line, fed by a mouse, by the dots under a finger, or by a
@@ -582,7 +584,7 @@ const STAY = 6; // px of cushion past a line's middle before the drop moves on
 function lineDrag(view, dragged, touch) {
   const eid = dragged.querySelector(':scope > .line-gutter')?.dataset.eid;
   let mark = null, drop = null, lift = null, fade = null, dy = 0, raf = 0, last = null;
-  let x0 = 0, depth0 = 0, home = null, lvl = 0, ind = 28, liftLeft = 0;
+  let x0 = 0, depth0 = 0, home = null, lvl = 0, ind = 28, liftLeft = 0; // lvl: levels in (or out) the sideways steps asked for
   // The editor may draw the line afresh while it moves, so it's found by its id.
   const idOf = (li) => li?.querySelector(':scope > .line-gutter')?.dataset.eid || null;
   const live = () => [...view.dom.querySelectorAll('li')].find((l) => idOf(l) === eid) || dragged;
@@ -625,10 +627,14 @@ function lineDrag(view, dragged, touch) {
     }
     if (k < 0) { k = 0; while (k < L.length && mid(L[k]) < e.clientY) k++; }
     const slot = slotOf(L, k);
-    // Sideways: a whole step to change level, and a whole step back to undo it.
+    // Up and down it keeps the level it shows, as far as the gap allows.
+    // Sideways: a whole step right of where the level last changed is one
+    // level in, a whole step left one level out.
+    let depth = Math.max(slot.lo, Math.min(slot.hi, depth0 + lvl));
     const dx = e.clientX - x0;
-    if (dx >= (lvl + 1) * STEP || dx <= (lvl - 1) * STEP) lvl = Math.round(dx / STEP);
-    slot.depth = Math.max(slot.lo, Math.min(slot.hi, depth0 + lvl));
+    if (dx >= STEP) { if (depth < slot.hi) { depth += 1; x0 += STEP; lvl = depth - depth0; } else x0 = e.clientX - STEP; }
+    else if (dx <= -STEP) { if (depth > slot.lo) { depth -= 1; x0 -= STEP; lvl = depth - depth0; } else x0 = e.clientX + STEP; }
+    slot.depth = depth;
     slot.home = !!home && slot.k === home.k && slot.depth === depth0;
     return slot;
   };
@@ -644,12 +650,14 @@ function lineDrag(view, dragged, touch) {
     const left = ref.r.left + (depth - ref.depth) * ind;
     const right = view.dom.getBoundingClientRect().right;
     Object.assign(mark.style, { left: `${left}px`, width: `${Math.max(40, right - left)}px`, top: `${y - 1}px` });
+    // Still in its own place: no orange line; the faded line there says it stays.
     mark.classList.toggle('home', drop.home);
+    mark.hidden = drop.home;
     if (lift) lift.style.left = `${liftLeft + (depth - depth0) * ind}px`;
   };
   const begin = (e) => {
     last = e;
-    x0 = e.clientX; lvl = 0; depth0 = depthOf(dragged);
+    x0 = e.clientX; depth0 = depthOf(dragged); lvl = 0;
     {
       const L = lines();
       const top = (dragged.querySelector(':scope > p') || dragged).getBoundingClientRect().top;
@@ -683,7 +691,7 @@ function lineDrag(view, dragged, touch) {
     lift.textContent = p?.textContent || '';
     if (kidsCount(dragged)) lift.dataset.more = `+${kidsCount(dragged)}`;
     liftLeft = b.left + (touch ? 0 : 14);
-    Object.assign(lift.style, { left: `${liftLeft}px`, width: `${Math.min(b.width, innerWidth - liftLeft - 8)}px`, top: `${b.top}px` });
+    Object.assign(lift.style, { left: `${liftLeft}px`, maxWidth: `${Math.min(b.width, innerWidth - liftLeft - 8)}px`, top: `${b.top}px` }); // as wide as its words, so it hides as little as it can
     document.body.append(lift);
     // It rides just above the finger, or just below the mouse, so the orange
     // line where it will land is never under it.

@@ -161,6 +161,7 @@ try {
     await desk.waitForSelector('.pop-menu .pop-item');
     const items = await desk.locator('.pop-menu .pop-item').allInnerTexts();
     assert.ok(items.some((t) => t.startsWith('Move to Trash')), items.join(' | '));
+    await shot(desk, 'oneway-rightclick-desk');
     await desk.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     await sleep(300);
   });
@@ -311,6 +312,7 @@ try {
     await sleep(550);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await phone.waitForSelector('.pop-menu .pop-item', { timeout: 3000 });
+    await shot(phone, 'oneway-hold-phone');
     assert.deepEqual(await titles(phone, 'wd_nb'), ['Running gags', 'Kenji', 'Mom', 'The bakery'], 'nothing moved');
     await phone.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     await sleep(300);
