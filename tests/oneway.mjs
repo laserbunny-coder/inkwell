@@ -88,6 +88,46 @@ try {
     assert.equal(await p.evaluate(() => String(getSelection())), '', 'no words picked');
   });
 
+  await check('a dragged line has a cushion: a wobble moves nothing, it goes one gap at a time, and a full step right puts it under', async () => {
+    await fresh();
+    const from = await at('Charlie');
+    const kid = await at('Bravo kid');
+    await p.mouse.move(from.x, from.y);
+    await p.mouse.down();
+    // A wobble up and down, and a little sideways: still its own place.
+    for (const [dx, dy] of [[0, 7], [3, -8], [-4, 9], [18, -6], [-18, 4], [0, -10]]) await p.mouse.move(from.x + dx, from.y + dy, { steps: 2 });
+    assert.equal(await p.evaluate(() => document.querySelector('.line-drop')?.classList.contains('home')), true, 'still home');
+    // The card rides below the pointer, never over the orange line.
+    const over = await p.evaluate(() => { const a = document.querySelector('.line-lift').getBoundingClientRect(); const b = document.querySelector('.line-drop').getBoundingClientRect(); return a.top < b.bottom && a.bottom > b.top && a.left < b.right && a.right > b.left; });
+    assert.equal(over, false, 'the card is clear of the orange line');
+    await p.mouse.up();
+    await sleep(300);
+    assert.equal(await plain(), START.trim(), 'a wobble moves nothing');
+    // Up to just short of the middle of "Bravo kid", drifting right a little: still its own place.
+    await p.mouse.move(from.x, from.y);
+    await p.mouse.down();
+    await p.mouse.move(from.x + 20, kid.b.y + kid.b.height / 2 - 2, { steps: 8 });
+    await p.mouse.up();
+    await sleep(300);
+    assert.equal(await plain(), START.trim(), 'not under Bravo kid, not above it');
+    // Past its middle: one gap up, between Bravo and Bravo kid.
+    await p.mouse.move(from.x, from.y);
+    await p.mouse.down();
+    await p.mouse.move(from.x, kid.b.y + 3, { steps: 8 });
+    await p.mouse.up();
+    await sleep(300);
+    assert.equal(await plain(), ['Alpha', 'Bravo', '  Charlie', '  Bravo kid'].join('\n'), 'one gap up');
+    await fresh();
+    // A whole step right: under the line above.
+    const c2 = await at('Charlie');
+    await p.mouse.move(c2.x, c2.y);
+    await p.mouse.down();
+    await p.mouse.move(c2.x + 50, c2.y + 2, { steps: 8 });
+    await p.mouse.up();
+    await sleep(300);
+    assert.equal(await plain(), ['Alpha', 'Bravo', '  Bravo kid', '  Charlie'].join('\n'), 'one level in');
+  });
+
   await check('in the line you are typing in, a drag picks words', async () => {
     await fresh();
     const a = await at('Charlie');
