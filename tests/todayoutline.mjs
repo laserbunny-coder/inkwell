@@ -205,6 +205,33 @@ try {
     await ph.waitForSelector('.zm-movebar:not([hidden]), [data-mb="open"]', { timeout: 5000 });
     assert.match(await ph.locator('[data-mb="open"]').innerText(), /Zoom in/);
   });
+  await check('phone: the triangle sits at the far right of the line, on the task and on the lines under it', async () => {
+    await ph.keyboard.press('Escape').catch(() => {});
+    await ph.evaluate(() => document.activeElement?.blur());
+    await row(ph, 'Rewrite the dojo').locator('.pl-words').tap();
+    await ph.locator('#plan-sheet .pl-ol-in').waitFor();
+    await ph.keyboard.press('Tab');
+    await ph.waitForFunction(() => document.activeElement?.closest?.('.pl-lines'), null, { timeout: 5000 });
+    await ph.keyboard.type('Kenji enters late');
+    await ph.keyboard.press('Enter');
+    await ph.keyboard.press('Tab');
+    await ph.keyboard.type('He trips on the mat');
+    await sleep(1200);
+    await ph.evaluate(() => document.activeElement?.blur());
+    await ph.reload();
+    await ph.waitForFunction(() => document.documentElement.dataset.started === '1');
+    await toList(ph);
+    const at = await ph.evaluate(() => {
+      const f = document.querySelector('#plan-sheet .pl-ol .pl-fold');
+      const r = f?.closest('.pl-task').getBoundingClientRect();
+      const sub = document.querySelector('#plan-sheet .pl-lines li.has-kids > .line-gutter .fold');
+      const li = sub?.closest('li').getBoundingClientRect();
+      return f && sub && { task: r.right - f.getBoundingClientRect().right, line: li.right - sub.getBoundingClientRect().right, wide: innerWidth };
+    });
+    assert.ok(at, 'both triangles are there');
+    assert.ok(at.task < 16, `task triangle ${at.task}px from the right`);
+    assert.ok(at.line < 16, `line triangle ${at.line}px from the right`);
+  });
   await pctx.close();
 } finally {
   await browser.close();

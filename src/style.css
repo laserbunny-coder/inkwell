@@ -2405,3 +2405,21 @@ html.touring .preview-strip { display: none; }
 .preview-strip button { font: inherit; border: 0; border-radius: 99px; padding: 4px 10px; background: color-mix(in srgb, var(--ink, #eee) 12%, transparent); color: inherit; cursor: pointer; white-space: nowrap; }
 .preview-strip button:hover { background: color-mix(in srgb, var(--ink, #eee) 20%, transparent); }
 @media (max-width: 700px) { .preview-strip { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 64px); gap: 6px; padding-left: 10px; } .preview-strip { left: 12px; transform: none; white-space: nowrap; } .preview-strip .pv-say { font-size: 0; } .preview-strip .pv-say::before { content: 'Preview'; font-size: 12px; } }
+
+/* On a phone the fold triangle sits at the far right of its line, on every
+   line at every depth, so the tick box and the words keep the left for the
+   thumb (Michael, Nov 25 2026; desktop keeps it on the left). The gutter
+   stretches across the line without taking taps; only its buttons do. */
+@media (--touch) {
+  #outline-editor .line-gutter, .wv-lines .line-gutter { right: 0; width: auto; pointer-events: none; }
+  #outline-editor .line-gutter button, .wv-lines .line-gutter button { pointer-events: auto; }
+  #outline-editor .bullet { right: auto; left: .8em; }
+  .wv-lines .bullet { right: auto; left: 0; }
+  #outline-editor .fold, .hide-bullets #outline-editor .fold, .wv-lines .fold { left: auto; right: 0; width: 2.2em; }
+  #outline-editor .fold::after, .hide-bullets #outline-editor .fold::after, .wv-lines .fold::after { left: auto; right: .75em; }
+  #outline-editor li.has-kids > p, .wv-lines li.has-kids > p { padding-right: 2.2em; }
+}
+@media (--touch) {
+  #outline-editor li.folded > .line-gutter .fold, .wv-lines li.folded > .line-gutter .fold { transform: none; }
+  #outline-editor li.folded > .line-gutter .fold::after, .wv-lines li.folded > .line-gutter .fold::after { transform: rotate(-90deg); }
+}
