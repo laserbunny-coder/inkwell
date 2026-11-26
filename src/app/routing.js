@@ -211,7 +211,7 @@ async function goStill(place) {
     await tagsPage?.show(place);
   } else if (place.view === 'plan') {
     // What's when is Plan now; Day, Week, Weeks ahead and Pace are zooms of Calendar.
-    remember({ view: 'plan', tab: tabFor(place.tab), ...(place.week ? { week: place.week } : {}), ...(place.line && place.tab === 'now' ? { line: place.line } : {}), ...(place.day && place.tab === 'day' ? { day: place.day } : {}) });
+    remember({ view: 'plan', tab: tabFor(place.tab), ...(place.week ? { week: place.week } : {}), ...(place.line && place.tab === 'now' ? { line: place.line } : {}), ...(place.day && (place.tab === 'day' || place.tab === 'calday') ? { day: place.day } : {}) });
     await plan?.showPage(place);
   } else if (place.view === 'sidenotes') {
     remember({ view: 'sidenotes' });
