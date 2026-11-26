@@ -343,11 +343,11 @@ export class Plan {
   zoomTop(face = 'day') {
     const day = this.dayAt || this.today;
     const isToday = day === this.today;
-    const head = make('header', 'pl-top zm-today-top');
+    const head = make('header', face === 'day' ? 'pl-top zm-today-top' : 'pl-top');
     const left = make('div');
     const word = isToday ? 'Today' : day === addDays(this.today, 1) ? 'Tomorrow' : day === addDays(this.today, -1) ? 'Yesterday' : long(day, { weekday: 'long' });
     left.append(make('div', 'pl-eyebrow', long(day, { weekday: 'long', month: 'long', day: 'numeric' })), make('h1', '', word));
-    if (isToday) {
+    if (isToday && face === 'day') {
       // The two ends of the day live here now (and in Ctrl + K).
       const ends = make('div', 'zm-ends');
       const n = this.now;
