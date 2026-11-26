@@ -12,6 +12,7 @@ import { placeSorts, bySort } from './order.js';
 import { walKey } from './panes.js';
 import { lineDecos, changedRangeOf, insertsNodes, unitsIn } from './linedecos.js';
 import { isTouch } from './device.js';
+import { zoomRun, anchorBy, aimAt } from './zoommotion.js';
 
 // The notebook's pages (daily pages and named pages) are outlines: lines you
 // can nest, Workflowy-style. Every line is its own entry whose parent is the
@@ -348,6 +349,25 @@ export const GatherBadge = Extension.create({
     })];
   }
 });
+
+// Zoom into a line (or out, with eid null) with the zoom's motion (Nov 25
+// 2026): the line's words lift into the title and the rest fades up under
+// them; out again, the title settles back into its line.
+// caret: the cursor waits on the empty line made under a line with nothing under it.
+export function zoomLine(view, eid, { caret = false } = {}) {
+  const was = foldKey.getState(view.state)?.zoom || null;
+  if ((eid || null) === was) return;
+  // Already inside a zoom (going to a place that keeps its zoom): that one moves the page.
+  const go = () => view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid || null }).setMeta('zoomCaret', caret));
+  if (document.documentElement.dataset.zt) { go(); return; }
+  const words = (id) => (id ? [...view.dom.querySelectorAll('li')].find((l) => l.getAttribute('data-eid') === id)?.querySelector(':scope > p') : null);
+  // Into a line: it lifts from where it is. Out: it settles back into place.
+  const id = eid || was;
+  const end = words(id);
+  const shown = end && end.getBoundingClientRect().height > 0;
+  aimAt(null);
+  zoomRun(shown ? 'line' : 'rise', go, { before: () => { if (shown) anchorBy(`.ProseMirror li[data-eid="${CSS.escape(id)}"] > p`); } });
+}
 
 // Folding and zooming, Workflowy-style. The arrow beside a line with lines
 // under it folds them away; clicking a bullet zooms in so that line is the
@@ -1341,7 +1361,8 @@ export const OutlineFold = Extension.create({
       Escape: () => {
         const st = foldKey.getState(this.editor.state);
         if (!st?.zoom) return false;
-        return this.editor.commands.command(({ tr }) => { tr.setMeta(foldKey, { zoom: null }); return true; });
+        zoomLine(this.editor.view, null);
+        return true;
       }
     };
   },
@@ -1418,7 +1439,7 @@ export const OutlineFold = Extension.create({
           const li = el.closest?.('li');
           if (!li || !view.dom.contains(li) || li.classList.contains('zoom-root') || li.querySelector(':scope > ul, :scope > ol')?.contains(el)) return null; // anywhere on the line itself, not the lines under it
           return li.querySelector(':scope > .line-gutter')?.dataset.eid || null;
-        }, (eid) => { view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid })); view.dom.blur(); });
+        }, (eid) => { zoomLine(view, eid); view.dom.blur(); });
         return {
           update(view, prev) {
             const a = foldKey.getState(view.state);
@@ -1474,7 +1495,7 @@ export const OutlineFold = Extension.create({
             // holding the dots still brings up the line's menu (as a right-click does).
             else {
               const li = b.closest('li');
-              const zoom = () => view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid }));
+              const zoom = () => zoomLine(view, eid);
               startDrag(view, li, event, { onClick: zoom, onHold: () => lineMenu(view, b, eid) });
             }
             return true;
@@ -1506,7 +1527,7 @@ export const OutlineFold = Extension.create({
             const li = wordsLine(view, event.target);
             if (!li) return false;
             event.preventDefault();
-            view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eidOf(li) }).setMeta('zoomCaret', true));
+            zoomLine(view, eidOf(li), { caret: true });
             return true;
           }
         }

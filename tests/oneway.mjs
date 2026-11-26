@@ -135,6 +135,8 @@ try {
     const a = await at('Charlie');
     await p.mouse.dblclick(a.x, a.y);
     await p.waitForFunction(() => document.querySelector('#outline-editor li.zoom-root > p')?.textContent === 'Charlie');
+    // The zoom's motion (280 ms) runs first: a click lands once the page is still.
+    await p.waitForFunction(() => !document.documentElement.dataset.zt);
     const empty = p.locator('#outline-editor li.zoom-root > ul > li > p');
     assert.equal(await empty.count(), 1, 'one empty line under it');
     const e = await empty.boundingBox();

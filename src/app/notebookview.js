@@ -2,7 +2,7 @@
 import { calmNow } from '../steady.js';
 import { keyboard } from '../keyboard.js';
 import { menuButton, toast } from '../menu.js';
-import { toggleDone, indentLines, outdentLines, moveLine, foldKey, toggleChecklist, hasBox, toggleBox, canMoveLine, removeLine, lineChecks } from '../outline.js';
+import { toggleDone, indentLines, outdentLines, moveLine, foldKey, toggleChecklist, hasBox, toggleBox, canMoveLine, removeLine, lineChecks, zoomLine } from '../outline.js';
 import { Notebook } from '../notebook.js';
 import { openHandleMenu } from '../handlemenu.js';
 import { openPicker } from '../picker.js';
@@ -96,7 +96,7 @@ function lineMenu(eid) {
     return true;
   };
   const on = (fn) => () => { if (here()) fn(); };
-  const zoom = { label: 'Zoom in', run: () => { notebook.zoomTo(eid); ed.commands.focus(); } };
+  const zoom = { label: 'Zoom in', run: () => { zoomLine(ed.view, eid); ed.commands.focus(); } };
   const fold = kids && { label: folded ? `Unfold the ${lines(under)} under it` : `Fold the ${lines(under)} under it`, keys: folded ? '⌘↓' : '⌘↑', run: () => { ed.view.dispatch(ed.state.tr.setMeta(foldKey, { fold: eid, on: !folded })); ed.commands.focus(); } };
   return {
     title: `Line${under ? ` · ${lines(under)} under it` : ''}`,
@@ -181,8 +181,8 @@ const currentEditor = () => (inNotebook() ? notebook.editor : editor);
 
 // Its commands in the box (Ctrl + K); commandinfo.js has their hints and words.
 addCommands(() => [
-  { group: 'write', label: 'Zoom into this line', keys: 'click its handle', run: () => notebook.zoomTo(notebook.currentLine()), when: inNotebook },
-  { group: 'write', label: 'Zoom out', keys: 'Esc', run: () => notebook.zoomTo(null), when: () => inNotebook() && !!notebook.zoom },
+  { group: 'write', label: 'Zoom into this line', keys: 'click its handle', run: () => zoomLine(notebook.editor.view, notebook.currentLine()), when: inNotebook },
+  { group: 'write', label: 'Zoom out', keys: 'Esc', run: () => zoomLine(notebook.editor.view, null), when: () => inNotebook() && !!notebook.zoom },
   { group: 'write', label: 'Fold or unfold this line', keys: `${mod}↑ ${mod}↓`, run: () => notebook.toggleFold(), when: inNotebook },
   { group: 'write', label: 'Link to a page…', keys: '[[', run: () => openPicker(currentEditor()), when: () => writing() || inNotebook() },
   { group: 'view', label: 'Typewriter mode: the line you’re on stays put', words: ['scroll', 'center', 'middle'], run: () => toggleTypewriter() },
@@ -248,7 +248,7 @@ function wireNotebook() {
     else if (act === 'tag') typeHere(ed, '#');
     else if (act === 'insert') typeHere(ed, '/');
     else if (act === 'link') openPicker(ed);
-    else if (act === 'zoom') { const here = notebook.currentLine(); notebook.zoomTo(notebook.zoom && here === notebook.zoom ? null : here); ed.commands.focus(); }
+    else if (act === 'zoom') { const here = notebook.currentLine(); zoomLine(ed.view, notebook.zoom && here === notebook.zoom ? null : here); ed.commands.focus(); }
     placeOutlineBar();
   });
   notebook.editor.view.dom.addEventListener('line-menu', (e) => {

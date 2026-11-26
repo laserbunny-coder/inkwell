@@ -2,7 +2,7 @@ import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { AltMark } from './alts.js';
 import { LinkCatch } from './linkcatch.js';
-import { OutlineDoc, LineIds, LineChecks, EntryRef, TagMarks, GatherBadge, mirrorKey, OutlineFold, OutlineKeys, OutlineItem, oneParagraphPerLine, foldKey, OutlineStore, loadDoc, replaceDoc } from './outline.js';
+import { OutlineDoc, LineIds, LineChecks, EntryRef, TagMarks, GatherBadge, mirrorKey, OutlineFold, OutlineKeys, OutlineItem, oneParagraphPerLine, foldKey, zoomLine, OutlineStore, loadDoc, replaceDoc } from './outline.js';
 import { getEntry, getMany, linkedFrom, byTag, putEntries, isTrashed } from './db.js';
 import { entry } from './model.js';
 import { catchLink } from './share.js';
@@ -259,7 +259,7 @@ export class Notebook {
         const b = document.createElement('button');
         b.type = 'button';
         b.textContent = label;
-        b.addEventListener('click', () => { this.zoomTo(target); if (!isTouch()) this.editor.commands.focus(); });
+        b.addEventListener('click', () => { zoomLine(this.editor.view, target || null); if (!isTouch()) this.editor.commands.focus(); });
         trail.append(b);
       };
       // On a phone the way back out is a plain "‹ Today" at the top left.
@@ -269,7 +269,7 @@ export class Notebook {
         b.type = 'button';
         b.className = 'nb-back';
         b.textContent = '‹ Today';
-        b.addEventListener('click', () => { if (today) this.zoomTo(null); else this.openDay(); });
+        b.addEventListener('click', () => { if (today) zoomLine(this.editor.view, null); else this.openDay(); });
         trail.append(b);
         if (!today) crumb(this.page ? titleOf(this.page) : 'Page', null);
       } else crumb(this.page ? titleOf(this.page) : 'Page', null);

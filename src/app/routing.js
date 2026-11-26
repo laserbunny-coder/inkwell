@@ -78,7 +78,19 @@ async function paneStep(dir) {
 let besideUntil = 0;
 function setBesideUntil(value) { return (besideUntil = value); }
 
+// The zoom's motion for any move in or out (Nov 25 2026, his ask: "throughout
+// the whole app"): app/zoom.js says whether a place lies deeper or higher than
+// this one, and if so moves there with the zoom. Everything else goes still.
+let goMotion = null;
+function setGoMotion(fn) { goMotion = fn; }
 async function go(place) {
+  if (goMotion && !root.dataset.zt && !inPane && besideUntil <= Date.now()) {
+    const moving = goMotion(place);
+    if (moving) return moving;
+  }
+  return goStill(place);
+}
+async function goStill(place) {
   // Studio without the day tools: the plan's places open the Desk (edition.js).
   if (dayOff() && place?.view === 'plan') place = { view: 'desk' };
   if (besideUntil > Date.now()) { besideUntil = 0; return openBeside(place); }
@@ -369,4 +381,4 @@ function wireRouting() {
   });
 }
 
-export { besideUntil, bookPlace, go, historyMode, lastChapterAnywhere, lastPlace, newPageHere, openBook, openEntry, paneStep, phoneAway, placeOf, remember, setBesideUntil, setHistoryMode, wireRouting };
+export { besideUntil, bookPlace, go, setGoMotion, historyMode, lastChapterAnywhere, lastPlace, newPageHere, openBook, openEntry, paneStep, phoneAway, placeOf, remember, setBesideUntil, setHistoryMode, wireRouting };
