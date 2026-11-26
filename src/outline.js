@@ -353,20 +353,20 @@ export const GatherBadge = Extension.create({
 // Zoom into a line (or out, with eid null) with the zoom's motion (Nov 25
 // 2026): the line's words lift into the title and the rest fades up under
 // them; out again, the title settles back into its line.
-export function zoomLine(view, eid) {
+// caret: the cursor waits on the empty line made under a line with nothing under it.
+export function zoomLine(view, eid, { caret = false } = {}) {
   const was = foldKey.getState(view.state)?.zoom || null;
   if ((eid || null) === was) return;
   // Already inside a zoom (going to a place that keeps its zoom): that one moves the page.
-  if (document.documentElement.dataset.zt) { view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid || null })); return; }
+  const go = () => view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid || null }).setMeta('zoomCaret', caret));
+  if (document.documentElement.dataset.zt) { go(); return; }
   const words = (id) => (id ? [...view.dom.querySelectorAll('li')].find((l) => l.getAttribute('data-eid') === id)?.querySelector(':scope > p') : null);
   // Into a line: it lifts from where it is. Out: it settles back into place.
   const id = eid || was;
   const end = words(id);
   const shown = end && end.getBoundingClientRect().height > 0;
   aimAt(null);
-  zoomRun(shown ? 'line' : 'rise', () => {
-    view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eid || null }));
-  }, { before: () => { if (shown) anchorBy(`.ProseMirror li[data-eid="${CSS.escape(id)}"] > p`); } });
+  zoomRun(shown ? 'line' : 'rise', go, { before: () => { if (shown) anchorBy(`.ProseMirror li[data-eid="${CSS.escape(id)}"] > p`); } });
 }
 
 // Folding and zooming, Workflowy-style. The arrow beside a line with lines
@@ -665,7 +665,7 @@ function startDrag(view, dragged, event, { onClick, onHold } = {}) {
 
 // Lines zoomed into that had nothing under them, given an empty line to write in.
 const seeded = new Set();
-function seedZoom(state, from, to) {
+function seedZoom(state, from, to, caret = false) {
   if (from === to) return null;
   const at = (id) => { let r = null; if (!id) return r; state.doc.descendants((n, pos) => { if (r) return false; if (n.type.name === 'listItem' && n.attrs.eid === id) { r = { n, pos }; return false; } return true; }); return r; };
   let tr = null;
@@ -687,7 +687,10 @@ function seedZoom(state, from, to) {
     if (t && !kidsOf(t.n)) {
       const { schema } = state;
       tr = tr || state.tr;
-      tr.insert(t.pos + t.n.nodeSize - 1, schema.nodes.bulletList.create(null, schema.nodes.listItem.create(null, schema.nodes.paragraph.create())));
+      const at0 = t.pos + t.n.nodeSize - 1;
+      tr.insert(at0, schema.nodes.bulletList.create(null, schema.nodes.listItem.create(null, schema.nodes.paragraph.create())));
+      // Zoomed in with a double-click, the cursor waits in it, so typing writes under the title.
+      if (caret) tr.setSelection(TextSelection.create(tr.doc, at0 + 3));
       seeded.add(to);
     }
   }
@@ -1454,7 +1457,7 @@ export const OutlineFold = Extension.create({
         // ready for a tap or a click, and goes again if left empty (Nov 25 2026).
         const zm = trs.map((t) => t.getMeta(foldKey)).filter((m) => m && 'zoom' in m).pop();
         if (zm) {
-          const tr = seedZoom(state, foldKey.getState(oldState).zoom, st.zoom);
+          const tr = seedZoom(state, foldKey.getState(oldState).zoom, st.zoom, trs.some((t) => t.getMeta('zoomCaret')));
           if (tr) return tr;
         }
         if (!st.folded.size && !st.zoom) return null;
@@ -1524,7 +1527,7 @@ export const OutlineFold = Extension.create({
             const li = wordsLine(view, event.target);
             if (!li) return false;
             event.preventDefault();
-            zoomLine(view, eidOf(li));
+            zoomLine(view, eidOf(li), { caret: true });
             return true;
           }
         }
