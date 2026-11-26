@@ -223,7 +223,7 @@ export function deskDrags(root, { drop, busy }) {
     if (!d?.touch) return;
     const { clientX: x, clientY: y } = e.touches[0];
     if (!d.armed) {
-      if (Math.hypot(x - d.x, y - d.y) > 10) end(); // a scroll, not a hold
+      if (Math.hypot(x - d.x, y - d.y) > 12) end(); // a scroll, not a hold (a little drift is still a hold)
       return;
     }
     e.preventDefault();

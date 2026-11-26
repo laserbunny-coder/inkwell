@@ -888,13 +888,27 @@ function pressLine(view, li, event) {
   window.addEventListener('pointercancel', done);
 }
 
-// On a phone, as in Workflowy: a finger held still on a line's words for a
-// moment lifts the line, and it then follows the finger up and down until
-// let go. A tap still puts the cursor there, a quick swipe still scrolls, and
-// in the line you're typing in a hold still selects words.
+// On a phone, as in Workflowy: a finger held on a line's words for a moment
+// picks the line up, and it then follows the finger up and down until let
+// go. A tap still puts the cursor there and a quick swipe still scrolls.
+// Nov 26 2026 (his ask: "if you're holding on it, it should select it, no
+// matter what"): a hold picks the line wherever the finger is on it (on a
+// link or a tag too, and in the line you're typing in: the keyboard goes
+// down), a little drift while holding doesn't call it off, and the line
+// stays picked after it lands or its menu closes. While it's picked, a
+// finger on it moves it straight away; a tap on it, or anywhere else, lets
+// it go.
 const HOLD = 400; // ms
+const DRIFT = 12; // px a finger may wander while it holds
 function holdDrags(view) {
-  let t = null; // { li, x, y, timer, d, armed, moved }
+  let t = null; // { li, x, y, timer, d, armed, moved, at, quick }
+  let picked = null; // the line that stays picked: its id
+  const pickStyle = document.createElement('style');
+  const pick = (eid) => {
+    picked = eid || null;
+    pickStyle.textContent = picked ? `li:has(> .line-gutter[data-eid="${CSS.escape(picked)}"]) > p { background: color-mix(in srgb, var(--accent) 16%, transparent); border-radius: 6px; }` : '';
+    if (picked && !pickStyle.isConnected) document.head.append(pickStyle);
+  };
   const stop = () => {
     if (!t) return;
     clearTimeout(t.timer);
@@ -903,39 +917,51 @@ function holdDrags(view) {
     t = null;
     setTimeout(() => { touchHeld = !!t; }, 0);
   };
+  const arm = () => {
+    if (!t || t.armed) return;
+    t.armed = true;
+    document.documentElement.classList.add('line-holding');
+    getSelection()?.removeAllRanges?.();
+    // Held in the line you're typing in: out of typing, so it's a move.
+    if (view.hasFocus()) view.dom.blur();
+    pick(t.eid);
+    t.d = lineDrag(view, t.li, true);
+    t.d.begin({ clientX: t.x, clientY: t.y });
+    navigator.vibrate?.(12);
+  };
   const start = (e) => {
     stop();
     if (e.touches.length !== 1 || !isTouch()) return;
     const el = e.target;
-    const off = el.closest?.('.line-gutter, .line-box, a, button, [contenteditable="false"]');
-    if (off && view.dom.contains(off)) return;
     const li = el.closest?.('li');
-    if (!li || !view.dom.contains(li) || !li.querySelector(':scope > p')?.contains(el)) return;
-    if (li.classList.contains('zoom-root') || !li.querySelector(':scope > .line-gutter')?.dataset.eid) return;
-    if (li.classList.contains('here') && view.hasFocus()) return; // typing here: a hold selects words
+    // Only this editor's own lines (a small one can sit inside a bigger one).
+    const mine = li && li.closest('.ProseMirror') === view.dom;
+    const onIt = mine && li.querySelector(':scope > p')?.contains(el) && !el.closest?.('.line-gutter, .line-box, button');
+    if (!onIt || li.classList.contains('zoom-root') || !eidOf(li)) {
+      // A touch anywhere else lets a picked line go.
+      if (picked && !(mine && eidOf(li) === picked)) pick(null);
+      return;
+    }
     const { clientX: x, clientY: y } = e.touches[0];
     touchHeld = true;
-    t = { li, x, y, armed: false, moved: false, el, eid: eidOf(li) };
+    t = { li, x, y, armed: false, moved: false, el, eid: eidOf(li), at: Date.now(), quick: picked === eidOf(li) };
+    if (picked && !t.quick) pick(null);
     // Should the editor draw the line afresh, the touch stays with the words
     // first touched: hear it there too.
     for (const [k, f] of hear) el.addEventListener(k, f, { passive: false });
-    t.timer = setTimeout(() => {
-      if (!t) return;
-      t.armed = true;
-      document.documentElement.classList.add('line-holding');
-      getSelection()?.removeAllRanges?.();
-      t.d = lineDrag(view, li, true);
-      t.d.begin({ clientX: x, clientY: y });
-      navigator.vibrate?.(12);
-    }, HOLD);
+    t.timer = setTimeout(arm, HOLD);
   };
   const once = (f) => (e) => { if (e) { if (e.inkHeard) return; e.inkHeard = true; } f(e); };
   const move = once((e) => {
     if (!t) return;
     const { clientX, clientY } = e.touches[0];
     if (!t.armed) {
-      if (Math.hypot(clientX - t.x, clientY - t.y) > 8) stop(); // a scroll, not a hold
-      return;
+      // The picked line moves at once; any other needs the hold first.
+      if (t.quick && e.cancelable) { clearTimeout(t.timer); arm(); }
+      else {
+        if (Math.hypot(clientX - t.x, clientY - t.y) > DRIFT) stop(); // a scroll, not a hold
+        return;
+      }
     }
     if (e.cancelable) e.preventDefault(); // the page stays put; the line moves
     if (Math.hypot(clientX - t.x, clientY - t.y) > 4) t.moved = true;
@@ -945,7 +971,11 @@ function holdDrags(view) {
     if (!t) return;
     const was = t;
     stop();
-    if (!was.armed) return;
+    if (!was.armed) {
+      // A tap on the picked line lets it go (and puts the cursor there, as any tap).
+      if (was.quick) pick(null);
+      return;
+    }
     if (e.cancelable) e.preventDefault(); // no tap (and no keyboard) when it lands
     const c = e.changedTouches?.[0];
     // Held still and let go: it settles back where it was, and its menu comes up.
@@ -956,18 +986,25 @@ function holdDrags(view) {
     }
   });
   const off = once(() => { if (t?.armed) t.d.end(null, true); stop(); });
+  // Typing lets a picked line go.
+  const typed = () => { if (picked) pick(null); };
+  view.dom.addEventListener('beforeinput', typed);
   const hear = [['touchmove', move], ['touchend', end], ['touchcancel', off]];
   // Heard on the editor only (not the whole page), so a touch anywhere else
   // in the app scrolls as freely as ever.
-  view.dom.addEventListener('touchstart', start, { passive: true });
   view.dom.addEventListener('touchmove', move, { passive: false });
   view.dom.addEventListener('touchend', end, { passive: false });
   view.dom.addEventListener('touchcancel', off);
   // The phone's own long-press menu (and word picking) would end the hold.
   const menu = (e) => { if (touchHeld || t) { e.preventDefault(); e.stopImmediatePropagation(); } };
   view.dom.addEventListener('contextmenu', menu, true);
+  document.addEventListener('touchstart', start, { passive: true, capture: true });
   return () => {
     off();
+    pick(null);
+    pickStyle.remove();
+    view.dom.removeEventListener('beforeinput', typed);
+    document.removeEventListener('touchstart', start, { capture: true });
     view.dom.removeEventListener('touchstart', start);
     view.dom.removeEventListener('touchmove', move);
     view.dom.removeEventListener('touchend', end);
