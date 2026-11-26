@@ -144,30 +144,43 @@ html.zoom body.typing.in-piece.peek-top .topbar, html.zoom.has-rail body.typing.
 }
 
 /* ---------- the motion of a zoom ---------- */
+/* "Quick" (Nov 25 2026, his pick from the playground): 280 ms, growing out of
+   what was tapped (--zx, --zy, set by zoommotion.js) and shrinking back into
+   it; a line zoomed into lifts into its title (zm-anchor). Ruler and mic stay put. */
+:root { --zt: 280ms; --zx: 50%; --zy: 42%; --zs: 1.5; --zi: .7; --z-ease: cubic-bezier(.22, .8, .2, 1); }
 ::view-transition-group(zm-ruler), ::view-transition-group(zm-mic) { animation: none; }
 ::view-transition-old(zm-ruler), ::view-transition-new(zm-ruler), ::view-transition-old(zm-mic), ::view-transition-new(zm-mic) { animation: none; }
-html[data-zt]::view-transition-old(root), html[data-zt]::view-transition-new(root) { animation-duration: 240ms; animation-timing-function: cubic-bezier(.2, .75, .2, 1); animation-fill-mode: both; }
-html[data-zt="in"]::view-transition-old(root) { animation-name: zt-away-big; }
-html[data-zt="in"]::view-transition-new(root) { animation-name: zt-come-small; }
-html[data-zt="out"]::view-transition-old(root) { animation-name: zt-away-small; }
-html[data-zt="out"]::view-transition-new(root) { animation-name: zt-come-big; }
+html[data-zt]::view-transition-group(*) { animation-duration: var(--zt); animation-timing-function: var(--z-ease); }
+html[data-zt]::view-transition-old(root), html[data-zt]::view-transition-new(root) { animation-duration: var(--zt); animation-timing-function: var(--z-ease); animation-fill-mode: both; transform-origin: var(--zx) var(--zy); mix-blend-mode: normal; }
+html[data-zt="in"]::view-transition-old(root) { animation-name: zt-grow-out; }
+html[data-zt="in"]::view-transition-new(root) { animation-name: zt-come-in; }
+html[data-zt="out"]::view-transition-old(root) { animation-name: zt-shrink-out; }
+html[data-zt="out"]::view-transition-new(root) { animation-name: zt-come-out; }
 html[data-zt="next"]::view-transition-old(root) { animation-name: zt-away-left; }
 html[data-zt="next"]::view-transition-new(root) { animation-name: zt-come-right; }
 html[data-zt="prev"]::view-transition-old(root) { animation-name: zt-away-right; }
 html[data-zt="prev"]::view-transition-new(root) { animation-name: zt-come-left; }
-html[data-zt="rise"]::view-transition-new(root) { animation-name: zt-come-small; }
+html[data-zt="rise"]::view-transition-new(root) { animation-name: zt-rise; }
 html[data-zt="rise"]::view-transition-old(root) { animation-name: zt-fade-out; }
-@keyframes zt-away-big { to { opacity: 0; transform: scale(1.06); } }
-@keyframes zt-come-small { from { opacity: 0; transform: scale(.96); } }
-@keyframes zt-away-small { to { opacity: 0; transform: scale(.95); } }
-@keyframes zt-come-big { from { opacity: 0; transform: scale(1.04); } }
-@keyframes zt-away-left { to { opacity: 0; transform: translateX(-36px); } }
-@keyframes zt-come-right { from { opacity: 0; transform: translateX(36px); } }
-@keyframes zt-away-right { to { opacity: 0; transform: translateX(36px); } }
-@keyframes zt-come-left { from { opacity: 0; transform: translateX(-36px); } }
+html[data-zt="line"]::view-transition-old(root) { animation-name: zt-fade-out; animation-duration: calc(var(--zt) * .6); }
+html[data-zt="line"]::view-transition-new(root) { animation-name: zt-rise; }
+html[data-zt="fade"]::view-transition-old(root) { animation-name: zt-fade-out; }
+html[data-zt="fade"]::view-transition-new(root) { animation-name: zt-fade-in; }
+/* The line and its title: the words travel; each end stays its own size of type. */
+html[data-zt]::view-transition-old(zm-anchor), html[data-zt]::view-transition-new(zm-anchor) { height: 100%; width: auto; object-fit: contain; object-position: 0 0; animation-duration: var(--zt); animation-timing-function: var(--z-ease); }
+@keyframes zt-grow-out { to { opacity: 0; transform: scale(var(--zs)); } }
+@keyframes zt-come-in { from { opacity: 0; transform: scale(var(--zi)); } }
+@keyframes zt-shrink-out { to { opacity: 0; transform: scale(var(--zi)); } }
+@keyframes zt-come-out { from { opacity: 0; transform: scale(var(--zs)); } }
+@keyframes zt-away-left { to { opacity: 0; transform: translateX(-8%); } }
+@keyframes zt-come-right { from { opacity: 0; transform: translateX(8%); } }
+@keyframes zt-away-right { to { opacity: 0; transform: translateX(8%); } }
+@keyframes zt-come-left { from { opacity: 0; transform: translateX(-8%); } }
+@keyframes zt-rise { from { opacity: 0; transform: translateY(10px); } }
 @keyframes zt-fade-out { to { opacity: 0; } }
+@keyframes zt-fade-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  html[data-zt]::view-transition-old(root), html[data-zt]::view-transition-new(root) { animation: none; }
+  html[data-zt]::view-transition-old(root), html[data-zt]::view-transition-new(root), html[data-zt]::view-transition-group(*) { animation: none; }
 }
 
 /* ---------- Now as a page (Part 2) ---------- */

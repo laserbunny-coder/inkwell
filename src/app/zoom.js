@@ -29,16 +29,16 @@ import { todayFace, facePlace, faceTo } from '../plan.js';
 import { addDays, weekOf } from '../tasks.js';
 import { addCommands } from './commandlist.js';
 import { body, gone, root, state } from '../main.js';
-import { bookPlace, go, lastPlace } from './routing.js';
+import { bookPlace, go, lastPlace, setGoMotion } from './routing.js';
 import { frame } from './workpages.js';
 import { plan, deskPage } from './talking.js';
 import { lookHere, hidden } from './pagesettings.js';
 import { dayOff } from '../edition.js';
 import { nowState, goNow } from '../nowzoom.js';
+import { zoomRun, aimAt, tappedBox, zoomMotion } from '../zoommotion.js';
 
 const roomy = media('roomy');
 const touch = media('touch');
-const calm = matchMedia('(prefers-reduced-motion: reduce)');
 
 // The seven stops, in order; the number keys follow the list.
 // Today and Now as one (Nov 25 2026): Today sits in the middle, and Now is
@@ -118,7 +118,6 @@ async function placeOfStop(id) {
 
 // ---------- moving ----------
 
-const motion = () => (calm.matches ? 'off' : root.dataset.motion || 'full');
 // How the next place arrives: in (nearer to Now), out (further), next or prev (across Now).
 function wayOf(from, to) {
   const a = at(from);
@@ -129,31 +128,55 @@ function wayOf(from, to) {
   return Math.abs(b - NOW) < Math.abs(a - NOW) ? 'in' : 'out';
 }
 
-let moving = 0;
-// Go somewhere along the ruler, with the zoom's motion: the View Transitions
-// API where the browser has it, a plain fade where it doesn't, and nothing at
-// all with motion off or reduced motion asked for.
-export async function zoomGo(place, way = 'rise') {
-  const m = motion();
-  if (m === 'off' || !document.startViewTransition || document.hidden) return go(place);
-  const turn = ++moving;
-  root.dataset.zt = m === 'gentle' ? 'fade' : way;
-  let shown;
-  try {
-    const t = document.startViewTransition(() => {
-      shown = go(place);
-      // A slow place (a big project) mustn't hold the screen still: what's there by then moves.
-      return Promise.race([shown, new Promise((r) => setTimeout(r, 220))]);
-    });
-    const end = () => { if (turn === moving) delete root.dataset.zt; };
-    t.finished.then(end, end);
-    // A quick second step skips this one: that's fine, not an error.
-    t.ready.catch(() => {});
-    t.updateCallbackDone.catch(() => {});
-  } catch {
-    delete root.dataset.zt;
-    return go(place);
+// How deep a place sits, on its own side of the ruler. Time: Year 0, Month 1,
+// Week 2, the day 3, a task zoomed into (Now) 4. Place: the Library 0, the
+// Desk or one area 1, a project 2, a piece or page of it 3. Library, Desk and
+// Project zoom like Year, Month and Week (Nov 25 2026, his ask).
+function depthOf(p) {
+  if (!p) return null;
+  const s = stopOf(p);
+  if (!s) return null;
+  const v = p.view;
+  if (at(s) <= NOW) {
+    if (v === 'plan') return { side: 'time', d: { year: 0, ahead: 1, pace: 1, week: 2 }[p.tab || 'week'] ?? (p.tab === 'now' ? 4 : 3) };
+    return { side: 'time', d: v === 'notebook' && p.zoom ? 4 : 3 };
   }
+  if (v === 'library') return { side: 'place', d: p.area ? 1 : 0 };
+  if (v === 'drawer' || v === 'tags' || v === 'desk') return { side: 'place', d: 1 };
+  if (v === 'world') return { side: 'place', d: p.part ? 3 : 2 };
+  return { side: 'place', d: 3 };
+}
+// Any move deeper or higher, from anywhere in the app, goes with the zoom.
+function goMotion(place) {
+  if (zoomMotion() === 'off' || !document.startViewTransition || document.hidden || !root.classList.contains('zoom')) return null;
+  const a = depthOf(lastPlace);
+  const b = depthOf(place);
+  if (!a || !b || a.side !== b.side || a.d === b.d) return null;
+  return zoomGo(place, b.d > a.d ? 'in' : 'out');
+}
+
+// Where a zoom in came from, per stop, so zooming back out shrinks into the same spot.
+const cameFrom = new Map();
+// Go somewhere along the ruler, with the zoom's motion (zoommotion.js): it
+// grows out of what you tapped and shrinks back into it; nothing at all with
+// motion off or reduced motion asked for.
+export async function zoomGo(place, way = 'rise') {
+  const keyOf = (p) => { const d = depthOf(p); return d ? `${d.side}${d.d}` : null; };
+  const from = keyOf(lastPlace);
+  const to = keyOf(place);
+  if (way === 'in') {
+    const box = aimAt(tappedBox());
+    if (from) cameFrom.set(from, box);
+  } else if (way === 'out') {
+    aimAt(cameFrom.get(to) || null);
+    cameFrom.delete(to);
+  } else aimAt(null);
+  let shown;
+  await zoomRun(way, () => {
+    shown = go(place);
+    // A slow place (a big project) mustn't hold the screen still: what's there by then moves.
+    return Promise.race([shown, new Promise((r) => setTimeout(r, 220))]);
+  });
   return shown;
 }
 
@@ -599,5 +622,6 @@ export function wireZoom() {
     if (e.deltaY > 0) zoomOut(); else zoomIn();
   }, { passive: false });
   if (!root.classList.contains('zoom')) root.classList.add('zoom');
+  setGoMotion(goMotion);
   light(lastPlace);
 }
