@@ -16,7 +16,9 @@ import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { TextSelection } from '@tiptap/pm/state';
 import { Extension } from '@tiptap/core';
-import { OutlineDoc, OutlineItem, OutlineKeys, LineIds, OutlineFold, TagMarks, EntryRef, LineChecks, OutlineStore, descendants, toOutlineDoc, foldKey, indentLines, outdentLines, moveLine } from './outline.js';
+import { OutlineDoc, OutlineItem, OutlineKeys, LineIds, OutlineFold, TagMarks, EntryRef, LineChecks, OutlineStore, descendants, toOutlineDoc, foldKey, indentLines, outdentLines, moveLine, toggleDone, toggleBox, hasBox, canMoveLine, removeLine } from './outline.js';
+import { openHandleMenu } from './handlemenu.js';
+import { toast } from './menu.js';
 import { Suggest } from './suggest.js';
 import { getEntry, putEntries } from './db.js';
 import { plain as make } from './dom.js';
@@ -175,6 +177,13 @@ export class PlanLines {
         }
       });
       it.editor.view.dom.setAttribute('aria-label', 'Lines under it');
+      // One way everywhere (Nov 26 2026): held still, or a right-click, is the line's menu here too.
+      it.editor.view.dom.addEventListener('line-menu', (e) => {
+        const { eid, anchor, at } = e.detail;
+        const li = anchor.closest('li');
+        li?.classList.add('menu-open');
+        openHandleMenu({ anchor, at, editor: it.editor, build: () => linesMenu(it.editor, eid), onClose: () => li?.classList.remove('menu-open') });
+      });
       this.live.set(ownerId, it);
       it.n = count(it.editor.state.doc);
       this.show(it);
@@ -280,4 +289,57 @@ export async function trashLinesUnder(ownerId) {
 export async function restoreLines(rows) {
   const now = Date.now();
   if (rows.length) await putEntries(rows.map((r) => ({ ...r, deleted: false, updated_at: now })));
+}
+
+// The menu for a line in a small outline: what can be done to the line itself.
+function findIn(ed, eid) {
+  let hit = null;
+  ed.state.doc.descendants((n, pos) => {
+    if (hit) return false;
+    if (n.type.name === 'listItem' && n.attrs.eid === eid) { hit = { node: n, pos, $pos: ed.state.doc.resolve(pos) }; return false; }
+    return true;
+  });
+  return hit;
+}
+function linesMenu(ed, eid) {
+  const line = findIn(ed, eid);
+  if (!line) return { sections: [] };
+  const { node, pos, $pos } = line;
+  let under = 0;
+  node.descendants((n) => { if (n.type.name === 'listItem') under++; });
+  const nested = $pos.depth > 1;
+  const inChecklist = nested && !!$pos.node($pos.depth - 1).attrs.checklist;
+  const lines = (n) => `${n} line${n === 1 ? '' : 's'}`;
+  // Line actions work on the line the caret is in, so put it there first.
+  const on = (fn) => () => {
+    const now = findIn(ed, eid);
+    if (!now) return;
+    ed.commands.setTextSelection(now.pos + 1 + now.node.firstChild.nodeSize - 1);
+    fn();
+  };
+  return {
+    title: `Line${under ? ` · ${lines(under)} under it` : ''}`,
+    sections: [
+      [
+        { label: node.attrs.done ? 'Not done' : 'Mark done', keys: '⌘↵', run: on(() => { toggleDone(ed); ed.commands.focus(); }) },
+        { label: hasBox(node, inChecklist) ? 'No box on this line' : 'Box on this line', run: on(() => { toggleBox(ed); ed.commands.focus(); }) }
+      ],
+      [
+        { label: 'Outdent', keys: '⇧Tab', stay: true, half: 'indent', off: !nested, run: on(() => { ed.commands.focus(); outdentLines(ed); }) },
+        { label: 'Indent', keys: 'Tab', stay: true, half: 'indent', off: $pos.index() === 0, run: on(() => { ed.commands.focus(); indentLines(ed); }) },
+        { label: 'Move up', keys: 'Alt+⇧↑', stay: true, half: 'move', off: !canMoveLine(ed.state, -1, pos + 2), run: on(() => moveLine(ed, -1)) },
+        { label: 'Move down', keys: 'Alt+⇧↓', stay: true, half: 'move', off: !canMoveLine(ed.state, 1, pos + 2), run: on(() => moveLine(ed, 1)) }
+      ],
+      [{ label: under ? `Delete line and the ${lines(under)} under it` : 'Delete line', danger: true, run: () => {
+        const now = findIn(ed, eid);
+        if (!now) return;
+        const tr = ed.state.tr;
+        if (now.$pos.depth === 1 && now.$pos.parent.childCount === 1) tr.replaceWith(now.pos, now.pos + now.node.nodeSize, ed.schema.nodes.listItem.create(null, ed.schema.nodes.paragraph.create()));
+        else removeLine(tr, now.pos);
+        ed.view.dispatch(tr);
+        ed.commands.focus();
+        toast(under ? `Deleted a line and the ${lines(under)} under it` : 'Line deleted', { label: 'Undo', run: () => ed.chain().focus().undo().run() });
+      } }]
+    ]
+  };
 }

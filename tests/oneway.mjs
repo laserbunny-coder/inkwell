@@ -172,6 +172,32 @@ try {
     assert.equal(await plain(), START.trim());
   });
 
+  await check('zoomed back out, the page sits exactly where it was (Esc, and the mouse\'s back button)', async () => {
+    const long = Array.from({ length: 70 }, (_, i) => `Line ${i + 1}${i % 7 === 3 ? `\n  Under ${i + 1}` : ''}`).join('\n');
+    await setOutline(p, long);
+    await p.evaluate(() => document.activeElement?.blur());
+    await sleep(200);
+    const top = (t) => p.evaluate((t) => [...document.querySelectorAll('#outline-editor li > p')].find((x) => x.textContent === t)?.getBoundingClientRect().top, t);
+    for (const [name, out] of [['Line 46', 'esc'], ['Line 32', 'back']]) {
+      await words(name).scrollIntoViewIfNeeded();
+      await p.mouse.wheel(0, 120);
+      await sleep(300);
+      const y0 = await top(name);
+      const a = await at(name);
+      await p.mouse.dblclick(a.x, a.y);
+      await p.waitForFunction((n) => document.querySelector('#outline-editor li.zoom-root > p')?.textContent === n, name);
+      await p.waitForFunction(() => !document.documentElement.dataset.zt);
+      await sleep(150);
+      if (out === 'esc') { await p.evaluate(() => document.activeElement?.blur()); await p.evaluate(() => window.__outline.view.dispatch(window.__outline.state.tr.setMeta(window.__foldKey, { zoom: null }))); }
+      else await p.goBack();
+      await p.waitForFunction(() => !document.querySelector('#outline-editor li.zoom-root'));
+      await p.waitForFunction(() => !document.documentElement.dataset.zt);
+      await sleep(750); // what's above settles; the line is held where it was meanwhile
+      const y1 = await top(name);
+      assert.ok(Math.abs(y1 - y0) < 3, `${name} (${out}) was at ${Math.round(y0)}, came back at ${Math.round(y1)}`);
+    }
+  });
+
   await check('no page errors', async () => { assert.deepEqual(errors, []); });
 } finally {
   await browser.close();
