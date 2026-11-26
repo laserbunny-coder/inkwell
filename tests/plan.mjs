@@ -59,9 +59,9 @@ const pick = async (p, label) => {
   } else await p.locator('.pop-menu .pop-item', { hasText: label }).first().click();
   await sleep(300);
 };
-const words = (p, root = '#plan') => p.locator(`${root} .pl-task .pl-words`).allInnerTexts();
+const words = (p, root = '#plan') => p.locator(`${root} .pl-task .pl-words`).allTextContents();
 // Only the ones still to do (a done one stays at its place among them).
-const todo = (p, root = '#plan') => p.locator(`${root} .pl-task:not(.done) .pl-words`).allInnerTexts();
+const todo = (p, root = '#plan') => p.locator(`${root} .pl-task:not(.done) .pl-words`).allTextContents();
 const row = (p, text) => p.locator('#plan .pl-task', { hasText: text });
 // Today's page (the day's Page face).
 const today = async (p) => {
@@ -365,7 +365,7 @@ try {
     // Yesterday's page still shows what was done that day.
     await page.locator('#nb-prev').click();
     await sleep(600);
-    assert.deepEqual(await page.locator('#plan .pl-task.done .pl-words').allInnerTexts(), ['Call Dana about the storyboards']);
+    assert.deepEqual(await page.locator('#plan .pl-task.done .pl-words').allTextContents(), ['Call Dana about the storyboards']);
     await page.clock.setFixedTime(new Date(NOW));
     await today(page);
   });

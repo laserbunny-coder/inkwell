@@ -176,6 +176,9 @@ try {
     const id = await ph.locator('.pl-task', { hasText: 'Rewrite the cold open' }).first().getAttribute('data-task');
     const t = ph.locator(`.pl-task[data-task="${id}"]`).first(); // tap the words, then the dots on that line zoom in
     await t.locator('.pl-words').tap();
+    // Typing in it brings up the keyboard (which hides the strip); done typing, the dots zoom in.
+    await ph.evaluate(() => document.activeElement?.blur());
+    await sleep(1100);
     await t.locator('.pl-grip').tap();
     await zoomedOn(ph, '^Rewrite the cold open');
     await strip(ph).waitFor();
