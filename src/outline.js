@@ -369,6 +369,58 @@ export function zoomLine(view, eid, { caret = false } = {}) {
   zoomRun(shown ? 'line' : 'rise', go, { before: () => { if (shown) anchorBy(`.ProseMirror li[data-eid="${CSS.escape(id)}"] > p`); } });
 }
 
+// Zooming back out lands where you were (Nov 26 2026, his ask: "when I zoom
+// out ... the page is scrolled quite a bit"). Going in, the line's height on
+// the screen is kept; coming back out of it, the page scrolls so that line
+// sits at that same height again. Any way out counts: Esc, the trail, the
+// mouse's back button.
+const spots = new WeakMap();
+const scrollerOf = (el) => {
+  for (let n = el?.parentElement; n && n !== document.body; n = n.parentElement) {
+    const o = getComputedStyle(n).overflowY;
+    if ((o === 'auto' || o === 'scroll') && n.scrollHeight > n.clientHeight) return n;
+  }
+  return document.scrollingElement || document.documentElement;
+};
+const lineWords = (view, id) => (id ? [...view.dom.querySelectorAll('li')].find((l) => l.getAttribute('data-eid') === id)?.querySelector(':scope > p') : null);
+function noteZoomSpot(view, was, to) {
+  const mine = spots.get(view) || new Map();
+  spots.set(view, mine);
+  const inward = to && (!was || lineWords(view, to));
+  if (inward) {
+    const r = lineWords(view, to)?.getBoundingClientRect();
+    if (r?.height) mine.set(to, r.top); else mine.delete(to);
+    return null;
+  }
+  // Out (or up): put the line you came out of back where it was.
+  return was && mine.has(was) ? { eid: was, y: mine.get(was) } : null;
+}
+function landZoomSpot(view, spot) {
+  const el = lineWords(view, spot.eid);
+  const r = el?.getBoundingClientRect();
+  if (!r?.height) return false;
+  const sc = scrollerOf(el);
+  sc.scrollTop += r.top - spot.y;
+  // Things above may still be settling (the trail going, the day's extras
+  // coming back): hold the line where it was until they're still, unless
+  // you scroll yourself.
+  const until = performance.now() + 500;
+  let stop = false;
+  const mine = () => { stop = true; };
+  for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) window.addEventListener(ev, mine, { once: true, passive: true, capture: true });
+  const hold = () => {
+    if (stop || performance.now() > until || !el.isConnected) {
+      for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) window.removeEventListener(ev, mine, { capture: true });
+      return;
+    }
+    const d = el.getBoundingClientRect().top - spot.y;
+    if (Math.abs(d) >= 0.5) sc.scrollTop += d;
+    requestAnimationFrame(hold);
+  };
+  requestAnimationFrame(hold);
+  return true;
+}
+
 // Folding and zooming, Workflowy-style. The arrow beside a line with lines
 // under it folds them away; clicking a bullet zooms in so that line is the
 // whole page. Which lines are folded is remembered on this device.
@@ -1418,8 +1470,19 @@ export const OutlineFold = Extension.create({
         return decos;
       }
     });
+    let landing = null;
     return [new Plugin({
       key: foldKey,
+      // Before the zoom changes the page: where is the line now?
+      filterTransaction(tr, state) {
+        const m = tr.getMeta(foldKey);
+        if (!m || !('zoom' in m)) return true;
+        const was = foldKey.getState(state)?.zoom || null;
+        const to = m.zoom || null;
+        if (to === was) return true;
+        for (const v of openViews) if (v.state === state) landing = noteZoomSpot(v, was, to);
+        return true;
+      },
       state: {
         init: () => ({ folded: loadFolded(), zoom: null }),
         apply(tr, old) {
@@ -1450,7 +1513,11 @@ export const OutlineFold = Extension.create({
           update(view, prev) {
             const a = foldKey.getState(view.state);
             const b = foldKey.getState(prev);
-            if (a.zoom !== b.zoom) onZoom(a.zoom);
+            if (a.zoom !== b.zoom) {
+              const spot = landing; landing = null;
+              view.dom.__zoomLanded = spot && landZoomSpot(view, spot) ? performance.now() : 0;
+              onZoom(a.zoom);
+            }
           },
           destroy() { openViews.delete(view); unhold(); undouble(); }
         };
@@ -1484,6 +1551,9 @@ export const OutlineFold = Extension.create({
       },
       props: {
         decorations(state) { return gutterKey.getState(state).set; },
+        // Just landed back where you were: a caret brought into view right
+        // after (a focus on the way out) doesn't move the page again.
+        handleScrollToSelection: (view) => performance.now() - (view.dom.__zoomLanded || 0) < 600,
         handleDOMEvents: {
           pointerdown(view, event) {
             if (event.pointerType === 'mouse' && event.button === 0 && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && event.detail < 2) {

@@ -236,7 +236,8 @@ export class Notebook {
   // Zoomed in: a trail back up to the page, and the day's extras step aside.
   zoomed(eid) {
     // The page changes under the caret when zooming in or out; bring it back into view.
-    requestAnimationFrame(() => this.editor.commands.scrollIntoView());
+    // Coming back out to where you were: the page already sits as it was (outline.js).
+    if (!this.editor.view.dom.__zoomLanded) requestAnimationFrame(() => this.editor.commands.scrollIntoView());
     const trail = $('#nb-zoom');
     $('.notebook').classList.toggle('zoomed', !!eid);
     trail.replaceChildren();

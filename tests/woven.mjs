@@ -434,8 +434,11 @@ try {
     assert.ok(labels.some((l) => /^Delete line/.test(l)), labels.join(' | '));
     await p.locator('.handle-menu .item', { hasText: 'Mark done' }).click();
     await p.waitForFunction(() => [...document.querySelectorAll('.wv-sumi .wv-lines li[data-done] > p')].some((x) => x.textContent.startsWith('He counts twice')));
-    // Held still and let go: the same menu.
+    // Held still and let go: the same menu (on a line you're not typing in;
+    // Mark done hands the caret back to the line first).
     await p.waitForFunction(() => !document.querySelector('.handle-menu'));
+    await p.waitForFunction(() => document.activeElement?.closest('.wv-lines'));
+    await sleep(100);
     await p.evaluate(() => document.activeElement?.blur());
     await sleep(200);
     const b = await words.boundingBox();
