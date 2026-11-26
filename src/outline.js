@@ -900,6 +900,7 @@ function pressLine(view, li, event) {
 // it go.
 const HOLD = 400; // ms
 const DRIFT = 12; // px a finger may wander while it holds
+const PRESS = 200; // ms: from here a hold stops the phone picking words
 function holdDrags(view) {
   let t = null; // { li, x, y, timer, d, armed, moved, at, quick }
   let picked = null; // the line that stays picked: its id
@@ -911,9 +912,9 @@ function holdDrags(view) {
   };
   const stop = () => {
     if (!t) return;
-    clearTimeout(t.timer);
+    clearTimeout(t.timer); clearTimeout(t.press);
     for (const [k, f] of hear) t.el.removeEventListener(k, f);
-    document.documentElement.classList.remove('line-holding');
+    document.documentElement.classList.remove('line-holding', 'line-pressing');
     t = null;
     setTimeout(() => { touchHeld = !!t; }, 0);
   };
@@ -950,6 +951,11 @@ function holdDrags(view) {
     // first touched: hear it there too.
     for (const [k, f] of hear) el.addEventListener(k, f, { passive: false });
     t.timer = setTimeout(arm, HOLD);
+    // Before the phone's own long press can pick a word (some phones start
+    // at 300 ms, sooner than the hold): words can't be picked while it's held,
+    // so the hold isn't cut short and the line moves in one go. Not at once,
+    // so a double tap still picks a word.
+    t.press = setTimeout(() => { if (t) document.documentElement.classList.add('line-pressing'); }, PRESS);
   };
   const once = (f) => (e) => { if (e) { if (e.inkHeard) return; e.inkHeard = true; } f(e); };
   const move = once((e) => {
@@ -988,6 +994,9 @@ function holdDrags(view) {
   const off = once(() => { if (t?.armed) t.d.end(null, true); stop(); });
   // Typing lets a picked line go.
   const typed = () => { if (picked) pick(null); };
+  // The phone starting to pick words while a line is held: not now.
+  const nosel = (e) => { if (t && (t.armed || Date.now() - t.at >= PRESS)) e.preventDefault(); };
+  document.addEventListener('selectstart', nosel, true);
   view.dom.addEventListener('beforeinput', typed);
   const hear = [['touchmove', move], ['touchend', end], ['touchcancel', off]];
   // Heard on the editor only (not the whole page), so a touch anywhere else
@@ -1004,6 +1013,7 @@ function holdDrags(view) {
     pick(null);
     pickStyle.remove();
     view.dom.removeEventListener('beforeinput', typed);
+    document.removeEventListener('selectstart', nosel, true);
     document.removeEventListener('touchstart', start, { capture: true });
     view.dom.removeEventListener('touchstart', start);
     view.dom.removeEventListener('touchmove', move);

@@ -191,6 +191,45 @@ try {
     await sleep(300);
   });
 
+  await check('a long line that wraps: held on a word, the phone cannot pick words, and it moves in one go', async () => {
+    const LONG = 'Order rope and the soft mats for Saturday, and ask the gym about the loft space for the shoot';
+    const OUT = START.replace('Order rope', LONG);
+    await setOutline(ph, OUT);
+    await blurred();
+    const w = words('soft mats');
+    const b = (await centre(w)).b;
+    assert.ok(b.height > 40, 'it wraps');
+    const from = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    const to = await centre(words("Kenji's verse"));
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: from.x, y: from.y }] });
+    await sleep(300);
+    // What the phone's own long press does on a word, before the hold lifts the line.
+    const stopped = await ph.evaluate(() => {
+      const p = [...document.querySelectorAll('#outline-editor li > p')].find((q) => q.textContent.includes('soft mats'));
+      const e = new Event('selectstart', { bubbles: true, cancelable: true });
+      p.firstChild.dispatchEvent(e);
+      return { stopped: e.defaultPrevented, sel: getComputedStyle(p).webkitUserSelect || getComputedStyle(p).userSelect };
+    });
+    assert.equal(stopped.stopped, true, 'the phone may not start picking words');
+    assert.equal(stopped.sel, 'none');
+    await sleep(250);
+    assert.equal(await ph.locator('.line-lift').count(), 1, 'it lifts');
+    for (let k = 1; k <= 10; k += 1) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: from.x, y: from.y + ((to.b.y + 3 - from.y) * k) / 10 }] });
+      await sleep(25);
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await sleep(300);
+    assert.equal((await readOutline(ph)).replace(/\|/g, '').split('\n')[0], LONG, 'moved in one go');
+    // A quick double tap still picks a word: nothing is stopped in the first moments.
+    const early = await ph.evaluate(() => { const e = new Event('selectstart', { bubbles: true, cancelable: true }); document.querySelector('#outline-editor li > p').dispatchEvent(e); return e.defaultPrevented; });
+    assert.equal(early, false, 'no hold, nothing stopped');
+    const other = await centre(words('Call Dana'));
+    await ph.touchscreen.tap(other.x, other.y);
+    await sleep(300);
+    await blurred();
+  });
+
   await check('after a move the line stays picked; a slide on it moves it again at once; a tap elsewhere lets it go', async () => {
     await setOutline(ph, START);
     await blurred();
