@@ -664,7 +664,13 @@ try {
 
   await check('a right-click on a notebook line (one you are not typing in) opens its menu', async () => {
     const top = p.locator('#outline-editor li:visible', { hasText: 'Call the harbourmaster' }).first();
-    const rc = async () => { await p.evaluate(() => document.activeElement?.blur()); await top.locator(':scope > p').click({ button: 'right', position: { x: 12, y: 10 } }); };
+    const rc = async () => {
+      await p.waitForFunction(() => !document.querySelector('.handle-menu'));
+      await sleep(300); // the line settles after a change (done lines restyle)
+      await p.evaluate(() => document.activeElement?.blur());
+      await top.locator(':scope > p').click({ button: 'right', position: { x: 12, y: 10 } });
+      await p.waitForSelector('.handle-menu', { state: 'visible' });
+    };
     await rc();
     await p.waitForSelector('.handle-menu', { state: 'visible' });
     assert.equal(await p.locator('.notebook.zoomed').count(), 0, 'a right-click does not zoom');
