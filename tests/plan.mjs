@@ -176,8 +176,8 @@ try {
     assert.equal((await taskNamed(page, 'Email the storyboard notes to Dana')).fields.task.day, '2026-11-10');
   });
 
-  await check('a double-click on a task’s words changes them in place', async () => {
-    await row(page, 'Order the storage drive').locator('.pl-words').dblclick();
+  await check('a click on a task’s words changes them in place', async () => {
+    await row(page, 'Order the storage drive').locator('.pl-words').click();
     const input = page.locator('#plan .pl-rename');
     await input.fill('Order the 8 TB storage drive');
     await input.press('Enter');
@@ -187,18 +187,18 @@ try {
     assert.deepEqual(t.content, [{ type: 'text', text: 'Order the 8 TB storage drive' }]);
     assert.equal(t.fields.task.day, '2026-11-09', 'the rest of the task is as it was');
     await sleep(400);
-    assert.equal(await page.locator('.pane').count(), 0, 'a double-click doesn’t open it as well');
+    assert.equal(await page.locator('.pane').count(), 0, 'a click doesn’t open it as well');
   });
 
-  await check('six dots show a task can be moved; Alt + Up and Alt + Down move it with the keyboard', async () => {
+  await check('no six dots (one way everywhere); Alt + Up and Alt + Down move a task with the keyboard', async () => {
     const r = row(page, 'Order the 8 TB');
     const op = () => r.locator('.pl-grip').evaluate((g) => getComputedStyle(g).opacity);
     await page.mouse.move(5, 5);
     await sleep(200);
-    assert.equal(await op(), '0', 'quiet until the pointer is on it');
+    assert.equal(await op(), '0');
     await r.hover();
     await sleep(200);
-    assert.equal(await op(), '1');
+    assert.equal(await op(), '0', 'none under the pointer either');
     assert.equal(await row(page, 'Call Dana').locator('.pl-grip').count(), 0, 'a done task has none');
     assert.deepEqual((await todo(page)).slice(0, 2), ['Board Reel 2', 'Order the 8 TB storage drive']);
     await r.locator('.pl-words').focus();
@@ -214,9 +214,8 @@ try {
   });
 
   await check('a click on a task zooms into it (Now), Alt + Left goes back out to the day’s page, Ctrl + click opens it beside', async () => {
-    // Today as an outline (Nov 25 2026): the words take the cursor, the six dots zoom in.
-    await row(page, 'Order the 8 TB').hover();
-    await row(page, 'Order the 8 TB').locator('.pl-grip').click();
+    // Today as an outline (Nov 25 2026): a click on the words takes the cursor, a double-click zooms in.
+    await row(page, 'Order the 8 TB').locator('.pl-words').dblclick();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && /Order the 8 TB/.test((window.__plan.items || []).find((i) => i.row.id === history.state?.zoom)?.row.text || ''));
     assert.equal(await page.locator('.pane-frame').count(), 0, 'nothing opened beside');
     await page.evaluate(() => document.activeElement?.blur());
@@ -247,7 +246,7 @@ try {
 
   await check('the ⋯ menu: “Open it where it’s written” goes to the Tasks page, which has no plan of its own', async () => {
     await row(page, 'Board Reel 2').hover();
-    await row(page, 'Board Reel 2').locator('.pl-grip').click({ button: 'right' }); // the menu: a right-click on the dots
+    await row(page, 'Board Reel 2').locator('.pl-words').click({ button: 'right' }); // the menu: a right-click on the dots
     await sleep(250);
     await pick(page, 'Open it where it’s written');
     await page.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Tasks');
@@ -427,7 +426,7 @@ try {
     assert.equal(await page.locator('#outline-editor .task-chip').innerText(), 'Today');
     await today(page);
     const r = row(page, 'Pick Kenji’s second verse');
-    await r.locator('.pl-grip').click({ button: 'right' });
+    await r.locator('.pl-words').click({ button: 'right' });
     await page.waitForSelector('.pop-menu');
     assert.match(await page.locator('.pop-menu').innerText(), /In The Ninja Bunch/i);
     await pick(page, 'Open it where it’s written');

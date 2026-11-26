@@ -748,3 +748,10 @@ html.has-rail .pl-switches { flex-direction: row; align-items: center; }
 textarea.pl-words-in { display: block; flex: 1 1 auto; width: 100%; resize: none; overflow: hidden; field-sizing: content; min-height: 0; cursor: text; caret-color: var(--accent); -webkit-appearance: none; appearance: none; outline: none; border-radius: 0; box-shadow: none; }
 textarea.pl-words-in::placeholder { color: var(--faint); }
 .pl-task.done textarea.pl-words-in { text-decoration: line-through; text-decoration-color: var(--faint); }
+
+/* One way everywhere (Nov 25 2026): Today's lines show no six dots; a
+   double-click or double tap zooms in, a drag or hold moves, held still and
+   let go is the menu. The triangle sits at the far right, as on a phone. */
+.pl-ol .pl-grip, .pl-task.pl-ol:hover .pl-grip, .pl-task.pl-ol:focus-within .pl-grip { opacity: 0 !important; }
+@media (--mouse) { .pl-ol .pl-grip { pointer-events: none; } }
+.pl-task.pl-ol.pl-armed { background: color-mix(in srgb, var(--accent) 16%, transparent); }

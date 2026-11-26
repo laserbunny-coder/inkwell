@@ -89,25 +89,23 @@ try {
     await p.waitForFunction(() => /Ask about the 10am slot/.test(document.querySelector('#plan-sheet .pl-lines')?.textContent || ''));
   });
 
-  await check('the six dots are faded until the pointer is over the line, and a click on them zooms in (Now)', async () => {
+  await check('no six dots, even under the pointer; a double-click on the line zooms in (Now)', async () => {
     const grip = row(p, 'Rewrite the dojo').locator('.pl-grip');
-    assert.equal(Number(await grip.evaluate((g) => getComputedStyle(g).opacity)), 0);
     await row(p, 'Rewrite the dojo').hover();
     await sleep(250);
-    assert.ok(Number(await grip.evaluate((g) => getComputedStyle(g).opacity)) > 0.5, 'shown on hover');
-    await grip.click();
+    assert.equal(Number(await grip.evaluate((g) => getComputedStyle(g).opacity)), 0, 'no dots on hover');
+    await row(p, 'Rewrite the dojo').locator('.pl-words').dblclick();
     await zoomedOn(p, 'Rewrite the dojo scene');
     await p.locator('.nz-strip:not([hidden])').waitFor();
   });
 
-  await check('a right-click on the dots is the task’s menu, Zoom in first; there is no ⋯ on the line', async () => {
+  await check('a right-click on the line is the task’s menu, Zoom in first; there is no ⋯ on the line', async () => {
     await p.evaluate(() => document.activeElement?.blur());
     await p.keyboard.press('Alt+ArrowLeft');
     await p.waitForFunction(() => document.documentElement.dataset.view === 'plan' && document.querySelector('#plan-sheet')?.dataset.tab === 'day');
     await sleep(400);
     assert.equal(await row(p, 'Find the script').locator('.pl-more').isVisible(), false);
-    await row(p, 'Find the script').hover();
-    await row(p, 'Find the script').locator('.pl-grip').click({ button: 'right' });
+    await row(p, 'Find the script').locator('.pl-words').click({ button: 'right' });
     const menu = p.locator('.pop-menu');
     await menu.waitFor();
     assert.match(await menu.innerText(), /^Zoom in/);
@@ -118,6 +116,24 @@ try {
     await sleep(400);
   });
 
+  await check('held still with the mouse and let go, the line’s menu comes up (and nothing else happens)', async () => {
+    const b = await row(p, 'Find the script').locator('.pl-words').boundingBox();
+    await p.mouse.move(b.x + 10, b.y + b.height / 2);
+    await p.mouse.down();
+    await sleep(650);
+    await p.mouse.up();
+    const menu = p.locator('.pop-menu');
+    await menu.waitFor();
+    assert.match(await menu.innerText(), /^Zoom in/);
+    assert.equal(await p.locator('#plan-sheet .pl-ol-in').count(), 0, 'not typing in it');
+    await p.keyboard.press('Escape');
+    await sleep(300);
+  });
+  await check('the triangle sits at the far right of the line on a computer too', async () => {
+    const r = await row(p, 'Reply to the gym').boundingBox();
+    const f = await row(p, 'Reply to the gym').locator('.pl-fold').boundingBox();
+    assert.ok(f.x + f.width > r.x + r.width - 60, `near the right edge (${Math.round(f.x)} of ${Math.round(r.x + r.width)})`);
+  });
   await check('Alt + Right on a task zooms in, and Alt + Left goes out to the list', async () => {
     await row(p, 'Find the script').locator('.pl-words').focus();
     await p.keyboard.press('Alt+ArrowRight');
@@ -135,22 +151,15 @@ try {
   for (const t of ['Rewrite the dojo scene', 'Find the script']) await add(ph, t);
   await ph.evaluate(() => document.activeElement?.blur());
   await sleep(300);
-  await check('phone: the dots show on the line you are on, and a tap on hidden dots still zooms in', async () => {
-    const g = (t) => row(ph, t).locator('.pl-grip');
+  await check('phone: no dots show, even on the line you are on', async () => {
     const id = await row(ph, 'Find the script').getAttribute('data-task');
     const mine = ph.locator(`#plan-sheet .pl-ol[data-task="${id}"] .pl-grip`);
-    assert.equal(Number(await mine.evaluate((x) => getComputedStyle(x).opacity)), 0, 'hidden off the line');
     await row(ph, 'Find the script').locator('.pl-words').tap();
     await ph.locator('#plan-sheet .pl-ol-in').waitFor();
     await sleep(200);
-    assert.ok(Number(await mine.evaluate((x) => getComputedStyle(x).opacity)) > 0.5, 'shown on the line you are on');
+    assert.equal(Number(await mine.evaluate((x) => getComputedStyle(x).opacity)), 0);
     await ph.locator('#plan-sheet .pl-ol-in').press('Enter');
     await sleep(500);
-    await g('Rewrite the dojo').tap();
-    await zoomedOn(ph, 'Rewrite the dojo scene');
-    await ph.goBack();
-    await ph.waitForFunction(() => document.querySelector('#plan-sheet')?.dataset.tab === 'day' && document.querySelectorAll('#plan-sheet .pl-ol').length === 2);
-    await sleep(400);
     assert.ok(await ph.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll');
   });
   await check('phone: a double tap on a task’s words zooms into it', async () => {

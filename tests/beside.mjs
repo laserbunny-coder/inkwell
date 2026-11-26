@@ -169,7 +169,7 @@ try {
 
   await check('a click on a task in the plan beside opens it in the main view, zoomed in on its line', async () => {
     await f.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).hover();
-    await f.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).locator('.pl-grip').click(); // the dots zoom in (the words take the cursor)
+    await f.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).locator('.pl-words').dblclick(); // a double-click zooms in (the words take the cursor)
     await page.waitForFunction(() => /second verse/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''));
     assert.ok(await page.locator('#outline-editor li[data-eid="ln_song_n"]').isVisible(), 'its notes are right there');
     assert.equal(await f.evaluate(() => document.documentElement.dataset.view), 'plan', 'the plan stays beside');
@@ -209,7 +209,7 @@ try {
     await page.waitForFunction(() => /Rhymes with katana/.test(document.querySelector('#plan .pl-kids')?.textContent || ''));
     assert.equal(await page.locator('#plan .pl-task', { hasText: 'second verse' }).locator('.pl-fold').getAttribute('aria-expanded'), 'true');
     await page.locator('#plan .pl-task', { hasText: 'second verse' }).hover();
-    await page.locator('#plan .pl-task', { hasText: 'second verse' }).locator('.pl-grip').click(); // its lines are written in place; the dots zoom in
+    await page.locator('#plan .pl-task', { hasText: 'second verse' }).locator('.pl-words').dblclick(); // its lines are written in place; a double-click zooms in
     await page.waitForFunction(() => /second verse/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''));
     assert.ok(await page.locator('#outline-editor li[data-eid="ln_song_n"]').isVisible());
     assert.equal(await count(page), 1, 'Beside is as it was');
@@ -281,7 +281,7 @@ try {
     await headIs(page, 'Notes', 'No draft open');
     const li = page.locator('#outline-editor li', { hasText: 'Rain all morning' });
     await li.hover();
-    await li.locator(':scope > .line-gutter .bullet').click({ button: 'middle' });
+    await li.locator(':scope > p').click({ button: 'middle' });
     f = await pane(page, 'notebook');
     assert.equal(await count(page), 1, 'one pane, not two');
     await headIs(page, '', 'Rain all morning');
@@ -319,7 +319,7 @@ try {
     await page.evaluate(() => { const c = document.querySelector('#many-panes'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); });
     const li = page.locator('#outline-editor li', { hasText: 'Rain all morning' });
     await li.hover();
-    await li.locator(':scope > .line-gutter .bullet').click({ button: 'middle' });
+    await li.locator(':scope > p').click({ button: 'middle' });
     await page.waitForFunction(() => window.__panes.count === 2);
     await pane(page, 'notebook');
     assert.equal(await page.locator('.pane:not(.spine)').count(), 2);

@@ -65,8 +65,10 @@ async function dragLine(p, from, to, { alt = false } = {}) {
   await p.mouse.move(600, 500);
   await p.evaluate(() => document.body.classList.remove('show-outline'));
   await sleep(250);
-  await from.hover();
-  const g = await from.locator(':scope > .line-gutter .bullet').boundingBox();
+  // A line is moved by its words now (one way everywhere): out of typing first.
+  await p.evaluate(() => { for (const f of [document, ...[...document.querySelectorAll('iframe')].map((x) => x.contentDocument)]) f?.activeElement?.blur?.(); });
+  const w = await from.locator(':scope > p').boundingBox();
+  const g = { x: w.x + 4, y: w.y, width: 12, height: w.height };
   const t = await to.locator(':scope > p').boundingBox();
   await p.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
   await p.mouse.down();
@@ -95,9 +97,8 @@ try {
   let pane;
   await check('middle-clicking a line’s dots opens it beside, zoomed in, and leaves you where you were', async () => {
     const li = p.locator('#outline-editor li', { hasText: 'Charlie' }).first();
-    await li.hover();
-    const g = await li.locator(':scope > .line-gutter .bullet').boundingBox();
-    await p.mouse.click(g.x + g.width / 2, g.y + g.height / 2, { button: 'middle' });
+    const g = await li.locator(':scope > p').boundingBox();
+    await p.mouse.click(g.x + 20, g.y + g.height / 2, { button: 'middle' });
     [pane] = await paneReady(p, 1);
     assert.equal(await p.evaluate(() => document.documentElement.classList.contains('has-panes')), true);
     assert.deepEqual(await pane.evaluate(() => [document.documentElement.dataset.view, window.__notebook.zoom != null]), ['notebook', true]);
@@ -168,8 +169,8 @@ try {
 
   await check('the line menu has Open beside and Move to the page open beside', async () => {
     const li = p.locator('#outline-editor li', { hasText: 'Bravo' }).first();
-    await li.hover();
-    await li.locator(':scope > .line-gutter .bullet').click({ button: 'right' });
+    await p.evaluate(() => document.activeElement?.blur());
+    await li.locator(':scope > p').click({ button: 'right' });
     await p.waitForSelector('.handle-menu');
     const menu = await p.locator('.handle-menu').innerText();
     assert.match(menu, /Open beside/);
@@ -240,12 +241,12 @@ try {
     await ph.keyboard.type('Grandpa on the roof');
     await sleep(600);
     const li = ph.locator('#outline-editor li', { hasText: 'Kenji' });
-    await li.locator(':scope > p').tap();
+    await ph.evaluate(() => document.activeElement?.blur());
     await sleep(300);
-    // Held still, the line's dots bring up its menu (a tap would zoom in).
-    const dots = await li.locator(':scope > .line-gutter .bullet').boundingBox();
+    // Held still and let go, the line's words bring up its menu.
+    const dots = await li.locator(':scope > p').boundingBox();
     const touch = await ph.context().newCDPSession(ph);
-    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: dots.x + dots.width / 2, y: dots.y + dots.height / 2 }] });
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: dots.x + 14, y: dots.y + dots.height / 2 }] });
     await sleep(650);
     await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await ph.waitForSelector('.handle-menu');

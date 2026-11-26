@@ -541,8 +541,7 @@ function lineDrag(view, dragged, touch) {
     fade = document.createElement('style');
     fade.textContent = `li:has(> .line-gutter[data-eid="${CSS.escape(eid || '')}"]) { opacity: .35; }`;
     document.head.append(fade);
-    if (!touch) return;
-    // A copy of the line's words pops out and rides with the finger.
+    // A copy of the line's words pops out and rides with the finger (or the mouse).
     const p = dragged.querySelector(':scope > p');
     const b = (p || dragged).getBoundingClientRect();
     lift = document.createElement('div');
@@ -553,9 +552,9 @@ function lineDrag(view, dragged, touch) {
     Object.assign(lift.style, { left: `${b.left}px`, width: `${Math.min(b.width, innerWidth - b.left - 8)}px`, top: `${b.top}px` });
     document.body.append(lift);
     // It rides just above the finger, so the line where it will land stays in sight.
-    dy = b.height + 22;
+    dy = touch ? b.height + 22 : b.height / 2;
     lift.style.top = `${e.clientY - dy}px`;
-    navigator.vibrate?.(8);
+    if (touch) navigator.vibrate?.(8);
     const box = scroller(view.dom);
     const step = () => {
       if (!mark) return;
@@ -644,6 +643,92 @@ function startDrag(view, dragged, event, { onClick, onHold } = {}) {
   window.addEventListener('pointercancel', done);
 }
 
+// Lines zoomed into that had nothing under them, given an empty line to write in.
+const seeded = new Set();
+function seedZoom(state, from, to) {
+  if (from === to) return null;
+  const at = (id) => { let r = null; if (!id) return r; state.doc.descendants((n, pos) => { if (r) return false; if (n.type.name === 'listItem' && n.attrs.eid === id) { r = { n, pos }; return false; } return true; }); return r; };
+  let tr = null;
+  // Out of one we gave a line to: if it's still the only one and still empty, it goes.
+  if (from && seeded.has(from)) {
+    seeded.delete(from);
+    const f = at(from);
+    const list = f && kidsOf(f.n);
+    const only = list?.childCount === 1 ? list.firstChild : null;
+    if (only && only.childCount === 1 && !only.firstChild.content.size) {
+      const start = f.pos + f.n.nodeSize - 1 - list.nodeSize;
+      tr = state.tr.delete(start, start + list.nodeSize);
+    }
+  }
+  if (to) {
+    const doc = tr ? tr.doc : state.doc;
+    let t = null;
+    doc.descendants((n, pos) => { if (t) return false; if (n.type.name === 'listItem' && n.attrs.eid === to) { t = { n, pos }; return false; } return true; });
+    if (t && !kidsOf(t.n)) {
+      const { schema } = state;
+      tr = tr || state.tr;
+      tr.insert(t.pos + t.n.nodeSize - 1, schema.nodes.bulletList.create(null, schema.nodes.listItem.create(null, schema.nodes.paragraph.create())));
+      seeded.add(to);
+    }
+  }
+  if (tr) tr.setMeta('addToHistory', false);
+  return tr;
+}
+
+// One way everywhere (Michael, Nov 25 2026): no dots to aim for. With the
+// mouse, a press on the words of a line you're not typing in moves it as
+// soon as it slides; held still and let go, its menu comes up; a plain
+// click puts the cursor there. In the line you're typing in, the mouse
+// picks words as usual. A double-click zooms in (below).
+const wordsLine = (view, el) => {
+  if (el?.closest?.('.line-gutter, .line-box, a, button, [contenteditable="false"]')) return null;
+  const li = el?.closest?.('li');
+  if (!li || !view.dom.contains(li) || li.classList.contains('zoom-root') || li.classList.contains('zoom-path')) return null;
+  if (!li.querySelector(':scope > p')?.contains(el)) return null;
+  return li.querySelector(':scope > .line-gutter')?.dataset.eid ? li : null;
+};
+const eidOf = (li) => li?.querySelector(':scope > .line-gutter')?.dataset.eid || null;
+const typingIn = (view, li) => li.classList.contains('here') && view.hasFocus();
+// Only the notebook hears 'line-menu' (the small editors under a task or a scene don't).
+const hasMenu = (view) => !!view.dom.closest('#outline-editor');
+function pressLine(view, li, event) {
+  const x0 = event.clientX, y0 = event.clientY;
+  const eid = eidOf(li);
+  const d = lineDrag(view, li, false);
+  let held = false;
+  const timer = setTimeout(() => { held = true; li.classList.add('line-held'); }, MENU_HOLD);
+  try { view.dom.setPointerCapture(event.pointerId); } catch { /* not a pointer we can hold */ }
+  const move = (e) => {
+    if (!d.started()) {
+      if (Math.hypot(e.clientX - x0, e.clientY - y0) < 5) return;
+      clearTimeout(timer);
+      li.classList.remove('line-held');
+      d.begin(e);
+    }
+    d.move(e);
+  };
+  const done = (e) => {
+    clearTimeout(timer);
+    li.classList.remove('line-held');
+    try { view.dom.releasePointerCapture(event.pointerId); } catch { /* already let go */ }
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', done);
+    window.removeEventListener('pointercancel', done);
+    if (d.started()) return d.end(e, e.type === 'pointercancel');
+    if (e.type !== 'pointerup') return;
+    if (held && hasMenu(view)) return lineMenu(view, li.querySelector(':scope > .line-gutter .bullet') || li, eid, { left: e.clientX, top: e.clientY });
+    // A plain click: the cursor where it landed.
+    const pos = view.posAtCoords({ left: x0, top: y0 });
+    const tr = view.state.tr;
+    if (pos) tr.setSelection(TextSelection.near(view.state.doc.resolve(pos.pos)));
+    view.focus();
+    view.dispatch(tr.scrollIntoView());
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', done);
+  window.addEventListener('pointercancel', done);
+}
+
 // On a phone, as in Workflowy: a finger held still on a line's words for a
 // moment lifts the line, and it then follows the finger up and down until
 // let go. A tap still puts the cursor there, a quick swipe still scrolls, and
@@ -670,7 +755,7 @@ function holdDrags(view) {
     if (li.classList.contains('here') && view.hasFocus()) return; // typing here: a hold selects words
     const { clientX: x, clientY: y } = e.touches[0];
     touchHeld = true;
-    t = { li, x, y, armed: false, moved: false, el };
+    t = { li, x, y, armed: false, moved: false, el, eid: eidOf(li) };
     // Should the editor draw the line afresh, the touch stays with the words
     // first touched: hear it there too.
     for (const [k, f] of hear) el.addEventListener(k, f, { passive: false });
@@ -703,8 +788,12 @@ function holdDrags(view) {
     if (!was.armed) return;
     if (e.cancelable) e.preventDefault(); // no tap (and no keyboard) when it lands
     const c = e.changedTouches?.[0];
-    // Held still and let go: it settles back where it was.
+    // Held still and let go: it settles back where it was, and its menu comes up.
     was.d.end(c && was.moved ? { clientX: c.clientX, clientY: c.clientY } : null, !was.moved);
+    if (!was.moved && hasMenu(view)) {
+      const li = [...view.dom.querySelectorAll('li')].find((l) => eidOf(l) === was.eid) || was.li;
+      lineMenu(view, li.querySelector(':scope > .line-gutter .bullet') || li, was.eid, c ? { left: c.clientX, top: c.clientY } : undefined);
+    }
   });
   const off = once(() => { if (t?.armed) t.d.end(null, true); stop(); });
   const hear = [['touchmove', move], ['touchend', end], ['touchcancel', off]];
@@ -1340,6 +1429,13 @@ export const OutlineFold = Extension.create({
       // and anything typed or moved into a fold opens it.
       appendTransaction(trs, oldState, state) {
         const st = foldKey.getState(state);
+        // Zoomed into a line with nothing under it: an empty line waits there,
+        // ready for a tap or a click, and goes again if left empty (Nov 25 2026).
+        const zm = trs.map((t) => t.getMeta(foldKey)).filter((m) => m && 'zoom' in m).pop();
+        if (zm) {
+          const tr = seedZoom(state, foldKey.getState(oldState).zoom, st.zoom);
+          if (tr) return tr;
+        }
         if (!st.folded.size && !st.zoom) return null;
         if (!trs.some((t) => t.docChanged || t.selectionSet || t.getMeta(foldKey))) return null;
         const head = state.selection.head;
@@ -1360,6 +1456,10 @@ export const OutlineFold = Extension.create({
         decorations(state) { return gutterKey.getState(state).set; },
         handleDOMEvents: {
           pointerdown(view, event) {
+            if (event.pointerType === 'mouse' && event.button === 0 && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && event.detail < 2) {
+              const li = wordsLine(view, event.target);
+              if (li && !typingIn(view, li)) { event.preventDefault(); pressLine(view, li, event); return true; }
+            }
             const b = event.target.closest?.('.line-gutter button');
             if (!b) return false;
             event.preventDefault();
@@ -1377,6 +1477,10 @@ export const OutlineFold = Extension.create({
             return true;
           },
           contextmenu(view, event) {
+            // A right-click on a line you're not typing in is its menu (in the
+            // line you're typing in, the browser's own, for spelling).
+            const li = !isTouch() && hasMenu(view) && wordsLine(view, event.target);
+            if (li && !typingIn(view, li)) { event.preventDefault(); lineMenu(view, li.querySelector(':scope > .line-gutter .bullet') || li, eidOf(li), { left: event.clientX, top: event.clientY }); return true; }
             const b = event.target.closest?.('.line-gutter');
             if (!b?.dataset.eid) return false;
             event.preventDefault();
@@ -1384,9 +1488,22 @@ export const OutlineFold = Extension.create({
             lineMenu(view, b.querySelector('.bullet') || b, b.dataset.eid, { left: event.clientX, top: event.clientY });
             return true;
           },
-          mousedown(_view, event) {
+          mousedown(view, event) {
+            // The press on a line's words is heard above (pointerdown): no cursor or word picking yet.
+            // (A right-press too, so the menu comes up for that line rather than the cursor going there.)
+            const li = (event.button === 0 || (event.button === 2 && hasMenu(view))) && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && event.detail < 2 && !isTouch() && wordsLine(view, event.target);
+            if (li && !typingIn(view, li)) { event.preventDefault(); return true; }
             if (!event.target.closest?.('.line-gutter button')) return false;
             event.preventDefault();
+            return true;
+          },
+          // A double-click on a line zooms into it, as a double tap does.
+          dblclick(view, event) {
+            if (isTouch()) return false;
+            const li = wordsLine(view, event.target);
+            if (!li) return false;
+            event.preventDefault();
+            view.dispatch(view.state.tr.setMeta(foldKey, { zoom: eidOf(li) }));
             return true;
           }
         }

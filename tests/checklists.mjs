@@ -148,7 +148,7 @@ try {
   });
 
   await check('the right-click line menu has Checklist and Box', async () => {
-    await line(laptop, 'Food').locator(':scope > .line-gutter').click({ button: 'right' });
+    await line(laptop, 'Food').locator(':scope > p').click({ button: 'right' });
     const menu = laptop.locator('.handle-menu, .hm-menu, [role="menu"]').last();
     await menu.waitFor();
     const text = await menu.innerText();

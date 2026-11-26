@@ -94,6 +94,8 @@ export class Plan {
         this.menu(this.item(row.dataset.task), row, { left: e.clientX, top: e.clientY });
       });
       if (el !== steps) this.drags(el);
+      // With a mouse, a Today line held still and let go brings up its menu (a phone's hold does too).
+      if (el !== steps) this.mouseHold(el);
       // On a phone: a tap types in a task's words, a double tap zooms into it.
       if (el !== steps) doubleTaps(el, (t) => {
         const row = t.closest?.('.pl-task.pl-ol[data-task]');
@@ -947,7 +949,7 @@ export class Plan {
       n.setAttribute('aria-expanded', String(open));
       // On a phone it sits at the far right of the line, clear of the tick
       // box, as on every outline line there (Michael, Nov 25 2026).
-      if (isTouch()) n.classList.add('at-end'); else title.append(n);
+      if (isTouch() || ol) n.classList.add('at-end'); else title.append(n);
       foldBtn = n;
     }
     if (rep) {
@@ -1753,6 +1755,18 @@ export class Plan {
   left(id) { if (this.box?.contains(document.activeElement) || this.box?.querySelector(`[data-task="${CSS.escape(id)}"]`)) this.leftAt = { id, y: document.scrollingElement?.scrollTop || 0, at: Date.now() }; }
 
   dblclick(e) {
+    // Today as an outline: a double-click anywhere on the line zooms in, as a
+    // double tap does (one way everywhere, Nov 25 2026).
+    const ol = e.target.closest?.('.pl-task.pl-ol[data-task]');
+    if (ol && !this.picking && !e.target.closest('.pl-check, .pl-kids, .pl-play, a, button:not(.pl-grip, .pl-words)')) {
+      const it = this.item(ol.dataset.task);
+      if (!it) return;
+      e.preventDefault();
+      clearTimeout(this.opening);
+      if (document.activeElement?.classList?.contains('pl-rename')) document.activeElement.blur(); // keeps what was typed
+      getSelection()?.removeAllRanges?.();
+      return this.open(it);
+    }
     const el = e.target.closest('.pl-words[data-act="words"]');
     const row = el?.closest('[data-task]');
     const i = row && this.item(row.dataset.task);
@@ -2438,6 +2452,33 @@ export class Plan {
     root.addEventListener('contextmenu', (e) => {
       if (t?.armed || t?.moving) { e.preventDefault(); e.stopImmediatePropagation(); } else end();
     }, true);
+  }
+
+  mouseHold(root) {
+    let h = null;
+    const off = () => { if (h) { clearTimeout(h.timer); h.row.classList.remove('pl-armed'); } };
+    root.addEventListener('mousedown', (e) => {
+      off(); h = null;
+      if (e.button !== 0 || !hover.matches || this.picking) return;
+      const row = e.target.closest?.('.pl-task.pl-ol[data-task]');
+      if (!row || e.target.closest('.pl-check, .pl-kids, .pl-play, .pl-fold, a, input, textarea, button:not(.pl-words, .pl-grip)')) return;
+      h = { row, x: e.clientX, y: e.clientY, held: false };
+      h.timer = setTimeout(() => { if (h) { h.held = true; row.classList.add('pl-armed'); } }, 450);
+    });
+    root.addEventListener('mousemove', (e) => { if (h && !h.held && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 5) { off(); h = null; } });
+    root.addEventListener('dragstart', () => { off(); h = null; });
+    root.addEventListener('mouseup', (e) => {
+      if (!h) return;
+      const was = h;
+      off(); h = null;
+      if (!was.held) return;
+      // Held still: its menu, and the click that follows does nothing else.
+      const stop = (c) => { c.stopImmediatePropagation(); c.preventDefault(); };
+      root.addEventListener('click', stop, { capture: true, once: true });
+      setTimeout(() => root.removeEventListener('click', stop, { capture: true }), 0);
+      const i = this.item(was.row.dataset.task);
+      if (i) this.menu(i, was.row, { left: e.clientX, top: e.clientY });
+    });
   }
 
   // A running timer counts up on the page once a second.

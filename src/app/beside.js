@@ -236,7 +236,9 @@ function paneKeys(e, m) {
 // a line's or paragraph's six dots, a [[link]], a #tag, a card in the Library
 // or a world, a chapter in the outline, a part of the path, a row or chip in the box.
 const BESIDE = 'a[data-ref], .line-gutter, .block-handle, .tag[data-tag], [data-id], .tree-chapter, .crumb-part, #palette-list > li:not(.box-chips), #palette-list .box-chip, .past-list [data-line]';
-const besideTarget = (e) => (e.button === 1 && paneHost() ? e.target.closest?.(BESIDE) : null);
+// A line's words count as the line (it has no dots to aim for any more).
+const lineWords = (t) => { const p = t.closest?.('#outline-editor li > p'); return p && !t.closest('a[data-ref], .tag[data-tag]') ? p.parentElement.querySelector(':scope > .line-gutter') : null; };
+const besideTarget = (e) => (e.button === 1 && paneHost() ? lineWords(e.target) || e.target.closest?.(BESIDE) : null);
 async function middleBeside(el) {
   if (el.matches('a[data-ref]')) return openEntryBeside(el.getAttribute('data-ref'));
   if (el.matches('.line-gutter')) {

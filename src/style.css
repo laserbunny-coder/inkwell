@@ -2423,3 +2423,30 @@ html.touring .preview-strip { display: none; }
   #outline-editor li.folded > .line-gutter .fold, .wv-lines li.folded > .line-gutter .fold { transform: none; }
   #outline-editor li.folded > .line-gutter .fold::after, .wv-lines li.folded > .line-gutter .fold::after { transform: rotate(-90deg); }
 }
+
+/* One way everywhere (Michael, Nov 25 2026): a line is its words. No six
+   dots on any line, on a computer or a phone: a double-click or double tap
+   zooms in, a press (or a hold, on a phone) moves it, held still and let go
+   its menu comes up. Bullets, if switched on in Aa, are only a mark. The
+   fold triangle sits at the far right of every line, on every screen. */
+#outline-editor .bullet .grip { display: none !important; }
+#outline-editor .line-gutter .bullet { pointer-events: none !important; background: none !important; cursor: default; }
+:root.hide-bullets #outline-editor .line-gutter .bullet { display: none !important; }
+#outline-editor .line-gutter, .wv-lines .line-gutter { right: 0; width: auto; pointer-events: none; }
+#outline-editor .line-gutter button.fold, .wv-lines .line-gutter button.fold { pointer-events: auto; }
+#outline-editor .bullet { right: auto; left: .8em; }
+.wv-lines .bullet { right: auto; left: 0; }
+#outline-editor .fold, .hide-bullets #outline-editor .fold, .wv-lines .fold { left: auto; right: 0; width: 2.2em; }
+#outline-editor .fold::after, .hide-bullets #outline-editor .fold::after, .wv-lines .fold::after { left: auto; right: .75em; }
+#outline-editor li.has-kids > p, .wv-lines li.has-kids > p { padding-right: 2.2em; }
+#outline-editor li.has-kids > .line-gutter .fold, .wv-lines li.has-kids > .line-gutter .fold { opacity: .45; }
+#outline-editor li.folded > .line-gutter .fold, .wv-lines li.folded > .line-gutter .fold { opacity: .8; transform: none; }
+#outline-editor li.has-kids:hover > .line-gutter .fold, #outline-editor .line-gutter .fold:hover { opacity: 1; color: var(--ink); }
+#outline-editor li.folded > .line-gutter .fold::after, .wv-lines li.folded > .line-gutter .fold::after { transform: rotate(-90deg); }
+@media (--mouse) {
+  #outline-editor li:not(.zoom-root):not(.zoom-path) > p { border-radius: 6px; }
+  :root:not(.focus) #outline-editor li:not(.zoom-root):not(.zoom-path):not(.here) > p:hover { background: var(--tint); }
+}
+#outline-editor li.line-held > p { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+/* The empty line waiting under a line zoomed into says where to write. */
+#outline-editor li.zoom-root > ul > li:only-child > p:has(> br.ProseMirror-trailingBreak:only-child)::before { content: 'Write here'; float: left; height: 0; color: var(--faint); pointer-events: none; }
