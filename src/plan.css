@@ -741,3 +741,5 @@ html.has-rail .pl-switches { flex-direction: row; align-items: center; }
 .pl-lines .wv-lines .bullet::after { display: none; } /* no bullets in Today (his word) */
 /* The menu is a right-click on the dots (or a hold on a phone): no ⋯ on Today's lines. */
 .pl-ol .pl-more { display: none; }
+/* A task's triangle on a phone: at the far right of the row, a thumb's width. */
+.pl-fold.at-end { min-width: 36px; min-height: 32px; margin: 0; padding: 0; font-size: 14px; text-align: center; }

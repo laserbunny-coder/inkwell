@@ -14,7 +14,7 @@ import { areas } from './library.js';
 import { clockWord } from './calendar.js';
 import { drawCalendar } from './plancal.js';
 import { children, getEntry, isTrashed } from './db.js';
-import { media } from './device.js';
+import { media, isTouch } from './device.js';
 import { make } from './dom.js';
 import { Now } from './now.js';
 import { drawYear } from './year.js';
@@ -921,13 +921,17 @@ export class Plan {
     // Lines written under a task are its notes. As in an outliner, a small
     // triangle shows them right here, under the task, and hides them again.
     const open = (!!i.notes || (ol && this.startUnder === id)) && !ghost && this.unfolded(id);
+    let foldBtn = null;
     if (i.notes) {
       const n = make('button', `pl-fold${open ? ' open' : ''}`, open ? '▾' : '▸');
       n.dataset.act = 'fold';
       n.title = `${open ? 'Hide' : 'Show'} ${i.notes === 1 ? 'the line' : `the ${i.notes} lines`} under it`;
       n.setAttribute('aria-label', n.title);
       n.setAttribute('aria-expanded', String(open));
-      title.append(n);
+      // On a phone it sits at the far right of the line, clear of the tick
+      // box, as on every outline line there (Michael, Nov 25 2026).
+      if (isTouch()) n.classList.add('at-end'); else title.append(n);
+      foldBtn = n;
     }
     if (rep) {
       const mark = make('button', 'pl-rep', '↻');
@@ -1002,6 +1006,7 @@ export class Plan {
     more.setAttribute('aria-label', 'More for this task');
     more.setAttribute('aria-haspopup', 'menu');
     acts.append(est, more);
+    if (foldBtn?.classList.contains('at-end')) acts.append(foldBtn);
     meta.append(sub, acts);
     if (!sub.childElementCount) row.classList.add('one-row');
     // Plain rows (Look: "Details on plan rows" off): the grip, the tick and the
