@@ -517,7 +517,7 @@ function wireManuscript() {
     toast: (m, a, b) => toast(m, a, b),
     menu: (anchor, items) => popMenu(anchor, items),
     stage: (st) => { if (state.project) setStage(state.project, st); },
-    openInMake: (sh) => { if (state.project) go({ view: 'production', id: state.project.id, tab: 'shots', shot: sh.id }); }
+    openInMake: (sh) => { if (state.project) go({ view: 'production', id: state.project.id, tab: 'shots', shot: sh.id, atStage: true }); }
   });
   window.__scriptShots = scriptShots;
   notes.inPlan = (n) => novelPlan.inPlan(n);

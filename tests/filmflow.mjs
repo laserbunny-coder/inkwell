@@ -70,6 +70,7 @@ put({ id: 'sc_g1', kind: 'scene', parent_id: 'ch_g1', sort: 1024, title: 'Neon',
 para('pp_g1', 'ch_g1', 2048, 'EXT. MOTEL LOT - NIGHT', { el: 'scene' });
 para('pp_g2', 'ch_g1', 3072, 'The VACANCY sign buzzes.', { el: 'action' });
 put({ id: 'sh_g1', kind: 'shot', parent_id: 'pp_g1', sort: 1024, text: 'The sign', fields: { n: 1, piece: 'pr_gen', from: 'pp_g2', to: 'pp_g2' } });
+put({ id: 'sh_g2', kind: 'shot', parent_id: 'pp_g1', sort: 2048, text: 'Rain on the lot', fields: { n: 2, piece: 'pr_gen', from: 'pp_g2', to: 'pp_g2', still: 'Rain on a motel lot, sodium light' } });
 
 let failed = 0;
 const errors = [];
@@ -96,6 +97,20 @@ const make = (id, tab) => goThen({ view: 'production', id, ...(tab ? { tab } : {
 const readyLines = () => p.$$eval('.pd-ready-line', (ls) => ls.map((l) => `${l.dataset.ready}|${l.querySelector('.pd-ready-v')?.textContent || ''}`));
 
 const browser = await chromium.launch();
+// A phone of its own (a real touch screen), synced from the same account.
+async function onPhone() {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark', deviceScaleFactor: SHOTS ? 2 : 1 });
+  await ctx.exposeFunction('__remote', remote);
+  await ctx.addInitScript(fake);
+  const ph = await ctx.newPage();
+  ph.on('pageerror', (e) => errors.push(`phone: ${e.message}`));
+  await ph.goto(`http://localhost:${PORT}/`);
+  const keep = p;
+  p = ph;
+  await until(() => !!window.__go);
+  await dbUntil('sh_c', '!!x');
+  return async () => { await ctx.close(); p = keep; };
+}
 try {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, colorScheme: 'dark', deviceScaleFactor: SHOTS ? 2 : 1 });
   await ctx.exposeFunction('__remote', remote);
@@ -176,7 +191,7 @@ try {
   await check('a generated piece shows only the first two lines', async () => {
     await make('pr_gen', 'shots');
     await until(() => !!document.querySelector('.pd-ready'));
-    assert.deepEqual(await readyLines(), ['lines|✓', 'frames|1 to draw']);
+    assert.deepEqual(await readyLines(), ['lines|✓', 'frames|2 to draw']);
     assert.match(await p.locator('.pd-ready .panel-label').innerText(), /Before generating/i);
   });
 
@@ -213,8 +228,86 @@ try {
     await idbPut({ ...piece, updated_at: Date.now() });
   });
 
+  // ---------- build 2: generated shots, one stage at a time ----------
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  const chips = () => p.$$eval('.pd-stagechip', (cs) => cs.map((c) => `${c.dataset.stage}:${c.querySelector('.pd-stagechip-n').textContent}`));
+  const at = (stage) => until((st) => document.querySelector('.pd-stagechip[aria-pressed="true"]')?.dataset.stage === st, stage);
+  const files = async (sel, list) => { const [fc] = await Promise.all([p.waitForEvent('filechooser'), p.click(sel)]); await fc.setFiles(list); };
+  const toastSays = (re) => until((src) => [...document.querySelectorAll('.toast')].some((t) => new RegExp(src).test(t.textContent || '')), re.source).catch(async (e) => { throw new Error(`${re.source} / toasts: ${await p.evaluate(() => [...document.querySelectorAll('.toast')].map((t) => t.textContent).join(' || '))}`); });
+
+  await check('a filmed piece shows no stage chips; a generated one has All plus six stages, with counts', async () => {
+    await make('pr_salt', 'shots');
+    await until(() => !!document.querySelector('.pd-shot'));
+    assert.equal(await p.locator('.pd-stagechip').count(), 0);
+    await make('pr_gen', 'shots');
+    await until(() => !!document.querySelector('.pd-stagechip'));
+    assert.deepEqual(await chips(), ['all:2', 'board:1', 'still:1', 'pickstill:0', 'video:0', 'picktake:0', 'done:0']);
+    await at('all');
+    assert.equal(await p.locator('.pd-scene').count(), 1, 'All is the list as it was');
+  });
+
+  await check('one shot through all six stages, each showing only what it needs', async () => {
+    await p.click('.pd-stagechip[data-stage="board"]');
+    await until(() => document.querySelectorAll('.pd-stageshot').length === 1 && !!document.querySelector('.pd-stageshot[data-shot="sh_g1"]'));
+    assert.equal(await p.locator('.pd-scene').count(), 0, 'only the shots waiting here');
+    await snap('filmflow-stage-board');
+    await files('.pd-stageshot[data-shot="sh_g1"] .pd-boardphoto', [{ name: 'board.png', mimeType: 'image/png', buffer: PNG }]);
+    await dbUntil('sh_g1', '!!x.fields.star?.board');
+    await until(() => !document.querySelector('.pd-stageshot[data-shot="sh_g1"]'));
+    assert.deepEqual(await chips(), ['all:2', 'board:0', 'still:2', 'pickstill:0', 'video:0', 'picktake:0', 'done:0']);
+    // First frame to make: the prompt with Copy, and the board frame as it is.
+    await p.click('.pd-stagechip[data-stage="still"]');
+    await until(() => !!document.querySelector('.pd-stageshot[data-shot="sh_g1"] .pd-useboard'));
+    assert.equal(await p.locator('.pd-stageshot[data-shot="sh_g1"] .pd-copy').count(), 1);
+    await snap('filmflow-stage-still');
+    await p.click('.pd-stageshot[data-shot="sh_g1"] .pd-useboard');
+    await toastSays(/board frame is the first frame.*Video to make/);
+    await dbUntil('sh_g1', 'x.fields.star.still === x.fields.star.board');
+    assert.deepEqual((await chips()).slice(2, 5), ['still:1', 'pickstill:0', 'video:1']);
+    await p.locator('.toast button', { hasText: 'Undo' }).last().click();
+    await dbUntil('sh_g1', '!x.fields.star.still');
+    await until(() => !!document.querySelector('.pd-stageshot[data-shot="sh_g1"]'));
+    // Pictures come back: they wait to be picked; a tap picks one.
+    await files('.pd-stageshot[data-shot="sh_g1"] .pd-addfiles', [{ name: 'a.png', mimeType: 'image/png', buffer: PNG }, { name: 'b.png', mimeType: 'image/png', buffer: PNG }]);
+    await toastSays(/2 pictures are in.*First frame to pick/);
+    await p.click('.pd-stagechip[data-stage="pickstill"]');
+    await until(() => document.querySelectorAll('.pd-stageshot[data-shot="sh_g1"] .pd-pick').length === 2);
+    await p.locator('.pd-stageshot[data-shot="sh_g1"] .pd-pick').first().click();
+    await toastSays(/First frame picked.*Video to make/);
+    await dbUntil('sh_g1', '!!x.fields.star.still && x.fields.star.still !== x.fields.star.board');
+    // Video to make: its prompt; takes come back, a tap keeps one: done.
+    await p.click('.pd-stagechip[data-stage="video"]');
+    await until(() => !!document.querySelector('.pd-stageshot[data-shot="sh_g1"] textarea[aria-label="Video prompt"]'));
+    await files('.pd-stageshot[data-shot="sh_g1"] .pd-addfiles', [{ name: 't1.mp4', mimeType: 'video/mp4', buffer: Buffer.from('not really a video') }]);
+    await toastSays(/A take is in.*Take to pick/);
+    await p.click('.pd-stagechip[data-stage="picktake"]');
+    await until(() => document.querySelectorAll('.pd-stageshot[data-shot="sh_g1"] .pd-pick').length === 1);
+    await p.locator('.pd-stageshot[data-shot="sh_g1"] .pd-pick').first().click();
+    await toastSays(/Take picked.*Done/);
+    await dbUntil('sh_g1', '!!x.fields.star.video');
+    assert.deepEqual(await chips(), ['all:2', 'board:0', 'still:1', 'pickstill:0', 'video:0', 'picktake:0', 'done:1']);
+    // The chip is remembered for this piece.
+    await make('pr_gen', 'shots');
+    await at('picktake');
+  });
+
+  await check('Open in Make lands on the shot’s own stage', async () => {
+    await goThen({ view: 'production', id: 'pr_gen', tab: 'shots', shot: 'sh_g2', atStage: true }, () => document.querySelector('.pd-stagechip[aria-pressed="true"]')?.dataset.stage === 'still' && !!document.querySelector('.pd-stageshot[data-shot="sh_g2"]'));
+  });
+
+  await check('phone 390px: the chips wrap, the stage list fits', async () => {
+    const back = await onPhone();
+    await make('pr_gen', 'shots');
+    await until(() => !!document.querySelector('.pd-stagechip'));
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'no sideways scroll');
+    const xs = await p.$$eval('.pd-stagechip', (cs) => cs.map((c) => c.getBoundingClientRect().right));
+    assert.ok(Math.max(...xs) <= 390, 'every chip on the screen');
+    await snap('filmflow-stage-phone');
+    await back();
+  });
+
   await check('phone 390px: Shots fits, nothing scrolls sideways', async () => {
-    await p.setViewportSize({ width: 390, height: 844 });
+    const back = await onPhone();
     await make('pr_gen', 'shots');
     await make('pr_salt', 'shots');
     await until(() => !!document.querySelector('.pd-shot .pd-thumb'));
@@ -222,7 +315,10 @@ try {
     const t = await p.locator('.pd-shot .pd-thumb').first().boundingBox();
     assert.ok(t.width >= 56, 'the frame is big enough to tap');
     await snap('filmflow-phone');
-    await p.setViewportSize({ width: 1280, height: 860 });
+    await p.locator('.pd-shot').first().evaluate((e) => e.scrollIntoView({ block: 'start' }));
+    await p.evaluate(() => window.scrollBy(0, -90));
+    await snap('filmflow-phone-rows');
+    await back();
   });
 
   assert.deepEqual(errors, []);
