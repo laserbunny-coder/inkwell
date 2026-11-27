@@ -37,7 +37,7 @@ export async function doorPlace(piece, stage, world) {
   const ms = hasManuscript(piece);
   if (kind === 'ideas') return { view: 'stage', id: piece.id, page: 'gather' };
   if (kind === 'revise' && ms) return { view: 'stage', id: piece.id, page: 'revise' };
-  if (TAB[kind] && ms) return { view: 'production', id: piece.id, tab: TAB[kind] };
+  if (TAB[kind] && ms) return { view: 'production', id: piece.id, tab: TAB[kind], ...(kind === 'days' ? { day: 'next' } : {}) };
   if (kind === 'edit' && ms) return { view: 'deliver', id: piece.id, tab: 'files' };
   if (kind === 'out' && ms) return { view: 'deliver', id: piece.id, tab: 'post' };
   return bookPlace(piece.id);

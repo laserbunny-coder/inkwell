@@ -2498,3 +2498,43 @@ html.touring .preview-strip { display: none; }
   .pd-ready-line.ok .pd-ready-v { grid-column: 2; grid-row: 1; }
   .pd-ready-door { grid-column: 2; grid-row: 2; }
 }
+/* The shoot day as its running order (Nov 27 2026): one column, phone first. */
+.pd-dayhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-top: 4px; }
+.pd-day-date { margin: 0; font-family: var(--prose); font-weight: 500; font-size: 21px; }
+.pd-day-where { font: 13.5px var(--ui); color: var(--muted); }
+.pd-dayhead .pd-got-count { margin-left: auto; }
+.pd-day-tools .ghost-btn[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); }
+.pd-run { display: flex; flex-direction: column; max-width: 760px; }
+.pd-run-place { font: 600 11px var(--ui); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin: 14px 0 4px; }
+.pd-run-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.pd-run-row { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-top: 1px solid var(--line); border-radius: 6px; }
+.pd-run-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pd-run-frame { flex: none; width: 104px; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); background: var(--panel); padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.pd-run-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pd-run-frame[aria-expanded="true"] { border-color: var(--accent); }
+.pd-run-noframe { font: 11.5px var(--ui); color: var(--faint); padding: 4px; text-align: center; }
+.pd-run-words { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pd-run-what { font-size: 15px; color: var(--ink); }
+.pd-run-sub { font: 12.5px var(--ui); color: var(--muted); }
+.pd-run-note { font: 12.5px var(--ui); color: var(--ink); opacity: .85; border-left: 2px solid var(--line); padding-left: 6px; }
+.pd-run-got { font: 12.5px var(--ui); color: var(--accent); display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+.pd-run-say { color: var(--ink); }
+.pd-sayadd { font-size: 12.5px; padding: 2px 6px; min-height: 28px; }
+.pd-run-tick { flex: none; width: 46px; height: 46px; border-radius: 50%; border: 2px solid var(--line); background: transparent; color: var(--bg); font: 700 20px var(--ui); cursor: pointer; padding: 0; }
+.pd-run-tick:hover { border-color: var(--faint); }
+.pd-run-tick[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+.pd-run-row.got .pd-run-what { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--faint); }
+.pd-run-row.got .pd-run-frame img { opacity: .5; }
+.pd-run-extra { list-style: none; padding: 0 4px 8px; }
+.pd-run-sayin { width: 100%; }
+.pd-run-lines { border-left: 2px solid var(--accent); margin: 0 0 8px 4px; padding: 4px 10px; font-family: var(--prose); font-size: 14px; }
+.pd-run-lines p { margin: 3px 0; }
+.pd-run-line.el-character { text-transform: uppercase; font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+.pd-run-line.el-dialogue { padding-left: 1.5em; }
+.pd-wrapbox { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 10px 12px; max-width: 760px; font: 14px var(--ui); }
+.pd-sheet-order { padding-left: 1.4em; }
+.pd-sheet-place { list-style: none; margin: 8px 0 2px -1.4em; font-weight: 600; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+@media (--narrow) {
+  .pd-run-frame { width: 84px; }
+  .pd-run-row { gap: 8px; padding: 8px 0; }
+}

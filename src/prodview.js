@@ -10,7 +10,7 @@ import {
   ELEMENT_TYPES, typeOf, elementsIn, newElement, setElement, namesOf,
   findElements, sceneElements, changeBreakdown, sceneSig, shotCode, newShot, shotStage, SHOT_STAGES, stillOf,
   withRenders, withPrompts, isVideo, shotForName, shootDays, newShootDay, shootDayTask, toCsv, toSrt, speechesIn, PLATFORMS,
-  MADE_BY, madeBy, isFilmed, gotIt, shotStatus, needsFootage, AUDIO, audioOf, toPlan,
+  MADE_BY, madeBy, isFilmed, gotIt, shotStatus, needsFootage, AUDIO, audioOf, toPlan, dayShotIds,
   viewSlots, toolIdsOf, rulesOf, genOf, secsOf, runsOf, GEN_STAGES, genStage, genFiles,
   PRICES_ID, priceList, priceOf, pricesChecked, estimate, spent, money, toEdl, cutEvents, lookOf
 } from './production.js';
@@ -18,6 +18,9 @@ import { make } from './dom.js';
 import { resolve as linesOf, linesIn, bareLines } from './shotlines.js';
 import { sceneTitle } from './scenename.js';
 import { picturesOnScene, picturesText } from './picturesin.js';
+import { arrangeable, movableRow } from './listkit.js';
+import { mergeOrder } from './deskdrag.js';
+import { isoToday } from './dates.js';
 
 // The production view of a piece (Ctrl + Shift + S): its scenes, each with
 // the elements it uses and its shots; a storyboard of the stills picked;
@@ -96,7 +99,9 @@ export class ProductionView {
     if (opts.shot && this.mode !== 'deliver') setPref('shotsView', 'list');
     this.landAt = this.mode === 'deliver' ? DELIVER_TABS.find((t) => t.id === opts.tab)?.group || null : null;
     if (opts.shot) { this.open.add(opts.shot); this.landShot = opts.atStage ? opts.shot : null; if (!opts.atStage) setPref(`genStage:${pieceId}`, 'all'); }
-    if (opts.day) { this.dayId = opts.day; setPref('prodTab', 'days'); }
+    // The Shooting door: today's shoot day, else the next one, else the list.
+    if (opts.day === 'next') { this.dayId = null; this.autoDay = true; setPref('prodTab', 'days'); }
+    else if (opts.day) { this.dayId = opts.day; setPref('prodTab', 'days'); }
     await this.render();
     if (opts.shot) this.el.querySelector(`[data-shot="${CSS.escape(opts.shot)}"]`)?.scrollIntoView({ block: 'center' });
     this.el.dataset.land = this.landAt || '';
@@ -749,7 +754,21 @@ export class ProductionView {
     ta.addEventListener('blur', () => this.now(`${sh.id}:note`));
     requestAnimationFrame(fit);
     wrap.append(ta);
-    d.append(wrap, this.rendersEl(sh, 'Reference frame or takes: drop them here, star the one you use'));
+    d.append(wrap);
+    // Said on the day, after the tick: a word for the edit.
+    if (f.say || gotIt(sh)) {
+      const sw = make('label', 'pd-prompt');
+      sw.append(make('span', 'panel-label', 'A word for the edit'));
+      const si = make('input', 'pd-input pd-say');
+      si.value = f.say || '';
+      si.placeholder = 'Take 3 is the one';
+      si.setAttribute('aria-label', 'A word for the edit');
+      si.addEventListener('input', () => this.later(`${sh.id}:say`, () => this.saveShotFields(sh.id, { say: si.value.trim() })));
+      si.addEventListener('blur', () => this.now(`${sh.id}:say`));
+      sw.append(si);
+      d.append(sw);
+    }
+    d.append(this.rendersEl(sh, 'Reference frame or takes: drop them here, star the one you use'));
     return d;
   }
 
@@ -1956,12 +1975,18 @@ export class ProductionView {
 
   async drawDays(body) {
     const days = await shootDays(this.piece.id);
+    if (this.autoDay) {
+      this.autoDay = false;
+      const shoots = days.filter((d) => d.fields?.type !== 'voice');
+      const today = isoToday();
+      this.dayId = (shoots.find((d) => d.fields?.date === today) || shoots.find((d) => (d.fields?.date || '') > today))?.id || null;
+    }
     if (this.dayId && !days.some((d) => d.id === this.dayId)) this.dayId = null;
     const list = make('div', 'pd-days');
     for (const d of days) {
-      const date = d.fields?.date ? new Date(`${d.fields.date}T12:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : 'No date';
-      const b = make('button', 'chip' + (d.id === this.dayId ? ' on' : ''), d.fields?.type === 'voice' ? `Voices · ${date}` : date);
+      const b = make('button', 'chip' + (d.id === this.dayId ? ' on' : ''), d.fields?.type === 'voice' ? `Voices · ${this.dayWords(d)}` : this.dayWords(d));
       if (d.fields?.type === 'voice') b.dataset.type = 'voice';
+      b.dataset.day = d.id;
       b.addEventListener('click', () => { this.dayId = d.id; this.render(); });
       list.append(b);
     }
@@ -1979,8 +2004,258 @@ export class ProductionView {
     body.append(list);
     if (!this.dayId) this.drawPlan(body, days);
     const day = days.find((d) => d.id === this.dayId);
-    if (!day) { body.append(make('p', 'hint gv-hint', 'A shoot day turns into a one-page call sheet: when and where, the scenes and shots, who’s needed, and the props and wardrobe from the breakdown. It can become a task on that day.')); return; }
-    body.append(this.dayForm(day), this.callSheet(day));
+    if (!day) { body.append(make('p', 'hint gv-hint', 'A shoot day opens as its running order: that day’s shots, in the order you shoot them, by place. Its call sheet is one tap away. It can become a task on that day.')); return; }
+    if (day.fields?.type === 'voice') { body.append(this.dayForm(day), this.callSheet(day)); return; }
+    this.runningOrder(body, day, days);
+  }
+
+  dayWords(d) { return d.fields?.date ? new Date(`${d.fields.date}T12:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : 'No date'; }
+
+  // The day's shots in running order, with the scene each is in.
+  dayShots(day) {
+    const where = new Map();
+    for (const s of this.scenes) for (const sh of s.shots) where.set(sh.id, { s, sh });
+    return dayShotIds(day, this.scenes, this.set).map((id) => where.get(id)).filter(Boolean);
+  }
+  // Where a scene is shot: its location in the breakdown, else its own name.
+  placeOf(s) {
+    const loc = (s.uses || []).map((id) => this.elById.get(id)).find((e) => e && e.fields.element.type === 'location');
+    return loc?.title || s.title || 'A scene';
+  }
+
+  // ---------- the shoot day as its running order (Nov 27 2026) ----------
+
+  // One column, phone first: the day's shots in the order they are shot,
+  // grouped by place. Drag (or hold, on a phone) to reorder; tap the tick
+  // when it is in the can; tap a frame for the lines it covers. Alt + Shift
+  // + Up / Down moves the row with the cursor on it.
+  runningOrder(body, day, days) {
+    const f = day.fields || {};
+    const rows = this.dayShots(day);
+    const got = rows.filter(({ sh }) => gotIt(sh)).length;
+    const leftOnly = pref('dayLeft', '') === '1';
+    this.planOpen ||= new Set();
+    this.sheetOpen ||= new Set();
+    const empty = !(f.scenes || []).length && !(f.shots || []).length;
+    // A day with nothing on it yet opens on its plan, which then stays open.
+    if (empty) this.planOpen.add(day.id);
+    const planOn = this.planOpen.has(day.id);
+    const head = make('div', 'pd-dayhead');
+    head.append(make('h2', 'pd-day-date', f.date ? new Date(`${f.date}T12:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) : 'No date yet'));
+    const where = [f.place, f.call && `call ${clock(f.call)}`].filter(Boolean).join(' · ');
+    if (where) head.append(make('span', 'pd-day-where', where));
+    if (rows.length) head.append(make('span', 'pd-got-count', `${got} of ${rows.length} got`));
+    body.append(head);
+    const tools = make('div', 'pd-add pd-day-tools');
+    const toggle = (label, on, run, cls) => { const b = make('button', `ghost-btn ${cls}`, label); b.type = 'button'; b.setAttribute('aria-pressed', String(on)); b.addEventListener('click', run); tools.append(b); return b; };
+    if (rows.length) toggle('Left only', leftOnly, () => { setPref('dayLeft', leftOnly ? '' : '1'); this.render(); }, 'pd-day-left');
+    toggle('Plan this day', planOn, () => { if (this.planOpen.has(day.id)) this.planOpen.delete(day.id); else this.planOpen.add(day.id); this.render(); }, 'pd-day-plan');
+    toggle('Call sheet', this.sheetOpen.has(day.id), () => { if (this.sheetOpen.has(day.id)) this.sheetOpen.delete(day.id); else this.sheetOpen.add(day.id); this.render(); }, 'pd-day-sheet');
+    body.append(tools);
+    if (planOn) body.append(this.dayForm(day));
+    if (this.sheetOpen.has(day.id)) body.append(this.callSheet(day));
+    // By place, in the order the places first come.
+    const groups = [];
+    for (const r of rows) {
+      const place = this.placeOf(r.s);
+      let g = groups.find((x) => x.place === place);
+      if (!g) groups.push((g = { place, rows: [] }));
+      g.rows.push(r);
+    }
+    const run = make('div', 'pd-run');
+    const order = rows.map(({ sh }) => sh.id);
+    const saveOrder = async (ids) => {
+      const fresh = await getEntry(day.id);
+      await this.saveShotFields(day.id, { order: [...new Set(mergeOrder([...new Set(ids)], fresh?.fields?.order || order))] });
+      await this.render();
+    };
+    groups.forEach((g, gi) => {
+      const kind = `pd-run-${gi}`; // each place its own list: a shot moves within its place
+      const shown = g.rows.filter(({ sh }) => !(leftOnly && gotIt(sh)));
+      if (!shown.length) return;
+      run.append(make('div', 'pd-run-place', g.place));
+      const ul = make('ul', 'pd-run-list');
+      shown.forEach(({ s, sh }, i) => {
+        const swap = (dir) => {
+          const other = shown[i + dir];
+          if (!other) return;
+          const ids = [...order];
+          const a = ids.indexOf(sh.id), b = ids.indexOf(other.sh.id);
+          [ids[a], ids[b]] = [ids[b], ids[a]];
+          saveOrder(ids).then(() => this.el.querySelector(`.pd-run-row[data-key="${CSS.escape(sh.id)}"]`)?.focus());
+        };
+        ul.append(this.runRow(sh, s, day, days, kind, { up: i > 0 ? () => swap(-1) : null, down: i < shown.length - 1 ? () => swap(1) : null }));
+        if (this.sayFor === sh.id) ul.append(this.sayEl(sh));
+        if (this.peek === sh.id) ul.append(this.peekEl(sh, s));
+      });
+      arrangeable(this.el, ul, kind, (_key, keys) => {
+        const ids = groups.flatMap((x) => (x === g ? keys : x.rows.map((r) => r.sh.id)));
+        saveOrder(ids);
+      });
+      run.append(ul);
+    });
+    if (!rows.length && !empty) run.append(make('p', 'hint', 'No shots to film in this day’s scenes yet. Add them in the script with Shots on, or below.'));
+    else if (rows.length && !run.querySelector('.pd-run-row')) run.append(make('p', 'hint', 'Everything on this day is got.'));
+    body.append(run);
+    const foot = make('div', 'pd-add');
+    const pick = make('button', 'pill pd-pickup', '+ Pickup shot');
+    pick.type = 'button';
+    pick.title = 'A new shot in the scene of the last row: it shows in the script and in Make too';
+    pick.addEventListener('click', () => this.pickup(day, rows));
+    foot.append(pick);
+    body.append(foot);
+    // At wrap: what is left goes to another day.
+    const left = rows.filter(({ sh }) => !gotIt(sh)).map(({ sh }) => sh.id);
+    if (got && left.length) {
+      const others = days.filter((d) => d.id !== day.id && d.fields?.type !== 'voice' && !d.deleted);
+      const box = make('div', 'pd-wrapbox');
+      box.append(make('span', '', `At wrap, ${plural(left.length, 'shot')} still to get.`));
+      const b = make('button', 'pill pd-moveleft', others.length === 1 ? `Move the ${left.length} left to ${this.dayWords(others[0])}` : others.length ? `Move the ${left.length} left to…` : `Move the ${left.length} left to a new day`);
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        if (others.length === 1) this.moveLeft(day, left, others[0]);
+        else if (!others.length) this.moveLeft(day, left, null);
+        else this.hooks.menu(b, [...others.map((d) => ({ label: this.dayWords(d), run: () => this.moveLeft(day, left, d) })), { label: 'A new day', run: () => this.moveLeft(day, left, null) }]);
+      });
+      box.append(b);
+      body.append(box);
+    }
+    if (rows.length) body.append(make('p', 'hint', 'Drag a shot to change the order (on a phone, hold it first). Tap a frame for the lines it covers. Each tick keeps its time.'));
+  }
+
+  runRow(sh, s, day, days, kind, moves) {
+    const f = sh.fields || {};
+    const on = gotIt(sh);
+    const li = make('li', 'pd-run-row' + (on ? ' got' : ''));
+    li.tabIndex = 0;
+    li.dataset.shot = sh.id;
+    movableRow(li, kind, sh.id, { up: moves.up, down: moves.down });
+    const frame = make('button', 'pd-run-frame');
+    frame.type = 'button';
+    frame.setAttribute('aria-label', this.peek === sh.id ? 'Hide the lines it covers' : 'Show the lines it covers');
+    frame.setAttribute('aria-expanded', String(this.peek === sh.id));
+    const still = this.stillOf(sh);
+    if (still) fileUrl(still).then((url) => { if (url) { const img = make('img'); img.src = url; img.alt = ''; frame.append(img); } });
+    else frame.append(make('span', 'pd-run-noframe', f.framing || 'No frame'));
+    frame.addEventListener('click', () => { this.peek = this.peek === sh.id ? null : sh.id; this.render(); });
+    const words = make('div', 'pd-run-words');
+    words.append(this.editable('pd-what pd-run-what', sh.text || '', 'What happens', (v) => this.saveShot(sh.id, { text: v, tags: tagsIn(v) })));
+    words.append(make('span', 'pd-run-sub', [f.framing, s.title].filter(Boolean).join(' · ')));
+    if (f.note) words.append(make('span', 'pd-run-note', f.note));
+    if (on) {
+      const at = make('span', 'pd-run-got');
+      const t = Number(f.got);
+      at.append(make('span', '', t > 100000 ? `Got ${new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(/\s+/g, ' ')}` : 'Got it'));
+      if (f.say) at.append(make('span', 'pd-run-say', ` · ${f.say}`));
+      const w = make('button', 'ghost-btn pd-sayadd', f.say ? 'edit' : '+ a word for the edit');
+      w.type = 'button';
+      w.addEventListener('click', () => { this.sayFor = this.sayFor === sh.id ? null : sh.id; this.render().then(() => this.el.querySelector('.pd-run-sayin')?.focus()); });
+      at.append(w);
+      words.append(at);
+    }
+    const tick = make('button', 'pd-run-tick', on ? '✓' : '');
+    tick.type = 'button';
+    tick.setAttribute('aria-pressed', String(on));
+    tick.setAttribute('aria-label', on ? `Got ${sh.text || 'it'} (tap to undo)` : `Got ${sh.text || 'it'}`);
+    tick.addEventListener('click', () => this.tickRun(sh, day));
+    const more = this.hooks.menuButton(() => [
+      { label: 'Open in the script', run: () => this.openScene(s) },
+      ...days.filter((d) => d.id !== day.id && d.fields?.type !== 'voice').map((d) => ({ label: `Move to ${this.dayWords(d)}`, run: () => this.moveLeft(day, [sh.id], d) })),
+      { label: 'Move to a new day', run: () => this.moveLeft(day, [sh.id], null) },
+      { label: 'Take off this day', run: () => this.takeOff(day, sh) }
+    ], 'More for this shot');
+    li.append(frame, words, tick, more);
+    return li;
+  }
+
+  sayEl(sh) {
+    const i = make('input', 'pd-input pd-run-sayin');
+    i.value = sh.fields?.say || '';
+    i.placeholder = 'Take 3 is the one. Focus soft at the end.';
+    i.setAttribute('aria-label', 'A word for the edit');
+    let done = false;
+    const save = async () => { if (done) return; done = true; this.sayFor = null; await this.saveShotFields(sh.id, { say: i.value.trim() }); await this.render(); };
+    i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } if (e.key === 'Escape') { done = true; this.sayFor = null; this.render(); } });
+    i.addEventListener('blur', save);
+    const li = make('li', 'pd-run-extra');
+    li.append(i);
+    return li;
+  }
+
+  // The script lines the shot covers, right under its row. Nothing scrolls.
+  peekEl(sh, s) {
+    const li = make('li', 'pd-run-extra pd-run-lines');
+    const paras = this.parasOf(s);
+    const span = linesOf(sh, paras);
+    if (!span) { li.append(make('p', 'hint', 'Not on any lines yet.')); return li; }
+    for (const p of paras.slice(span.from, span.to + 1)) {
+      if (!(p.text || '').trim()) continue;
+      li.append(make('p', `pd-run-line el-${p.el || 'action'}`, p.text));
+    }
+    return li;
+  }
+
+  async setGotAt(id, value) {
+    const fresh = await getEntry(id);
+    if (!fresh) return;
+    const fields = { ...fresh.fields };
+    if (value) fields.got = value; else delete fields.got;
+    await this.saveShot(id, { fields });
+  }
+
+  async tickRun(sh, day) {
+    const was = sh.fields?.got || null;
+    await this.setGotAt(sh.id, was ? null : Date.now());
+    await this.render();
+    const rows = this.dayShots(await getEntry(day.id) || day);
+    const n = rows.filter((r) => gotIt(r.sh)).length;
+    const t = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+    this.hooks.toast(was ? `${sh.text || 'The shot'}: still to get` : `Got it at ${t} · ${n} of ${rows.length}`, { label: 'Undo', run: async () => { await this.setGotAt(sh.id, was); await this.render(); } });
+  }
+
+  // A real shot in the scene of the last row, on this day, its name ready.
+  async pickup(day, rows) {
+    const s = rows.at(-1)?.s || this.scenes.find((x) => (day.fields?.scenes || []).includes(x.id)) || this.scenes[0];
+    if (!s) return;
+    const sh = await newShot(s.id, { pieceId: this.piece.id });
+    const fresh = await getEntry(day.id);
+    const f = fresh.fields || {};
+    const patch = { order: [...rows.map((r) => r.sh.id), sh.id] };
+    patch.shots = [...new Set([...(f.shots || []), sh.id])];
+    await this.saveShotFields(day.id, patch);
+    this.hooks.changed([sh]);
+    await this.render();
+    this.el.querySelector(`.pd-run-row[data-shot="${CSS.escape(sh.id)}"] .pd-run-what`)?.focus();
+    this.hooks.toast('A pickup is a real shot: it shows in the script and in Make too');
+  }
+
+  // Shots off this day and onto another (or a new one), with Undo.
+  async moveLeft(day, ids, to) {
+    const from = await getEntry(day.id);
+    const target = to ? await getEntry(to.id) : await newShootDay(this.piece.id, new Date(Date.now() + 86400000).toISOString().slice(0, 10), {});
+    if (!to) this.hooks.changed([target]);
+    const fa = from.fields || {};
+    const fb = target.fields || {};
+    const put = async (row, fields) => { const r = { ...row, fields, updated_at: Date.now() }; await putEntries([r]); this.hooks.changed([r]); };
+    await put(from, { ...fa, skip: [...new Set([...(fa.skip || []), ...ids])], shots: (fa.shots || []).filter((x) => !ids.includes(x)), order: (fa.order || []).filter((x) => !ids.includes(x)) });
+    await put(target, { ...fb, shots: [...new Set([...(fb.shots || []), ...ids])], skip: (fb.skip || []).filter((x) => !ids.includes(x)) });
+    await this.render();
+    this.hooks.toast(`${plural(ids.length, 'shot')} moved to ${this.dayWords(target)}`, { label: 'Undo', run: async () => {
+      await put(await getEntry(from.id), fa);
+      const t = await getEntry(target.id);
+      if (to) await put(t, fb);
+      else { const r = { ...t, deleted: true, updated_at: Date.now() }; await putEntries([r]); this.hooks.changed([r]); }
+      this.dayId = from.id;
+      await this.render();
+    } });
+  }
+
+  async takeOff(day, sh) {
+    const fresh = await getEntry(day.id);
+    const was = fresh.fields || {};
+    await this.saveShotFields(day.id, { skip: [...new Set([...(was.skip || []), sh.id])], shots: (was.shots || []).filter((x) => x !== sh.id) });
+    await this.render();
+    this.hooks.toast(`${sh.text || 'The shot'} is off this day`, { label: 'Undo', run: async () => { const r = await getEntry(day.id); await putEntries([{ ...r, fields: was, updated_at: Date.now() }]); this.hooks.changed([r]); await this.render(); } });
   }
 
   async addDay(type = null, scenes = []) {
@@ -2186,6 +2461,7 @@ export class ProductionView {
       for (const it of items) ul.append(typeof it === 'string' ? make('li', '', it) : it);
       sheet.append(ul);
     };
+    const runRows = voice ? [] : this.dayShots(day);
     section('Scenes', scenes.map((s) => {
       const li = make('li');
       li.append(make('strong', '', `${s.n ? `${s.n}  ` : ''}${s.title}`));
@@ -2200,36 +2476,35 @@ export class ProductionView {
           for (const l of lines) ul.append(make('li', '', `${l.who ? `${l.who}: ` : ''}${l.text}`));
           li.append(ul);
         }
-      } else if (s.shots.length) {
-        // A generated shot needs nothing from the day, so it isn't listed.
-        // Each can be ticked on the day: the same Got it as on Shots.
-        const filmed = s.shots.filter((sh) => needsFootage(madeBy(sh, this.set)));
+      } else if (!runRows.length && s.shots.length) {
+        // Nothing to film here (generated shots): the shots, as words.
         const ul = make('ul', 'pd-sheet-shots');
-        for (const sh of filmed.length ? filmed : s.shots) {
-          const m = madeBy(sh, this.set);
-          const it = make('li', 'pd-sheet-shot');
-          const words = `${this.codeOf(sh, s)}  ${sh.text || ''}`;
-          const extra = [sh.fields?.framing, sh.fields?.note].filter(Boolean).join('. ');
-          if (needsFootage(m)) {
-            const lab = make('label');
-            const box = make('input');
-            box.type = 'checkbox';
-            box.checked = gotIt(sh);
-            box.setAttribute('aria-label', `Got it: ${sh.text || this.codeOf(sh, s)}`);
-            box.addEventListener('change', () => this.setGot(sh.id, box.checked));
-            lab.append(box, make('span', '', ` ${words}`));
-            if (extra) lab.append(make('span', 'pd-sheet-sub', ` (${extra})`));
-            if (m === 'ref') lab.append(make('span', 'pd-sheet-sub', ' · reference'));
-            it.append(lab);
-          } else it.textContent = `${words}${extra ? ` (${extra})` : ''}`;
-          ul.append(it);
-        }
+        for (const sh of s.shots) { const extra = [sh.fields?.framing, sh.fields?.note].filter(Boolean).join('. '); ul.append(make('li', 'pd-sheet-shot', `${this.codeOf(sh, s)}  ${sh.text || ''}${extra ? ` (${extra})` : ''}`)); }
         li.append(ul);
       }
       const notes = this.notesOf.get(s.id) || [];
       for (const n of notes) li.append(make('div', 'pd-sheet-note', n.text));
       return li;
     }));
+    // The shots in running order, by place: ticking happens in the running
+    // order itself, so the sheet is words only.
+    if (!voice) {
+      const rows = runRows;
+      if (rows.length) {
+        sheet.append(make('h3', '', 'Running order'));
+        const ol = make('ul', 'pd-sheet-shots pd-sheet-order');
+        let place = '';
+        for (const { s, sh } of rows) {
+          const p = this.placeOf(s);
+          if (p !== place) { place = p; ol.append(make('li', 'pd-sheet-place', p)); }
+          const extra = [sh.fields?.framing, sh.fields?.note].filter(Boolean).join('. ');
+          const li = make('li', 'pd-sheet-shot', `${this.codeOf(sh, s)}  ${sh.text || ''}`);
+          li.append(make('span', 'pd-sheet-sub', ` ${s.title}${extra ? ` (${extra})` : ''}${madeBy(sh, this.set) === 'ref' ? ' · reference' : ''}`));
+          ol.append(li);
+        }
+        sheet.append(ol);
+      }
+    }
     // Who's coming: the actor beside the character, then the crew, each
     // with their call time (the day's call unless they have their own).
     const callOf = (key) => { const v = f.calls?.[key] || f.call; return v ? clock(v) : ''; };
@@ -2451,11 +2726,11 @@ export class ProductionView {
   // ---------- out to the edit ----------
 
   csvText() {
-    const rows = [['Shot', 'Scene', 'Scene heading', 'What happens', 'Framing', 'Stage', 'Model', 'Seconds', 'Still prompt', 'Video prompt', 'Still', 'Take']];
+    const rows = [['Shot', 'Scene', 'Scene heading', 'What happens', 'Framing', 'Stage', 'Model', 'Seconds', 'Still prompt', 'Video prompt', 'Still', 'Take', 'Note for the day', 'For the edit']];
     const name = (id) => this.fileNames.get(id) || '';
     for (const s of this.scenes) for (const sh of s.shots) {
       const f = sh.fields || {};
-      rows.push([this.codeOf(sh, s), s.code || '', s.slug || s.title, sh.text || '', f.framing || '', shotStatus(sh, this.set), genOf(sh).model || '', genOf(sh).secs || '', f.still || '', f.video || '', name(f.star?.still), name(f.star?.video)]);
+      rows.push([this.codeOf(sh, s), s.code || '', s.slug || s.title, sh.text || '', f.framing || '', shotStatus(sh, this.set), genOf(sh).model || '', genOf(sh).secs || '', f.still || '', f.video || '', name(f.star?.still), name(f.star?.video), f.note || '', f.say || '']);
     }
     return toCsv(rows);
   }

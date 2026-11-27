@@ -60,7 +60,8 @@ para('pp_s4', 'ch_s1', 6144, 'The key does not fit.', { el: 'action' });
 put({ id: 'sh_a', kind: 'shot', parent_id: 'pp_s1', sort: 1024, text: 'June at the counter', fields: { n: 1, piece: 'pr_salt', framing: 'Wide', from: 'pp_s2', to: 'pp_s2' } });
 put({ id: 'sh_b', kind: 'shot', parent_id: 'pp_s1', sort: 2048, text: 'The bell', fields: { n: 2, piece: 'pr_salt', framing: 'Insert' } });
 put({ id: 'sh_c', kind: 'shot', parent_id: 'pp_s3', sort: 1024, text: 'The key', fields: { n: 1, piece: 'pr_salt', framing: 'Close-up', from: 'pp_s4', to: 'pp_s4' } });
-put({ id: 'bd-pp_s1', kind: 'breakdown', parent_id: 'pp_s1', fields: { add: ['pg_june', 'pg_clerk'], drop: [], piece: 'pr_salt' } });
+put({ id: 'pg_office', kind: 'page', parent_id: 'wd_sr', title: 'Starlite office', sort: 3, fields: { element: { type: 'location' } } });
+put({ id: 'bd-pp_s1', kind: 'breakdown', parent_id: 'pp_s1', fields: { add: ['pg_june', 'pg_clerk', 'pg_office'], drop: [], piece: 'pr_salt' } });
 put({ id: 'sd_1', kind: 'shootday', parent_id: 'pr_salt', fields: { date: '2026-12-05', call: '18:00', place: 'Starlite Motel', scenes: ['pp_s1'] } });
 // A generated reel in the same world.
 put({ id: 'pr_gen', kind: 'project', parent_id: 'wd_sr', title: 'Salt Road teaser', area_id: 'area-film', sort: 2, fields: { type: 'screenplay', woven: true, stage: 'Generating', stageSet: 'ai' } });
@@ -176,8 +177,10 @@ try {
     // The second scene goes on the day, from the day's form.
     await make('pr_salt', 'days');
     await p.locator('.pd-days .chip', { hasText: 'Dec' }).first().click();
+    await p.click('.pd-day-plan');
     await p.locator('.pd-daypick .chip', { hasText: 'Room nine' }).click();
     await dbUntil('sd_1', "x.fields.scenes.includes('pp_s3')");
+    await p.click('.pd-day-plan');
     await p.click('.prod-view .chip[data-tab="shots"]');
     await until(() => !!document.querySelector('.pd-ready-line.ok[data-ready="days"]'));
     assert.equal(await p.locator('.pd-ready-line[data-ready="days"] .pd-ready-v.ok').innerText(), '✓');
@@ -303,6 +306,133 @@ try {
     const xs = await p.$$eval('.pd-stagechip', (cs) => cs.map((c) => c.getBoundingClientRect().right));
     assert.ok(Math.max(...xs) <= 390, 'every chip on the screen');
     await snap('filmflow-stage-phone');
+    await back();
+  });
+
+  // ---------- build 3: the shoot day as its running order ----------
+  const runIds = () => p.$$eval('.pd-run-row', (rs) => rs.map((r) => r.dataset.shot));
+  const places = () => p.$$eval('.pd-run-place', (rs) => rs.map((r) => r.textContent));
+  const openDay = () => goThen({ view: 'production', id: 'pr_salt', tab: 'days', day: 'next' }, () => document.querySelectorAll('.pd-run-row').length >= 3);
+
+  await check('the Shooting door opens the next shoot day as its running order, by place', async () => {
+    await openDay();
+    assert.match(await p.locator('.pd-day-date').innerText(), /Saturday, December 5/);
+    assert.match(await p.locator('.pd-day-where').innerText(), /Starlite Motel · call 6:00 pm/);
+    assert.deepEqual(await places(), ['Starlite office', 'Room nine']);
+    assert.deepEqual(await runIds(), ['sh_a', 'sh_b', 'sh_c']);
+    assert.match(await p.locator('.pd-dayhead .pd-got-count').innerText(), /^0 of 3 got$/);
+    assert.equal(await p.locator('.pd-dayform').count(), 0, 'Plan this day is folded');
+    assert.match(await p.locator('.pd-run-row[data-shot="sh_a"]').innerText(), /35mm, slow push in/, 'the note for the day on its row');
+    await snap('filmflow-day');
+  });
+
+  await check('reorder: keys and dragging; the order is kept after a reload and goes to other devices', async () => {
+    await p.locator('.pd-run-row[data-shot="sh_a"]').focus();
+    await p.keyboard.press('Alt+Shift+ArrowDown');
+    await dbUntil('sd_1', "JSON.stringify(x.fields.order) === JSON.stringify(['sh_b','sh_a','sh_c'])");
+    await until(() => [...document.querySelectorAll('.pd-run-row')].map((r) => r.dataset.shot).join() === 'sh_b,sh_a,sh_c');
+    // Drag sh_b back below sh_a.
+    const a = await p.locator('.pd-run-row[data-shot="sh_a"]').boundingBox();
+    const b = await p.locator('.pd-run-row[data-shot="sh_b"] .pd-run-sub').boundingBox();
+    await p.mouse.move(b.x + 10, b.y + 5);
+    await p.mouse.down();
+    for (let i = 1; i <= 10; i++) { await p.mouse.move(b.x + 10, b.y + 5 + ((a.y + a.height * 0.85) - (b.y + 5)) * (i / 10)); await sleep(30); }
+    await p.mouse.up();
+    await dbUntil('sd_1', "JSON.stringify(x.fields.order) === JSON.stringify(['sh_a','sh_b','sh_c'])");
+    await openDay();
+    assert.deepEqual(await runIds(), ['sh_a', 'sh_b', 'sh_c']);
+    await until(() => true);
+    await sleep(1500);
+    assert.deepEqual(table.get('sd_1')?.fields?.order, ['sh_a', 'sh_b', 'sh_c'], 'synced');
+  });
+
+  await check('tick: its time is kept, toast with Undo; a word for the edit; Left only', async () => {
+    await p.click('.pd-run-row[data-shot="sh_a"] .pd-run-tick');
+    await dbUntil('sh_a', 'x.fields.got > 1000000');
+    await toastSays(/Got it at .* · 1 of 3/);
+    await until(() => /Got \d/.test(document.querySelector('.pd-run-row[data-shot="sh_a"] .pd-run-got')?.textContent || ''));
+    await p.locator('.toast button', { hasText: 'Undo' }).last().click();
+    await dbUntil('sh_a', '!x.fields.got');
+    await p.click('.pd-run-row[data-shot="sh_a"] .pd-run-tick');
+    await dbUntil('sh_a', 'x.fields.got > 1000000');
+    await p.click('.pd-run-row[data-shot="sh_a"] .pd-sayadd');
+    await p.fill('.pd-run-sayin', 'Take 3 is the one');
+    await p.keyboard.press('Enter');
+    await dbUntil('sh_a', "x.fields.say === 'Take 3 is the one'");
+    await until(() => /Take 3 is the one/.test(document.querySelector('.pd-run-row[data-shot="sh_a"]')?.textContent || ''));
+    await snap('filmflow-day-got');
+    await p.click('.pd-day-left');
+    await until(() => !document.querySelector('.pd-run-row[data-shot="sh_a"]') && !!document.querySelector('.pd-run-row[data-shot="sh_b"]'));
+    await p.click('.pd-day-left');
+    await until(() => !!document.querySelector('.pd-run-row[data-shot="sh_a"]'));
+  });
+
+  await check('tap a frame: the lines it covers unfold under the row, nothing scrolls', async () => {
+    await p.locator('.pd-run-row[data-shot="sh_c"] .pd-run-frame').scrollIntoViewIfNeeded();
+    const y = await p.evaluate(() => window.scrollY);
+    await p.click('.pd-run-row[data-shot="sh_c"] .pd-run-frame');
+    await until(() => /The key does not fit/.test(document.querySelector('.pd-run-lines')?.textContent || ''));
+    assert.equal(await p.evaluate(() => window.scrollY), y);
+    await p.click('.pd-run-row[data-shot="sh_c"] .pd-run-frame');
+    await until(() => !document.querySelector('.pd-run-lines'));
+  });
+
+  await check('+ Pickup shot: a real shot in the last row’s scene, on the day, its name ready', async () => {
+    await p.click('.pd-pickup');
+    await until(() => document.querySelectorAll('.pd-run-row').length === 4);
+    const id = (await runIds()).at(-1);
+    assert.ok(!['sh_a', 'sh_b', 'sh_c'].includes(id));
+    assert.equal((await db(id)).parent_id, 'pp_s3', 'in Room nine');
+    assert.ok(await p.evaluate(() => document.activeElement?.classList.contains('pd-run-what')), 'its name is focused');
+    await p.keyboard.type('Pickup: the key again');
+    await p.keyboard.press('Enter');
+    await dbUntil(id, "x.text === 'Pickup: the key again'");
+    // It shows in Make too.
+    await make('pr_salt', 'shots');
+    await until((i) => !!document.querySelector(`.pd-shot[data-shot="${i}"]`), id);
+  });
+
+  await check('the call sheet lists the shots in running order, words only; Plan this day unfolds the form', async () => {
+    await openDay();
+    await p.click('.pd-day-sheet');
+    await until(() => !!document.querySelector('.pd-sheet-order'));
+    const t = await p.locator('.pd-sheet-order').innerText();
+    assert.ok(t.indexOf('June at the counter') < t.indexOf('The bell') && t.indexOf('The bell') < t.indexOf('The key'), t);
+    assert.equal(await p.locator('.pd-sheet input[type="checkbox"]').count(), 0);
+    await p.click('.pd-day-sheet');
+    await p.click('.pd-day-plan');
+    await until(() => !!document.querySelector('.pd-dayform'));
+    await p.click('.pd-day-plan');
+    await until(() => !document.querySelector('.pd-dayform'));
+  });
+
+  await check('at wrap: the shots left move to a new day, with Undo', async () => {
+    await openDay();
+    await until(() => !!document.querySelector('.pd-moveleft'));
+    assert.match(await p.locator('.pd-moveleft').innerText(), /Move the 3 left to a new day/);
+    await p.click('.pd-moveleft');
+    await toastSays(/3 shots moved to/);
+    await dbUntil('sd_1', "(x.fields.skip || []).length === 3");
+    await until(() => document.querySelectorAll('.pd-run-row').length === 1);
+    await p.locator('.toast button', { hasText: 'Undo' }).last().click();
+    await dbUntil('sd_1', "!(x.fields.skip || []).length");
+    await until(() => document.querySelectorAll('.pd-run-row').length === 4);
+    assert.equal(await p.locator('.pd-days .chip[data-day]').count(), 1, 'the new day went again');
+  });
+
+  await check('phone 390px: the running order fits, the tick is easy to hit', async () => {
+    const back = await onPhone();
+    await openDay();
+    await until(() => document.querySelectorAll('.pd-run-row').length === 4); // the pickup shot came over too
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'no sideways scroll');
+    const t = await p.locator('.pd-run-row[data-shot="sh_b"] .pd-run-tick').boundingBox();
+    assert.ok(t.width >= 44 && t.height >= 44, 'tick at least 44 px');
+    assert.ok(t.x + t.width <= 390, 'tick on the screen');
+    await snap('filmflow-day-phone');
+    await p.tap('.pd-run-row[data-shot="sh_b"] .pd-run-tick');
+    await dbUntil('sh_b', 'x.fields.got > 1000000');
+    await p.locator('.toast button', { hasText: 'Undo' }).last().tap();
+    await dbUntil('sh_b', '!x.fields.got');
     await back();
   });
 

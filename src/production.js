@@ -312,18 +312,38 @@ export const AUDIO = [
 export const audioOf = (bd, world) => bd?.fields?.audio || world?.fields?.production?.audio || 'recorded';
 export const needsVoices = (audio) => audio === 'recorded' || audio === 'both';
 
-// What still needs a day: scenes with shots to film that aren't on a shoot
-// day, and scenes with voices to record that aren't on a voice session.
+// A shoot day's shots, in running order (Nov 27 2026): the shots to film in
+// its scenes (in the order the scenes were picked, each scene's in script
+// order), plus any put on the day by hand (fields.shots), less any moved off
+// it (fields.skip). fields.order is the order they will be shot; one not in
+// it yet comes after. scenes: [{ id, shots }] of the piece. Returns ids.
+export function dayShotIds(day, scenes, setId) {
+  const f = day?.fields || {};
+  if (f.type === 'voice') return [];
+  const skip = new Set(f.skip || []);
+  const byScene = new Map(scenes.map((s) => [s.id, s]));
+  const all = new Set(scenes.flatMap((s) => (s.shots || []).map((sh) => sh.id)));
+  const ids = [];
+  for (const id of f.scenes || []) for (const sh of byScene.get(id)?.shots || []) if (needsFootage(madeBy(sh, setId))) ids.push(sh.id);
+  for (const id of f.shots || []) if (all.has(id) && !ids.includes(id)) ids.push(id);
+  const on = ids.filter((id) => !skip.has(id));
+  const at = new Map((f.order || []).map((id, i) => [id, i]));
+  const known = on.filter((id) => at.has(id)).sort((a, b) => at.get(a) - at.get(b));
+  return [...known, ...on.filter((id) => !at.has(id))];
+}
+
+// What still needs a day: shots to film that are on no shoot day (by scene),
+// and scenes with voices to record that aren't on a voice session.
 // scenes: [{ id, shots, audio, talk }] where talk says it has lines.
 export function toPlan(scenes, days, setId) {
-  const on = (type) => new Set(days.filter((d) => !d.deleted && (d.fields?.type === 'voice') === (type === 'voice')).flatMap((d) => d.fields?.scenes || []));
-  const shooting = on('shoot');
-  const voicing = on('voice');
+  const live = days.filter((d) => !d.deleted);
+  const onDay = new Set(live.filter((d) => d.fields?.type !== 'voice').flatMap((d) => dayShotIds(d, scenes, setId)));
+  const voicing = new Set(live.filter((d) => d.fields?.type === 'voice').flatMap((d) => d.fields?.scenes || []));
   const shoot = [];
   const voice = [];
   for (const s of scenes) {
-    const shots = (s.shots || []).filter((sh) => needsFootage(madeBy(sh, setId)));
-    if (shots.length && !shooting.has(s.id)) shoot.push({ scene: s, shots });
+    const shots = (s.shots || []).filter((sh) => needsFootage(madeBy(sh, setId)) && !onDay.has(sh.id));
+    if (shots.length) shoot.push({ scene: s, shots });
     if (s.talk && needsVoices(s.audio) && !voicing.has(s.id)) voice.push(s);
   }
   return { shoot, voice };
