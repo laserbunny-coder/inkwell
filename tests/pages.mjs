@@ -376,7 +376,7 @@ try {
     await go(page, { view: 'production', id: 'pr_reel2' });
     await page.waitForFunction(() => document.documentElement.dataset.view === 'production');
     await page.waitForSelector('.prod-view .gv-levels .chip');
-    { const t = await page.locator('.prod-view .gv-levels .chip').allInnerTexts(); assert.deepEqual(t, ['Shots', 'Storyboard', 'Cast and places', 'Shoot days'], JSON.stringify(t)); }
+    { const t = await page.locator('.prod-view .gv-levels .chip').allInnerTexts(); assert.deepEqual(t, ['Shots', 'Cast and places', 'Shoot days'], JSON.stringify(t)); }
     await go(page, { view: 'deliver', id: 'pr_reel2' });
     await page.waitForFunction(() => document.documentElement.dataset.view === 'deliver');
     await page.waitForSelector('.pd-group[data-group="out"]');

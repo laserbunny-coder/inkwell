@@ -5,7 +5,7 @@
 //   the first stage (New idea)            → Ideas for this piece
 //   writing (Writing, Outlining, Drafting, Polishing) → the text
 //   checking (Revising, Workshopping)     → Drafts and notes
-//   Boarding                              → Storyboard
+//   Boarding                              → Shots, as Frames (the storyboard)
 //   Prepping, Generating (and Rehearsing, Recording, Animating) → Shots
 //   Shooting, Filming                     → Shoot days
 //   Editing                               → Deliver, at the files for the edit

@@ -513,8 +513,9 @@ try {
     assert.equal(row('sh_d').fields.got, undefined, 'a second tap: still to get');
   });
 
-  await check('Storyboard: the frames are the shooting checklist (tick, N of M got, Left to shoot); an empty frame offers Sketch and Photo', async () => {
-    await laptop.locator('.gv-levels .chip[data-tab="board"]').click();
+  await check('Shots as Frames: the frames are the shooting checklist (tick, N of M got, Left to shoot); an empty frame offers Sketch and Photo', async () => {
+    assert.deepEqual(await laptop.locator('.gv-levels .chip').evaluateAll((els) => els.map((e) => e.dataset.tab)), ['shots', 'kit', 'days'], 'Storyboard is part of Shots now');
+    await laptop.locator('.pd-view[data-view="frames"]').click();
     await laptop.waitForSelector('.pd-board .pd-card');
     const card = laptop.locator('.pd-card[data-shot="sh_d"]');
     assert.equal(await card.locator('.pd-tick').count(), 1, 'a filmed shot has a tick on its frame');
@@ -555,10 +556,21 @@ try {
     await laptop.locator('.pd-card').first().focus();
     await laptop.keyboard.press('ArrowRight');
     assert.equal(await laptop.evaluate(() => [...document.querySelectorAll('.pd-card')].indexOf(document.activeElement)), 1);
-    await laptop.locator('.pd-lay').click();
-    await laptop.waitForSelector('.pd-board.column');
-    await laptop.locator('.pd-lay').click();
-    await laptop.waitForSelector('.pd-board:not(.column)');
+    // List: the same shots, each with its frame at the start of its row;
+    // Play, the count and Left to shoot sit above both.
+    await laptop.locator('.pd-view[data-view="list"]').click();
+    await laptop.waitForSelector('.pd-shot .pd-thumb');
+    assert.equal(await laptop.locator(`.pd-shot[data-shot="${id}"] .pd-thumb img`).count(), 1, 'the sketch shows on its row');
+    assert.equal(await laptop.locator('.pd-shot[data-shot="sh_d"] .pd-thumb.empty').count(), 1, 'an empty frame on the row');
+    assert.match(await laptop.locator('.pd-got-count').innerText(), /^0 of 1 got$/);
+    await laptop.locator('.pd-shot[data-shot="sh_d"] .pd-got').click();
+    await laptop.waitForFunction(() => document.querySelector('.pd-shot[data-shot="sh_d"] .pd-got')?.getAttribute('aria-pressed') === 'true');
+    await laptop.locator('.pd-leftonly').click();
+    await laptop.waitForFunction(() => !document.querySelector('.pd-shot[data-shot="sh_d"]'));
+    await laptop.locator('.pd-leftonly').click();
+    await laptop.locator('.pd-shot[data-shot="sh_d"] .pd-got').click();
+    await laptop.waitForFunction(() => document.querySelector('.pd-shot[data-shot="sh_d"] .pd-got')?.getAttribute('aria-pressed') === 'false');
+    await settle(laptop);
   });
 
   assert.deepEqual(laptop.errors, []);

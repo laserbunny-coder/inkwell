@@ -7,7 +7,7 @@ import { plain as make } from './dom.js';
 import { shotStage, SHOT_STAGES } from './production.js';
 
 // opts: code, scene (its name), status (its word: Planned, Got it, Still picked…),
-// got ({ on, set(on) }) for a filmed shot's Got it tick, covers (the lines it covers, said plainly), pic (element), close() or null, edit(patch
+// got ({ on, set(on) }) for a filmed shot's Got it tick, note ({ value }) for a filmed shot's note for the day, covers (the lines it covers, said plainly), pic (element), close() or null, edit(patch
 // {text}|{framing}), done() (Enter), blur(), picture(file), make(), remove().
 export function shotCard(sh, opts) {
   const d = make('div', 'ss-detail');
@@ -44,6 +44,20 @@ export function shotCard(sh, opts) {
   };
   const what = field('ss-what-in', sh.text, 'What happens', 'text');
   const framing = field('ss-framing-in', sh.fields?.framing, 'Framing: wide, close-up, insert…', 'framing');
+  // A filmed shot's note for the day (lens, move, sound): the same note as
+  // in Make, so a shot is planned in one place.
+  let note = null;
+  if (opts.note) {
+    note = make('textarea', 'ss-field ss-note-in');
+    note.value = opts.note.value || '';
+    note.rows = 2;
+    note.placeholder = 'Note for the day: lens, move, sound';
+    note.setAttribute('aria-label', 'Note for the day');
+    const fit = () => { note.style.height = 'auto'; note.style.height = `${note.scrollHeight + 2}px`; };
+    note.addEventListener('input', () => { fit(); opts.edit?.({ note: note.value }); });
+    note.addEventListener('blur', () => opts.blur?.());
+    requestAnimationFrame(fit);
+  }
   const where = make('p', 'ss-in', opts.scene ? `In ${opts.scene}` : '');
   const covers = opts.covers ? make('p', 'ss-covers', opts.covers) : null;
   // Where it starts and ends: each end's first words, a line earlier or later.
@@ -144,6 +158,6 @@ export function shotCard(sh, opts) {
     if (opts.copyPrompt) { const b = make('button', 'ss-act ss-copy', 'Copy the prompt'); b.type = 'button'; b.title = 'Words for Gemini or ChatGPT: the look, the shot, its lines, who and where. Paste with the sketch.'; b.addEventListener('click', () => opts.copyPrompt()); tools.append(b); }
     if (opts.savePicture) { const b = make('button', 'ss-act ss-save', 'Save picture'); b.type = 'button'; b.addEventListener('click', () => opts.savePicture()); tools.append(b); }
   }
-  d.append(top, what, framing, where, ...(covers ? [covers] : []), ...(ends ? [ends] : []), ...(strip ? [strip] : []), acts, ...(tools ? [tools] : []));
+  d.append(top, what, framing, ...(note ? [note] : []), where, ...(covers ? [covers] : []), ...(ends ? [ends] : []), ...(strip ? [strip] : []), acts, ...(tools ? [tools] : []));
   return d;
 }

@@ -313,10 +313,10 @@ try {
     await sleep(600);
     const w = await get(page, 'wd_nb');
     assert.deepEqual(w.fields.stageLists.ai, ['New idea', 'Boarding', 'Writing', 'Generating', 'Editing', 'Posted']);
-    assert.deepEqual(w.fields.toolLists.ai, ['shots', 'board', 'kit']);
+    assert.deepEqual(w.fields.toolLists.ai, ['shots', 'kit']);
     await go(page, { view: 'production', id: 'pr_reel1', tab: 'shots' });
     await page.waitForSelector('.prod-view .gv-levels .chip[data-tab="shots"]');
-    assert.deepEqual(await page.locator('.prod-view .gv-levels .chip').evaluateAll((els) => els.map((e) => e.dataset.tab)), ['shots', 'board', 'kit']);
+    assert.deepEqual(await page.locator('.prod-view .gv-levels .chip').evaluateAll((els) => els.map((e) => e.dataset.tab)), ['shots', 'kit']);
     await shot(page, 'workflow-make-tools');
     await openMake(page);
     await openStages(page);
@@ -340,7 +340,7 @@ try {
     const own = (await all(page)).find((r) => r.kind === 'workflow');
     assert.ok(own, 'the workflow is saved');
     assert.equal(own.title, 'Reels with a live shoot');
-    assert.deepEqual({ base: own.fields.base, stages: own.fields.stages, tools: own.fields.tools }, { base: 'ai', stages: ['New idea', 'Writing', 'Boarding', 'Generating', 'Editing', 'Live shoot', 'Posted'], tools: ['shots', 'board', 'kit', 'days'] });
+    assert.deepEqual({ base: own.fields.base, stages: own.fields.stages, tools: own.fields.tools }, { base: 'ai', stages: ['New idea', 'Writing', 'Boarding', 'Generating', 'Editing', 'Live shoot', 'Posted'], tools: ['shots', 'kit', 'days'] });
     assert.equal(await page.locator('.stage-edit .se-tabs .chip.on').getAttribute('data-set'), own.id);
     assert.equal(await page.locator('.se-use select[data-type="screenplay"]').inputValue(), own.id);
     await shot(page, 'workflow-own');
@@ -363,7 +363,7 @@ try {
     await page.waitForSelector('#lib-new', { state: 'visible' });
     await page.waitForSelector('#lib-new-how .se-tabs .chip.on');
     assert.equal(await page.locator('#lib-new-how .se-tabs .chip.on').getAttribute('data-set'), 'ai');
-    assert.match(await page.locator('#lib-new-how .se-preview').innerText(), /New idea › Writing › Boarding › Generating › Editing › Posted[\s\S]*Make: Shots, Storyboard, Cast and places, Shoot days/);
+    assert.match(await page.locator('#lib-new-how .se-preview').innerText(), /New idea › Writing › Boarding › Generating › Editing › Posted[\s\S]*Make: Shots, Cast and places, Shoot days/);
     await shot(page, 'workflow-new-preview');
     // A book series starts as Book; a life project has no workflow.
     await page.locator('.lib-shape[data-shape="series"]').click();
@@ -385,7 +385,7 @@ try {
     const w = (await all(page)).find((r) => r.kind === 'world' && r.title === 'Bakery Nights');
     assert.equal(w.fields.shape, 'show');
     assert.deepEqual(w.fields.stageLists, { ai: ['New idea', 'Scripted', 'Boarding', 'Generating', 'Editing', 'Posted'] });
-    assert.deepEqual(w.fields.toolLists, { ai: ['shots', 'board', 'days'] });
+    assert.deepEqual(w.fields.toolLists, { ai: ['shots', 'days'] });
     assert.equal(w.fields.stageFor, undefined);
   });
 

@@ -133,6 +133,7 @@ html.ss-dragging, html.ss-dragging * { cursor: grabbing !important; user-select:
 .ss-x:hover { background: var(--tint); color: var(--ink); }
 .ss-field { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--ink); font: 14px var(--ui); }
 .ss-field::placeholder { color: var(--faint); }
+.ss-note-in { resize: vertical; line-height: 1.4; min-height: 2.6em; }
 .ss-in, .ss-covers { margin: 0; font-size: 12px; color: var(--muted); }
 .ss-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .ss-act { padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: 12.5px var(--ui); cursor: pointer; }

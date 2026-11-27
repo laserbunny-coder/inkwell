@@ -359,7 +359,7 @@ try {
   });
 
   await check('the storyboard shows the starred still, in order', async () => {
-    await laptop.locator('.gv-levels .chip[data-tab="board"]').click();
+    await laptop.locator('.pd-view[data-view="frames"]').click();
     await laptop.waitForSelector('.pd-board .pd-card');
     const codes = await laptop.locator('.pd-card-code').allTextContents();
     assert.deepEqual(codes, ['NB-E01-S01-01', 'NB-E01-S01-01A', 'NB-E01-S01-02']);
@@ -369,6 +369,8 @@ try {
 
   await check('Claude: a breakdown adds from the kit and suggests what the kit is missing', async () => {
     await laptop.locator('.gv-levels .chip[data-tab="shots"]').click();
+    await laptop.locator('.pd-view[data-view="list"]').click();
+    await laptop.waitForSelector('.pd-scene');
     await laptop.locator('.gv-tools .more-btn').click();
     await pick(laptop, 'Break down every scene');
     await laptop.waitForSelector('.gv-claude .gv-findings button');
