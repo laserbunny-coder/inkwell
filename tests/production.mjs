@@ -427,6 +427,8 @@ try {
     await laptop.locator('.gv-levels .chip[data-tab="days"]').click();
     await laptop.locator('.pd-days .chip.add', { hasText: 'Shoot day' }).click();
     await laptop.waitForSelector('.pd-dayform');
+    await laptop.locator('.pd-day-sheet').click();
+    await laptop.waitForSelector('.pd-sheet');
     await laptop.locator('.pd-dayform input[aria-label="Date"]').fill('2027-02-03');
     await laptop.locator('.pd-dayform input[aria-label="Date"]').dispatchEvent('change');
     await sleep(300);

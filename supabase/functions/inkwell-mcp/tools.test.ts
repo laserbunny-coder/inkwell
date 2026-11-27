@@ -386,6 +386,17 @@ assert.equal(gotPr.scenes[1].shots[0].got_it, true);
 assert.equal(gotPr.scenes[1].shots[0].stage, "got it");
 await call("update_shot", { shot_id: "sh-3", got_it: false });
 assert.equal((await call("production", { piece_id: "pr-reel" })).scenes[1].shots[0].got_it, false);
+// A shoot day gives its running order (the day's order first), and a filmed
+// shot its note for the day and its word for the edit.
+rows.push(e("sd-1", "shootday", "pr-reel", { fields: { date: "2026-12-05", place: "The dojo", call: "07:00", scenes: ["pp-5"], shots: ["sh-1"], order: ["sh-1", "sh-3"] } }));
+rows.find((r) => r.id === "sh-3")!.fields = { ...rows.find((r) => r.id === "sh-3")!.fields, note: "Rain bars on", say: "Take 2" };
+const dayPr = await call("production", { piece_id: "pr-reel" });
+assert.deepEqual(dayPr.shoot_days.map((d: any) => [d.date, d.where, d.running_order.map((x: any) => x.shot_id)]), [["2026-12-05", "The dojo", ["sh-1", "sh-3"]]]);
+assert.equal(dayPr.shoot_days[0].running_order[1].word_for_the_edit, "Take 2");
+assert.equal(dayPr.scenes[1].shots[0].note_for_the_day, "Rain bars on");
+rows.find((r) => r.id === "sd-1")!.fields.skip = ["sh-1"];
+assert.deepEqual((await call("production", { piece_id: "pr-reel" })).shoot_days[0].running_order.map((x: any) => x.shot_id), ["sh-3"], "moved off the day");
+rows.find((r) => r.id === "sd-1")!.deleted = true;
 // Estimate: shots 1 and 2 at Kling 3.0 ($0.08/s), 7 s, 2 tries; the live one isn't generated.
 assert.equal(pr.cost.estimate_usd, 1.12);
 assert.equal(pr.cost.prices_checked, "2026-11-03");

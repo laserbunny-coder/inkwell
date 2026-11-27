@@ -421,7 +421,7 @@ export const TOOLS: Record<string, unknown>[] = [
   {
     name: "production",
     title: "Read a piece's production",
-    description: "A piece's production, for making its shots in another tool: the show rules and style, the cast and places (each element's looks, who plays them, lighting, tool IDs, character sheet and reference pictures as links), and each scene's shots with their code, what happens, framing, prompts, how each is generated, the tries so far (model, cost, files as links) and what's starred. Links to pictures work for a day. Give scene to read one scene (its id or its number, like 3A).",
+    description: "A piece's production, for making its shots in another tool: the show rules and style, the cast and places (each element's looks, who plays them, lighting, tool IDs, character sheet and reference pictures as links), and each scene's shots with their code, what happens, framing, prompts, how each is generated, the tries so far (model, cost, files as links) and what's starred; a filmed shot's note for the day and word for the edit; and each shoot day with its running order. Links to pictures work for a day. Give scene to read one scene (its id or its number, like 3A).",
     inputSchema: {
       type: "object",
       required: ["piece_id"],
@@ -2022,6 +2022,7 @@ async function production(args: Record<string, unknown>, db: Db) {
         ...(made !== "gen" ? { made: made === "live" ? "filmed live" : "generated from footage" } : {}),
         // A filmed shot is Planned or Got it; a generated one has its five stages.
         ...(made === "live" ? { got_it: !!f.got, ...(f.got ? { got_on: localDate(new Date(Number(f.got)).toISOString(), tz) } : {}) } : {}),
+        ...(f.note ? { note_for_the_day: f.note } : {}), ...(f.say ? { word_for_the_edit: f.say } : {}),
         stage: made === "live" ? (f.got ? "got it" : "planned") : stageOf(f),
         still_prompt: f.still || "", video_prompt: f.video || "",
         generation: {
@@ -2048,6 +2049,30 @@ async function production(args: Record<string, unknown>, db: Db) {
     return { id: s.id, ...(s.number ? { number: s.number } : {}), heading: s.heading, ...(bare.length ? { lines_without_a_shot: bare.map((i) => lineOut(s.paras[i])) } : {}), elements: uses.map((id) => shape.byId.get(id)?.title).filter(Boolean), shots: shotsOut };
   });
   const checked = list.map((p) => p.checked ?? "").sort().at(-1);
+  // Shoot days, each with its running order (the same list the app shows):
+  // the filmed shots of its scenes, plus any put on it by hand, less any
+  // moved off it, in the order they will be shot.
+  const codeOf = new Map<string, string>();
+  const shotOf = new Map<string, Entry>();
+  const sceneShots = new Map<string, Entry[]>();
+  for (const s of scenes) { sceneShots.set(s.id, s.shots); for (const sh of s.shots) { codeOf.set(sh.id, shotCode({ show, piece: pc, scene: s.number, shot: sh.fields?.n })); shotOf.set(sh.id, sh); } }
+  const filmedHere = (sh: Entry) => { const m = sh.fields?.made || (liveFilm ? "live" : "gen"); return m === "live" || m === "ref"; };
+  const dayRows = (await db.kids([piece.id])).filter((r) => r.kind === "shootday" && !gone(r)).sort((a, b) => String(a.fields?.date || "").localeCompare(String(b.fields?.date || "")));
+  const shootDays = want ? [] : dayRows.map((d) => {
+    const f = (d.fields ?? {}) as Record<string, any>;
+    if (f.type === "voice") return { date: f.date || null, voice_session: true, scenes: (f.scenes ?? []).length };
+    const skip = new Set<string>(f.skip ?? []);
+    const ids: string[] = [];
+    for (const sid of f.scenes ?? []) for (const sh of sceneShots.get(sid) ?? []) if (filmedHere(sh)) ids.push(sh.id);
+    for (const id of f.shots ?? []) if (shotOf.has(id) && !ids.includes(id)) ids.push(id);
+    const on = ids.filter((id) => !skip.has(id));
+    const at = new Map<string, number>(((f.order ?? []) as string[]).map((id, i) => [id, i]));
+    const order = [...on.filter((id) => at.has(id)).sort((a, b) => at.get(a)! - at.get(b)!), ...on.filter((id) => !at.has(id))];
+    return {
+      id: d.id, date: f.date || null, ...(f.place ? { where: f.place } : {}), ...(f.call ? { call: f.call } : {}),
+      running_order: order.map((id) => { const sh = shotOf.get(id)!; return { shot_id: id, code: codeOf.get(id), what: sh.text || "", got_it: !!sh.fields?.got, ...(sh.fields?.say ? { word_for_the_edit: sh.fields.say } : {}) }; }),
+    };
+  });
   return {
     piece: piece.title, id: piece.id, world: world?.title,
     rules: {
@@ -2068,6 +2093,7 @@ async function production(args: Record<string, unknown>, db: Db) {
       };
     }),
     scenes: out,
+    ...(shootDays.length ? { shoot_days: shootDays } : {}),
     cost: {
       estimate_usd: Math.round(estimate * 100) / 100, tries_per_shot: Number(pg.tries) > 0 ? Number(pg.tries) : 3, ...(pg.model ? { model_for_finals: pg.model } : {}),
       spent_usd: Math.round(spent * 100) / 100, ...(unpriced.size ? { no_price_for: [...unpriced] } : {}), prices_checked: checked,
