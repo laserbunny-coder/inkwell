@@ -247,8 +247,9 @@ button.np-crumb:hover, button.np-crumb:focus-visible { color: var(--ink); backgr
 }
 
 /* ---------- Part 3: the day's two dividers ---------- */
-.pl-part { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px 2px; color: var(--faint); font: 11px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; cursor: grab; user-select: none; }
-.pl-part::after { content: ''; flex: 1; height: 1px; background: var(--line); opacity: .7; }
+.pl-morn, .pl-part { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px 2px; color: var(--faint); font: 11px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; cursor: grab; user-select: none; }
+.pl-morn { cursor: default; margin-top: 2px; }
+.pl-morn::after, .pl-part::after { content: ''; flex: 1; height: 1px; background: var(--line); opacity: .7; }
 .pl-part.dragging { opacity: .4; }
 .pl-part.drop-after { box-shadow: 0 2px 0 var(--accent); }
 .pl-part.drop-before { box-shadow: 0 -2px 0 var(--accent); }
@@ -514,3 +515,5 @@ body.nz-on .notebook { padding-bottom: calc(40vh + 50px); }
   /* The keyboard up: the writing row has the bottom, as the ruler does. */
   body:is(.kb-up, .outline-bar-on) .nz-strip { display: none; }
 }
+
+.pl-cal.parted { border-bottom: 0; padding-bottom: 2px; }
