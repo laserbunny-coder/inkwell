@@ -87,6 +87,9 @@ try {
     await at(p, 'today');
     await p.waitForSelector('#plan-sheet .pl-part');
     assert.deepEqual(await p.locator('#plan-sheet .pl-part').allTextContents(), ['Afternoon', 'Evening']);
+    // Morning is the fixed label at the top of the list, never draggable.
+    assert.equal(await p.locator('#plan-sheet .pl-list > .pl-morn').first().textContent(), 'Morning');
+    assert.equal(await p.locator('#plan-sheet .pl-list > :first-child').getAttribute('class'), 'pl-morn');
     assert.equal(await p.locator('#plan-sheet .pl-part[data-part="aft"]').getAttribute('draggable'), 'true');
     // Dragged above "Board scene 3": the afternoon starts there.
     await p.locator('#plan-sheet .pl-part[data-part="aft"]').dragTo(p.locator('#plan-sheet .pl-task', { hasText: 'Board scene 3' }).first(), { targetPosition: { x: 20, y: 2 } });

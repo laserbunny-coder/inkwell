@@ -433,6 +433,8 @@ export class Plan {
     cal.setAttribute('aria-label', 'On your calendar');
     for (const e of top) cal.append(this.eventLine(e, 'pl-ev'));
     cal.hidden = !top.length;
+    // The Morning label below carries the line under the all-day events.
+    if (this.partsShown()) cal.classList.add('parted');
     const row = (i) => this.taskRow(i, { next: day === today && i === p.next, inplace: !!i.row.fields?.done, outline: true });
     // Done tasks stay where they were in your order; with "Done tasks in the
     // list" off they're out of sight, under one faint "3 done" line.
@@ -461,7 +463,11 @@ export class Plan {
   withParts(above, day) {
     if (!this.partsShown()) return above;
     const at = this.partsOf(day);
-    const out = [];
+    // Morning is simply the top of the day, so its label never moves: a plain
+    // heading like the other two, but not a place you drag.
+    const morn = make('div', 'pl-morn');
+    morn.append(make('span', 'pl-part-l', 'Morning'));
+    const out = [morn];
     const put = { aft: false, eve: false };
     const divider = (k) => {
       const d = make('div', 'pl-part');
