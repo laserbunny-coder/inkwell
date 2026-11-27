@@ -97,6 +97,20 @@ const make = (id, tab) => goThen({ view: 'production', id, ...(tab ? { tab } : {
 const readyLines = () => p.$$eval('.pd-ready-line', (ls) => ls.map((l) => `${l.dataset.ready}|${l.querySelector('.pd-ready-v')?.textContent || ''}`));
 
 const browser = await chromium.launch();
+// A phone of its own (a real touch screen), synced from the same account.
+async function onPhone() {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark', deviceScaleFactor: SHOTS ? 2 : 1 });
+  await ctx.exposeFunction('__remote', remote);
+  await ctx.addInitScript(fake);
+  const ph = await ctx.newPage();
+  ph.on('pageerror', (e) => errors.push(`phone: ${e.message}`));
+  await ph.goto(`http://localhost:${PORT}/`);
+  const keep = p;
+  p = ph;
+  await until(() => !!window.__go);
+  await dbUntil('sh_c', '!!x');
+  return async () => { await ctx.close(); p = keep; };
+}
 try {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, colorScheme: 'dark', deviceScaleFactor: SHOTS ? 2 : 1 });
   await ctx.exposeFunction('__remote', remote);
@@ -282,18 +296,18 @@ try {
   });
 
   await check('phone 390px: the chips wrap, the stage list fits', async () => {
-    await p.setViewportSize({ width: 390, height: 844 });
+    const back = await onPhone();
     await make('pr_gen', 'shots');
     await until(() => !!document.querySelector('.pd-stagechip'));
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'no sideways scroll');
     const xs = await p.$$eval('.pd-stagechip', (cs) => cs.map((c) => c.getBoundingClientRect().right));
     assert.ok(Math.max(...xs) <= 390, 'every chip on the screen');
     await snap('filmflow-stage-phone');
-    await p.setViewportSize({ width: 1280, height: 860 });
+    await back();
   });
 
   await check('phone 390px: Shots fits, nothing scrolls sideways', async () => {
-    await p.setViewportSize({ width: 390, height: 844 });
+    const back = await onPhone();
     await make('pr_gen', 'shots');
     await make('pr_salt', 'shots');
     await until(() => !!document.querySelector('.pd-shot .pd-thumb'));
@@ -301,7 +315,10 @@ try {
     const t = await p.locator('.pd-shot .pd-thumb').first().boundingBox();
     assert.ok(t.width >= 56, 'the frame is big enough to tap');
     await snap('filmflow-phone');
-    await p.setViewportSize({ width: 1280, height: 860 });
+    await p.locator('.pd-shot').first().evaluate((e) => e.scrollIntoView({ block: 'start' }));
+    await p.evaluate(() => window.scrollBy(0, -90));
+    await snap('filmflow-phone-rows');
+    await back();
   });
 
   assert.deepEqual(errors, []);

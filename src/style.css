@@ -2490,3 +2490,10 @@ html.touring .preview-strip { display: none; }
 .pd-pick:hover, .pd-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pd-pick img, .pd-pick video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pd-addfiles { cursor: pointer; }
+@media (--narrow) {
+  .pd-ready-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; }
+  .pd-ready-k { grid-column: 1 / -1; }
+  .pd-ready-line.ok .pd-ready-k { grid-column: 1; }
+  .pd-ready-v { grid-column: 1; }
+  .pd-ready-door { grid-column: 2; grid-row: 2; }
+}
