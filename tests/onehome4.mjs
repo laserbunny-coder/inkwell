@@ -155,7 +155,7 @@ try {
     await outlineOf('pr_nb');
     // Each making stage lands on its own screen, and the crumb names it.
     await door('Boarding').click();
-    await until(() => document.documentElement.dataset.view === 'production' && document.querySelector('.prod-view .chip[data-tab="board"]')?.getAttribute('aria-selected') === 'true' && /Storyboard/.test(document.querySelector('#crumb')?.textContent || ''));
+    await until(() => document.documentElement.dataset.view === 'production' && document.querySelector('.prod-view .chip[data-tab="shots"]')?.getAttribute('aria-selected') === 'true' && document.querySelector('.pd-view[data-view="frames"]')?.getAttribute('aria-pressed') === 'true' && !!document.querySelector('.pd-board'));
     await outlineOf('pr_nb');
     await door('Generating').click();
     await until(() => document.documentElement.dataset.view === 'production' && document.querySelector('.prod-view .chip[data-tab="shots"]')?.getAttribute('aria-selected') === 'true' && /Shots/.test(document.querySelector('#crumb')?.textContent || ''));

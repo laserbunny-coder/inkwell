@@ -78,13 +78,15 @@ export const STAGES = ['New idea', 'Writing', 'Boarding', 'Generating', 'Editing
 // last stage always means out in the world: canon, posted, published.
 // The tools a workflow puts on Make. Video work gets them all; a book or a
 // poem none (until its own tools come), and any project can turn them on.
+// (Nov 27 2026: Shots and Storyboard are one tab, Shots, with List and
+// Frames. A stored tool list that still says 'board' means Shots.)
 export const TOOLS = [
   { id: 'shots', label: 'Shots' },
-  { id: 'board', label: 'Storyboard' },
   { id: 'kit', label: 'Cast and places' },
   { id: 'days', label: 'Shoot days' }
 ];
-const VIDEO = ['shots', 'board', 'kit', 'days'];
+const VIDEO = ['shots', 'kit', 'days'];
+const asShots = (list) => [...new Set((list || []).map((id) => (id === 'board' ? 'shots' : id)))];
 // The names before statuses were worded as what's happening, so pieces
 // marked then keep their place (Boarded reads as Boarding).
 const LEGACY = [
@@ -104,7 +106,7 @@ export const STAGE_SETS = [
 // Workflows you saved as your own: stages and tools to start the next
 // project from. They're entries (kind 'workflow'), so every device has them.
 let OWN = [];
-const ownSet = (r) => ({ id: r.id, name: r.title || 'My workflow', about: 'Yours', stages: r.fields?.stages?.length >= 2 ? r.fields.stages : STAGES, tools: r.fields?.tools || [], base: r.fields?.base || 'ai', own: true, more: true });
+const ownSet = (r) => ({ id: r.id, name: r.title || 'My workflow', about: 'Yours', stages: r.fields?.stages?.length >= 2 ? r.fields.stages : STAGES, tools: asShots(r.fields?.tools), base: r.fields?.base || 'ai', own: true, more: true });
 export function setOwnWorkflows(rows) { OWN = rows.filter((r) => r && !r.deleted && r.kind === 'workflow').map(ownSet); }
 export const addOwnWorkflow = (row) => { OWN = [...OWN.filter((x) => x.id !== row.id), ownSet(row)]; };
 export const dropOwnWorkflow = (id) => { OWN = OWN.filter((x) => x.id !== id); };
@@ -133,7 +135,7 @@ export const stagesIn = (set, world) => world?.fields?.stageLists?.[set.id] || s
 export const stagesOf = (p, world) => stagesIn(stageSetOf(p, world), world);
 // The tools on Make for a set in this world, and for a piece. A piece that
 // asked for the video tools anyway gets them on top.
-export const toolsIn = (set, world) => world?.fields?.toolLists?.[set.id] || set.tools || [];
+export const toolsIn = (set, world) => asShots(world?.fields?.toolLists?.[set.id] || set.tools || []);
 export function toolsOf(p, world) {
   const t = toolsIn(stageSetOf(p, world), world);
   return p?.fields?.videoTools ? TOOLS.map((x) => x.id).filter((id) => t.includes(id) || VIDEO.includes(id)) : TOOLS.map((x) => x.id).filter((id) => t.includes(id));

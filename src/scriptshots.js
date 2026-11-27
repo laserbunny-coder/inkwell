@@ -92,6 +92,7 @@ export class ScriptShots {
     this.shown = new Map(); // shot id -> the picture tapped in its open card
     this.lines = null; // the lines picked: { eid, from, to } (indexes in its scene)
     this.saving = new Map();
+    this.noted = new Set(); // shots whose note for the day was typed here
     this.frame = 0;
     this.groupsKey = '';
     this.mode = 'off';
@@ -769,6 +770,7 @@ export class ScriptShots {
       covers: this.coversText(sh, a),
       status: this.doneOf(sh) ? this.gotWord(sh) : shotStatus(sh, this.setId),
       got: { on: this.doneOf(sh), word: this.gotWord(sh), set: (on) => this.setGot(sh.id, on).then(() => this.reload()) },
+      note: isFilmed(sh, this.setId) ? { value: sh.fields?.note || '' } : null,
       pic: this.pic(sh, true, shown),
       sketch: {
         blank: () => this.sketchOn(sh.id, { title }),
@@ -783,7 +785,7 @@ export class ScriptShots {
       copyPrompt: () => this.copyPrompt(sh, a),
       savePicture: shown ? () => this.savePicture(shown, title) : null,
       close: closeBtn ? () => this.close() : null,
-      edit: (patch) => { if ('text' in patch) sh.text = patch.text; if ('framing' in patch) sh.fields = { ...sh.fields, framing: patch.framing }; this.patch(sh); this.later(sh.id); },
+      edit: (patch) => { if ('text' in patch) sh.text = patch.text; if ('framing' in patch) sh.fields = { ...sh.fields, framing: patch.framing }; if ('note' in patch) { sh.fields = { ...sh.fields, note: patch.note }; this.noted.add(sh.id); } this.patch(sh); this.later(sh.id); },
       done: () => { this.flush(sh.id); this.close(); },
       blur: () => this.flush(sh.id),
       picture: (files) => this.addPictures(sh.id, files),
@@ -899,7 +901,9 @@ export class ScriptShots {
     const cur = this.find(id);
     const fresh = await getEntry(id);
     if (!cur || !fresh) return;
-    const row = { ...fresh, text: cur.sh.text || '', fields: { ...fresh.fields, framing: cur.sh.fields?.framing || '' }, updated_at: Date.now() };
+    const fields = { ...fresh.fields, framing: cur.sh.fields?.framing || '' };
+    if (this.noted.delete(id)) fields.note = cur.sh.fields?.note || '';
+    const row = { ...fresh, text: cur.sh.text || '', fields, updated_at: Date.now() };
     delete row._by;
     await putEntries([row]);
     cur.sh.updated_at = row.updated_at; // ours: no redraw for it

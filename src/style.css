@@ -1485,15 +1485,35 @@ div.pd-scene-title { cursor: default; }
 .pd-viewer-bar .pill { color: #E8E2D6; border-color: #5a554e; }
 .pd-viewer-name { font-size: 12px; opacity: .7; margin-right: 6px; }
 .pd-play .pd-viewer-bar { font-family: var(--ui); font-size: 14px; }
+/* Shots: List or Frames (Nov 27 2026). */
+.pd-viewpick { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin-right: 4px; }
+.pd-view { border: 0; background: transparent; color: var(--muted); font: 13px var(--ui); padding: 6px 14px; min-height: 34px; cursor: pointer; }
+.pd-view + .pd-view { border-left: 1px solid var(--line); }
+.pd-view[aria-pressed="true"] { background: var(--tint); color: var(--ink); }
+.pd-thumb { width: 72px; aspect-ratio: 16 / 9; flex: none; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); background: var(--bg); padding: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; color: var(--faint); font: 16px var(--ui); cursor: pointer; }
+.pd-thumb.empty { border-style: dashed; }
+.pd-thumb:hover { border-color: var(--faint); color: var(--ink); }
+.pd-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pd-shot:has(.pd-got[aria-pressed="true"]) .pd-thumb img { opacity: .5; }
+/* Before the shoot: what is still missing, each line a door. */
+.pd-ready { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 4px 12px; }
+.pd-ready-head { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent; padding: 6px 0; text-align: left; cursor: pointer; color: var(--ink); }
+.pd-ready-head .panel-label { margin: 0; }
+.pd-ready-sum { flex: 1; font: 13px var(--ui); color: var(--muted); }
+.pd-ready-fold { color: var(--faint); font-size: 12px; }
+.pd-ready-lines { display: flex; flex-direction: column; padding-bottom: 6px; }
+.pd-ready-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 5px 0; border-top: 1px solid var(--line); font: 13.5px var(--ui); }
+.pd-ready-k { flex: 1 1 200px; color: var(--ink); }
+.pd-ready-line.ok .pd-ready-k { color: var(--muted); }
+.pd-ready-v { color: var(--muted); }
+.pd-ready-v.ok { color: var(--accent); font-weight: 600; }
+.pd-ready-door { font-size: 13px; padding: 4px 8px; min-height: 32px; }
 .pd-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
 .pd-card { display: flex; flex-direction: column; gap: 4px; text-align: left; border: 0; background: transparent; padding: 0; }
 .pd-card { cursor: pointer; border-radius: 8px; }
 .pd-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .pd-card-words { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .pd-card-framing { font-size: 12px; color: var(--faint); }
-.pd-board.column { grid-template-columns: minmax(0, 1fr); }
-.pd-board.column .pd-card { flex-direction: row; align-items: flex-start; gap: 12px; }
-.pd-board.column .pd-pic { flex: 0 0 min(46%, 320px); }
 .pd-pic { position: relative; }
 .pd-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 100%; }
 .pd-empty > .pd-empty-btn + .pd-empty-btn { margin-top: 0; }
@@ -1618,14 +1638,15 @@ div.pd-scene-title { cursor: default; }
   .pd-price-row > :nth-child(2), .pd-price-row > :nth-child(3), .pd-price-row > :nth-child(5) { display: none; }
   .pd-cost-prices { margin-left: 0; }
 
-  .pd-shot-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto auto; }
+  .pd-shot-row { display: grid; grid-template-columns: 20px 64px minmax(0, 1fr) auto auto; column-gap: 8px; }
   .pd-shot-row > .pd-toggle { grid-column: 1; grid-row: 1; }
-  .pd-shot-row > .pd-what { grid-column: 2; grid-row: 1; }
-  .pd-shot-row > .pd-framing { grid-column: 2 / -1; grid-row: 2; }
-  .pd-shot-row > .pd-state { grid-column: 2 / -1; grid-row: 3; padding: 0 0 4px 4px; }
+  .pd-shot-row > .pd-thumb { grid-column: 2; grid-row: 1 / span 2; width: 64px; }
+  .pd-shot-row > .pd-what { grid-column: 3; grid-row: 1; }
+  .pd-shot-row > .pd-framing { grid-column: 3 / -1; grid-row: 2; }
+  .pd-shot-row > .pd-state { grid-column: 3 / -1; grid-row: 3; padding: 0 0 4px 4px; }
   .pd-shot-row > .pd-code { display: none; }
-  .pd-shot-row > .pd-got { grid-column: 3; grid-row: 1; }
-  .pd-shot-row > :last-child { grid-column: 4; grid-row: 1; }
+  .pd-shot-row > .pd-got { grid-column: 4; grid-row: 1; }
+  .pd-shot-row > :last-child { grid-column: 5; grid-row: 1; }
   .pd-scene-head { flex-wrap: wrap; }
   .pd-slugline { order: 9; flex-basis: 100%; padding-left: calc(1.5em + 8px); }
   .pd-detail { padding-left: 0; }
