@@ -2495,5 +2495,6 @@ html.touring .preview-strip { display: none; }
   .pd-ready-k { grid-column: 1 / -1; }
   .pd-ready-line.ok .pd-ready-k { grid-column: 1; }
   .pd-ready-v { grid-column: 1; }
+  .pd-ready-line.ok .pd-ready-v { grid-column: 2; grid-row: 1; }
   .pd-ready-door { grid-column: 2; grid-row: 2; }
 }
