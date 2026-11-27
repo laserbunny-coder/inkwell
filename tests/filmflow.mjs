@@ -112,7 +112,7 @@ try {
     assert.deepEqual(await p.$$eval('.prod-view .gv-levels .chip', (cs) => cs.map((c) => c.textContent)), ['Shots', 'Cast and places', 'Shoot days']);
     assert.equal(await p.getAttribute('.pd-view[data-view="list"]', 'aria-pressed'), 'true');
     assert.equal(await p.locator('.pd-board-tools .pill', { hasText: 'Play' }).count(), 1);
-    assert.match(await p.locator('.pd-got-count').innerText(), /^0 of 3 got$/);
+    await until(() => /^0 of 3 got$/.test(document.querySelector('.pd-got-count')?.textContent || ''));
     assert.equal(await p.locator('.pd-shot .pd-thumb.empty').count(), 3, 'every row starts with its frame (empty here)');
     await snap('filmflow-list');
     await p.click('.pd-view[data-view="frames"]');
