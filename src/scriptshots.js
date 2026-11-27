@@ -29,7 +29,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { getEntry, getMany, putEntries } from './db.js';
 import { plain as make } from './dom.js';
 import { addFile, fileUrl, fileBlob, thumbUrl, isImage } from './files.js';
-import { shotsUnder, newShot, shotCode, stillOf, withRenders, isVideo, isFilmed, shotStatus } from './production.js';
+import { shotsUnder, newShot, shotCode, stillOf, withRenders, isVideo, isFilmed, shotStatus, GEN_STAGES, genStage } from './production.js';
 import { stageSetOf, stagesOf, stageOf } from './library.js';
 import { snap, resolve, linesIn, inOrder, covering, bareLines, lanes, placeAmong } from './shotlines.js';
 import { scenesOf } from './woven.js';
@@ -768,7 +768,7 @@ export class ScriptShots {
       code: this.codeOf(sh, a),
       scene: sceneName(a),
       covers: this.coversText(sh, a),
-      status: this.doneOf(sh) ? this.gotWord(sh) : shotStatus(sh, this.setId),
+      status: this.doneOf(sh) ? this.gotWord(sh) : isFilmed(sh, this.setId) ? shotStatus(sh, this.setId) : GEN_STAGES.find((x) => x.id === genStage(sh, (id) => this.kinds.get(id) || 'still'))?.word || '',
       got: { on: this.doneOf(sh), word: this.gotWord(sh), set: (on) => this.setGot(sh.id, on).then(() => this.reload()) },
       note: isFilmed(sh, this.setId) ? { value: sh.fields?.note || '' } : null,
       pic: this.pic(sh, true, shown),

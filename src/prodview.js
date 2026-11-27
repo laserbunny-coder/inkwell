@@ -11,7 +11,7 @@ import {
   findElements, sceneElements, changeBreakdown, sceneSig, shotCode, newShot, shotStage, SHOT_STAGES, stillOf,
   withRenders, withPrompts, isVideo, shotForName, shootDays, newShootDay, shootDayTask, toCsv, toSrt, speechesIn, PLATFORMS,
   MADE_BY, madeBy, isFilmed, gotIt, shotStatus, needsFootage, AUDIO, audioOf, toPlan,
-  viewSlots, toolIdsOf, rulesOf, genOf, secsOf, runsOf,
+  viewSlots, toolIdsOf, rulesOf, genOf, secsOf, runsOf, GEN_STAGES, genStage, genFiles,
   PRICES_ID, priceList, priceOf, pricesChecked, estimate, spent, money, toEdl, cutEvents, lookOf
 } from './production.js';
 import { make } from './dom.js';
@@ -95,7 +95,7 @@ export class ProductionView {
     // A shot opened from elsewhere opens in the list.
     if (opts.shot && this.mode !== 'deliver') setPref('shotsView', 'list');
     this.landAt = this.mode === 'deliver' ? DELIVER_TABS.find((t) => t.id === opts.tab)?.group || null : null;
-    if (opts.shot) this.open.add(opts.shot);
+    if (opts.shot) { this.open.add(opts.shot); this.landShot = opts.atStage ? opts.shot : null; if (!opts.atStage) setPref(`genStage:${pieceId}`, 'all'); }
     if (opts.day) { this.dayId = opts.day; setPref('prodTab', 'days'); }
     await this.render();
     if (opts.shot) this.el.querySelector(`[data-shot="${CSS.escape(opts.shot)}"]`)?.scrollIntoView({ block: 'center' });
@@ -345,6 +345,18 @@ export class ProductionView {
     if (ready) body.append(ready);
     body.append(this.viewBar());
     if (this.frames) { await this.drawFrames(body); return; }
+    // A generated film: one stage at a time, the whole film through.
+    const gen = this.genShots();
+    // Opened on one shot (the script card's Open in Make): its own stage.
+    if (this.landShot) {
+      const hit = gen.find(({ sh }) => sh.id === this.landShot);
+      if (hit) setPref(`genStage:${this.piece.id}`, this.stageOf(hit.sh));
+      this.landShot = null;
+    }
+    if (gen.length) {
+      body.append(this.stageChips(gen));
+      if (this.genAt !== 'all') { this.drawStage(body, gen); return; }
+    }
     if (this.script && !this.piece.fields?.numbered) {
       const note = make('div', 'pd-banner');
       note.append(make('span', '', 'Number the scenes so every shot gets a code that never changes.'));
@@ -1642,16 +1654,171 @@ export class ProductionView {
     return box;
   }
 
+  // ---------- generated shots, one stage at a time ----------
+
+  genShots() {
+    const out = [];
+    for (const s of this.scenes) for (const sh of s.shots) if (!isFilmed(sh, this.set)) out.push({ s, sh });
+    return out;
+  }
+  stageOf(sh) { return genStage(sh, (id) => this.kindOf?.get(id) || 'still'); }
+  get genAt() { const v = pref(`genStage:${this.piece.id}`, 'all'); return v === 'all' || GEN_STAGES.some((x) => x.id === v) ? v : 'all'; }
+
+  stageChips(gen) {
+    const row = make('div', 'pd-stagechips');
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', 'Show the shots waiting at one stage');
+    const at = this.genAt;
+    const count = (id) => gen.filter(({ sh }) => this.stageOf(sh) === id).length;
+    for (const st of [{ id: 'all', label: 'All' }, ...GEN_STAGES]) {
+      const b = make('button', 'chip pd-stagechip' + (st.id === at ? ' on' : ''));
+      b.type = 'button';
+      b.dataset.stage = st.id;
+      b.setAttribute('aria-pressed', String(st.id === at));
+      b.append(make('span', '', st.label));
+      b.append(make('span', 'pd-stagechip-n', String(st.id === 'all' ? gen.length : count(st.id))));
+      b.addEventListener('click', () => { setPref(`genStage:${this.piece.id}`, st.id); this.render(); });
+      row.append(b);
+    }
+    return row;
+  }
+
+  // Only the shots waiting at the picked stage, one under another, each open
+  // at the one thing that stage needs.
+  drawStage(body, gen) {
+    const at = this.genAt;
+    const here = gen.filter(({ sh }) => this.stageOf(sh) === at);
+    if (!here.length) { body.append(make('p', 'hint gv-empty', 'Nothing waits at this stage.')); return; }
+    const list = make('div', 'pd-stagelist');
+    for (const { s, sh } of here) list.append(this.stageShotEl(sh, s, at));
+    body.append(list);
+  }
+
+  // After a pick: where the shot went, with Undo.
+  async moved(sh, before, did) {
+    await this.render();
+    const fresh = await getEntry(sh.id);
+    const to = GEN_STAGES.find((x) => x.id === this.stageOf(fresh || sh));
+    this.hooks.toast(`${did}${to ? `. It waits under “${to.label}”` : ''}`, { label: 'Undo', run: async () => { await this.saveShot(sh.id, { fields: before }); await this.render(); } });
+  }
+
+  stageShotEl(sh, s, at) {
+    const f = sh.fields || {};
+    const box = make('div', 'pd-stageshot');
+    box.dataset.shot = sh.id;
+    box.dataset.stage = at;
+    const head = make('div', 'pd-stageshot-head');
+    const words = make('div', 'pd-stageshot-words');
+    const sub = make('span', 'pd-stageshot-sub', [f.framing, s?.title].filter(Boolean).join(' · '));
+    const paras = this.parasOf(s);
+    const span = s ? linesOf(sh, paras) : null;
+    if (span) { const n = linesIn(paras, span.from, span.to); sub.append(' · ', make('span', 'pd-covers', `covers ${n} line${n === 1 ? '' : 's'}`)); }
+    words.append(make('span', 'pd-stageshot-what', sh.text || 'A shot'), sub);
+    head.append(this.thumbEl(sh), words);
+    box.append(head);
+    const acts = make('div', 'pd-add');
+    const btn = (label, run, cls = 'pill') => { const b = make('button', cls, label); b.type = 'button'; b.addEventListener('click', run); acts.append(b); return b; };
+    const prompt = (k, label) => {
+      const wrap = make('div', 'pd-prompt');
+      const top = make('div', 'pd-prompt-head');
+      top.append(make('span', 'panel-label', label));
+      const ta = make('textarea', 'pd-ta');
+      ta.value = f[k] || '';
+      ta.rows = 3;
+      ta.placeholder = k === 'still' ? 'The first frame, as one picture' : 'How it moves';
+      ta.setAttribute('aria-label', label);
+      ta.addEventListener('input', () => this.later(`${sh.id}:${k}`, () => this.saveShotFields(sh.id, { [k]: ta.value, prompt_by: 'me' })));
+      ta.addEventListener('blur', () => this.now(`${sh.id}:${k}`));
+      const copy = make('button', 'ghost-btn pd-copy', 'Copy');
+      copy.type = 'button';
+      copy.addEventListener('click', () => this.copy(ta.value, `${label} copied`));
+      top.append(copy);
+      wrap.append(top, ta);
+      box.append(wrap);
+    };
+    const add = (label, accept) => {
+      const l = make('label', 'pill pd-addfiles', label);
+      const input = make('input');
+      input.type = 'file';
+      input.multiple = true;
+      input.accept = accept;
+      input.hidden = true;
+      input.addEventListener('change', async () => {
+        const fs = [...(input.files || [])];
+        input.value = '';
+        if (!fs.length) return;
+        const before = (await getEntry(sh.id))?.fields || {};
+        const n = await this.addRenders(sh.id, fs, true);
+        if (n) await this.moved(sh, before, n === 1 ? (accept.startsWith('video') ? 'A take is in' : 'A picture is in') : `${n} ${accept.startsWith('video') ? 'takes' : 'pictures'} are in`);
+      });
+      l.append(input);
+      acts.append(l);
+    };
+    const tiles = (ids, kind) => {
+      const row = make('div', 'pd-picks');
+      for (const id of [...ids].reverse()) {
+        const b = make('button', 'pd-pick');
+        b.type = 'button';
+        b.dataset.file = id;
+        b.setAttribute('aria-label', kind === 'video' ? 'Keep this take' : 'Keep this picture');
+        (async () => {
+          const url = await fileUrl(id);
+          if (!url) { b.classList.add('missing'); return; }
+          if (kind === 'video') { const v = make('video'); v.src = url; v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'metadata'; b.append(v); b.addEventListener('pointerenter', () => v.play().catch(() => {})); b.addEventListener('pointerleave', () => v.pause()); }
+          else { const img = make('img'); img.src = url; img.alt = ''; b.append(img); }
+        })();
+        b.addEventListener('click', async () => {
+          const fresh = await getEntry(sh.id);
+          const before = fresh.fields || {};
+          await this.saveShotFields(sh.id, { star: { ...(before.star || {}), [kind === 'video' ? 'video' : 'still']: id } });
+          await this.moved(sh, before, kind === 'video' ? 'Take picked' : 'First frame picked');
+        });
+        row.append(b);
+      }
+      box.append(row);
+    };
+    const files = genFiles(sh, (id) => this.kindOf?.get(id) || 'still');
+    if (at === 'board') {
+      btn('Sketch the frame', async () => { const before = f; await this.sketchShot(sh); const fresh = await getEntry(sh.id); if (this.stageOf(fresh) !== 'board') await this.moved(sh, before, 'Board frame drawn'); });
+      btn('Photo', () => this.photoFor(sh, { kind: 'board', source: 'photo' }), 'ghost-btn pd-boardphoto');
+      acts.append(make('span', 'hint', 'or draw it on its lines in the script'));
+    } else if (at === 'still') {
+      prompt('still', 'First frame prompt');
+      add('+ Pictures came back', 'image/*');
+      const board = f.star?.board || files.board.at(-1);
+      if (board) {
+        btn('Use the board frame as it is', async () => {
+          const before = (await getEntry(sh.id))?.fields || {};
+          await this.saveShotFields(sh.id, { star: { ...(before.star || {}), board, still: board } });
+          await this.moved(sh, before, 'The board frame is the first frame');
+        }, 'ghost-btn pd-useboard');
+      }
+    } else if (at === 'pickstill') {
+      tiles(files.stills, 'still');
+      acts.append(make('span', 'hint', 'Tap the one to keep.'));
+      add('+ More pictures', 'image/*');
+    } else if (at === 'video') {
+      prompt('video', 'Video prompt');
+      add('+ Takes came back', 'video/*');
+    } else if (at === 'picktake') {
+      tiles(files.takes, 'video');
+      acts.append(make('span', 'hint', 'Tap the take to keep.'));
+      add('+ More takes', 'video/*');
+    } else acts.append(make('span', 'hint', 'In the rough cut.'));
+    box.append(acts);
+    return box;
+  }
+
   // A scene's lines as the shot lines know them.
   parasOf(s) { return (s?.rows || []).filter((r) => r.kind === 'para' && r.fields?.el !== 'scene').map((r) => ({ id: r.id, el: r.fields?.el, text: r.text || '' })); }
 
   // A photo (or several) for a shot, from the camera roll or the computer.
-  photoFor(sh) {
+  photoFor(sh, meta = null) {
     const input = make('input');
     input.type = 'file';
     input.accept = 'image/*';
     input.multiple = true;
-    input.addEventListener('change', async () => { const { picturesOnShot } = await import('./picturesin.js'); const r = await picturesOnShot(sh.id, [...(input.files || [])]); await this.render(); if (r.added) this.hooks.toast(r.added === 1 ? 'Picture on the shot' : `${r.added} pictures on the shot`, { label: 'Undo', run: async () => { await r.undo(); this.render(); } }); }, { once: true });
+    input.addEventListener('change', async () => { const { picturesOnShot } = await import('./picturesin.js'); const r = await picturesOnShot(sh.id, [...(input.files || [])], meta); await this.render(); if (r.added) this.hooks.toast(meta?.kind === 'board' ? 'Board frame on the shot. It waits under “First frame to make”' : r.added === 1 ? 'Picture on the shot' : `${r.added} pictures on the shot`, { label: 'Undo', run: async () => { await r.undo(); this.render(); } }); }, { once: true });
     input.click();
   }
 

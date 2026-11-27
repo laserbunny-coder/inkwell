@@ -2473,3 +2473,20 @@ html.touring .preview-strip { display: none; }
 #outline-editor li.line-held > p { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 /* The empty line waiting under a line zoomed into says where to write. */
 #outline-editor li.zoom-root > ul > li:only-child > p:has(> br.ProseMirror-trailingBreak:only-child)::before { content: 'Write here'; float: left; height: 0; color: var(--faint); pointer-events: none; }
+/* Generated shots, one stage at a time (Nov 27 2026). */
+.pd-stagechips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pd-stagechip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; }
+.pd-stagechip-n { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pd-stagechip.on .pd-stagechip-n { color: inherit; }
+.pd-stagelist { display: flex; flex-direction: column; gap: 10px; max-width: 760px; }
+.pd-stageshot { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pd-stageshot-head { display: flex; gap: 10px; align-items: flex-start; }
+.pd-stageshot-head .pd-thumb { width: 96px; }
+.pd-stageshot-words { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pd-stageshot-what { font-size: 14.5px; color: var(--ink); }
+.pd-stageshot-sub { font-size: 12.5px; color: var(--muted); }
+.pd-picks { display: flex; flex-wrap: wrap; gap: 8px; }
+.pd-pick { width: 150px; max-width: calc(50% - 4px); aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; padding: 0; background: var(--bg); cursor: pointer; }
+.pd-pick:hover, .pd-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pd-pick img, .pd-pick video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pd-addfiles { cursor: pointer; }

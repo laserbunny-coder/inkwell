@@ -215,6 +215,38 @@ export function shotStage(shot) {
   return 'plan';
 }
 
+// A generated shot, one stage at a time (Nov 27 2026): worked out from what
+// it has, never stored. kindOf(fileId) says 'still' or 'video'.
+export const GEN_STAGES = [
+  { id: 'board', label: 'To board', word: 'Needs a board frame' },
+  { id: 'still', label: 'First frame to make', word: 'First frame to make' },
+  { id: 'pickstill', label: 'First frame to pick', word: 'Pictures are in, pick one' },
+  { id: 'video', label: 'Video to make', word: 'Video to make' },
+  { id: 'picktake', label: 'Take to pick', word: 'Takes are in, pick one' },
+  { id: 'done', label: 'Done', word: 'Done' }
+];
+export function genFiles(sh, kindOf) {
+  const out = { board: [], stills: [], takes: [] };
+  for (const t of sh?.fields?.tries || []) {
+    for (const id of t.files || []) {
+      if (t.kind === 'board') out.board.push(id);
+      else if (kindOf(id) === 'video') out.takes.push(id);
+      else out.stills.push(id);
+    }
+  }
+  return out;
+}
+export function genStage(sh, kindOf) {
+  const f = sh?.fields || {};
+  if (f.star?.video) return 'done';
+  const { board, stills, takes } = genFiles(sh, kindOf);
+  if (takes.length) return 'picktake';
+  if (f.star?.still) return 'video';
+  if (stills.length) return 'pickstill';
+  if (board.length || f.star?.board || (f.still || '').trim()) return 'still';
+  return 'board';
+}
+
 // Keeps the prompts as they were when renders came back, so the wording that
 // worked is never lost. Renders made with the prompts as they are now go with
 // the last try if it had the same prompts, or start a new one.
@@ -222,7 +254,8 @@ export function withRenders(fields, fileIds, by = 'me', at = Date.now()) {
   const tries = [...(fields.tries || [])];
   const cur = { still: fields.still || '', video: fields.video || '' };
   const last = tries.at(-1);
-  if (last && (last.still || '') === cur.still && (last.video || '') === cur.video) tries[tries.length - 1] = { ...last, files: [...(last.files || []), ...fileIds] };
+  // A sketch or board photo is a try of its own: renders never join it.
+  if (last && last.kind !== 'board' && (last.still || '') === cur.still && (last.video || '') === cur.video) tries[tries.length - 1] = { ...last, files: [...(last.files || []), ...fileIds] };
   else tries.push({ id: newId('tr'), at, by, ...cur, files: [...fileIds] });
   return { ...fields, tries };
 }
