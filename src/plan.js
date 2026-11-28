@@ -903,7 +903,8 @@ export class Plan {
     if (this.sel?.has(id)) row.classList.add('sel');
     if (i.occ) row.dataset.occ = i.occ;
     if (ghost) row.dataset.ghost = i.ghost;
-    if (!done && !ghost && drag) {
+    // Done ones move like open ones (Michael, Nov 27 2026); one time a repeat was done stays put.
+    if (!ghost && !i.occ && drag) {
       row.dataset.move = '1';
       if (hover.matches) row.draggable = true;
       // The six dots say it can be moved: drag it, or press and hold on a phone.
@@ -1221,15 +1222,22 @@ export class Plan {
     const list = [];
     const was = new Map();
     let theirs = 0;
+    let dayOnly = 0;
     for (const id of ids) {
       const r = await getEntry(id);
       const t = taskOf(r);
       if (!r || r.deleted) continue;
       if (t?.owner && t.owner !== 'me') { theirs += 1; continue; }
+      // A done one shows on the day it was done, so it moves from day to day only.
+      if (r.fields?.done && !when?.day) { dayOnly += 1; continue; }
       list.push(id);
       was.set(id, t);
     }
-    if (!list.length) { if (theirs) this.hooks.toast?.('That’s Nate’s task: it stays as he has it'); return []; }
+    if (!list.length) {
+      if (theirs) this.hooks.toast?.('That’s Nate’s task: it stays as he has it');
+      else if (dayOnly) { this.hooks.toast?.('A done task stays on a day: move it to another day, or untick it first'); await this.refresh(); }
+      return [];
+    }
     const snaps = (await Promise.all(list.map((id) => whenSnap(id)))).filter(Boolean);
     const made = snaps.filter((x) => !x.task).length;
     const rows = [];
@@ -1450,8 +1458,10 @@ export class Plan {
       col.append(h);
       for (const e of this.cal.filter((x) => x.day === d.iso)) col.append(this.eventLine(e, 'pw-ev'));
       const l = list(d.iso);
-      for (const i of d.open) l.append(this.chip(i));
-      for (const i of d.done) l.append(this.chip(i));
+      // Done ones sit at their place in the day's order, among the open ones.
+      const mine = d.done.filter((i) => !i.occ && i.task.day === d.iso);
+      for (const i of [...d.open, ...mine].sort(orderOf)) l.append(this.chip(i));
+      for (const i of d.done.filter((x) => !mine.includes(x))) l.append(this.chip(i));
       l.append(this.addRow(d.iso, 'Add'));
       col.append(l);
       grid.append(col);
@@ -1512,7 +1522,7 @@ export class Plan {
     b.dataset.act = 'more';
     if (i.occ) b.dataset.occ = i.occ;
     if (i.ghost) { b.dataset.ghost = i.ghost; b.title = `${repeatWord(i.task.repeat)}: it comes round on this day`; }
-    if (!done && !i.ghost) { b.dataset.move = '1'; if (hover.matches) b.draggable = true; }
+    if (!i.ghost && !i.occ) { b.dataset.move = '1'; if (hover.matches) b.draggable = true; }
     b.append(make('span', 'pw-t', lineName(i.row)));
     if (isRepeat(i.task) && !done) b.append(make('small', 'pw-rep', '↻'));
     return b;
@@ -1828,11 +1838,9 @@ export class Plan {
     const old = row.classList.contains('carried');
     const seq = [...list.querySelectorAll(old ? '.pl-task.carried[data-move]' : '.pl-task:is([data-move], .inplace):not(.carried):not(.ghost), .pl-wev')];
     const at = seq.indexOf(row);
-    // Done ones keep their places: one press steps past them to the next open task.
+    // One press, one place: done ones count as places, and move the same way.
     const dir = e.key === 'ArrowUp' ? -1 : 1;
-    let to = at + dir;
-    while (to >= 0 && to < seq.length && seq[to].classList?.contains('done')) to += dir;
-    to = Math.max(0, Math.min(seq.length - 1, to));
+    const to = Math.max(0, Math.min(seq.length - 1, at + dir));
     e.preventDefault();
     if (at < 0 || to === at) return true;
     seq.splice(to, 0, ...seq.splice(at, 1));
@@ -2007,7 +2015,7 @@ export class Plan {
       if (hq?.link && /^https:\/\//.test(hq.link)) items.push({ label: 'Open it on the Acro HQ board', run: () => window.open(hq.link, '_blank', 'noopener') });
       if (items.length) items.push('sep');
     }
-    const list = !done && anchor?.dataset?.move && anchor.closest?.('.pl-list');
+    const list = anchor?.dataset?.move && anchor.closest?.('.pl-list');
     if (list) items.push('sep', { label: 'Move to the top', run: () => this.toEnd(list, i.row.id, true) }, { label: 'Move to the bottom', run: () => this.toEnd(list, i.row.id, false) });
     items.push('sep', { label: `When…${hover.matches ? '  (Alt + W)' : ''}`, run: () => this.pickWhenFor(this.movingIds(i.row.id), { anchor, at }) }, 'sep',
       // It can come round again; one that does can be a habit, with no hours.
