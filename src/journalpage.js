@@ -149,7 +149,7 @@ export class JournalPage {
       paint(p, e.row.text || '', words);
       li.append(p);
       const kids = e.kids.filter(hasWords);
-      if (kids.length) li.append(this.tree(kids, []));
+      if (kids.length) li.append(this.tree(kids, words));
       ul.append(li);
     }
     return ul;
