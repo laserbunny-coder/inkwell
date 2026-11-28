@@ -372,7 +372,9 @@ async function start() {
   if (asked.has('tidy')) showTidy().catch((e) => console.error(e));
   // The monthly alert links to ?summaries: What Claude knows, with the weekly and monthly summaries.
   if (asked.has('summaries')) showClaudeKnows(null).catch((e) => console.error(e));
-  if (asked.get('open')) { setAsking(asked.get('open')); await openAsked(); }
+  // ?open=journal: every day's journal (journalpage.js).
+  if (asked.get('open') === 'journal') await go({ view: 'journal' });
+  else if (asked.get('open')) { setAsking(asked.get('open')); await openAsked(); }
   // A phone alert for Needs you or a note from Claude opens the Desk, where they're listed.
   if (asked.has('desk')) await go({ view: 'desk' });
   // Shared from another app (or shared earlier and not yet placed).

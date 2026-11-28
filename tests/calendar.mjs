@@ -98,9 +98,13 @@ const go = async (p, place) => {
   await still(p);
   await sleep(350);
 };
-const day = (p, d) => go(p, { view: 'notebook', pageId: `day-${d}` });
-const lines = (p, sel = '#plan .pl-ev') => p.locator(sel).evaluateAll((els) => els.map((e) => [...e.querySelectorAll('span')].map((s) => s.textContent).join(' | ')));
-const add = async (p, text) => { const input = p.locator('#plan input[data-add]').first(); await input.fill(text); await input.press('Enter'); await sleep(400); };
+// A day's List face, where its plan and events are (the Page face has no plan).
+const day = async (p, d) => {
+  await go(p, { view: 'plan', tab: 'day', day: d });
+  await p.waitForFunction((x) => document.querySelector('#plan-sheet[data-tab="day"] .zm-date input')?.value === x, d);
+};
+const lines = (p, sel = '#plan-sheet .pl-ev') => p.locator(sel).evaluateAll((els) => els.map((e) => [...e.querySelectorAll('span')].map((s) => s.textContent).join(' | ')));
+const add = async (p, text) => { const input = p.locator('#plan-sheet input[data-add]').first(); await input.fill(text); await input.press('Enter'); await sleep(400); };
 const shot = async (p, name) => { if (SHOTS) { await p.evaluate(() => document.querySelector('.toast')?.remove()); await still(p); await sleep(250); await p.screenshot({ path: `${SHOTS}/${name}.png` }); } };
 
 let failed = 0;
@@ -113,31 +117,31 @@ try {
   await day(page, '2026-11-09');
 
   await check('today’s calendar sits over the plan as faint lines: all day first, then by the clock; what’s over is fainter', async () => {
-    await page.waitForSelector('#plan .pl-ev');
+    await page.waitForSelector('#plan-sheet .pl-ev');
     assert.deepEqual(await lines(page), [
       'All day | Arrow’s birthday',
       '9:30 am | Standup with Nate | 30 min',
       '4 pm | Dentist | 1 h',
       '4:30 pm | Call with Dana | 1 h',
     ]);
-    assert.deepEqual(await page.locator('#plan .pl-ev').evaluateAll((els) => els.map((e) => e.classList.contains('past'))), [false, true, false, false]);
-    assert.match(await page.locator('#plan .pl-ev', { hasText: 'Dentist' }).getAttribute('title'), /Dentist · 4 pm to 5 pm · Michael/);
+    assert.deepEqual(await page.locator('#plan-sheet .pl-ev').evaluateAll((els) => els.map((e) => e.classList.contains('past'))), [false, true, false, false]);
+    assert.match(await page.locator('#plan-sheet .pl-ev', { hasText: 'Dentist' }).getAttribute('title'), /Dentist · 4 pm to 5 pm · Michael/);
     // It asked for this one day, midnight to midnight here.
     assert.deepEqual(page.asked[0], ['2026-11-09T08:00:00.000Z', '2026-11-10T08:00:00.000Z']);
     // Events aren't tasks: nothing to tick, nothing written.
-    assert.equal(await page.locator('#plan .pl-ev .pl-check').count(), 0);
+    assert.equal(await page.locator('#plan-sheet .pl-ev .pl-check').count(), 0);
     assert.ok(!(await all(page)).some((r) => /Dentist/.test(r.text || r.title || '')));
   });
 
   await check('another day’s page has that day’s events, and no “left today”', async () => {
     await day(page, '2026-11-10');
-    await page.waitForSelector('#plan .pl-ev');
+    await page.waitForSelector('#plan-sheet .pl-ev');
     assert.deepEqual(await lines(page), ['10 am | Shoot prep | 2 h']);
-    assert.equal(await page.locator('#plan .pl-left').count(), 0);
+    assert.equal(await page.locator('#plan-sheet .pl-left').count(), 0);
     await day(page, '2026-11-11');
     await sleep(400);
-    assert.equal(await page.locator('#plan .pl-ev').count(), 0);
-    assert.ok(await page.locator('#plan .pl-cal').isHidden());
+    assert.equal(await page.locator('#plan-sheet .pl-ev').count(), 0);
+    assert.ok(await page.locator('#plan-sheet .pl-cal').isHidden());
   });
 
   await check('Week has each day’s events on top of its tasks; one that runs for days is on each of them', async () => {
@@ -161,8 +165,8 @@ try {
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
     await day(page, '2026-11-09');
-    await page.waitForSelector('#plan .pl-ev');
-    assert.equal(await page.locator('#plan .pl-ev').count(), 4);
+    await page.waitForSelector('#plan-sheet .pl-ev');
+    assert.equal(await page.locator('#plan-sheet .pl-ev').count(), 4);
     assert.deepEqual(page.errors, []);
   });
 
@@ -171,13 +175,13 @@ try {
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
     await day(page, '2026-11-09');
-    await page.waitForFunction(() => !document.querySelector('#plan .pl-ev'));
-    assert.ok(await page.locator('#plan .pl-cal').isHidden());
+    await page.waitForFunction(() => !document.querySelector('#plan-sheet .pl-ev'));
+    assert.ok(await page.locator('#plan-sheet .pl-cal').isHidden());
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
     await day(page, '2026-11-09');
     await sleep(500);
-    assert.equal(await page.locator('#plan .pl-ev').count(), 0);
+    assert.equal(await page.locator('#plan-sheet .pl-ev').count(), 0);
     await page.evaluate(() => localStorage.removeItem('cal-mode'));
   });
 
@@ -186,8 +190,8 @@ try {
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
     await day(page, '2026-11-09');
-    await page.waitForSelector('#plan .pl-ev');
-    assert.ok(await page.locator('#plan .pl-cal').isVisible(), 'an old hidden choice brings them back');
+    await page.waitForSelector('#plan-sheet .pl-ev');
+    assert.ok(await page.locator('#plan-sheet .pl-cal').isVisible(), 'an old hidden choice brings them back');
     assert.equal(await page.locator('input[data-show="calendar"]').count(), 0);
     assert.deepEqual(page.errors, []);
   });
@@ -196,7 +200,7 @@ try {
     const phone = await open(undefined, { ...devices['Pixel 7'], todayPage: false });
     await day(phone, '2026-11-09');
     // (On a phone the day's page shows its words; the plan is the List face.)
-    await phone.waitForSelector('#plan .pl-ev', { state: 'attached' });
+    await phone.waitForSelector('#plan-sheet .pl-ev', { state: 'attached' });
     const wide = await phone.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     assert.ok(wide <= 1, `the page spills ${wide}`);
     await shot(phone, 'calendar-phone');

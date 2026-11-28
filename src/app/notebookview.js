@@ -97,6 +97,17 @@ function lineMenu(eid) {
   };
   const on = (fn) => () => { if (here()) fn(); };
   const zoom = { label: 'Zoom in', run: () => { zoomLine(ed.view, eid); ed.commands.focus(); } };
+  // A day's Journal line (journal.js): only Fold, All journals and Zoom in.
+  if (node.attrs.journal) {
+    return {
+      title: 'Journal',
+      sections: [[
+        { label: folded ? 'Unfold' : 'Fold', run: () => { ed.view.dispatch(ed.state.tr.setMeta(foldKey, { fold: eid, on: !folded })); } },
+        { label: 'All journals', run: () => openEntry('journal') },
+        zoom
+      ]]
+    };
+  }
   const fold = kids && { label: folded ? `Unfold the ${lines(under)} under it` : `Fold the ${lines(under)} under it`, keys: folded ? '⌘↓' : '⌘↑', run: () => { ed.view.dispatch(ed.state.tr.setMeta(foldKey, { fold: eid, on: !folded })); ed.commands.focus(); } };
   return {
     title: `Line${under ? ` · ${lines(under)} under it` : ''}`,
@@ -208,6 +219,7 @@ function wireNotebook() {
     },
     onTaskChip: (eid, el) => (el?.dataset.train ? amountsMenu(eid, el, { wrote: (rows) => applyRemote(rows).then(() => notebook.redrawMarks()) }) : plan?.chipMenu(eid, el)),
     onTasks: () => plan?.soon(),
+    onJournals: () => openEntry('journal'),
     onChange: () => { clearTimeout(railTimer); railTimer = setTimeout(renderRail, 100); },
     // A mirror edited a paragraph of the chapter that's open behind the notebook.
     onSources: (rows) => { if (rows.some((r) => r.parent_id === state.chapterId)) applyRemoteChapter(); },

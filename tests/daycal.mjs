@@ -48,11 +48,11 @@ const go = async (p, place) => {
   await still(p);
   await sleep(350);
 };
-const add = async (p, text, at = '#plan') => { const input = p.locator(`${at} input[data-add]`).first(); await input.fill(text); await input.press('Enter'); await sleep(400); };
+const add = async (p, text, at = '#plan-sheet') => { const input = p.locator(`${at} input[data-add]`).first(); await input.fill(text); await input.press('Enter'); await sleep(400); };
 const blk = (p, text) => p.locator('#plan-sheet .dc-blk', { hasText: text });
 const chip = (p, text) => p.locator('#plan-sheet .dc-chip', { hasText: text });
 const chips = (p) => p.locator('#plan-sheet .dc-chip').allInnerTexts();
-const words = (p) => p.locator('#plan .pl-task:not(.done) .pl-words').allInnerTexts();
+const words = (p) => p.locator('#plan-sheet .pl-task:not(.done) .pl-words').allInnerTexts();
 // Where on the screen a time of day is, on the grid.
 const yOf = async (p, min) => p.evaluate(([m, px]) => { const g = document.querySelector('#plan-sheet .dc-grid'); return g.getBoundingClientRect().top + (m - Number(g.dataset.from)) * px; }, [min, PX]);
 // Bring a time on the hours to the middle of the screen (on a slow machine it can sit below the fold).
@@ -86,7 +86,7 @@ try {
   });
   await page.reload();
   await page.waitForFunction(() => document.documentElement.dataset.started === '1');
-  await go(page, { view: 'notebook', pageId: `day-${TODAY}` });
+  await go(page, { view: 'plan', tab: 'day', day: TODAY });
   await add(page, 'Cut the trailer');
   await add(page, 'Email Dana the boards');
   await add(page, 'Print the call sheet');
@@ -95,7 +95,7 @@ try {
   const order = ['Back up the drives', ...(await words(page))];
 
   await check('Calendar’s Day shows the day by the hour, with nothing placed yet', async () => {
-    assert.equal(await page.locator('#plan .pl-view').count(), 0, 'no List | Calendar inside the plan any more');
+    assert.equal(await page.locator('#plan-sheet .pl-view').count(), 0, 'no List | Calendar inside the plan any more');
     await go(page, { view: 'plan', tab: 'calday' });
     await page.waitForSelector('#plan-sheet .dc-grid');
     // What has no time yet waits behind one button.
@@ -188,13 +188,13 @@ try {
   });
 
   await check('the calendar never reorders the list, and the list never moves a block', async () => {
-    await go(page, { view: 'notebook', pageId: `day-${TODAY}` });
-    await page.waitForSelector('#plan .pl-list');
+    await go(page, { view: 'plan', tab: 'day', day: TODAY });
+    await page.waitForSelector('#plan-sheet .pl-list');
     assert.deepEqual(await words(page), [...order.slice(1), 'Call the print shop']);
-    assert.equal(await page.locator('#plan .pl-task .pl-est:visible').count(), 0, 'no times on the list');
-    await page.locator('#plan .pl-task', { hasText: 'Print the call sheet' }).locator('.pl-words').focus();
+    assert.equal(await page.locator('#plan-sheet .pl-task .pl-est:visible').count(), 0, 'no times on the list');
+    await page.locator('#plan-sheet .pl-task', { hasText: 'Print the call sheet' }).locator('.pl-words').focus();
     await page.keyboard.press('Alt+ArrowUp');
-    await page.waitForFunction(() => document.querySelectorAll('#plan .pl-task .pl-words')[1]?.textContent === 'Print the call sheet' || document.querySelectorAll('#plan .pl-task .pl-words')[2]?.textContent === 'Print the call sheet');
+    await page.waitForFunction(() => document.querySelectorAll('#plan-sheet .pl-task .pl-words')[1]?.textContent === 'Print the call sheet' || document.querySelectorAll('#plan-sheet .pl-task .pl-words')[2]?.textContent === 'Print the call sheet');
     await sleep(300);
     assert.deepEqual(await placedAt(page, 'Print the call sheet'), { day: TODAY, at: 19 * 60 });
     await go(page, { view: 'plan', tab: 'calday' });

@@ -130,7 +130,7 @@ function roomTags() {
   if (v === 'plan') return tabFor(lastPlace?.tab) === 'now' ? ['today', 'plan'] : ['plan', 'when', 'day'].includes(tabFor(lastPlace?.tab)) ? ['plan'] : ['calendar'];
   if (inNotebook() && notebook.page) return notebook.isDay ? ['today'] : ['page'];
   if (v === 'desk') return ['desk'];
-  if (['library', 'drawer', 'tags'].includes(v)) return ['library'];
+  if (['library', 'drawer', 'tags', 'journal'].includes(v)) return ['library'];
   if (writing()) return isScript() ? ['script', 'write'] : ['write'];
   if (['world', 'project', 'grid', 'production', 'deliver', 'stage'].includes(v)) return ['world'];
   return [];

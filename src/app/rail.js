@@ -320,6 +320,8 @@ async function drawCrumb() {
     // The book you're writing in is a switcher: it lists every world and piece.
     if (same) parts.pop();
     parts.push(bookPart(state.project), link(ch?.title || '', () => {}, 'here'));
+  } else if (view() === 'journal') {
+    parts.push(lib, link('Journal', () => {}, 'here'));
   } else if (view() === 'tags') {
     const at = tagsPage?.place || {};
     parts.push(lib, link('Tags', () => go({ view: 'tags' }), at.tag ? '' : 'here'));

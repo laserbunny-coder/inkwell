@@ -131,7 +131,32 @@ export async function linkedFrom(id) {
 export async function byTag(tag) {
   const db = await open();
   const rows = await result(db.transaction('entries').objectStore('entries').index('tags').getAll(tag));
-  return rows.filter(live);
+  if (tag !== 'journal') return rows.filter(live);
+  // Lines under a day's Journal line count as #journal without the tag
+  // being typed (Nov 28 2026); the typed ones (older voice journals) too.
+  const seen = new Set();
+  return [...(await journalLines()), ...rows].filter((r) => live(r) && !seen.has(r.id) && seen.add(r.id));
+}
+
+// Every day's Journal line (rows jr-YYYY-MM-DD), live ones only.
+export async function journalHeads() {
+  const db = await open();
+  const rows = await result(db.transaction('entries').objectStore('entries').getAll(IDBKeyRange.bound('jr-', 'jr-\uffff')));
+  return rows.filter((r) => live(r) && r.kind === 'line' && r.fields?.journal);
+}
+
+// The lines written under the Journal lines, at any depth (#journal by place).
+export async function journalLines(heads) {
+  const out = [];
+  const walk = async (pid) => {
+    for (const r of await children(pid)) {
+      if (r.kind !== 'line') continue;
+      out.push(r);
+      await walk(r.id);
+    }
+  };
+  for (const h of heads || await journalHeads()) await walk(h.id);
+  return out;
 }
 
 // The most used tags, most first. Counts from the tags index's keys alone
@@ -151,6 +176,9 @@ export async function topTags(limit = 30) {
       c.continue();
     };
   });
+  // #journal counts the lines under every day's Journal line too.
+  const implied = (await journalLines()).length;
+  if (implied) counts.set('journal', (counts.get('journal') || 0) + implied);
   const ranked = [...counts].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]))).map(([t]) => t);
   const hasLive = (tag) => new Promise((resolve, reject) => {
     const req = db.transaction('entries').objectStore('entries').index('tags').openCursor(tag);
@@ -165,13 +193,14 @@ export async function topTags(limit = 30) {
   const out = [];
   for (const t of ranked) {
     if (out.length >= limit) break;
-    if (await hasLive(t)) out.push(t);
+    if ((t === 'journal' && implied) || await hasLive(t)) out.push(t);
   }
   return out;
 }
 
 // Every (tag, entry) pair, one entry per tag it carries.
 export async function eachTagged(fn) {
+  for (const r of await journalLines()) if (!r.tags?.includes('journal')) fn('journal', r);
   const db = await open();
   await new Promise((resolve, reject) => {
     const req = db.transaction('entries').objectStore('entries').index('tags').openCursor();

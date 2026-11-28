@@ -143,6 +143,7 @@ html.zoom body.typing.in-piece.peek-top .topbar, html.zoom.has-rail body.typing.
   html.zoom .topbar > :is(.zm-np, .zm-go, .zm-shots, .zm-aa, .zm-more) { order: 3; }
   html.zoom body.kb-up .topbar { opacity: 0 !important; pointer-events: none; }
   html.zoom body:not(.looking) :is(.notebook, .page) { padding-top: calc(var(--topbar-h, 44px) + 18px); }
+  html.zoom body .plan-home:has(> #plan-sheet[data-tab="day"]), html.zoom body .plan-home:has(> #plan-sheet[data-tab="calday"]) { padding-top: calc(var(--topbar-h, 44px) + 18px); }
 }
 
 /* ---------- the motion of a zoom ---------- */

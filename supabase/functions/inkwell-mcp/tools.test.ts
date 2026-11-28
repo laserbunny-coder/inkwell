@@ -559,4 +559,35 @@ assert.ok((await call("add_look", { element: "pg-mom", results: ["https://cdn.ge
 const tl2: any = await handle({ jsonrpc: "2.0", id: 0, method: "tools/list" }, db);
 for (const t of ["production", "update_shot", "add_try", "star", "prices", "update_prices", "looks", "add_look", "pick_look"]) assert.ok(tl2.result.tools.some((x: any) => x.name === t), t);
 
+// The Journal line (Nov 28 2026): first in read, its lines count as #journal.
+rows.push(
+  e("day-2026-11-27", "day", null, { title: "2026-11-27" }),
+  e("li-n1", "line", "day-2026-11-27", { text: "Saved a link about lenses", sort: 1 }),
+  e("jr-2026-11-27", "line", "day-2026-11-27", { text: "Journal", sort: 5, fields: { journal: true } }),
+  e("li-j1", "line", "jr-2026-11-27", { text: "Quiet morning, long walk", created_at: T("2026-11-27T16:00:00Z") }),
+  e("li-j2", "line", "li-j1", { text: "Thought about the reel", created_at: T("2026-11-27T16:05:00Z") }),
+  e("li-old", "line", "day-2026-10-27", { text: "Old voice journal #journal", tags: ["journal"] }),
+);
+const jday = await call("read", { id: "2026-11-27" });
+assert.equal(jday.lines[0].text, "Journal", "the Journal line comes first");
+assert.equal(jday.lines[0].journal, true);
+assert.equal(jday.lines[0].lines[0].text, "Quiet morning, long walk");
+const js = await call("search", { tag: "journal", limit: 10 });
+const jt = js.results.map((r: any) => r.text);
+assert.ok(jt.includes("Quiet morning, long walk") && jt.includes("Thought about the reel"), jt.join(" | "));
+assert.ok(jt.includes("Old voice journal #journal"), "typed #journal lines too");
+assert.ok(!jt.includes("Journal"), "not the Journal line itself");
+assert.ok(!jt.includes("Saved a link about lenses"));
+const jtags = await call("tags");
+assert.equal(jtags.tags.find((t: any) => t.tag === "#journal").count, 3);
+assert.ok((await call("rename_line", { line_id: "jr-2026-11-27", text: "Diary" })).error, "the Journal line can't be renamed");
+assert.ok((await call("delete_line", { line_id: "jr-2026-11-27" })).error, "or deleted");
+const ja = await call("add_lines", { to: "2026-11-26", under: "journal", lines: ["Wrote this for him"] });
+assert.equal(ja.added, 1);
+const jmade = rows.find((r) => r.id === "jr-2026-11-26")!;
+assert.equal(jmade.fields.journal, true);
+assert.equal(jmade.parent_id, "day-2026-11-26");
+assert.equal(rows.find((r) => r.text === "Wrote this for him")!.parent_id, "jr-2026-11-26");
+assert.ok((await call("add_lines", { to: "pg-kenji", under: "journal", lines: ["x"] })).error, "only on a daily page");
+
 console.log("inkwell-mcp tools: all checks passed");

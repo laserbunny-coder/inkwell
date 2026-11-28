@@ -198,11 +198,11 @@ try {
   });
 
   await check('a loose task is on no day’s plan: today’s page shows only today’s and the carried-over one', async () => {
-    await go(page, { view: 'notebook', pageId: 'day-2026-11-13' });
-    await page.waitForSelector('#plan .pl-task');
-    const words = await page.locator('#plan .pl-task .pl-words').allInnerTexts();
+    await go(page, { view: 'plan', tab: 'day', day: '2026-11-13' });
+    await page.waitForSelector('#plan-sheet .pl-task');
+    const words = await page.locator('#plan-sheet .pl-task .pl-words').allInnerTexts();
     assert.deepEqual(words, ['Write Kenji’s verse']);
-    assert.match(await page.locator('#plan .pl-early-n').innerText(), /^1 left from earlier days/, 'the carried-over one, on its quiet line');
+    assert.match(await page.locator('#plan-sheet .pl-early-n').innerText(), /^1 left from earlier days/, 'the carried-over one, on its quiet line');
   });
 
   await check('Week: one press and one drag puts a project step on a day; the tray is “Any day this week”', async () => {

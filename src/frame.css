@@ -60,7 +60,7 @@
 }
 /* The warm night looks: soft words, a brighter title, links underlined so they never rely on colour,
    and "needs you" as a gold dot with a soft glow (orange is the everyday accent here). */
-:root:is([data-look="ember"], [data-look="candle"], [data-look="night"]) :is(#nb-title, #wh-title, #ph-title, .lib-head h1, .st-title, .tg-head h1, .tags-home h1, .rail-brand) { color: var(--title-ink); }
+:root:is([data-look="ember"], [data-look="candle"], [data-look="night"]) :is(#nb-title, .zm-title, #wh-title, #ph-title, .lib-head h1, .st-title, .tg-head h1, .tags-home h1, .rail-brand) { color: var(--title-ink); }
 :root:is([data-look="ember"], [data-look="candle"], [data-look="night"]) .dk-sig { box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 24%, transparent); }
 :root[data-look="graphite"] {
   color-scheme: dark;
@@ -91,10 +91,10 @@ html, body { -webkit-font-smoothing: antialiased; }
 ::selection { background: color-mix(in srgb, var(--accent) 26%, transparent); }
 
 /* Titles of places wear the look's title face. */
-:is(#nb-title, #wh-title, #ph-title, .lib-head h1, .st-title, .tg-head h1, .tags-home h1) {
+:is(#nb-title, .zm-title, #wh-title, #ph-title, .lib-head h1, .st-title, .tg-head h1, .tags-home h1) {
   font-family: var(--title); font-weight: var(--title-w); letter-spacing: var(--title-ls);
 }
-:root:is([data-look="midnight"], [data-look="paper"]) :is(#nb-title, #wh-title, #ph-title, .lib-head h1, .tags-home h1) { font-size: 44px; line-height: 1.08; }
+:root:is([data-look="midnight"], [data-look="paper"]) :is(#nb-title, .zm-title, #wh-title, #ph-title, .lib-head h1, .tags-home h1) { font-size: 44px; line-height: 1.08; }
 :root:is([data-look="midnight"], [data-look="paper"]) .st-title { font-size: 36px; line-height: 1.1; }
 
 /* ---------- The rail: the rooms, as words ---------- */
@@ -257,7 +257,7 @@ html, body { -webkit-font-smoothing: antialiased; }
   html.has-rail .lib-jumps { display: none; }
 }
 @media (--narrow) {
-  :root:is([data-look="midnight"], [data-look="paper"]) :is(#nb-title, #wh-title, #ph-title, .lib-head h1, .tags-home h1) { font-size: 34px; }
+  :root:is([data-look="midnight"], [data-look="paper"]) :is(#nb-title, .zm-title, #wh-title, #ph-title, .lib-head h1, .tags-home h1) { font-size: 34px; }
   :root:is([data-look="midnight"], [data-look="paper"]) .st-title { font-size: 30px; }
 }
 /* A ticked box pops and settles. */

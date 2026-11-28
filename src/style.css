@@ -477,15 +477,15 @@ button.wv-mk:hover { background: var(--tint); }
 }
 
 /* Views: the manuscript (default), the notebook, the library and a book's home */
-.notebook, .library, .project-home, .world-home, .tags-home, .desk-home, .plan-home, .grid-view, .prod-view, .compare-view, .stage-view { display: none; }
+.notebook, .library, .project-home, .world-home, .journal-home, .tags-home, .desk-home, .plan-home, .grid-view, .prod-view, .compare-view, .stage-view { display: none; }
 :root[data-view] .page { display: none; }
 :root[data-view] .when-write { display: none; }
-:root[data-view="notebook"] .notebook, :root[data-view="library"] .library, :root[data-view="project"] .project-home, :root[data-view="world"] .world-home, :root[data-view="tags"] .tags-home, :root[data-view="desk"] .desk-home, :root[data-view="plan"] .plan-home, :root[data-view="grid"] .grid-view, :root[data-view="production"] .prod-view, :root[data-view="deliver"] .prod-view, :root[data-view="compare"] .compare-view, :root[data-view="stage"] .stage-view, :root[data-view="drawer"] .stage-view { display: flex; }
+:root[data-view="notebook"] .notebook, :root[data-view="library"] .library, :root[data-view="project"] .project-home, :root[data-view="world"] .world-home, :root[data-view="tags"] .tags-home, :root[data-view="journal"] .journal-home, :root[data-view="desk"] .desk-home, :root[data-view="plan"] .plan-home, :root[data-view="grid"] .grid-view, :root[data-view="production"] .prod-view, :root[data-view="deliver"] .prod-view, :root[data-view="compare"] .compare-view, :root[data-view="stage"] .stage-view, :root[data-view="drawer"] .stage-view { display: flex; }
 
 .notebook { justify-content: center; padding: 72px 32px 40vh; }
 .nb-sheet { width: 100%; max-width: var(--page-width, 660px); }
 .nb-head { display: flex; align-items: center; gap: 2px; margin: 4px 0 18px; }
-#nb-title { font-family: var(--prose); font-weight: 500; font-size: calc(var(--text-size, 21px) * 1.45); line-height: 1.25; margin: 0; outline: none; min-width: 4ch; }
+#nb-title, .zm-title { font-family: var(--prose); font-weight: 500; font-size: calc(var(--text-size, 21px) * 1.45); line-height: 1.25; margin: 0; outline: none; min-width: 4ch; }
 #nb-title[contenteditable="true"]:empty::before { content: 'Untitled page'; color: var(--faint); }
 .nb-head .ghost-btn { font-size: 16px; padding: 6px 10px; opacity: .5; }
 .nb-head:hover .ghost-btn, .nb-head .ghost-btn:focus { opacity: 1; }
@@ -637,7 +637,7 @@ button.tree-area:hover { color: var(--ink); }
 .dot { width: 8px; height: 8px; border-radius: 2px; flex: none; display: inline-block; }
 
 /* Library and a book's home */
-.library, .project-home, .world-home, .tags-home, .desk-home, .plan-home { justify-content: center; padding: 72px 32px 20vh; }
+.library, .project-home, .world-home, .tags-home, .journal-home, .desk-home, .plan-home { justify-content: center; padding: 72px 32px 20vh; }
 .lib-sheet { width: 100%; max-width: 1000px; }
 .lib-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
 .lib-head h1, .ph-head h1 { font-family: var(--prose); font-weight: 500; font-size: 38px; margin: 0; flex: 1; outline: none; }
@@ -720,7 +720,7 @@ button.tree-area:hover { color: var(--ink); }
 .past-more { height: 1px; }
 
 @media (max-width: 760px) {
-  .library, .project-home, .world-home, .tags-home, .desk-home, .plan-home { padding: 48px 18px 20vh; }
+  .library, .project-home, .world-home, .tags-home, .journal-home, .desk-home, .plan-home { padding: 48px 18px 20vh; }
   .ph-grid { grid-template-columns: 1fr; }
   .chips, .chip-row { align-items: flex-start; justify-content: flex-start; }
   #lib-path { text-align: left; }
@@ -1847,12 +1847,12 @@ body.looking .topbar:hover, body.looking .topbar:focus-within, body.show-top .to
   .topbar { padding: 8px 10px; }
   .topbar.has-tabs .crumb { flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
   .topbar.has-tabs .crumb::-webkit-scrollbar { display: none; }
-  body.looking:not(.typing) :is(.library, .project-home, .world-home, .tags-home, .desk-home, .plan-home, .grid-view, .prod-view, .stage-view, .compare-view) { padding-top: max(28px, calc(var(--topbar-h, 48px) + 24px)); }
+  body.looking:not(.typing) :is(.library, .project-home, .world-home, .tags-home, .journal-home, .desk-home, .plan-home, .grid-view, .prod-view, .stage-view, .compare-view) { padding-top: max(28px, calc(var(--topbar-h, 48px) + 24px)); }
 }
 /* On a computer the faint bar stays on the pages you look at, so they start below it. */
 @media (--wide) {
   /* Not tied to typing, so the page doesn't jump when a box gets or loses the caret. */
-  body.looking :is(.library, .project-home, .world-home, .tags-home, .desk-home, .plan-home, .grid-view, .prod-view, .stage-view, .compare-view) { padding-top: max(104px, calc(var(--topbar-h, 88px) + 20px)); }
+  body.looking :is(.library, .project-home, .world-home, .tags-home, .journal-home, .desk-home, .plan-home, .grid-view, .prod-view, .stage-view, .compare-view) { padding-top: max(104px, calc(var(--topbar-h, 88px) + 20px)); }
 }
 
 /* ---------- The Today panel ---------- */
@@ -2538,3 +2538,45 @@ html.touring .preview-strip { display: none; }
   .pd-run-frame { width: 84px; }
   .pd-run-row { gap: 8px; padding: 8px 0; }
 }
+
+/* ---------- The Journal line at the top of every day page (journal.js) ---------- */
+#outline-editor li.journal > p { position: relative; font-weight: 500; color: var(--title-ink, var(--ink)); padding-right: 9.5em; }
+#outline-editor li.journal > .line-gutter .fold { display: none; }
+#outline-editor .jr-tail { position: absolute; right: 0; top: 0; height: 1.6em; display: flex; align-items: center; gap: 10px; font: 12.5px var(--ui); font-weight: 400; user-select: none; }
+#outline-editor .jr-count { color: var(--faint); }
+#outline-editor .jr-tail button { border: 0; background: none; padding: 2px 0; color: var(--faint); font: inherit; cursor: pointer; }
+#outline-editor .jr-all { opacity: 0; transition: opacity .15s; }
+#outline-editor li.journal > p:hover .jr-all, #outline-editor .jr-all:focus-visible { opacity: 1; }
+#outline-editor .jr-tail button:hover { color: var(--accent); }
+#outline-editor .jr-fold { width: 22px; text-align: center; }
+#outline-editor .jr-fold::after { content: ''; display: inline-block; border: 4px solid transparent; border-top: 6px solid currentColor; border-bottom: 0; transition: transform .15s; }
+#outline-editor li.journal.folded .jr-fold::after { transform: rotate(-90deg); }
+#outline-editor li.zoom-root.journal > p .jr-tail { display: none; }
+#outline-editor p.jr-write { position: relative; }
+#outline-editor p.jr-write::before { content: attr(data-ph); position: absolute; left: 0; top: 0; color: var(--faint); pointer-events: none; }
+@media (--touch) {
+  #outline-editor .jr-all { opacity: .75; }
+  #outline-editor .jr-tail { gap: 12px; }
+  #outline-editor .jr-fold { width: 30px; }
+}
+@media (prefers-reduced-motion: reduce) { #outline-editor .jr-all, #outline-editor .jr-fold::after { transition: none; } }
+
+/* ---------- All journals (journalpage.js) ---------- */
+.jp-sheet { max-width: var(--page-width, 660px); }
+.jp-title { font-family: var(--title); font-weight: var(--title-w); letter-spacing: var(--title-ls); color: var(--title-ink, var(--ink)); font-size: 38px; line-height: 1.1; margin: 4px 0 0; }
+.jp-find { margin: 18px 0 20px; }
+.jp-find input { width: 100%; box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; color: var(--ink); font: 15px var(--ui); }
+.jp-find input::placeholder { color: var(--faint); }
+.jp-day { padding: 14px 0 16px; border-top: 1px solid var(--line); }
+.jp-day h3 { margin: 0 0 6px; font: 500 13px var(--ui); color: var(--muted); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.jp-open { border: 0; background: none; padding: 4px 0; color: var(--faint); font: 12.5px var(--ui); cursor: pointer; white-space: nowrap; }
+.jp-open:hover { color: var(--accent); }
+.jp-lines { list-style: none; margin: 0; padding: 0; }
+.jp-lines .jp-lines { padding-left: 1.2em; border-left: 1px solid var(--line); margin-left: .2em; }
+.jp-e { font-family: var(--title); font-size: 18px; line-height: 1.55; color: var(--title-ink, var(--ink)); margin: 0 0 6px; overflow-wrap: anywhere; }
+.jp-lines .jp-lines .jp-e { font-size: 16.5px; color: var(--ink); }
+.jp-e mark { background: var(--tint); color: var(--accent); border-radius: 3px; }
+.jp-none { color: var(--faint); padding: 20px 0; }
+.jp-more { border: 0; background: none; color: var(--muted); font: 13px var(--ui); padding: 14px 0; cursor: pointer; }
+.jp-more:hover { color: var(--accent); }
+@media (--narrow) { .jp-title { font-size: 30px; } .jp-e { font-size: 17px; } }

@@ -290,6 +290,7 @@ async function renderZoomLibrary(allAreas, allBooks) {
   const jump = (label, run, title = '') => { const b = make('button', 'zl-chip', label); b.type = 'button'; if (title) b.title = title; b.addEventListener('click', run); achips.append(b); };
   jump('Drawer', () => go({ view: 'drawer' }), 'Sparks and ideas not in a project yet');
   jump('Daily pages', () => go({ view: 'notebook', pageId: `day-${isoToday()}` }), 'Today’s page; the days before it are a step back');
+  jump('Journal', () => go({ view: 'journal' }), 'Every day’s journal, newest first');
   jump('Tags', () => go({ view: 'tags' }));
   const trash = $('#lib-trash-box');
   if (!trash.hidden) jump('Trash', () => { trash.open = true; trash.scrollIntoView({ block: 'start', behavior: 'smooth' }); });

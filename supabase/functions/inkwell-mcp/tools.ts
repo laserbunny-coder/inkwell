@@ -120,6 +120,7 @@ export const INSTRUCTIONS = `Inkwell is this person's own writing app and notebo
 - Prose and scripts are written in chapters of paragraphs. In a script each paragraph has an element: scene (heading), action, character, paren, dialogue or transition. Scenes may carry a production scene number such as 3 or 3A; those never change.
 - Pages, daily pages and outline pieces are written as nested lines. There is one daily page per day (read it with read and a date, YYYY-MM-DD, or "today").
 - Lines and paragraphs can carry #tags and [[links]] to pages by their title.
+- Every daily page starts with a fixed line, Journal (journal: true in read). The lines under it are the person's journal for that day and count as #journal without the tag (search with tag journal finds them, and the older typed #journal lines). The Journal line itself never changes. Write in the journal (add_lines with under: "journal") only when the person asks you to.
 - Inkwell is also the person's second brain: captures, voice notes, links, ideas and research pile up over years. To find things, start with map (a short overview: every world and page with a one-line about, the daily pages, the tags in use, and weekly and monthly summaries of what was written). Then narrow down with search (by words, tag, place, date), tags and links, and open things with read. Don't read everything; follow the map. list_worlds gives the full tree when you need every id.
 - Weekly and monthly summaries (in map, opened with read) are the quickest way into what the person was thinking about at a time; each points back to the lines it came from.
 - One-line abouts are your own notes on what a world, piece, page or chapter is, so that the map says more than a title. The person doesn't need to see them and won't be shown them unless they look. When you've read something whose about is missing (map lists some under needs_about) or no longer fits, write one with set_about: one plain, factual line on what it is and holds, in under 25 words, not an opinion. Don't mention abouts in your reply unless asked.
@@ -225,6 +226,7 @@ export const TOOLS: Record<string, unknown>[] = [
       properties: {
         to: str("A page or outline piece id, or a date (YYYY-MM-DD) or \"today\" for the daily page."),
         under_line_id: str("Nest the new lines under this line, after any lines already under it."),
+        under: { type: "string", enum: ["journal"], description: "\"journal\": add them under the daily page's Journal line (its journal), only when the person asks you to write in their journal. Needs to as a date." },
         lines: LINES,
       },
     },
@@ -852,7 +854,45 @@ class Shape {
 
 // ---------- reading ----------
 
-type Line = { id: string; text: string; by?: string; done?: boolean; lines?: Line[] };
+type Line = { id: string; text: string; by?: string; done?: boolean; journal?: boolean; lines?: Line[] };
+
+// ---------- the Journal line (Nov 28 2026) ----------
+// Every daily page starts with a fixed line, "Journal" (row jr-YYYY-MM-DD,
+// fields.journal). The lines under it count as #journal without the tag
+// being typed. The line itself is never renamed, moved, ticked or deleted.
+const JOURNAL = "journal";
+const journalOf = (date: string) => `jr-${date}`;
+function fixedJournal(r: Entry) {
+  if (r.fields?.journal) throw new Bad("That's the daily page's Journal line, which stays as it is. Its lines (under it) can be changed.");
+}
+/** The daily pages' Journal lines (only those on these dates, if given), newest day first. */
+async function journalHeads(db: Db, dates?: string[]): Promise<Entry[]> {
+  const days = dates ?? (await db.rollup()).map((x) => x.home).filter((h) => h.startsWith("day-")).map((h) => h.slice(4));
+  if (!days.length) return [];
+  const heads = await db.get(days.map(journalOf));
+  return heads.filter((h) => !gone(h) && h.kind === "line" && h.fields?.journal).sort((a, b) => (a.id < b.id ? 1 : -1));
+}
+/** Every live line under these, at any depth. */
+async function linesBelow(db: Db, ids: string[]): Promise<Entry[]> {
+  const out: Entry[] = [];
+  let level = ids;
+  for (let depth = 0; level.length && depth < 40; depth++) {
+    const rows = (await db.kids(level)).filter((r) => r.kind === "line" && !gone(r));
+    out.push(...rows);
+    level = rows.map((r) => r.id);
+  }
+  return out;
+}
+/** A day's Journal row, made (not saved) if it isn't there yet. */
+async function journalRow(db: Db, date: string): Promise<{ row: Entry; made: boolean }> {
+  const [was] = await db.get([journalOf(date)]);
+  if (was && !gone(was)) return { row: was, made: false };
+  if (was) throw new Bad("That day's Journal line is in the Trash; bring it back in the app first.");
+  const first = (await db.kids([`day-${date}`])).filter((r) => r.kind === "line" && !gone(r)).sort(bySort)[0];
+  return { row: row("line", { id: journalOf(date), parent_id: `day-${date}`, sort: (first?.sort ?? GAP) - GAP, text: "Journal", content: [{ type: "text", text: "Journal" }], fields: { done: false, journal: true } }), made: true };
+}
+/** A day's lines with its Journal line first. */
+const journalFirst = (lines: Line[]) => [...lines.filter((l) => l.journal), ...lines.filter((l) => !l.journal)];
 
 async function linesUnder(db: Db, rootId: string): Promise<Line[]> {
   const out: Line[] = [];
@@ -862,7 +902,7 @@ async function linesUnder(db: Db, rootId: string): Promise<Line[]> {
     const rows = (await db.kids(level)).filter((r) => r.kind === "line" && !gone(r)).sort(bySort);
     const next: string[] = [];
     for (const r of rows) {
-      const line: Line = { id: r.id, text: r.text || "", ...(who(r) ? { by: who(r) } : {}), ...(r.fields?.done ? { done: true } : {}) };
+      const line: Line = { id: r.id, text: r.text || "", ...(r.fields?.journal ? { journal: true } : {}), ...(who(r) ? { by: who(r) } : {}), ...(r.fields?.done ? { done: true } : {}) };
       const list = byParent.get(r.parent_id!)!;
       list.push(line);
       line.lines = [];
@@ -897,7 +937,7 @@ async function read(args: Record<string, unknown>, db: Db) {
   if (date) {
     const id = `day-${date}`;
     const [day] = await db.get([id]);
-    return { daily_page: date, id, lines: day && !gone(day) ? await linesUnder(db, id) : [] };
+    return { daily_page: date, id, lines: day && !gone(day) ? journalFirst(await linesUnder(db, id)) : [] };
   }
   const r = await one(db, args.id);
   if (r.kind === "digest") return readDigest(r);
@@ -912,7 +952,8 @@ async function read(args: Record<string, unknown>, db: Db) {
   }
   if (r.kind === "page" || r.kind === "day") {
     const inside = shape.pageTree(r.id);
-    return { page: r.title, id: r.id, ...about, where: shape.where(r), lines: await linesUnder(db, r.id), ...(inside.length ? { pages_inside: inside } : {}) };
+    const lines = await linesUnder(db, r.id);
+    return { page: r.title, id: r.id, ...about, where: shape.where(r), lines: r.kind === "day" ? journalFirst(lines) : lines, ...(inside.length ? { pages_inside: inside } : {}) };
   }
   if (r.kind === "chapter") {
     const piece = shape.byId.get(shape.byId.get(r.parent_id ?? "")?.parent_id ?? "");
@@ -1101,11 +1142,25 @@ async function search(args: Record<string, unknown>, db: Db) {
   if (!query && !tag && !under && !kinds && !sinceDay && !untilDay) throw new Bad("Give some words to find, or a filter (tag, in, kinds, since, until).");
   const newest = args.newest === true || args.newest === "true";
   const limit = intArg(args.limit, "limit", 1, 50, 20);
-  const hits = await db.find({
-    query, kinds, tag, under, newest, limit,
-    since: sinceDay ? dayStart(sinceDay, tz) : null,
-    until: untilDay ? dayStart(nextDay(untilDay), tz) : null,
-  });
+  const since = sinceDay ? dayStart(sinceDay, tz) : null;
+  const until = untilDay ? dayStart(nextDay(untilDay), tz) : null;
+  let hits = await db.find({ query, kinds, tag, under, newest, limit, since, until });
+  // #journal: the lines under each day's Journal line count too, newest day first.
+  if (tag === JOURNAL && hits.length < limit && (!kinds || kinds.includes("line"))) {
+    const [inside] = under ? await db.get([under]) : [];
+    const onDay = inside?.kind === "day" ? inside.id.slice(4) : inside?.fields?.journal ? inside.id.slice(3) : null;
+    if (!under || onDay) {
+      const seen = new Set(hits.map((h) => h.id));
+      for (const h of await journalHeads(db, onDay ? [onDay] : undefined)) {
+        const d = h.id.slice(3);
+        if ((sinceDay && d < sinceDay) || (untilDay && d > untilDay)) continue;
+        if (hits.length >= limit) break;
+        const got = await db.find({ query, kinds: kinds ?? ["line"], tag: null, under: h.id, newest, limit: limit - hits.length + 1, since, until });
+        for (const g of got) if (g.id !== h.id && !seen.has(g.id) && hits.length < limit) { seen.add(g.id); hits.push(g); }
+      }
+      if (newest) hits = hits.sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+    }
+  }
   const shape = await shapeWithAbouts(db);
   const where = await placer(db, shape, hits);
   return {
@@ -1118,6 +1173,18 @@ async function tags(args: Record<string, unknown>, db: Db) {
   let under: Entry | null = null;
   if (typeof args.in === "string" && args.in.trim()) under = await one(db, args.in.trim(), "in");
   const list = await db.tags(under?.id ?? null);
+  // #journal counts the lines under the daily pages' Journal lines too.
+  const onDay = !under ? undefined : under.kind === "day" ? [under.id.slice(4)] : under.fields?.journal ? [under.id.slice(3)] : null;
+  if (onDay !== null) {
+    const heads = await journalHeads(db, onDay);
+    const lines = (await linesBelow(db, heads.map((h) => h.id))).filter((r) => !r.tags?.includes(JOURNAL));
+    if (lines.length) {
+      const last = lines.reduce((m, r) => (String(r.updated_at ?? "") > m ? String(r.updated_at) : m), "");
+      const j = list.find((t) => t.tag === JOURNAL);
+      if (j) { j.n += lines.length; if (last > j.last) j.last = last; } else list.push({ tag: JOURNAL, n: lines.length, last });
+      list.sort((a, b) => b.n - a.n);
+    }
+  }
   const tz = await db.timeZone();
   return {
     ...(under ? { in: under.title || under.id } : {}),
@@ -1319,7 +1386,14 @@ async function addLines(args: Record<string, unknown>, db: Db) {
     name = shape.where(target) || target.title;
   }
   let parentId = target.id;
-  if (args.under_line_id !== undefined && args.under_line_id !== null && args.under_line_id !== "") {
+  // Into the day's journal, only when the person asks for that.
+  if (args.under === JOURNAL || args.under_line_id === JOURNAL) {
+    if (!date) throw new Bad("under: \"journal\" needs to be a daily page: give to as a date (YYYY-MM-DD) or \"today\".");
+    const j = await journalRow(db, date);
+    if (j.made) rows.push(j.row);
+    parentId = j.row.id;
+    name = `the journal on ${name}`;
+  } else if (args.under_line_id !== undefined && args.under_line_id !== null && args.under_line_id !== "") {
     const under = await one(db, args.under_line_id, "under_line_id");
     if (under.kind !== "line") throw new Bad("under_line_id must be a line (ids come from read).");
     // It has to be on the page we're adding to.
@@ -1456,6 +1530,7 @@ async function changeRow(db: Db, r: Entry, patch: Partial<Pick<Entry, "parent_id
 
 async function markDone(args: Record<string, unknown>, db: Db) {
   const r = await one(db, args.line_id, "line_id");
+  fixedJournal(r);
   if (r.kind !== "line") throw new Bad("line_id must be a line on a page or daily page (ids come from read or search).");
   const done = boolArg(args.done, true);
   const was = !!r.fields?.done;
@@ -1514,6 +1589,7 @@ async function lineHome(db: Db, to: unknown, underLine: unknown): Promise<{ targ
 
 async function moveLine(args: Record<string, unknown>, db: Db) {
   const r = await one(db, args.line_id, "line_id");
+  fixedJournal(r);
   if (r.kind !== "line") throw new Bad("line_id must be a line (ids come from read or search). Paragraphs in a chapter can't be moved this way.");
   const { make, parentId, name } = await lineHome(db, args.to, args.under_line_id);
   // Never into itself or anything under it.
@@ -1546,6 +1622,7 @@ async function under(db: Db, id: string): Promise<Entry[]> {
 
 async function deleteLine(args: Record<string, unknown>, db: Db) {
   const r = await one(db, args.line_id, "line_id");
+  fixedJournal(r);
   if (r.kind !== "line") throw new Bad("line_id must be a task or a line on a page or daily page (ids come from list_tasks, read or search).");
   const t = taskOf(r.fields);
   if (t && !mine(t)) throw new Bad(`That's ${t.owner}'s task: it stays theirs (on the Acro HQ board if it's there).`);
@@ -1565,6 +1642,7 @@ async function deleteLine(args: Record<string, unknown>, db: Db) {
 
 async function renameLine(args: Record<string, unknown>, db: Db) {
   const r = await one(db, args.line_id, "line_id");
+  fixedJournal(r);
   if (r.kind !== "line") throw new Bad("line_id must be a task or a line on a page or daily page (ids come from list_tasks, read or search).");
   const text = textArg(args.text, "text", 2000).replace(/\s*\n+\s*/g, " ").trim();
   if (!text) throw new Bad("text can't be empty (to remove a line, use delete_line).");
