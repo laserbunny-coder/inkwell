@@ -59,18 +59,25 @@ const pick = async (p, label) => {
   } else await p.locator('.pop-menu .pop-item', { hasText: label }).first().click();
   await sleep(300);
 };
-const words = (p, root = '#plan') => p.locator(`${root} .pl-task .pl-words`).allTextContents();
+const words = (p, root = '#plan-sheet') => p.locator(`${root} .pl-task .pl-words`).allTextContents();
 // Only the ones still to do (a done one stays at its place among them).
-const todo = (p, root = '#plan') => p.locator(`${root} .pl-task:not(.done) .pl-words`).allTextContents();
-const row = (p, text) => p.locator('#plan .pl-task', { hasText: text });
-// Today's page (the day's Page face).
+const todo = (p, root = '#plan-sheet') => p.locator(`${root} .pl-task:not(.done) .pl-words`).allTextContents();
+const row = (p, text) => p.locator('#plan-sheet .pl-task', { hasText: text });
+// Today's list (the day's List face), where the plan is (Nov 28 2026: the
+// Page face has no plan block any more).
 const today = async (p) => {
+  await zoomTo(p, 'Today');
+  await still(p);
+  await sleep(300);
+};
+// Today's page (the day's Page face): the lines, no plan.
+const dayPage = async (p) => {
   await p.evaluate(() => { const d = new Date(); const day = `day-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; history.pushState({ view: 'notebook', pageId: day }, ''); dispatchEvent(new PopStateEvent('popstate', { state: { view: 'notebook', pageId: day } })); });
   await p.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && /^day-/.test(history.state?.pageId || ''));
   await still(p);
   await sleep(300);
 };
-const add = async (p, text, box = '#plan input[data-add]') => {
+const add = async (p, text, box = '#plan-sheet input[data-add]') => {
   const input = p.locator(box).first();
   await input.fill(text);
   await input.press('Enter');
@@ -86,16 +93,20 @@ try {
   const page = await open({ width: 1440, height: 900 });
   await today(page);
 
-  await check('a day’s page has its plan on top', async () => {
-    assert.ok(await page.locator('#plan').isVisible());
-    assert.equal(await page.locator('#plan .pl-label').innerText(), 'PLAN');
-    assert.equal(await page.locator('#plan input[data-add]').getAttribute('placeholder'), 'Add a task');
+  await check('a day’s List has the plan; its Page has none', async () => {
+    await dayPage(page);
+    assert.equal(await page.locator('#plan .pl-task, #plan input[data-add]').count(), 0, 'no plan block on the Page face');
+    assert.ok(await page.locator('#plan').isHidden());
+    await today(page);
+    assert.ok(await page.locator('#plan-sheet').isVisible());
+    assert.equal(await page.locator('#plan-sheet .pl-label').innerText(), 'PLAN');
+    assert.equal(await page.locator('#plan-sheet input[data-add]').getAttribute('placeholder'), 'Add a task');
   });
 
   await check('a task typed into the plan lands on today, on the Tasks page', async () => {
     // The very same box stays (a phone keyboard closes if the focused box is swapped for a new one).
-    await page.evaluate(() => { document.querySelector('#plan input[data-add]').__kept = true; });
-    assert.equal(await page.locator('#plan input[data-add]').getAttribute('enterkeyhint'), 'enter', 'a phone keyboard shows Enter, not Done');
+    await page.evaluate(() => { document.querySelector('#plan-sheet input[data-add]').__kept = true; });
+    assert.equal(await page.locator('#plan-sheet input[data-add]').getAttribute('enterkeyhint'), 'enter', 'a phone keyboard shows Enter, not Done');
     await add(page, 'Call Dana about the storyboards 30m');
     await add(page, 'Board Reel 2 1h 30m');
     await add(page, 'Order the storage drive');
@@ -115,7 +126,7 @@ try {
   await check('ticking a task just ticks it; unticking brings it back', async () => {
     await row(page, 'Call Dana').locator('.pl-check').click();
     await sleep(350);
-    assert.equal(await page.locator('#plan .pl-took').count(), 0, 'no “how long did it take?”');
+    assert.equal(await page.locator('#plan-sheet .pl-took').count(), 0, 'no “how long did it take?”');
     assert.ok((await taskNamed(page, 'Call Dana about the storyboards')).fields.task.done_at > 0);
     assert.deepEqual(await words(page), ['Call Dana about the storyboards', 'Board Reel 2', 'Order the storage drive'], 'done stays where it was');
     await row(page, 'Call Dana').locator('.pl-check').click();
@@ -129,15 +140,16 @@ try {
   });
 
   await check('Ctrl + Shift + Enter makes any line a task where it’s written, with a quiet label after its words', async () => {
+    await dayPage(page);
+    // The page starts with its Journal line: write beside it, not under it.
     await page.locator('#outline-editor').click();
     await page.keyboard.type('Email the storyboard notes');
+    await page.keyboard.press('Shift+Tab');
     await page.keyboard.press('Control+Shift+Enter');
     await sleep(600);
     const li = page.locator('#outline-editor li', { hasText: 'Email the storyboard notes' });
     assert.equal(await li.locator('.task-chip').innerText(), 'Today');
     assert.equal(await li.locator('.line-box').count(), 1, 'it has a box to tick');
-    assert.ok((await words(page)).includes('Email the storyboard notes'), 'and it’s on the plan');
-    assert.equal(await row(page, 'Email the storyboard notes').locator('.pl-place').count(), 0, 'no “where” for a line on this very page');
     const t = await taskNamed(page, 'Email the storyboard notes');
     assert.equal(t.parent_id, 'day-2026-11-09', 'it stays where it was written');
     assert.equal(t.fields.task.day, '2026-11-09');
@@ -145,24 +157,29 @@ try {
     await page.keyboard.type(' to Dana');
     await sleep(700);
     assert.equal((await taskNamed(page, 'Email the storyboard notes to Dana')).fields.task.day, '2026-11-09');
-    assert.ok((await words(page)).includes('Email the storyboard notes to Dana'));
+    await today(page);
+    assert.ok((await words(page)).includes('Email the storyboard notes to Dana'), 'and it’s on the plan');
+    assert.equal(await row(page, 'Email the storyboard notes').locator('.pl-place').count(), 0, 'no “where” for a line on today’s own page');
   });
 
   await check('ticking its box on the page ticks it on the plan, and the other way round', async () => {
+    await dayPage(page);
     const li = page.locator('#outline-editor li', { hasText: 'Email the storyboard notes to Dana' });
     await li.locator('.line-box').click();
     await sleep(800);
-    assert.ok(await row(page, 'Email the storyboard notes').evaluate((el) => el.classList.contains('done')));
     let t = await taskNamed(page, 'Email the storyboard notes to Dana');
     assert.equal(t.fields.done, true);
     assert.ok(t.fields.task.done_at > 0, 'done on the page says when, too');
     assert.equal(await li.locator('.task-chip').innerText(), 'Done');
+    await today(page);
+    assert.ok(await row(page, 'Email the storyboard notes').evaluate((el) => el.classList.contains('done')));
     await row(page, 'Email the storyboard notes').locator('.pl-check').click();
     await sleep(800);
-    assert.equal(await li.locator('.line-box').getAttribute('aria-checked'), 'false');
-    assert.equal(await li.locator('.task-chip').innerText(), 'Today');
     t = await taskNamed(page, 'Email the storyboard notes to Dana');
     assert.equal(t.fields.done, false);
+    await dayPage(page);
+    assert.equal(await li.locator('.line-box').getAttribute('aria-checked'), 'false');
+    assert.equal(await li.locator('.task-chip').innerText(), 'Today');
   });
 
   await check('the label on the page opens the same menu: Tomorrow takes it off today’s plan', async () => {
@@ -172,13 +189,14 @@ try {
     await pick(page, 'Tomorrow');
     await sleep(400);
     assert.equal(await li.locator('.task-chip').innerText(), 'Tomorrow');
-    assert.ok(!(await words(page)).includes('Email the storyboard notes to Dana'));
     assert.equal((await taskNamed(page, 'Email the storyboard notes to Dana')).fields.task.day, '2026-11-10');
+    await today(page);
+    assert.ok(!(await words(page)).includes('Email the storyboard notes to Dana'));
   });
 
   await check('a click on a task’s words changes them in place', async () => {
     await row(page, 'Order the storage drive').locator('.pl-words').click();
-    const input = page.locator('#plan .pl-rename');
+    const input = page.locator('#plan-sheet .pl-rename');
     await input.fill('Order the 8 TB storage drive');
     await input.press('Enter');
     await sleep(400);
@@ -207,7 +225,7 @@ try {
     const before = await words(page);
     const at = before.indexOf('Order the 8 TB storage drive');
     await page.keyboard.press('Alt+ArrowUp');
-    await page.waitForFunction((n) => [...document.querySelectorAll('#plan .pl-task .pl-words')].map((x) => x.textContent)[n] === 'Order the 8 TB storage drive', at - 1);
+    await page.waitForFunction((n) => [...document.querySelectorAll('#plan-sheet .pl-task .pl-words')].map((x) => x.textContent)[n] === 'Order the 8 TB storage drive', at - 1);
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Order the 8 TB storage drive', 'the keyboard stays on it');
     for (let k = at - 1; k > 0; k -= 1) { await page.keyboard.press('Alt+ArrowUp'); await sleep(350); }
     assert.equal((await words(page))[0], 'Order the 8 TB storage drive', 'to the very top');
@@ -215,25 +233,25 @@ try {
     await sleep(300);
     assert.equal((await words(page))[0], 'Order the 8 TB storage drive', 'and no further');
     for (let k = 0; k < at; k += 1) { await page.keyboard.press('Alt+ArrowDown'); await sleep(350); }
-    await page.waitForFunction(() => document.querySelector('#plan .pl-task:not(.done) .pl-words')?.textContent === 'Board Reel 2');
+    await page.waitForFunction(() => document.querySelector('#plan-sheet .pl-task:not(.done) .pl-words')?.textContent === 'Board Reel 2');
     assert.equal((await taskNamed(page, 'Board Reel 2')).fields.task.order < (await taskNamed(page, 'Order the 8 TB storage drive')).fields.task.order, true, 'the order is saved');
   });
 
-  await check('a click on a task zooms into it (Now), Alt + Left goes back out to the day’s page, Ctrl + click opens it beside', async () => {
+  await check('a click on a task zooms into it (Now), Alt + Left goes back out to the day’s list, Ctrl + click opens it beside', async () => {
     // Today as an outline (Nov 25 2026): a click on the words takes the cursor, a double-click zooms in.
     await row(page, 'Order the 8 TB').locator('.pl-words').dblclick();
     await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && /Order the 8 TB/.test((window.__plan.items || []).find((i) => i.row.id === history.state?.zoom)?.row.text || ''));
     assert.equal(await page.locator('.pane-frame').count(), 0, 'nothing opened beside');
     await page.evaluate(() => document.activeElement?.blur());
     await page.keyboard.press('Alt+ArrowLeft');
-    // Out to the day: the face he came from (here, the day's page).
-    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook' && document.querySelectorAll('#plan .pl-task').length >= 2);
+    // Out to the day: the face he came from (here, the day's list).
+    await page.waitForFunction(() => document.querySelectorAll('#plan-sheet .pl-task').length >= 2);
     await row(page, 'Order the 8 TB').locator('.pl-words').click({ modifiers: ['Control'] });
     await page.waitForFunction(() => {
       const d = [...document.querySelectorAll('.pane-frame')].at(-1)?.contentDocument;
       return d?.documentElement?.dataset.started === '1' && /Order the 8 TB/.test(d.querySelector('#outline-editor li.zoom-root')?.textContent || '');
     }, null, { timeout: 15000 });
-    assert.equal(await page.evaluate(() => !!document.querySelector('#outline-editor li.zoom-root')), false, 'the main view stays on the day');
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.view === 'plan' && document.querySelector('#plan-sheet')?.dataset.tab), 'day', 'the main view stays on the day');
     await page.evaluate(() => window.__panes.closeAll());
     await page.waitForFunction(() => !document.querySelector('.pane'));
   });
@@ -257,11 +275,11 @@ try {
     await pick(page, 'Open it where it’s written');
     await page.waitForFunction(() => document.querySelector('#nb-title')?.textContent === 'Tasks');
     await sleep(400);
-    assert.ok(await page.locator('#plan').isHidden());
+    assert.ok(await page.locator('#plan-sheet').isHidden());
     const li = page.locator('#outline-editor li', { hasText: 'Board Reel 2' });
     assert.equal(await li.locator('.task-chip').innerText(), 'Today');
     await today(page);
-    assert.ok(await page.locator('#plan').isVisible());
+    assert.ok(await page.locator('#plan-sheet').isVisible());
   });
 
   await check('Week: seven days from Monday, today’s tasks under today', async () => {
@@ -360,23 +378,24 @@ try {
     await page.clock.setFixedTime(new Date('2026-11-10T08:30:00-08:00'));
     await today(page);
     await sleep(600);
-    assert.match(await page.locator('#nb-title').innerText(), /Tuesday, November 10/);
+    assert.match(await page.locator('#plan-sheet .zm-title').innerText(), /Tuesday, November 10/);
     const list = await words(page);
     // What's left from yesterday waits on one quiet line on top; a click on ▸ shows it.
     assert.deepEqual(list, ['Email the storyboard notes to Dana']);
-    assert.match(await page.locator('#plan .pl-early-n').innerText(), /^1 left from earlier days/);
-    await page.locator('#plan .pl-early-tri').click();
-    await page.waitForFunction(() => [...document.querySelectorAll('#plan .pl-task.carried .pl-words')].some((w) => w.textContent === 'Headlamp for Arrow'));
-    await page.locator('#plan .pl-early-tri').click();
+    assert.match(await page.locator('#plan-sheet .pl-early-n').innerText(), /^1 left from earlier days/);
+    await page.locator('#plan-sheet .pl-early-tri').click();
+    await page.waitForFunction(() => [...document.querySelectorAll('#plan-sheet .pl-task.carried .pl-words')].some((w) => w.textContent === 'Headlamp for Arrow'));
+    await page.locator('#plan-sheet .pl-early-tri').click();
     // Yesterday's page still shows what was done that day.
-    await page.locator('#nb-prev').click();
+    await page.locator('#plan-sheet [data-act="day-prev"]').click();
     await sleep(600);
-    assert.deepEqual(await page.locator('#plan .pl-task.done .pl-words').allTextContents(), ['Call Dana about the storyboards']);
+    assert.deepEqual(await page.locator('#plan-sheet .pl-task.done .pl-words').allTextContents(), ['Call Dana about the storyboards']);
     await page.clock.setFixedTime(new Date(NOW));
     await today(page);
   });
 
   await check('“Not a task any more” leaves a plain line where it was', async () => {
+    await dayPage(page);
     await page.locator('#outline-editor li', { hasText: 'Email the storyboard notes to Dana' }).locator('.task-chip').click();
     await sleep(250);
     await pick(page, 'Not a task any more');
@@ -396,9 +415,15 @@ try {
     await page.keyboard.type('Water the ferns');
     await page.keyboard.press('Control+Shift+Enter');
     await sleep(600);
+    assert.ok(await taskNamed(page, 'Water the ferns'));
+    await today(page);
     assert.ok((await words(page)).includes('Water the ferns'));
+    await dayPage(page);
+    await page.locator('#outline-editor li p', { hasText: 'Water the ferns' }).click();
     await page.keyboard.press('Control+Shift+Backspace');
     await sleep(900);
+    assert.equal(await taskNamed(page, 'Water the ferns'), undefined);
+    await today(page);
     assert.ok(!(await words(page)).includes('Water the ferns'));
   });
 
@@ -445,7 +470,7 @@ try {
     for (const look of ['lamplight', 'ember', 'candle', 'night', 'graphite', 'typewriter', 'paper', 'midnight']) {
       await page.evaluate((l) => document.querySelector(`.look-opt[data-look="${l}"]`).click(), look);
       await sleep(150);
-      const c = await page.evaluate(() => { const s = getComputedStyle(document.querySelector('#plan .pl-words')); return [s.color, getComputedStyle(document.body).backgroundColor]; });
+      const c = await page.evaluate(() => { const s = getComputedStyle(document.querySelector('#plan-sheet .pl-words')); return [s.color, getComputedStyle(document.body).backgroundColor]; });
       assert.notEqual(c[0], c[1], look);
     }
     assert.deepEqual(page.errors, []);

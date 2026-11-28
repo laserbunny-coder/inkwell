@@ -113,8 +113,6 @@ export class Plan {
     this.phoneSw = make('nav', 'tp-switch');
     this.phoneSw.hidden = true;
     box.before(this.phoneSw);
-    // The plan beside the page needs a wide window: crossing 1100 px moves it.
-    matchMedia('(min-width: 1100px)').addEventListener('change', () => { if (this.dayShown) this.redraw(); });
     this.now = new Now(this);
     this.zpick = new Pick(this);
     this.shelf = new Shelf(this);
@@ -123,7 +121,9 @@ export class Plan {
 
   item(id) { return this.items.find((i) => i.row.id === id) || null; }
   get today() { return isoOf(); }
-  get dayShown() { return !!this.day && this.hooks.view() === 'notebook'; }
+  // The day's page never shows the plan (Nov 28 2026, his note): List is the
+  // day's tasks, Page is the journal and what was saved through the day.
+  get dayShown() { return false; }
   get pageShown() { return this.hooks.view() === 'plan'; }
   get stepsShown() { return !!this.world && !!this.steps && this.hooks.view() === 'world'; }
 
@@ -138,11 +138,9 @@ export class Plan {
   async showDay(page) {
     this.day = page?.kind === 'day' ? page.title : null;
     this.took = this.just = null;
-    this.box.hidden = !this.day;
+    this.box.hidden = true;
+    this.box.replaceChildren();
     this.phoneShow(!!this.day && !hover.matches);
-    this.dock();
-    if (this.day) await this.refresh();
-    else this.box.replaceChildren();
   }
 
   // A project's page calls this when it opens: its own tasks, wherever in
@@ -204,20 +202,8 @@ export class Plan {
     this.tickClock();
   }
 
-  // On a computer, at 1100 px and wider, the plan can sit in its own column
-  // beside the day's page (Alt + P flips it back on top, as on a phone).
-  dock() {
-    const main = this.box.closest('.notebook') || this.phoneSw.closest('.notebook');
-    if (!main) return;
-    const side = this.dayShown && hover.matches && this.hooks.layout?.() === 'side';
-    if (side && this.box.parentElement !== main) main.append(this.box);
-    else if (!side && this.box.parentElement === main) this.phoneSw.after(this.box);
-    main.classList.toggle('plan-side', side);
-  }
-
   redraw() {
     if (this.renaming) return;
-    this.dock();
     if (this.dayShown) this.drawDay();
     if (this.stepsShown) this.drawSteps();
     if (this.pageShown) {
@@ -337,32 +323,44 @@ export class Plan {
     }
     return row;
   }
-  // The top of a day's list or hours: its date and name, the arrows to the
-  // days on either side (Shift + Left and Right), and its faces. Today's also
-  // has the two ends of the day.
+  // The top of a day's list or hours: the same head as the day's page (Nov 28
+  // 2026, his note: "as long as the controls are the same place up top"),
+  // so List, Page and Hours switch without anything moving: "Today" (or
+  // "Daily page") over the date, the arrows to the days on either side
+  // (Shift + Left and Right) at the right, and the faces under the title.
+  // Today's list then has the two ends of the day, below the faces.
   zoomTop(face = 'day') {
     const day = this.dayAt || this.today;
     const isToday = day === this.today;
-    const head = make('header', face === 'day' ? 'pl-top zm-today-top' : 'pl-top');
-    const left = make('div');
-    const word = isToday ? 'Today' : day === addDays(this.today, 1) ? 'Tomorrow' : day === addDays(this.today, -1) ? 'Yesterday' : long(day, { weekday: 'long' });
-    left.append(make('div', 'pl-eyebrow', long(day, { weekday: 'long', month: 'long', day: 'numeric' })), make('h1', '', word));
+    const head = make('header', 'zm-head zm-today-top');
+    head.append(make('div', 'panel-label zm-kind', isToday ? 'Today' : 'Daily page'));
+    const row = make('div', 'nb-head zm-headrow');
+    const title = make('h1', 'zm-title', isTouch() ? long(day, { weekday: 'short', month: 'short', day: 'numeric' }) : long(day, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }));
+    if (isTouch()) title.title = long(day, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    const btn = (act, label, aria) => { const b = make('button', 'ghost-btn', label); b.type = 'button'; b.dataset.act = act; b.setAttribute('aria-label', aria); b.title = aria; return b; };
+    const date = make('label', 'ghost-btn nb-date zm-date');
+    date.setAttribute('aria-label', 'Go to a date');
+    date.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><input type="date">';
+    // The picker opens on the day shown.
+    date.querySelector('input').value = day;
+    date.querySelector('input').addEventListener('change', (e) => {
+      const to = e.target.value;
+      if (to) zoomTo({ place: to === this.today ? { view: 'plan', tab: face } : { view: 'plan', tab: face, day: to }, way: to < day ? 'prev' : 'next' });
+    });
+    row.append(title, make('span', 'spacer'), btn('day-prev', '‹', 'The day before (Shift + Left)'));
+    if (!isToday) row.append(btn('day-today', 'Today', 'Back to today'));
+    row.append(btn('day-next', '›', 'The day after (Shift + Right)'), date);
+    const faces = make('nav', 'tp-switch');
+    faces.append(this.facesRow(face, day));
+    head.append(row, faces);
     if (isToday && face === 'day') {
-      // The two ends of the day live here now (and in Ctrl + K).
+      // The two ends of the day live here (and in Ctrl + K), under the faces.
       const ends = make('div', 'zm-ends');
       const n = this.now;
       if (n.morning({ dp: dayPlan(this.items || [], this.today, this.today) })) ends.append(n.btn('talkday', 'Talk the day through', 'link', 'T'));
       if (n.evening()) ends.append(n.btn('closeday', 'Close the day', 'link', 'C'));
-      if (ends.childElementCount) left.append(ends);
+      if (ends.childElementCount) head.append(ends);
     }
-    const nav = make('div', 'pl-nav zm-daynav');
-    const btn = (act, label, aria) => { const b = make('button', 'ghost-btn', label); b.type = 'button'; b.dataset.act = act; b.setAttribute('aria-label', aria); b.title = aria; return b; };
-    nav.append(btn('day-prev', '‹', 'The day before (Shift + Left)'));
-    if (!isToday) nav.append(btn('day-today', 'Today', 'Back to today'));
-    nav.append(btn('day-next', '›', 'The day after (Shift + Right)'));
-    const side = make('div', 'zm-dayside');
-    side.append(nav, this.facesRow(face, day));
-    head.append(left, side);
     return head;
   }
   // Into a day from the Week (the zoom): today is the Today stop; another day
@@ -558,14 +556,6 @@ export class Plan {
     if (p.todo.length) said.push(`${p.todo.length} to do`);
     if (p.done.length) said.push(`${p.done.length} done`);
     head.append(make('span', 'pl-sum', said.join(' · ')));
-    // On a computer the plan sits beside the page or on top of it: one click flips it.
-    const flip = this.hooks.layout && box === this.box && hover.matches ? this.hooks.layout() : null;
-    if (flip) {
-      const b = make('button', 'ghost-btn pl-flip', flip === 'side' ? '⤒ On top' : '⇥ To the side');
-      b.dataset.act = 'flip';
-      b.title = flip === 'side' ? 'The plan on top of the page, in one column (Alt + P)' : 'The plan in a column beside the page (Alt + P)';
-      head.append(b);
-    }
     const { list, typing } = this.dayListIn(box, day, bits);
     // Today: "Tomorrow and later" folded under the day (open, Tomorrow and This week
     // take a dropped task to push it out), then the rest of the plan as one.
@@ -1583,7 +1573,6 @@ export class Plan {
     if (act === 'early-fold') { this.earlyOpen = !this.earlyOpen; return this.redraw(); }
     if (act === 'early-today') return this.bringToday();
     if (act === 'early-more') return this.earlyMenu(el);
-    if (act === 'flip') return this.hooks.flip?.();
     if (act === 'free') return this.askFree();
     if (act === 'dayend') return this.askDayEnd();
     if (act === 'area-target') return this.askTarget(el.closest('[data-area]').dataset.area);

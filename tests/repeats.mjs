@@ -71,11 +71,16 @@ const go = async (p, place) => {
   await still(p);
   await sleep(350);
 };
-const day = (p, d) => go(p, { view: 'notebook', pageId: `day-${d}` });
+// A day's List face, where its plan is; its Page face has the lines.
+const day = async (p, d) => {
+  await go(p, { view: 'plan', tab: 'day', day: d });
+  await p.waitForFunction((x) => document.querySelector('#plan-sheet[data-tab="day"] .zm-date input')?.value === x, d);
+};
+const dayPage = (p, d) => go(p, { view: 'notebook', pageId: `day-${d}` });
 const pick = async (p, label) => { await p.locator('.pop-menu .pop-item', { hasText: label }).first().click(); await sleep(300); };
-const words = (p, sel = '#plan .pl-task') => p.locator(`${sel} .pl-words`).allInnerTexts();
-const row = (p, text, more = '') => p.locator(`#plan .pl-task${more}`, { hasText: text });
-const add = async (p, text, box = '#plan input[data-add]') => {
+const words = (p, sel = '#plan-sheet .pl-task') => p.locator(`${sel} .pl-words`).allInnerTexts();
+const row = (p, text, more = '') => p.locator(`#plan-sheet .pl-task${more}`, { hasText: text });
+const add = async (p, text, box = '#plan-sheet input[data-add]') => {
   const input = p.locator(box).first();
   await input.fill(text);
   await input.press('Enter');
@@ -92,7 +97,7 @@ async function check(name, fn) {
 try {
   const page = await open({ width: 1440, height: 900 });
   await day(page, '2026-11-09');
-  await page.waitForSelector('#plan .pl-task');
+  await page.waitForSelector('#plan-sheet .pl-task');
 
   await check('a task that repeats says so with a quiet ↻, and a habit says it is one', async () => {
     assert.deepEqual(await words(page), ['Morning pages', 'Review the week']);
@@ -167,7 +172,7 @@ try {
   await check('ticking a habit asks nothing; the run grows', async () => {
     await row(page, 'Morning pages').locator('.pl-check').click();
     await sleep(400);
-    assert.equal(await page.locator('#plan .pl-took').count(), 0);
+    assert.equal(await page.locator('#plan-sheet .pl-took').count(), 0);
     const t = await T(page, 'Morning pages');
     assert.deepEqual([t.day, t.did.length, t.did.at(-1)[0]], ['2026-11-10', 21, '2026-11-09']);
     await row(page, 'Morning pages').locator('.pl-words').click();
@@ -197,16 +202,16 @@ try {
     await sleep(400);
     t = await T(page, 'Board Reel 2');
     assert.deepEqual([t.repeat.days, t.day], [[2, 4], '2026-11-10'], 'it starts on the first of those days');
-    assert.ok(!(await words(page, '#plan .pl-task:not(.done)')).includes('Board Reel 2'));
+    assert.ok(!(await words(page, '#plan-sheet .pl-task:not(.done)')).includes('Board Reel 2'));
     await day(page, '2026-11-10');
-    await page.waitForSelector('#plan .pl-task');
+    await page.waitForSelector('#plan-sheet .pl-task');
     await menu(page, 'Board Reel 2');
     assert.ok(await page.locator('.pop-menu .pop-item', { hasText: 'Tuesday and Thursday' }).count());
     await pick(page, 'Skip this one');
     t = await T(page, 'Board Reel 2');
     assert.deepEqual([t.day, t.did || []], ['2026-11-12', []]);
     await day(page, '2026-11-12');
-    await page.waitForSelector('#plan .pl-task');
+    await page.waitForSelector('#plan-sheet .pl-task');
     await menu(page, 'Board Reel 2');
     await pick(page, 'A habit');
     assert.equal((await T(page, 'Board Reel 2')).habit, true);
@@ -244,8 +249,8 @@ try {
 
   await check('on a later day’s page it’s there, fainter, and can’t be ticked before its day', async () => {
     await day(page, '2026-11-11');
-    await page.waitForSelector('#plan .pl-task');
-    assert.deepEqual((await words(page, '#plan .pl-task.ghost')).sort(), ['Morning pages', 'Run', 'Standup', 'Stretch']);
+    await page.waitForSelector('#plan-sheet .pl-task');
+    assert.deepEqual((await words(page, '#plan-sheet .pl-task.ghost')).sort(), ['Morning pages', 'Run', 'Standup', 'Stretch']);
     await row(page, 'Standup').locator('.pl-check').click({ force: true });
     assert.match(await page.locator('.toast').innerText(), /comes round on Wednesday/);
     assert.deepEqual([(await T(page, 'Standup')).day, (await T(page, 'Standup')).did || []], ['2026-11-09', []]);
@@ -254,7 +259,7 @@ try {
   await check('the next morning a daily one is simply today’s; a missed weekly one lapses and waits for its next day', async () => {
     await page.clock.setFixedTime(new Date('2026-11-10T08:30:00-08:00'));
     await day(page, '2026-11-10');
-    await page.waitForSelector('#plan .pl-task');
+    await page.waitForSelector('#plan-sheet .pl-task');
     await sleep(300);
     assert.ok(await row(page, 'Stretch').evaluate((el) => !el.classList.contains('carried') && !el.classList.contains('ghost')));
     assert.ok(await row(page, 'Morning pages').evaluate((el) => !el.classList.contains('carried') && !el.classList.contains('ghost')));
@@ -270,16 +275,17 @@ try {
     assert.deepEqual([t.day, t.did.map((d) => d[0])], ['2026-11-11', ['2026-11-10']]);
     // Run (Monday, Wednesday, Friday) is Wednesday's, the weekly one next Monday's.
     await day(page, '2026-11-11');
-    await page.waitForSelector('#plan .pl-task');
+    await page.waitForSelector('#plan-sheet .pl-task');
     assert.ok(await row(page, 'Run').evaluate((el) => !el.classList.contains('carried')));
     await day(page, '2026-11-16');
-    await page.waitForSelector('#plan .pl-task');
+    await page.waitForSelector('#plan-sheet .pl-task');
     assert.equal(await row(page, 'Review the week').count(), 1);
     await day(page, '2026-11-10');
-    await page.waitForSelector('#plan .pl-task');
+    await page.waitForSelector('#plan-sheet .pl-task');
   });
 
   await check('ticked in its words on a page, it moves on just the same', async () => {
+    await dayPage(page, '2026-11-10');
     await page.locator('#outline-editor').click();
     await page.keyboard.type('Check the render queue');
     await page.keyboard.press('Control+Shift+Enter');
@@ -295,6 +301,7 @@ try {
     assert.equal(await li.locator('.line-box').getAttribute('aria-checked'), 'false');
     const r = await named(page, 'Check the render queue');
     assert.deepEqual([r.fields.done, r.fields.task.day, r.fields.task.did.map((d) => d[0])], [false, '2026-11-11', ['2026-11-10']]);
+    await day(page, '2026-11-10');
     assert.ok(await row(page, 'Check the render queue').evaluate((el) => el.classList.contains('done')), 'and today’s plan shows it done');
     assert.deepEqual(page.errors, []);
   });

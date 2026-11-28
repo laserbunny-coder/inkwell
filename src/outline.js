@@ -140,7 +140,14 @@ export const LineIds = Extension.create({
           renderHTML: (a) => (a.mirror ? { 'data-mirror': '' } : {})
         },
         // What it has gathered so far, so a line you delete stays gone.
-        gathered: { default: null, keepOnSplit: false, parseHTML: () => null, renderHTML: () => ({}) }
+        gathered: { default: null, keepOnSplit: false, parseHTML: () => null, renderHTML: () => ({}) },
+        // A day page's Journal line (journal.js): the fixed first line.
+        journal: {
+          default: false,
+          keepOnSplit: false,
+          parseHTML: (el) => el.hasAttribute('data-journal'),
+          renderHTML: (a) => (a.journal ? { 'data-journal': '' } : {})
+        }
       }
     }];
   },
@@ -427,8 +434,19 @@ function landZoomSpot(view, spot) {
 export const foldKey = new PluginKey('fold');
 const gutterKey = new PluginKey('lineGutter');
 const FOLDED = 'folded';
-const loadFolded = () => { try { return new Set(JSON.parse(localStorage.getItem(FOLDED) || '[]')); } catch { return new Set(); } };
-const saveFolded = (set) => { try { localStorage.setItem(FOLDED, JSON.stringify([...set].slice(-2000))); } catch {} };
+// Every day's Journal line folds together (one setting per device, Nov 28
+// 2026): its fold is one flag, not a line's id in the list.
+const JFOLD = 'journalFolded';
+const isJournal = (eid) => typeof eid === 'string' && eid.startsWith('jr-');
+export const journalFolded = () => { try { return localStorage.getItem(JFOLD) === '1'; } catch { return false; } };
+class FoldSet extends Set {
+  has(eid) { return isJournal(eid) ? journalFolded() : super.has(eid); }
+  add(eid) { if (isJournal(eid)) { try { localStorage.setItem(JFOLD, '1'); } catch { /* no storage */ } return this; } return super.add(eid); }
+  delete(eid) { if (isJournal(eid)) { try { localStorage.setItem(JFOLD, '0'); } catch { /* no storage */ } return true; } return super.delete(eid); }
+  get size() { return super.size + (journalFolded() ? 1 : 0); }
+}
+const loadFolded = () => { try { return new FoldSet(JSON.parse(localStorage.getItem(FOLDED) || '[]')); } catch { return new FoldSet(); } };
+const saveFolded = (set) => { try { localStorage.setItem(FOLDED, JSON.stringify([...set].filter((e) => !isJournal(e)).slice(-2000))); } catch {} };
 const kidsOf = (li) => (li.lastChild?.type.name === 'bulletList' ? li.lastChild : null);
 // Folds a line away on this device, in any page that's open too (a voice
 // capture lands with the lines under it folded, so a long ramble stays one line).
@@ -582,6 +600,8 @@ const STAY = 6; // px of cushion past a line's middle before the drop moves on
 // One move of a line, fed by a mouse, by the dots under a finger, or by a
 // finger held on the line's words: begin() lifts it, move() follows, end() lands it.
 function lineDrag(view, dragged, touch) {
+  // A day's Journal line stays put (journal.js).
+  if (dragged?.hasAttribute?.('data-journal')) return { begin() {}, move() {}, end() {}, started: () => false };
   const eid = dragged.querySelector(':scope > .line-gutter')?.dataset.eid;
   let mark = null, drop = null, lift = null, fade = null, dy = 0, raf = 0, last = null;
   let x0 = 0, depth0 = 0, home = null, lvl = 0, ind = 28, liftLeft = 0; // lvl: levels in (or out) the sideways steps asked for
@@ -1046,6 +1066,8 @@ export function dropLineAt(view, eid, targetEid, after, into = false) {
   if (node?.type.name !== 'listItem' || target?.type.name !== 'listItem') return false;
   // Not into itself.
   if (at > from && at < from + node.nodeSize) return false;
+  // Dropped on a day's Journal line (or above it): under it, at the top.
+  if (target.attrs.journal && !after) into = true;
   const tr = state.tr.delete(from, from + node.nodeSize);
   let to;
   if (into) {
@@ -1616,7 +1638,7 @@ export const OutlineFold = Extension.create({
           if (!m) return old;
           const next = { folded: old.folded, zoom: old.zoom };
           if ('fold' in m) {
-            next.folded = new Set(old.folded);
+            next.folded = new FoldSet(old.folded);
             const on = m.on ?? !old.folded.has(m.fold);
             if (on) next.folded.add(m.fold); else next.folded.delete(m.fold);
             saveFolded(next.folded);
@@ -1671,7 +1693,10 @@ export const OutlineFold = Extension.create({
         }
         const inside = ranges.find((r) => head > r.from && head < r.to);
         if (!inside) return null;
-        if (trs.some((t) => t.docChanged)) return state.tr.setMeta(foldKey, { fold: inside.eid, on: false });
+        // (A page opened, or another device's version shown, isn't typing
+        // into the fold: the caret steps out of it instead, and the fold stays.)
+        const whole = trs.some((t) => t.steps.some((st) => st.from === 0 && st.to === t.before.content.size));
+        if (!whole && trs.some((t) => t.docChanged)) return state.tr.setMeta(foldKey, { fold: inside.eid, on: false });
         const sel = forward ? Selection.findFrom(state.doc.resolve(inside.to), 1, true) : Selection.findFrom(state.doc.resolve(inside.from), -1, true);
         return state.tr.setSelection(sel || Selection.findFrom(state.doc.resolve(inside.from), -1, true));
       },
@@ -1892,7 +1917,9 @@ export class OutlineStore {
     const present = new Set();
     const visit = (list, parentId) => {
       const items = [];
-      list.forEach((item) => { if (item.type.name === 'listItem' && item.attrs.eid) items.push(item); });
+      // A day's Journal line is saved the first time something is written
+      // under it, so empty days don't fill the database (journal.js).
+      list.forEach((item) => { if (item.type.name === 'listItem' && item.attrs.eid && !(item.attrs.journal && !this.cache.has(item.attrs.eid) && !journalWritten(item))) items.push(item); });
       const sorts = placeSorts(items.map((item) => {
         const prev = this.cache.get(item.attrs.eid);
         return prev && !prev.deleted && prev.parent_id === parentId ? prev.sort : undefined;
@@ -1911,14 +1938,15 @@ export class OutlineStore {
         const mirror = item.attrs.mirror || null;
         const checklist = !!item.attrs.checklist;
         const box = item.attrs.box ?? null;
-        const same = prev && !prev.deleted && prev.parent_id === parentId && prev.sort === sort && !!prev.fields?.done === done &&
+        const journal = !!item.attrs.journal;
+        const same = !!prev?.fields?.journal === journal && prev && !prev.deleted && prev.parent_id === parentId && prev.sort === sort && !!prev.fields?.done === done &&
           !!prev.fields?.checklist === checklist && (prev.fields?.box ?? null) === box &&
           (prev.fields?.gather || null) === gather && JSON.stringify(prev.fields?.gathered || null) === JSON.stringify(gathered) &&
           (prev.fields?.mirror || null) === mirror && JSON.stringify(prev.content) === JSON.stringify(content);
         if (!same) {
           rows.push({
             ...(prev || { id, created_at: now, type: null, fields: {}, area_id: null, title: '' }),
-            kind: 'line', parent_id: parentId, sort, text, content, fields: taskDone(checkFields({ ...(prev?.fields || {}), done, gather, gathered, mirror }, checklist, box), now),
+            kind: 'line', parent_id: parentId, sort, text, content, fields: journalField(taskDone(checkFields({ ...(prev?.fields || {}), done, gather, gathered, mirror }, checklist, box), now), journal),
             // A mirror keeps a copy of its words (for search and exports) but
             // not its tags, so the line isn't found twice under its #tag.
             tags: mirror ? [] : tagsIn(text), links: refsIn(content), deleted: false, updated_at: now
@@ -2027,6 +2055,20 @@ function taskDone(fields, now) {
   return fields;
 }
 
+// Something written under a Journal line (or a line nested there).
+function journalWritten(item) {
+  let words = false;
+  item.forEach((child) => { if (child.type.name === 'bulletList') child.descendants((n) => { if (words) return false; if (n.isText || (n.isLeaf && n.type.name !== 'hardBreak')) words = true; return !words; }); });
+  return words;
+}
+function journalField(fields, journal) {
+  if (journal) return { ...fields, journal: true };
+  if (!fields.journal) return fields;
+  const f = { ...fields };
+  delete f.journal;
+  return f;
+}
+
 // Checklist marks are kept only where set, so other lines' rows don't change.
 function checkFields(fields, checklist, box) {
   const f = { ...fields };
@@ -2043,7 +2085,7 @@ export function toOutlineDoc(pageId, rows, sources = new Map()) {
   }
   const list = (pid) => {
     const items = (byParent.get(pid) || []).sort(bySort).map((r) => {
-      const v = mirrorView({ eid: r.id, done: !!r.fields?.done, gather: r.fields?.gather || null, gathered: r.fields?.gathered || null, mirror: r.fields?.mirror || null, checklist: !!r.fields?.checklist, box: r.fields?.box ?? null }, r.content, sources);
+      const v = mirrorView({ eid: r.id, journal: !!r.fields?.journal, done: !!r.fields?.done, gather: r.fields?.gather || null, gathered: r.fields?.gathered || null, mirror: r.fields?.mirror || null, checklist: !!r.fields?.checklist, box: r.fields?.box ?? null }, r.content, sources);
       const content = [{ type: 'paragraph', ...(v.content ? { content: v.content } : {}) }];
       const kids = list(r.id);
       if (kids) content.push(kids);

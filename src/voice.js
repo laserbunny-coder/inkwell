@@ -2,6 +2,7 @@ import { Node, mergeAttributes } from '@tiptap/core';
 import { putEntries, getEntry, children, getMeta, setMeta, CLAUDE } from './db.js';
 import { entry, newId, tagsIn } from './model.js';
 import { placeSorts, bySort } from './order.js';
+import { intoJournalRow } from './journal.js';
 
 // Walk-and-talk: what you say is written up in one of your modes (the same
 // modes as Scribe, kept on your account, so one made in either app shows in
@@ -214,6 +215,8 @@ export async function placeVoice(it, answer, { withTag = (row) => row } = {}) {
   }
   const rows = showVersion(start, kids, mode, name, voice.v[mode]);
   if (answer.tag) rows[0] = withTag(rows[0], answer.tag);
+  // Journal mode (Nov 28 2026): under the day's Journal line, not at the top of the page.
+  if (mode === 'journal' && String(rows[0].parent_id || '').startsWith('day-')) rows.splice(0, 1, ...await intoJournalRow(rows[0]));
   // Links to anything it named go last, under everything else.
   (answer.refs || []).filter((r) => r?.label && /^https?:\/\//.test(r.url || '')).slice(0, 6).forEach((r, i) => {
     rows.push({ ...entry('line', { id: `${line.id}-r${i + 1}` }), parent_id: line.id, sort: 1e6 + i, text: r.label, content: [{ type: 'text', text: r.label, marks: [{ type: 'link', attrs: { href: r.url } }] }], fields: { done: false, gather: null, gathered: null, mirror: null }, _by: CLAUDE });

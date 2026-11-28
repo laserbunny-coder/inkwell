@@ -22,6 +22,7 @@ import { checkLineDecos, diffLineDecos } from './linedecos.js';
 import { taskOf, chipLabel, setTask, unTask, isoOf } from './tasks.js';
 import { isTouch } from './device.js';
 import { pad } from './dates.js';
+import { JournalLine, withJournal, intoJournal, isJournalId, journalIn, journalId } from './journal.js';
 
 // The notebook: a page for every day, plus named pages, all written as nested
 // lines. Lines can link to pages, days and chapters with [[, carry #tags, and
@@ -107,7 +108,7 @@ export function mirrorEid(gatherer, source) {
 const EMPTY = { type: 'doc', content: [{ type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }] }] };
 
 export class Notebook {
-  constructor({ onPick, onOpen, onStatus, onChange, onPlace, onZoom, onSources, onLink, onTaskChip, onTasks }) {
+  constructor({ onPick, onOpen, onStatus, onChange, onPlace, onZoom, onSources, onLink, onTaskChip, onTasks, onJournals }) {
     this.onZoom = onZoom || (() => {});
     this.onTasks = onTasks || (() => {});
     this.origins = new Map();
@@ -125,6 +126,7 @@ export class Notebook {
       element: $('#outline-editor'),
       extensions: [
         StarterKit.configure({ document: false, listItem: false, codeBlock: false, code: false, horizontalRule: false, heading: false, blockquote: false, trailingNode: false }),
+        JournalLine.configure({ onAll: () => onJournals?.() }),
         OutlineDoc, OutlineItem, OutlineKeys, LineIds, LineChecks, EntryRef.configure({ onPick, onOpen }), TagMarks.configure({ onTag: (t) => this.showTag(t) }), GatherBadge.configure({ onTag: (t) => this.showTag(t), onOpen, origin: (id) => this.origins.get(id) || '' }), AltMark,
         OutlineFold.configure({ onZoom: (eid) => this.zoomed(eid) }),
         FileEmbed.configure({ onTooBig: (f) => toast(`“${f.name}” is too big to add (the limit is ${Math.round(MAX_BYTES / 1048576)} MB)`) }),
@@ -174,7 +176,7 @@ export class Notebook {
     if (!eid || !this.page) return null;
     await this.store.flush(this.editor.state.doc);
     const row = this.store.cache.get(eid);
-    if (!row || row.deleted || row.fields?.mirror) return null;
+    if (!row || row.deleted || row.fields?.mirror || isJournalId(eid)) return null;
     const today = isoOf();
     const was = taskOf(row);
     const next = was ? await unTask(eid) : await setTask(eid, { day: this.isDay && this.page.title > today ? this.page.title : today, order: Date.now() / 1000 });
@@ -306,10 +308,23 @@ export class Notebook {
     this.onPlace(this.page);
   }
 
+  // A day page starts with its Journal line (journal.js).
+  // (The empty line under a journal not yet written in keeps its id while the
+  // page stays open, so a refresh doesn't take the caret off it.)
+  journaled(doc) {
+    if (this.page?.kind !== 'day') return doc;
+    const iso = this.page.title || this.page.id.slice(4);
+    const cur = journalIn(this.editor.state.doc)?.node;
+    const keep = cur?.attrs.eid === journalId(iso) && cur.lastChild?.type.name === 'bulletList' ? cur.lastChild.firstChild?.attrs.eid : null;
+    return withJournal(doc, iso, keep);
+  }
+
   async open(id, fallback, focusLine) {
     if (this.page) await this.store.close(this.editor.state.doc);
-    const { doc, recovered } = await this.store.load(id, fallback);
+    const loaded = await this.store.load(id, fallback);
+    const { recovered } = loaded;
     this.page = this.store.page;
+    const doc = this.journaled(loaded.doc);
     loadDoc(this.editor, doc);
     this.store.noteShown(this.editor.state.doc, !recovered);
     if (recovered) this.store.change(this.editor.state.doc);
@@ -317,7 +332,8 @@ export class Notebook {
     // may be typing, or have opened the [[ picker, which mustn't lose it.
     // (If the [[ picker is already open and typing, leave the caret with it.)
     if (!document.activeElement?.closest('.picker')) {
-      if (focusLine) this.focusLine(focusLine);
+      if (focusLine === 'journal') this.focusJournal();
+      else if (focusLine) this.focusLine(focusLine);
       else this.editor.commands.focus('end');
     }
     await this.noteOrigins();
@@ -329,7 +345,17 @@ export class Notebook {
     this.onChange();
   }
 
+  // The caret at the end of what's written in the journal ("Write ›").
+  focusJournal() {
+    const tr = intoJournal(this.editor.state, { end: true });
+    if (!tr) return;
+    this.editor.view.dispatch(tr.setMeta('addToHistory', false));
+    this.editor.view.focus();
+    requestAnimationFrame(() => this.editor.commands.scrollIntoView());
+  }
+
   focusLine(eid) {
+    if (eid === 'journal') return this.focusJournal();
     this.editor.state.doc.descendants((node, pos) => {
       if (node.type.name === 'listItem' && node.attrs.eid === eid) {
         this.editor.commands.setTextSelection(pos + 2 + node.firstChild.content.size);
@@ -570,7 +596,7 @@ export class Notebook {
     if (!this.store.idle) { if (tries < 20) setTimeout(() => this.applyRemote(rows, tries + 1), 800); return; }
     const page = await getEntry(this.page.id);
     if (page) { this.store.page = this.page = page; this.renderHead(); }
-    const doc = await this.store.refresh();
+    const doc = this.journaled(await this.store.refresh());
     const ed = this.editor;
     if (JSON.stringify(doc) === JSON.stringify(ed.state.doc.toJSON())) { redrawTasks(ed); return; }
     const { $from } = ed.state.selection;
@@ -605,7 +631,7 @@ export class Notebook {
       }
       return n.content ? { ...n, content: n.content.map(live) } : n;
     };
-    this.editor.commands.setContent(oneParagraphPerLine(save ? live(json) : json), { emitUpdate: false });
+    this.editor.commands.setContent(this.journaled(oneParagraphPerLine(save ? live(json) : json)), { emitUpdate: false });
     this.store.noteShown(this.editor.state.doc, true);
     if (save) this.store.change(this.editor.state.doc);
   }

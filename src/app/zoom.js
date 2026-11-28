@@ -67,7 +67,7 @@ export function stopOf(place) {
   if (v === 'notebook' && place.zoom && nowState.zoom === place.zoom) return 'today';
   if (v === 'notebook') return !place.pageId || String(place.pageId).startsWith('day-') ? 'today' : 'project';
   if (v === 'desk') return 'desk';
-  if (['library', 'drawer', 'tags'].includes(v)) return 'library';
+  if (['library', 'drawer', 'tags', 'journal'].includes(v)) return 'library';
   if (PIECE_VIEWS.includes(v)) return 'project';
   return null;
 }
@@ -142,7 +142,7 @@ function depthOf(p) {
     return { side: 'time', d: v === 'notebook' && p.zoom ? 4 : 3 };
   }
   if (v === 'library') return { side: 'place', d: p.area ? 1 : 0 };
-  if (v === 'drawer' || v === 'tags' || v === 'desk') return { side: 'place', d: 1 };
+  if (v === 'drawer' || v === 'tags' || v === 'journal' || v === 'desk') return { side: 'place', d: 1 };
   if (v === 'world') return { side: 'place', d: p.part ? 3 : 2 };
   return { side: 'place', d: 3 };
 }

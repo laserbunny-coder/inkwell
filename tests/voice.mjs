@@ -119,7 +119,7 @@ try {
   await page.goto(URL);
   await page.waitForSelector('#editor .ProseMirror');
 
-  await check('a capture lands written up as Journal, with the chip, #journal and the note to self set apart', async () => {
+  await check('a capture lands written up as Journal, under the day’s Journal line (#journal by place), with the chip and the note to self set apart', async () => {
     await page.evaluate((raw) => {
       window.__voice = async (b) => (b.use === 'scene'
         ? { raw, mode: 'scene', blocks: [{ text: 'The river ran slow under the bridge.', el: 'paragraph', new_scene: false }], notes: [] }
@@ -134,8 +134,10 @@ try {
     await page.waitForFunction(() => /walked the river/.test(document.querySelector('#outline-editor .ProseMirror')?.innerText || ''), null, { timeout: 10000 });
     const line = await capLine();
     assert.equal(await page.locator('#outline-editor .voice-chip').last().innerText(), 'Journal');
-    assert.match(line.text, /Today I walked the river\. #journal$/, 'journaling isn’t filed as #idea');
-    assert.deepEqual(line.tags, ['journal']);
+    // Under the day's Journal line (Nov 28 2026): #journal by where it is, not typed.
+    assert.match(line.parent_id, /^jr-\d{4}-\d{2}-\d{2}$/, 'under the Journal line');
+    assert.match(line.text, /Today I walked the river\.$/, 'journaling isn’t filed as #idea');
+    assert.deepEqual(line.tags, []);
     assert.equal(line.fields.voice.raw, RAW, 'word for word, kept');
     assert.deepEqual((await kidsOf(line.id)).map((k) => k.text), ['I kept thinking about the bridge.', 'Note to self: Call Mum.']);
     // Only its first line shows; the rest is folded under it, a click away.
@@ -488,7 +490,8 @@ try {
       if (!line) await sleep(100);
     }
     assert.ok(line, 'written up with its title');
-    assert.match(line.text, /\d{1,2}:\d{2} [ap]m\s+Pond walk and coffee #journal$/, line.text);
+    assert.match(line.text, /\d{1,2}:\d{2} [ap]m\s+Pond walk and coffee$/, line.text);
+    assert.match(line.parent_id, /^jr-/, "under the day’s Journal line");
     assert.deepEqual((await kidsOf(line.id)).map((k) => k.text), ['I walked around the pond this morning.', 'Then coffee, and a long think about the week.', 'Note to self: Call Nate.']);
     assert.equal(line.fields.voice.by, 'openai');
     await page.waitForFunction((id) => document.querySelector(`#outline-editor li[data-eid="${id}"]`)?.classList.contains('folded'), line.id);

@@ -25,6 +25,8 @@ const fake = () => {
 };
 
 const browser = pageFirst(await chromium.launch());
+// A day page's Journal line (and its empty line to write on), left out.
+const noJournal = (t) => t.replace(/^Journal( \[\+\])?\n(  \n)?/, '');
 let failed = 0;
 async function check(name, fn) {
   try { await fn(); console.log(`ok   ${name}`); } catch (e) { failed += 1; console.log(`FAIL ${name}\n     ${e.message}`); }
@@ -381,9 +383,10 @@ Episode 2|`));
     await page.reload();
     await page.waitForSelector('#outline-editor .ProseMirror');
     await sleep(900);
+    // A day page opens with its Journal line on top (Nov 28 2026): what was typed follows it.
     const text = await page.evaluate(() => window.__outline.state.doc.textContent);
-    assert.equal(text, 'Ninja Bunch reelKenji fallsMomo laughsRehearsal notes');
-    assert.equal((await readOutline(page)).replace('|', ''), clean(`
+    assert.equal(text.replace(/^Journal/, ''), 'Ninja Bunch reelKenji fallsMomo laughsRehearsal notes');
+    assert.equal(noJournal((await readOutline(page)).replace('|', '')), clean(`
 Ninja Bunch reel [+]
   Kenji falls
   Momo laughs
@@ -399,7 +402,7 @@ Rehearsal notes`));
     await page.reload();
     await page.waitForSelector('#outline-editor .ProseMirror');
     await sleep(900);
-    assert.equal((await readOutline(page)).replace('|', ''), 'Cast\nLocations');
+    assert.equal(noJournal((await readOutline(page)).replace('|', '')), 'Cast\nLocations');
   });
 
   assert.deepEqual(page.errors, []);

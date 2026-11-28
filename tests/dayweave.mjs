@@ -48,7 +48,7 @@ const all = (p) => p.evaluate(() => new Promise((res) => {
 }));
 const named = async (p, text) => (await all(p)).find((r) => r.text === text && r.fields?.task);
 const still = (p) => p.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {}))));
-let PL = '#plan';
+let PL = '#plan-sheet';
 const go = async (p, place) => {
   await p.evaluate((pl) => { history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); }, place);
   await p.waitForFunction((pl) => (document.documentElement.dataset.view || 'write') === pl.view && history.state?.view === pl.view, place);
@@ -71,16 +71,16 @@ async function check(name, fn) {
 
 try {
   const page = await open({ width: 1440, height: 900 });
-  await go(page, { view: 'notebook', pageId: 'day-2026-11-09' });
-  await page.waitForSelector('#plan .pl-wev');
+  await go(page, { view: 'plan', tab: 'day', day: '2026-11-09' });
+  await page.waitForSelector('#plan-sheet .pl-wev');
 
   await check('a new device: no time estimates, only how many; a length typed at the end is kept quietly', async () => {
     await add(page, 'Cut the trailer 2h');
     await add(page, 'Email Dana the boards');
     await add(page, 'Print the call sheet');
-    assert.equal(await page.locator('#plan .pl-sum').innerText(), '3 to do');
-    assert.equal(await page.locator('#plan .pl-left').count(), 0, 'no hours left today');
-    assert.equal(await page.locator('#plan .pl-task .pl-est:visible').count(), 0, 'no lengths on the rows');
+    assert.equal(await page.locator('#plan-sheet .pl-sum').innerText(), '3 to do');
+    assert.equal(await page.locator('#plan-sheet .pl-left').count(), 0, 'no hours left today');
+    assert.equal(await page.locator('#plan-sheet .pl-task .pl-est:visible').count(), 0, 'no lengths on the rows');
     assert.equal((await named(page, 'Cut the trailer')).fields.task.est, 120);
     await row(page, 'Cut the trailer').locator('.pl-words').click({ button: 'right' }); // the menu: a right-click on the dots
     await page.waitForSelector('.pop-menu .pop-item');
@@ -90,7 +90,7 @@ try {
   });
 
   await check('events sit among the tasks at their place; new tasks go after what has begun by now', async () => {
-    assert.deepEqual(await page.locator('#plan .pl-cal .pl-ev').allInnerTexts().then((t) => t.map((x) => x.replace(/\s+/g, ' ').trim())), ['All day Arrow’s birthday']);
+    assert.deepEqual(await page.locator('#plan-sheet .pl-cal .pl-ev').allInnerTexts().then((t) => t.map((x) => x.replace(/\s+/g, ' ').trim())), ['All day Arrow’s birthday']);
     await seqIs(page, ['@ Standup with Nate', 'Cut the trailer', 'Email Dana the boards', 'Print the call sheet', '@ Dentist', '@ Call with Dana']);
     assert.ok(await ev(page, 'Standup').evaluate((e) => e.classList.contains('past')), 'the morning’s standup is over: faint');
     assert.equal(await ev(page, 'Dentist').locator('.pl-check').count(), 0, 'nothing to tick on an event');
@@ -106,8 +106,8 @@ try {
     assert.deepEqual((await named(page, 'Print the call sheet')).fields.task.at, { day: '2026-11-09', after: 16 * 60 });
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
-    await go(page, { view: 'notebook', pageId: 'day-2026-11-09' });
-    await page.waitForSelector('#plan .pl-wev');
+    await go(page, { view: 'plan', tab: 'day', day: '2026-11-09' });
+    await page.waitForSelector('#plan-sheet .pl-wev');
     await seqIs(page, ['@ Standup with Nate', 'Cut the trailer', 'Email Dana the boards', '@ Dentist', 'Print the call sheet', '@ Call with Dana']);
   });
 
@@ -138,21 +138,21 @@ try {
     await page.evaluate(() => localStorage.setItem('cal-gone', 'c1:dentist'));
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
-    await go(page, { view: 'notebook', pageId: 'day-2026-11-09' });
-    await page.waitForSelector('#plan .pl-wev');
+    await go(page, { view: 'plan', tab: 'day', day: '2026-11-09' });
+    await page.waitForSelector('#plan-sheet .pl-wev');
     await seqIs(page, ['Email Dana the boards', '@ Standup with Nate', 'Cut the trailer', 'Print the call sheet', '@ Call with Dana']);
     await page.evaluate(() => localStorage.removeItem('cal-gone'));
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
-    await go(page, { view: 'notebook', pageId: 'day-2026-11-09' });
+    await go(page, { view: 'plan', tab: 'day', day: '2026-11-09' });
     await seqIs(page, ['Email Dana the boards', '@ Standup with Nate', 'Cut the trailer', '@ Dentist', 'Print the call sheet', '@ Call with Dana']);
   });
 
 
   await check('the whole plan works: tick, and it sinks', async () => {
     await row(page, 'Email Dana').locator('.pl-check').click();
-    await page.waitForFunction(() => document.querySelector('#plan .pl-task.done'));
-    assert.equal(await page.locator('#plan .pl-sum').innerText(), '2 to do · 1 done');
+    await page.waitForFunction(() => document.querySelector('#plan-sheet .pl-task.done'));
+    assert.equal(await page.locator('#plan-sheet .pl-sum').innerText(), '2 to do · 1 done');
     assert.deepEqual(page.errors, []);
   });
 

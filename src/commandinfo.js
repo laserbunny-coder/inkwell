@@ -57,6 +57,7 @@ export const INFO = [
   { l: 'Library', g: 'go', h: 'Your areas and the projects in them, on shelves.', w: ['shelves', 'areas', 'books', 'worlds', 'projects', 'all'] },
   { l: 'The Drawer: ideas with no home yet', g: 'go', h: 'Ideas you’ve put away until they find a project.', w: ['ideas', 'someday', 'parked', 'jackie chan'] },
   { l: 'Tags: every tag, grouped', g: 'go', h: 'Every #tag you’ve used, and the lines that carry each one.', w: ['hashtag', 'labels', '#'] },
+  { l: 'Journal: every day’s journal, newest first', g: 'go', h: 'What you wrote under Journal on every day page (and older #journal lines), newest first, with a find box.', w: ['journal', 'diary', 'all journals'] },
   { l: 'Catch-up: what your Claude threads did (bottom of the Desk)', g: 'go', h: 'What each Claude thread has reported, newest first, at the bottom of the Desk.', w: ['catch up', 'catchup', 'threads', 'updates', 'claude', 'news', 'reports'] },
   { l: 'History: every Claude thread, newest first', g: 'go', h: 'Every Claude thread there has been, to search and reopen.', w: ['threads', 'closed', 'finished', 'old', 'past', 'find a thread'], at: ['desk'] },
   { l: 'Search inside all your writing', g: 'go', h: 'Finds any word in anything you’ve written, not only names.', w: ['find', 'look for', 'full text', 'every word', 'grep'] },

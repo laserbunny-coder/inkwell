@@ -222,6 +222,8 @@ try {
     await p.waitForSelector('#outline-editor .ProseMirror-focused');
     await sleep(300);
     assert.equal(await p.locator('#nb-kind').innerText(), 'TODAY');
+    // Ctrl + J lands under the Journal line; Shift + Tab writes on the page itself.
+    await p.keyboard.press('Shift+Tab');
     await p.keyboard.type('Call the harbourmaster #research');
     await p.keyboard.press('Enter');
     await p.keyboard.press('Tab');
@@ -847,6 +849,8 @@ try {
     // the keyboard (which is up by then) and press one of its buttons.
     await ph.evaluate(() => { window.__notebook.editor.commands.focus('end'); window.__keyboard.set(true); });
     await ph.waitForSelector('.outline-bar', { state: 'visible' });
+    // Out from under the Journal line, onto the page itself.
+    await ph.keyboard.press('Shift+Tab');
     await ph.keyboard.type('Boats');
     await ph.keyboard.press('Enter');
     await ph.keyboard.type('Tides');
@@ -977,7 +981,7 @@ try {
     await sleep(400);
     assert.equal(await clear(), true, 'caret visible after tapping a line near the bottom');
     // A line with lines under it has a caret to fold it.
-    const parent = ph.locator('#outline-editor li.has-kids').first();
+    const parent = ph.locator('#outline-editor li.has-kids:not([data-journal])').first();
     const caret = parent.locator(':scope > .line-gutter .fold');
     assert.ok(Number(await caret.evaluate((b) => getComputedStyle(b).opacity)) > 0.3, 'caret shows on a phone');
     await caret.tap();

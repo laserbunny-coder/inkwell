@@ -37,7 +37,7 @@ import { askServer, canAskServer, captureHere, deskPage, plan } from './talking.
 
 const PAGE_NAMES = { gather: 'Gather', shape: 'Shape', write: 'Write', revise: 'Revise', make: 'Make', deliver: 'Deliver', notes: 'Notes' };
 // Views you look at rather than type in: the tabs sit faintly at the top there.
-const LOOKING = ['library', 'tags', 'desk', 'plan', 'world', 'project', 'grid', 'production', 'deliver', 'compare', 'stage', 'drawer'];
+const LOOKING = ['library', 'tags', 'journal', 'desk', 'plan', 'world', 'project', 'grid', 'production', 'deliver', 'compare', 'stage', 'drawer'];
 let strip; // set in wireWorkPages()
 let nav; // set in wireWorkPages()
 // The rail of rooms and the switch at the top centre (frame.js).
@@ -89,6 +89,7 @@ async function pageContext() {
   };
   if (v === 'library') return { scope: 'desk', active: 'library' };
   if (v === 'tags') return { scope: 'desk', active: 'tags' };
+  if (v === 'journal') return { scope: 'desk', active: 'library' };
   if (v === 'drawer') return { scope: 'desk', active: 'drawer' };
   if (v === 'desk') return { scope: 'desk', active: 'desk' };
   if (v === 'plan') return { scope: 'desk', active: 'today' };

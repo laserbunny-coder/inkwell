@@ -22,7 +22,8 @@ const slim = (r) => ({ id: r.id, kind: r.kind, parent_id: r.parent_id, title: r.
 
 function itemFor(r) {
   // A mirror's words are its original's, which is found already.
-  if (r.deleted || isTrashed(r) || r.fields?.mirror) return null;
+  // A day's Journal line is only its label: the lines under it are found.
+  if (r.deleted || isTrashed(r) || r.fields?.mirror || r.fields?.journal) return null;
   const text = TEXT.includes(r.kind) ? (r.kind === 'scene' ? r.title : r.text) : NAMED.includes(r.kind) ? r.title : '';
   // A saved link is found by its page's real title and its address too
   // ("youtube"), even once the line was reworded.
@@ -84,6 +85,10 @@ export async function searchIndex() {
     whereCache.set(r.id, label);
     return label;
   };
+  const inJournal = (r) => {
+    for (let at = byId.get(r.parent_id), n = 0; at && n < 50; at = byId.get(at.parent_id), n++) if (at.id.startsWith('jr-')) return true;
+    return false;
+  };
   return {
     size: items.size,
     find(query, limit = 50) {
@@ -94,7 +99,9 @@ export async function searchIndex() {
       const last = index.last;
       const pool = last && q.startsWith(last.q) ? last.hits : items.values();
       const hits = [];
-      for (const it of pool) if (words.every((w) => it.key.includes(w))) hits.push(it);
+      // Lines under a day's Journal line count as #journal without the tag typed.
+      const has = (it, w) => it.key.includes(w) || (w === '#journal' && inJournal(it.row));
+      for (const it of pool) if (words.every((w) => has(it, w))) hits.push(it);
       index.last = { q, hits };
       // Names first, then whole-phrase matches, then the most recently changed.
       const phrase = words.join(' ');

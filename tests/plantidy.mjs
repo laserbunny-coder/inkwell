@@ -55,12 +55,12 @@ const go = async (p, place) => {
   await still(p);
   await sleep(350);
 };
-const add = async (p, text) => { const input = p.locator('#plan input[data-add]').first(); await input.fill(text); await input.press('Enter'); await sleep(400); };
+const add = async (p, text) => { const input = p.locator('#plan-sheet input[data-add]').first(); await input.fill(text); await input.press('Enter'); await sleep(400); };
 // The list as drawn: events as "@ title", tasks by their words.
-const seq = (p) => p.evaluate(() => [...document.querySelectorAll('#plan .pl-list > .pl-task:not(.done), #plan .pl-list > .pl-wev')].map((el) => (el.classList.contains('pl-wev') ? `@ ${el.querySelector('.ev-w').textContent}` : el.querySelector('.pl-words').textContent)));
-const seqIs = (p, want) => p.waitForFunction((w) => JSON.stringify([...document.querySelectorAll('#plan .pl-list > .pl-task:not(.done), #plan .pl-list > .pl-wev')].map((el) => (el.classList.contains('pl-wev') ? `@ ${el.querySelector('.ev-w').textContent}` : el.querySelector('.pl-words').textContent))) === JSON.stringify(w), want, { timeout: 8000 }).catch(async () => { assert.deepEqual(await seq(p), want); });
-const row = (p, text) => p.locator('#plan .pl-task', { hasText: text });
-const ev = (p, text) => p.locator('#plan .pl-wev', { hasText: text });
+const seq = (p) => p.evaluate(() => [...document.querySelectorAll('#plan-sheet .pl-list > .pl-task:not(.done), #plan-sheet .pl-list > .pl-wev')].map((el) => (el.classList.contains('pl-wev') ? `@ ${el.querySelector('.ev-w').textContent}` : el.querySelector('.pl-words').textContent)));
+const seqIs = (p, want) => p.waitForFunction((w) => JSON.stringify([...document.querySelectorAll('#plan-sheet .pl-list > .pl-task:not(.done), #plan-sheet .pl-list > .pl-wev')].map((el) => (el.classList.contains('pl-wev') ? `@ ${el.querySelector('.ev-w').textContent}` : el.querySelector('.pl-words').textContent))) === JSON.stringify(w), want, { timeout: 8000 }).catch(async () => { assert.deepEqual(await seq(p), want); });
+const row = (p, text) => p.locator('#plan-sheet .pl-task', { hasText: text });
+const ev = (p, text) => p.locator('#plan-sheet .pl-wev', { hasText: text });
 const shot = async (p, name) => { if (SHOTS) { await p.evaluate(() => document.querySelector('.toast')?.remove()); await still(p); await sleep(250); await p.screenshot({ path: `${SHOTS}/${name}.png` }); } };
 const look = (p, name, on) => p.evaluate(([n, v]) => { const c = document.querySelector(`[data-show="${n}"]`); if (c.checked !== v) c.click(); }, [name, on]);
 
@@ -73,7 +73,7 @@ const put = (p, rows) => p.evaluate((rs) => new Promise((res) => {
   const r = indexedDB.open('writing');
   r.onsuccess = () => { const t = r.result.transaction('entries', 'readwrite'); for (const x of rs) t.objectStore('entries').put(x); t.oncomplete = () => res(); };
 }), rows);
-const words = (p) => p.evaluate(() => [...document.querySelectorAll('#plan .pl-list > .pl-task:not(.done) .pl-words')].map((w) => w.textContent));
+const words = (p) => p.evaluate(() => [...document.querySelectorAll('#plan-sheet .pl-list > .pl-task:not(.done) .pl-words')].map((w) => w.textContent));
 const byId = async (p, id) => (await all(p)).find((r) => r.id === id);
 const toast = (p) => p.locator('.toast').innerText();
 const focusTask = async (p, text) => {
@@ -83,8 +83,8 @@ const focusTask = async (p, text) => {
 
 try {
   const page = await open({ width: 1440, height: 900 });
-  await go(page, { view: 'notebook', pageId: 'day-2026-11-09' });
-  await page.waitForSelector('#plan .pl-list');
+  await go(page, { view: 'plan', tab: 'day', day: '2026-11-09' });
+  await page.waitForSelector('#plan-sheet .pl-list');
   for (const t of ['Board Reel 2', 'Email Dana the boards', 'Print the call sheet', 'Order the storage drive', 'Book the rehearsal room', 'Call the print shop', 'Pick up the costumes']) await add(page, t);
   // Two lines of notes under one task, written under it as anywhere.
   const reel = await named(page, 'Board Reel 2');
@@ -92,18 +92,18 @@ try {
   await put(page, [1, 2].map((n) => ({ id: `ln_reel_${n}`, kind: 'line', parent_id: reel.id, sort: n * 1024, text: n === 1 ? 'Shot list on the Reel 2 page' : 'Keep the rain real', content: [{ type: 'text', text: n === 1 ? 'Shot list on the Reel 2 page' : 'Keep the rain real' }], tags: [], links: [], fields: {}, deleted: false, created_at: now, updated_at: now })));
   await page.reload();
   await page.waitForFunction(() => document.documentElement.dataset.started === '1');
-  await go(page, { view: 'notebook', pageId: 'day-2026-11-09' });
-  await page.waitForFunction(() => document.querySelectorAll('#plan .pl-task').length === 7);
+  await go(page, { view: 'plan', tab: 'day', day: '2026-11-09' });
+  await page.waitForFunction(() => document.querySelectorAll('#plan-sheet .pl-task').length === 7);
 
   await check('Ctrl + Shift + Backspace on a task: it and its lines go to the Trash, the toast says so, and Undo brings all of it back', async () => {
     await focusTask(page, 'Board Reel 2');
     await page.keyboard.press('Control+Shift+Backspace');
-    await page.waitForFunction(() => !document.querySelector('#plan .pl-task')?.textContent.includes('Board Reel 2') && ![...document.querySelectorAll('#plan .pl-words')].some((w) => w.textContent === 'Board Reel 2'));
+    await page.waitForFunction(() => !document.querySelector('#plan-sheet .pl-task')?.textContent.includes('Board Reel 2') && ![...document.querySelectorAll('#plan-sheet .pl-words')].some((w) => w.textContent === 'Board Reel 2'));
     assert.match(await toast(page), /Deleted “Board Reel 2” and 2 lines under it/);
     const gone = await all(page);
     assert.ok(['ln_reel_1', 'ln_reel_2', reel.id].every((id) => gone.find((r) => r.id === id)?.fields?.trashed), 'the task and its lines are in the Trash');
     await page.locator('.toast .toast-action', { hasText: 'Undo' }).click();
-    await page.waitForFunction(() => [...document.querySelectorAll('#plan .pl-words')].some((w) => w.textContent === 'Board Reel 2'));
+    await page.waitForFunction(() => [...document.querySelectorAll('#plan-sheet .pl-words')].some((w) => w.textContent === 'Board Reel 2'));
     const back = await all(page);
     assert.ok(['ln_reel_1', 'ln_reel_2', reel.id].every((id) => !back.find((r) => r.id === id)?.fields?.trashed), 'all of it is back');
     assert.equal((await words(page))[0], 'Board Reel 2', 'in its place');
@@ -112,30 +112,30 @@ try {
   await check('Delete in the ⋯ menu; Ctrl + Z in the plan takes it back; it leaves the page it was written on', async () => {
     await row(page, 'Call the print shop').locator('.pl-words').click({ button: 'right' }); // the menu: a right-click on the dots
     await page.locator('.pop-menu .pop-item', { hasText: /^Delete$/ }).click();
-    await page.waitForFunction(() => ![...document.querySelectorAll('#plan .pl-words')].some((w) => w.textContent === 'Call the print shop'));
+    await page.waitForFunction(() => ![...document.querySelectorAll('#plan-sheet .pl-words')].some((w) => w.textContent === 'Call the print shop'));
     const line = await named(page, 'Call the print shop');
     assert.ok(line.fields.trashed);
     await go(page, { view: 'notebook', pageId: 'page-tasks' });
     await page.waitForSelector('#outline-editor li');
     assert.equal(await page.locator('#outline-editor li', { hasText: 'Call the print shop' }).count(), 0, 'not on its page either');
-    await go(page, { view: 'notebook', pageId: 'day-2026-11-09' });
-    await page.waitForSelector('#plan .pl-task');
+    await go(page, { view: 'plan', tab: 'day', day: '2026-11-09' });
+    await page.waitForSelector('#plan-sheet .pl-task');
     await focusTask(page, 'Board Reel 2');
     await page.keyboard.press('Control+z');
-    await page.waitForFunction(() => [...document.querySelectorAll('#plan .pl-words')].some((w) => w.textContent === 'Call the print shop'));
+    await page.waitForFunction(() => [...document.querySelectorAll('#plan-sheet .pl-words')].some((w) => w.textContent === 'Call the print shop'));
   });
 
   await check('Shift + click picks several; one Ctrl + Shift + Backspace deletes them, and one Undo brings them all back', async () => {
     await row(page, 'Print the call sheet').locator('.pl-words').click({ modifiers: ['Shift'] });
     await row(page, 'Order the storage drive').locator('.pl-words').click({ modifiers: ['Shift'] });
-    assert.equal(await page.locator('#plan .pl-task.sel').count(), 2);
+    assert.equal(await page.locator('#plan-sheet .pl-task.sel').count(), 2);
     assert.equal(await page.evaluate(() => !!document.querySelector('#outline-editor li.zoom-root')), false, 'a Shift + click picks, it doesn’t open');
     await page.keyboard.press('Control+Shift+Backspace');
-    await page.waitForFunction(() => document.querySelectorAll('#plan .pl-task:not(.done)').length === 5);
+    await page.waitForFunction(() => document.querySelectorAll('#plan-sheet .pl-task:not(.done)').length === 5);
     assert.match(await toast(page), /Deleted 2 tasks/);
     await page.locator('.toast .toast-action', { hasText: 'Undo' }).click();
-    await page.waitForFunction(() => document.querySelectorAll('#plan .pl-task:not(.done)').length === 7);
-    assert.equal(await page.locator('#plan .pl-task.sel').count(), 0);
+    await page.waitForFunction(() => document.querySelectorAll('#plan-sheet .pl-task:not(.done)').length === 7);
+    assert.equal(await page.locator('#plan-sheet .pl-task.sel').count(), 0);
   });
 
   await check('a task on the Acro HQ board is deleted without asking, marked to come off the board too; Undo takes it all back', async () => {
@@ -143,17 +143,17 @@ try {
     await put(page, [{ ...t, fields: { ...t.fields, hq: { id: 't9', link: 'https://hq.example/?task=t9' } }, updated_at: Date.now() }]);
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.started === '1');
-    await go(page, { view: 'notebook', pageId: 'day-2026-11-09' });
-    await page.waitForSelector('#plan .pl-hq', { state: 'attached' });
+    await go(page, { view: 'plan', tab: 'day', day: '2026-11-09' });
+    await page.waitForSelector('#plan-sheet .pl-hq', { state: 'attached' });
     await focusTask(page, 'Email Dana the boards');
     await page.keyboard.press('Control+Shift+Backspace');
-    await page.waitForFunction(() => ![...document.querySelectorAll('#plan .pl-words')].some((w) => w.textContent === 'Email Dana the boards'));
+    await page.waitForFunction(() => ![...document.querySelectorAll('#plan-sheet .pl-words')].some((w) => w.textContent === 'Email Dana the boards'));
     assert.equal(await page.locator('.ask').count(), 0, 'no question');
     assert.match(await toast(page), /from the HQ board/);
     const gone = await named(page, 'Email Dana the boards');
     assert.ok(gone.fields.trashed && gone.fields.hqDelete, 'in the Trash, and meant for the board too');
     await page.locator('.toast .toast-action', { hasText: 'Undo' }).click();
-    await page.waitForFunction(() => [...document.querySelectorAll('#plan .pl-words')].some((w) => w.textContent === 'Email Dana the boards'));
+    await page.waitForFunction(() => [...document.querySelectorAll('#plan-sheet .pl-words')].some((w) => w.textContent === 'Email Dana the boards'));
     const back = await named(page, 'Email Dana the boards');
     assert.ok(!back.fields.trashed && !back.fields.hqDelete, 'back, and staying on the board');
   });
@@ -162,15 +162,15 @@ try {
   await page.clock.setFixedTime(new Date(LATER));
   await page.reload();
   await page.waitForFunction(() => document.documentElement.dataset.started === '1');
-  await go(page, { view: 'notebook', pageId: 'day-2026-11-11' });
+  await go(page, { view: 'plan', tab: 'day', day: '2026-11-11' });
   // More than three fold into one line; a click unfolds them in place.
-  await page.waitForSelector('#plan .pl-early');
-  await page.locator('#plan .pl-early-tri').click();
-  await page.waitForFunction(() => document.querySelectorAll('#plan .pl-task.carried').length === 7);
+  await page.waitForSelector('#plan-sheet .pl-early');
+  await page.locator('#plan-sheet .pl-early-tri').click();
+  await page.waitForFunction(() => document.querySelectorAll('#plan-sheet .pl-task.carried').length === 7);
 
   await check('Go through: the quiet line of what’s left from earlier days opens it', async () => {
-    assert.match(await page.locator('#plan .pl-early-n').innerText(), /7 left from earlier days/);
-    await page.locator('#plan .pl-early-n').click();
+    assert.match(await page.locator('#plan-sheet .pl-early-n').innerText(), /7 left from earlier days/);
+    await page.locator('#plan-sheet .pl-early-n').click();
     await page.waitForSelector('.thru-card');
     const opts = await page.evaluate(() => [...document.querySelectorAll('.thru-opt')].map((b) => `${b.dataset.key} ${b.querySelector('.thru-label').textContent}`));
     assert.deepEqual(opts.filter((o) => !/HQ/.test(o)), ['K Keep it for today', 'C Done: check it off', 'N Not today: off the day, still where it’s written', 'D Delete it', 'S Skip for now']);
@@ -204,7 +204,7 @@ try {
     assert.ok(!(await named(page, third)).fields.done, 'Undo opened it again');
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !document.querySelector('.thru'));
-    await page.waitForFunction(() => document.querySelectorAll('#plan .pl-task.carried').length === 5);
+    await page.waitForFunction(() => document.querySelectorAll('#plan-sheet .pl-task.carried').length === 5);
     assert.ok([...await words(page)].includes(first), 'the kept one is on today');
   });
 

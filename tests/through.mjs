@@ -166,7 +166,6 @@ try {
     const l1 = await lineNamed(page, 'Call Dana');
     assert.equal(l1.fields.task.day, '2026-11-09');
     assert.equal(l1.fields.sorted.how, 'task');
-    await page.waitForFunction(() => [...document.querySelectorAll('#plan .pl-task .pl-words')].some((w) => w.textContent.startsWith('Call Dana')));
     assert.equal((await card(page)).count, 'Loose lines · 2 of 5');
   });
 

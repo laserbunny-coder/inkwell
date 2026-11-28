@@ -175,6 +175,8 @@ try {
     await a.keyboard.press('Control+J');
     await a.waitForSelector('#outline-editor .ProseMirror-focused');
     await sleep(500);
+    // Out from under the Journal line, to write on the page itself.
+    await a.keyboard.press('Shift+Tab');
     await a.keyboard.type('Buy stamps');
     await a.keyboard.press('Enter');
     await a.keyboard.type('Call the printer');

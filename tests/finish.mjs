@@ -72,7 +72,7 @@ const go = async (p, place) => { await p.evaluate((pl) => { history.pushState(pl
 const still = (p) => p.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {}))));
 const shot = async (p, name) => { if (SHOTS) { await still(p); await sleep(200); await p.screenshot({ path: `${SHOTS}/${name}.png` }); } };
 const deskText = (p) => p.locator('main.desk-home').innerText();
-const todayTasks = (p) => p.locator('#plan .pl-task:not(.done) .pl-words').allInnerTexts();
+const todayTasks = (p) => p.locator('#plan-sheet .pl-task:not(.done) .pl-words').allInnerTexts();
 const cards = async (p) => { await p.waitForSelector('#lib-zoom:not([hidden]) .zl-name'); return p.locator('#lib-zoom .zl-area .zl-name').allInnerTexts(); };
 const shelf = (p) => p.locator('#lib-zoom .zl-done .zl-chip').allInnerTexts();
 const nasPage = async (p) => { await go(p, { view: 'world', id: 'wd_nas' }); await p.waitForFunction(() => document.querySelector('#wh-title')?.textContent === 'NAS'); await sleep(400); };
@@ -88,8 +88,8 @@ try {
   await check('before: NAS is on the Desk, in the Library and its task is on Today', async () => {
     await go(page, { view: 'desk' });
     assert.match(await deskText(page), /NAS/);
-    await go(page, { view: 'notebook', pageId: 'day-2026-11-14' });
-    await page.waitForSelector('#plan .pl-task');
+    await go(page, { view: 'plan', tab: 'day' });
+    await page.waitForSelector('#plan-sheet .pl-task');
     assert.ok((await todayTasks(page)).includes('Label the drives'));
     await go(page, { view: 'library' });
     assert.ok((await cards(page)).includes('NAS'));
@@ -127,8 +127,8 @@ try {
   await check('after: off the Desk and Today; on the Library’s Finished shelf', async () => {
     await go(page, { view: 'desk' });
     assert.doesNotMatch(await deskText(page), /NAS/);
-    await go(page, { view: 'notebook', pageId: 'day-2026-11-14' });
-    await page.waitForSelector('#plan .pl-task');
+    await go(page, { view: 'plan', tab: 'day' });
+    await page.waitForSelector('#plan-sheet .pl-task');
     const t = await todayTasks(page);
     assert.ok(!t.includes('Label the drives') && t.includes('Board Reel 2'), t.join(', '));
     await go(page, { view: 'library' });
@@ -157,8 +157,8 @@ try {
     await go(page, { view: 'library' });
     assert.ok((await cards(page)).includes('NAS'));
     assert.deepEqual(await shelf(page), []);
-    await go(page, { view: 'notebook', pageId: 'day-2026-11-14' });
-    await page.waitForSelector('#plan .pl-task');
+    await go(page, { view: 'plan', tab: 'day' });
+    await page.waitForSelector('#plan-sheet .pl-task');
     assert.ok((await todayTasks(page)).includes('Label the drives'));
     await go(page, { view: 'desk' });
     assert.match(await deskText(page), /NAS/);

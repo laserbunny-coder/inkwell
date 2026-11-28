@@ -26,6 +26,16 @@ import { box, writing } from './commands.js';
 import { deskPage, plan, tagsPage } from './talking.js';
 import { openBeside, panes, planningView, pull, sideNotes, talkThrough } from './beside.js';
 
+// Every day's journal in one place (journalpage.js), made the first time it's opened.
+let journalOne = null;
+async function journalPage() {
+  if (!journalOne) {
+    const { JournalPage } = await import('../journalpage.js');
+    journalOne = new JournalPage($('#journal-sheet'), { openDay: (iso, journal) => go({ view: 'notebook', pageId: dayId(iso), ...(journal ? { line: 'journal' } : {}) }) });
+  }
+  return journalOne;
+}
+
 // ---------- getting around ----------
 
 // The phone opens on Today when you've been away a while (see the start).
@@ -209,6 +219,9 @@ async function goStill(place) {
   } else if (place.view === 'tags') {
     remember(place);
     await tagsPage?.show(place);
+  } else if (place.view === 'journal') {
+    remember({ view: 'journal' });
+    await (await journalPage()).show();
   } else if (place.view === 'plan') {
     // What's when is Plan now; Day, Week, Weeks ahead and Pace are zooms of Calendar.
     remember({ view: 'plan', tab: tabFor(place.tab), ...(place.week ? { week: place.week } : {}), ...(place.line && place.tab === 'now' ? { line: place.line } : {}), ...(place.day && (place.tab === 'day' || place.tab === 'calday') ? { day: place.day } : {}) });
@@ -297,6 +310,7 @@ async function openEntry(id) {
 }
 // Where following a link to `id` leads (null: nowhere to go).
 async function placeOf(id) {
+  if (id === 'journal') return { view: 'journal' };
   const row = await getEntry(id);
   // A link to a day that hasn't been written on yet still opens that day.
   if (!row && id?.startsWith('day-')) return { view: 'notebook', pageId: id };
@@ -344,6 +358,7 @@ async function newPageHere() {
 addCommands(() => [
   { group: 'go', label: 'Library', keys: `${mod}⇧O`, run: () => go({ view: 'library', area: null }) },
   { group: 'go', label: 'Tags: every tag, grouped', keys: '', run: () => go({ view: 'tags' }) },
+  { group: 'go', label: 'Journal: every day’s journal, newest first', keys: '', words: ['journal', 'journals', 'diary', 'all journals', 'entries'], run: () => go({ view: 'journal' }) },
   { group: 'go', label: 'Calendar: day (today’s hours)', keys: '', words: ['calendar', 'day', 'hours', 'time', 'schedule'], run: () => go({ view: 'plan', tab: 'calday' }) },
   { group: 'go', label: 'Calendar: week (seven days, and what’s for any day this week)', keys: '', words: ['calendar', 'week', 'plan', 'tasks', 'schedule', 'tray', 'any day'], run: () => go({ view: 'plan', tab: 'week' }) },
   { group: 'go', label: 'Desk: every project, what needs you and who’s working on it', keys: `${mod}⇧U`, words: ['claude', 'threads', 'needs you', 'calls', 'catch-up', 'catchup', 'updates', 'projects', 'stage'], run: () => go({ view: 'desk' }) },

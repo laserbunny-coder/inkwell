@@ -115,7 +115,9 @@ try {
 
   let f;
   await check('Ctrl + \\ opens today’s plan beside, and leaves you where you were', async () => {
-    await page.click('#outline-editor .ProseMirror li:last-child p');
+    // The end of the page's last line (the Journal line is first, with its own line under it).
+    await page.click('#outline-editor li[data-eid="ln_b"] > p');
+    await page.keyboard.press('End');
     await page.keyboard.press('Control+Backslash');
     f = await pane(page, 'plan', 'day');
     await still(page);
@@ -133,20 +135,23 @@ try {
     assert.equal(await f.locator('.topbar').isVisible(), false);
     // Typing still lands on the day's page.
     await page.keyboard.type(' again');
-    await page.waitForFunction(() => /slowed down again$/.test(document.querySelector('#outline-editor li:last-child p').textContent));
+    await page.waitForFunction(() => /slowed down again$/.test(document.querySelector('#outline-editor li[data-eid="ln_b"] > p').textContent));
     assert.equal(await page.evaluate(() => document.documentElement.dataset.view), 'notebook');
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/beside-plan.png` });
   });
 
   await check('a task ticked beside is ticked on the day’s page too, and one added beside shows there', async () => {
     await f.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('[data-act="tick"]').click();
-    await page.waitForFunction(() => !!document.querySelector('#plan .pl-task.done, #plan .pl-task[data-done="1"]') || [...document.querySelectorAll('#plan .pl-task')].some((r) => /Call Dana/.test(r.textContent) && r.querySelector('[data-act="tick"]')?.getAttribute('aria-checked') === 'true'));
+    await page.waitForFunction(() => new Promise((res) => { const r = indexedDB.open('writing'); r.onsuccess = () => { const q = r.result.transaction('entries').objectStore('entries').get('ln_call'); q.onsuccess = () => res(q.result?.fields?.done === true); }; }));
     const row = (await all(page)).find((r) => r.id === 'ln_call');
     assert.equal(row.fields.done, true);
     await f.locator('#plan-sheet input[data-add]').fill('Print the call sheet 10m');
     await f.locator('#plan-sheet input[data-add]').press('Enter');
-    await page.waitForFunction(() => [...document.querySelectorAll('#plan .pl-task .pl-words')].some((w) => w.textContent === 'Print the call sheet'));
-    assert.ok((await words(f)).includes('Print the call sheet'));
+    await f.waitForFunction(() => [...document.querySelectorAll('#plan-sheet .pl-task .pl-words')].some((w) => w.textContent === 'Print the call sheet'));
+    // The main view's own list has it too.
+    await goMain(page, { view: 'plan', tab: 'day' });
+    await page.waitForFunction(() => [...document.querySelectorAll('#plan-sheet .pl-task .pl-words')].some((w) => w.textContent === 'Print the call sheet'));
+    await goMain(page, { view: 'notebook', pageId: 'day-2026-11-09' });
   });
 
   await check('the plan’s own Hours open in the pane; List comes back to today’s plan alone', async () => {
@@ -202,25 +207,27 @@ try {
 
 
   await check('a triangle shows a task’s lines in the plan; written right there; the dots zoom into the task, and Alt + Left comes back', async () => {
-    const r = page.locator('#plan .pl-task', { hasText: 'second verse' });
+    // The main view on today's list (the day's Page face has no plan).
+    await goMain(page, { view: 'plan', tab: 'day' });
+    const r = page.locator('#plan-sheet .pl-task', { hasText: 'second verse' });
     assert.equal(await r.locator('.pl-fold').count(), 1);
-    assert.equal(await page.locator('#plan .pl-task', { hasText: 'Call Dana' }).locator('.pl-fold').count(), 0, 'none without lines under it');
+    assert.equal(await page.locator('#plan-sheet .pl-task', { hasText: 'Call Dana' }).locator('.pl-fold').count(), 0, 'none without lines under it');
     await r.locator('.pl-fold').click();
-    await page.waitForFunction(() => /Rhymes with katana/.test(document.querySelector('#plan .pl-kids')?.textContent || ''));
-    assert.equal(await page.locator('#plan .pl-task', { hasText: 'second verse' }).locator('.pl-fold').getAttribute('aria-expanded'), 'true');
-    await page.locator('#plan .pl-task', { hasText: 'second verse' }).hover();
-    await page.locator('#plan .pl-task', { hasText: 'second verse' }).locator('.pl-words').dblclick(); // its lines are written in place; a double-click zooms in
+    await page.waitForFunction(() => /Rhymes with katana/.test(document.querySelector('#plan-sheet .pl-kids')?.textContent || ''));
+    assert.equal(await page.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).locator('.pl-fold').getAttribute('aria-expanded'), 'true');
+    await page.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).hover();
+    await page.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).locator('.pl-words').dblclick(); // its lines are written in place; a double-click zooms in
     await page.waitForFunction(() => /second verse/.test(document.querySelector('#outline-editor li.zoom-root')?.textContent || ''));
     assert.ok(await page.locator('#outline-editor li[data-eid="ln_song_n"]').isVisible());
     assert.equal(await count(page), 1, 'Beside is as it was');
     await page.keyboard.press('Alt+ArrowLeft');
-    await page.waitForFunction(() => !document.querySelector('#outline-editor li.zoom-root') && /Rhymes with katana/.test(document.querySelector('#plan .pl-kids')?.textContent || ''));
-    await page.locator('#plan .pl-task', { hasText: 'second verse' }).locator('.pl-fold').click();
-    await page.waitForFunction(() => !document.querySelector('#plan .pl-kids'));
+    await page.waitForFunction(() => document.documentElement.dataset.view === 'plan' && /Rhymes with katana/.test(document.querySelector('#plan-sheet .pl-kids')?.textContent || ''));
+    await page.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).locator('.pl-fold').click();
+    await page.waitForFunction(() => !document.querySelector('#plan-sheet .pl-kids'));
   });
 
-  await check('a task’s menu on the day’s page has Open it beside; the plan beside has no such line', async () => {
-    await page.locator('#plan .pl-task', { hasText: 'second verse' }).click({ button: 'right' });
+  await check('a task’s menu on the day’s list has Open it beside; the plan beside has no such line', async () => {
+    await page.locator('#plan-sheet .pl-task', { hasText: 'second verse' }).click({ button: 'right' });
     await page.locator('.pop-menu .pop-item', { hasText: 'Open it beside' }).click();
     f = await pane(page, 'notebook');
     await headIs(page, '', 'Songs');

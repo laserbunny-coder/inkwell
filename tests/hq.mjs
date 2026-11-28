@@ -64,13 +64,14 @@ try {
   await page.waitForFunction(() => document.documentElement.dataset.started === '1');
 
   await check('on your day: your HQ task with a link to its card; Nate’s isn’t there', async () => {
-    await page.evaluate(() => document.querySelector('#view-toggle').click());
-    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
-    await page.waitForFunction(() => document.querySelectorAll('#plan .pl-task').length >= 1);
+    // Today's list (the day's Page face has no plan).
+    await page.evaluate(() => { const pl = { view: 'plan', tab: 'day' }; history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); });
+    await page.waitForFunction(() => document.documentElement.dataset.view === 'plan');
+    await page.waitForFunction(() => document.querySelectorAll('#plan-sheet .pl-task').length >= 1);
     await still(page);
-    const words = await page.locator('#plan .pl-task .pl-words').allInnerTexts();
+    const words = await page.locator('#plan-sheet .pl-task .pl-words').allInnerTexts();
     assert.deepEqual(words, ['QuickBooks catch-up']);
-    const a = page.locator('#plan .pl-task', { hasText: 'QuickBooks' }).locator('a.pl-hq');
+    const a = page.locator('#plan-sheet .pl-task', { hasText: 'QuickBooks' }).locator('a.pl-hq');
     assert.equal(await a.getAttribute('href'), `${HQ}/?task=t1`);
     assert.equal(await a.getAttribute('target'), '_blank');
   });
@@ -85,14 +86,15 @@ try {
   });
 
   await check('“Hand to Nate” gives it to him and it leaves your day; “Make it mine” takes it back', async () => {
-    await page.evaluate(() => document.querySelector('#view-toggle').click());
-    await page.waitForFunction(() => document.documentElement.dataset.view === 'notebook');
-    await page.waitForFunction(() => document.querySelectorAll('#plan .pl-task').length >= 1);
-    await page.locator('#plan .pl-task', { hasText: 'QuickBooks' }).click({ button: 'right' });
+    // Today's list (the day's Page face has no plan).
+    await page.evaluate(() => { const pl = { view: 'plan', tab: 'day' }; history.pushState(pl, ''); dispatchEvent(new PopStateEvent('popstate', { state: pl })); });
+    await page.waitForFunction(() => document.documentElement.dataset.view === 'plan');
+    await page.waitForFunction(() => document.querySelectorAll('#plan-sheet .pl-task').length >= 1);
+    await page.locator('#plan-sheet .pl-task', { hasText: 'QuickBooks' }).click({ button: 'right' });
     await page.locator('.pop-menu .pop-item', { hasText: 'Hand to Nate' }).first().click();
     await sleep(500);
     assert.equal((await get(page, 'li_q')).fields.task.owner, 'Nate');
-    await page.waitForFunction(() => ![...document.querySelectorAll('#plan .pl-task .pl-words')].some((x) => x.textContent === 'QuickBooks catch-up'));
+    await page.waitForFunction(() => ![...document.querySelectorAll('#plan-sheet .pl-task .pl-words')].some((x) => x.textContent === 'QuickBooks catch-up'));
     await go(page, { view: 'world', id: 'wd_acro', part: 'steps' });
     await page.waitForFunction(() => [...document.querySelectorAll('#wh-steps .pl-task')].some((x) => /QuickBooks/.test(x.textContent)));
     await page.locator('#wh-steps .pl-task', { hasText: 'QuickBooks' }).click({ button: 'right' });
