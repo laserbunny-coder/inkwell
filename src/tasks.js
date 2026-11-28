@@ -640,6 +640,13 @@ export const setWhen = (id, when, extra = {}) => change(id, (r) => {
   if (when?.day) {
     patch.day = when.day;
     patch.span = null;
+    // A done one moved to another day was done on that day: same time of day, new date.
+    if (r.fields?.done && t?.done_at && isoOf(t.done_at) !== when.day) {
+      const was = new Date(t.done_at);
+      const to = dateOf(when.day);
+      to.setHours(was.getHours(), was.getMinutes(), was.getSeconds(), was.getMilliseconds());
+      patch.done_at = to.getTime();
+    }
     if (t && isStretch(t)) patch.until = addDays(when.day, Math.round((dateOf(t.until) - dateOf(t.day)) / 864e5));
   } else {
     patch.day = null;
@@ -657,7 +664,7 @@ export async function whenSnap(id) {
   const r = await getEntry(id);
   if (!r || r.deleted) return null;
   const t = taskOf(r);
-  return { id, task: t ? Object.fromEntries(WHEN_KEYS.map((k) => [k, t[k] ?? null])) : null, box: r.fields?.box ?? null };
+  return { id, task: t ? { ...Object.fromEntries(WHEN_KEYS.map((k) => [k, t[k] ?? null])), ...(t.done_at ? { done_at: t.done_at } : {}) } : null, box: r.fields?.box ?? null };
 }
 export const whenBack = (snap) => change(snap.id, (r) => {
   if (!snap.task) {

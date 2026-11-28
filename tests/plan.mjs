@@ -199,16 +199,22 @@ try {
     await r.hover();
     await sleep(200);
     assert.equal(await op(), '0', 'none under the pointer either');
-    assert.equal(await row(page, 'Call Dana').locator('.pl-grip').count(), 0, 'a done task has none');
+    // Done ones move like open ones (Nov 27 2026), so they have the same hidden grip.
+    assert.equal(await row(page, 'Call Dana').locator('.pl-grip').count(), 1, 'a done task moves too');
     assert.deepEqual((await todo(page)).slice(0, 2), ['Board Reel 2', 'Order the 8 TB storage drive']);
     await r.locator('.pl-words').focus();
+    // One press, one place: a done one counts as a place (Nov 27 2026).
+    const before = await words(page);
+    const at = before.indexOf('Order the 8 TB storage drive');
     await page.keyboard.press('Alt+ArrowUp');
-    await page.waitForFunction(() => document.querySelector('#plan .pl-task:not(.done) .pl-words')?.textContent === 'Order the 8 TB storage drive');
+    await page.waitForFunction((n) => [...document.querySelectorAll('#plan .pl-task .pl-words')].map((x) => x.textContent)[n] === 'Order the 8 TB storage drive', at - 1);
     assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Order the 8 TB storage drive', 'the keyboard stays on it');
+    for (let k = at - 1; k > 0; k -= 1) { await page.keyboard.press('Alt+ArrowUp'); await sleep(350); }
+    assert.equal((await words(page))[0], 'Order the 8 TB storage drive', 'to the very top');
     await page.keyboard.press('Alt+ArrowUp');
     await sleep(300);
-    assert.equal((await words(page))[0], 'Order the 8 TB storage drive', 'past the done one, to the very top');
-    await page.keyboard.press('Alt+ArrowDown');
+    assert.equal((await words(page))[0], 'Order the 8 TB storage drive', 'and no further');
+    for (let k = 0; k < at; k += 1) { await page.keyboard.press('Alt+ArrowDown'); await sleep(350); }
     await page.waitForFunction(() => document.querySelector('#plan .pl-task:not(.done) .pl-words')?.textContent === 'Board Reel 2');
     assert.equal((await taskNamed(page, 'Board Reel 2')).fields.task.order < (await taskNamed(page, 'Order the 8 TB storage drive')).fields.task.order, true, 'the order is saved');
   });
@@ -265,7 +271,8 @@ try {
     assert.equal(await page.locator('#plan-sheet h1').innerText(), 'November 9 to 15');
     assert.equal(await page.locator('#plan-sheet .pl-eyebrow').innerText(), 'THIS WEEK');
     assert.equal(await page.locator('.pw-day').count(), 7);
-    assert.deepEqual(await page.locator('.pw-day.today .pw-t').allInnerTexts(), ['Order the 8 TB storage drive', 'Board Reel 2', 'Call Dana about the storyboards']);
+    // A done one keeps its place in the day's order, as on Today's list.
+    assert.deepEqual(await page.locator('.pw-day.today .pw-t').allInnerTexts(), ['Call Dana about the storyboards', 'Order the 8 TB storage drive', 'Board Reel 2']);
     assert.deepEqual(await page.locator('.pw-day[data-day="2026-11-10"] .pw-t').allInnerTexts(), ['Email the storyboard notes to Dana']);
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/plan-week.png` });
   });
@@ -296,7 +303,7 @@ try {
   });
 
   await check('Week: drag a task onto another day at a place, and up or down within its day', async () => {
-    const open = () => page.locator('.pw-day.today .pw-task[data-move] .pw-t').allInnerTexts();
+    const open = () => page.locator('.pw-day.today .pw-task:not(.done) .pw-t').allInnerTexts();
     assert.deepEqual(await open(), ['Headlamp for Arrow']);
     await page.locator('.pw-task', { hasText: 'Film the tumbling class' }).dragTo(page.locator('.pw-task', { hasText: 'Headlamp for Arrow' }), { targetPosition: { x: 20, y: 2 } });
     await sleep(500);
@@ -321,7 +328,7 @@ try {
     const h = await page.locator('.pw-task', { hasText: 'Headlamp for Arrow' }).boundingBox();
     await page.locator('.pw-np .pw-task', { hasText: 'Film the tumbling class' }).dragTo(page.locator('.pw-task', { hasText: 'Headlamp for Arrow' }), { targetPosition: { x: 20, y: h.height - 2 } });
     await sleep(500);
-    assert.deepEqual(await page.locator('.pw-day.today .pw-task[data-move] .pw-t').allInnerTexts(), ['Headlamp for Arrow', 'Film the tumbling class']);
+    assert.deepEqual(await page.locator('.pw-day.today .pw-task:not(.done) .pw-t').allInnerTexts(), ['Headlamp for Arrow', 'Film the tumbling class']);
     assert.equal((await taskNamed(page, 'Film the tumbling class')).fields.task.day, '2026-11-09');
     assert.equal(await page.locator('.pw-np .pw-task', { hasText: 'Film the tumbling class' }).count(), 0);
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/plan-week-np.png` });
