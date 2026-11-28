@@ -95,7 +95,9 @@ try {
     assert.ok(line.content.some((n) => n.type === 'voice' && n.attrs.name === 'Journal'), 'the mode chip');
     assert.match(line.text, /9:41 pm/);
     assert.match(line.text, /Today I walked the dog/);
-    assert.match(line.text, /#journal/);
+    // It lands under the day's Journal line, so the tag is implied, not typed (Nov 28 2026).
+    assert.match(line.parent_id, /^jr-/);
+    assert.doesNotMatch(line.text, /#journal/);
     assert.doesNotMatch(line.text, /#idea/);
     const under = all.filter((r) => r.parent_id === 'li_s1' && r.kind === 'line').map((r) => r.text);
     assert.deepEqual(under, ['Then the rooftop shot.', 'And the lantern.']);
