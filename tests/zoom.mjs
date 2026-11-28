@@ -171,7 +171,9 @@ try {
     assert.equal(await p.locator('#plan-sheet .zm-today-top [data-act="day-today"]').count(), 0);
     await p.locator('#plan-sheet [data-act="day-next"]').click();
     await p.waitForFunction((d) => history.state?.tab === 'day' && history.state?.day === d, await day(1));
-    await p.waitForFunction(() => document.querySelector('#plan-sheet h1')?.textContent === 'Tomorrow');
+    // The same head as the day's page: the day's full date (Nov 28 2026).
+    const longDay = (k) => p.evaluate((n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }); }, k);
+    await p.waitForFunction((t) => document.querySelector('#plan-sheet h1')?.textContent === t, await longDay(1));
     // Tomorrow's page has the faces too, and List brings tomorrow's list back.
     await p.locator('#plan-sheet .zm-faces [data-face="page"]').click();
     await p.waitForFunction((d) => history.state?.view === 'notebook' && String(history.state?.pageId) === `day-${d}`, await day(1));
@@ -179,7 +181,7 @@ try {
     await p.locator('.notebook .zm-faces [data-face="hours"]').click();
     await p.waitForFunction((d) => history.state?.tab === 'calday' && history.state?.day === d, await day(1));
     await p.waitForSelector('#plan-sheet .zm-faces [data-face="hours"][aria-current="page"]');
-    assert.equal(await p.locator('#plan-sheet h1').innerText(), 'Tomorrow');
+    assert.equal(await p.locator('#plan-sheet h1').innerText(), await longDay(1));
     // Shift + Left on the hours: today's hours.
     await blur(p);
     await p.keyboard.press('Shift+ArrowLeft');
@@ -188,7 +190,7 @@ try {
     await p.waitForFunction((d) => history.state?.tab === 'calday' && history.state?.day === d, await day(-1));
     await p.locator('#plan-sheet .zm-faces [data-face="list"]').click();
     await p.waitForFunction((d) => history.state?.tab === 'day' && history.state?.day === d, await day(-1));
-    assert.equal(await p.locator('#plan-sheet h1').innerText(), 'Yesterday');
+    assert.equal(await p.locator('#plan-sheet h1').innerText(), await longDay(-1));
     await p.locator('#plan-sheet [data-act="day-today"]').click();
     await p.waitForFunction(() => history.state?.tab === 'day' && !history.state?.day);
   });

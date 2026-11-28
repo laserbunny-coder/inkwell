@@ -48,7 +48,7 @@ async function check(name, fn) {
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const today = `day-${iso(new Date())}`;
 const tomorrow = `day-${iso(new Date(Date.now() + 864e5))}`;
-const lines = (f) => f.evaluate(() => [...document.querySelectorAll('#outline-editor li > p')].map((p) => p.textContent));
+const lines = (f) => f.evaluate(() => [...document.querySelectorAll('#outline-editor li > p')].filter((x) => !x.closest('li[data-journal]')).map((p) => p.textContent));
 const paneFrames = (p) => p.frames().filter((f) => f.url().includes('?pane='));
 async function paneReady(p, n) {
   await p.waitForFunction((n) => [...document.querySelectorAll('.pane-frame')].filter((f) => f.contentDocument?.documentElement?.dataset?.started === '1').length >= n, n, { timeout: 15000 });
@@ -89,6 +89,9 @@ try {
   await p.waitForSelector('html[data-started="1"]');
   await toToday(p);
   await p.click('#outline-editor .ProseMirror');
+  // On the page itself, not under its Journal line.
+  await p.evaluate(() => window.__outline.commands.focus('end'));
+  await p.keyboard.press('Shift+Tab');
   for (const t of ['Alpha', 'Bravo', 'Charlie']) { await p.keyboard.type(t); await p.keyboard.press('Enter'); }
   await p.keyboard.type('Verse two');
   await p.keyboard.press('Tab');
@@ -115,11 +118,11 @@ try {
     await verse.click();
     await pane.press('#outline-editor .ProseMirror', 'End');
     await pane.locator('#outline-editor .ProseMirror').pressSequentially(' is hungry');
-    await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].some((x) => x.textContent === 'Verse two is hungry'), null, { timeout: 5000 });
+    await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].filter((x) => !x.closest('li[data-journal]')).some((x) => x.textContent === 'Verse two is hungry'), null, { timeout: 5000 });
     await p.locator('#outline-editor li > p', { hasText: 'Alpha' }).click();
     await p.keyboard.press('End');
     await p.keyboard.type(' and more');
-    await pane.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].some((x) => x.textContent === 'Charlie'), null, { timeout: 5000 });
+    await pane.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].filter((x) => !x.closest('li[data-journal]')).some((x) => x.textContent === 'Charlie'), null, { timeout: 5000 });
     await sleep(800);
     // Back in the pane: Alpha isn't shown there (zoomed into Charlie), but it's saved once.
     assert.equal(await pane.evaluate(async () => (await window.__notebook.store.refresh(), true)), true);
@@ -145,13 +148,15 @@ try {
     await p.evaluate((id) => window.__panes.open({ view: 'notebook', pageId: id }), tomorrow);
     [other] = await paneReady(p, 1);
     await other.click('#outline-editor .ProseMirror');
+    await other.evaluate(() => window.__outline.commands.focus('end'));
+    await other.press('#outline-editor .ProseMirror', 'Shift+Tab');
     await other.locator('#outline-editor .ProseMirror').pressSequentially('One');
     await other.press('#outline-editor .ProseMirror', 'Enter');
     await other.locator('#outline-editor .ProseMirror').pressSequentially('Two');
     await sleep(800);
     await dragLine(p, p.locator('#outline-editor li', { hasText: 'Charlie' }).first(), other.locator('#outline-editor li', { hasText: 'One' }).first());
-    await other.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].map((x) => x.textContent).join('|') === 'One|Charlie|Verse two is hungry|Two', null, { timeout: 6000 });
-    await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].length === 2, null, { timeout: 5000 }).catch(() => {});
+    await other.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].filter((x) => !x.closest('li[data-journal]')).map((x) => x.textContent).join('|') === 'One|Charlie|Verse two is hungry|Two', null, { timeout: 6000 });
+    await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].filter((x) => !x.closest('li[data-journal]')).length === 2, null, { timeout: 5000 }).catch(() => {});
     assert.deepEqual(await lines(p), ['Alpha and more', 'Bravo']);
   });
 
@@ -163,8 +168,8 @@ try {
 
   await check('a line dragged from a pane into the main window moves there', async () => {
     await dragLine(p, other.locator('#outline-editor li', { hasText: 'One' }).first(), p.locator('#outline-editor li', { hasText: 'Alpha' }).first());
-    await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].map((x) => x.textContent).join('|') === 'Alpha and more|One|Bravo', null, { timeout: 6000 });
-    await other.waitForFunction(() => ![...document.querySelectorAll('#outline-editor li > p')].some((x) => x.textContent === 'One'), null, { timeout: 5000 });
+    await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].filter((x) => !x.closest('li[data-journal]')).map((x) => x.textContent).join('|') === 'Alpha and more|One|Bravo', null, { timeout: 6000 });
+    await other.waitForFunction(() => ![...document.querySelectorAll('#outline-editor li > p')].filter((x) => !x.closest('li[data-journal]')).some((x) => x.textContent === 'One'), null, { timeout: 5000 });
   });
 
   await check('the line menu has Open beside and Move to the page open beside', async () => {
@@ -177,8 +182,8 @@ try {
     const moveTo = p.locator('.handle-menu button', { hasText: /^Move to Thursday|^Move to Friday|^Move to .*20\d\d|^Move to / }).filter({ hasNotText: 'Move to…' });
     assert.equal(await moveTo.count(), 1, menu);
     await moveTo.click();
-    await other.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].some((x) => x.textContent === 'Bravo'), null, { timeout: 5000 });
-    await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].map((x) => x.textContent).join('|') === 'Alpha and more|One', null, { timeout: 5000 }).catch(() => {});
+    await other.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].filter((x) => !x.closest('li[data-journal]')).some((x) => x.textContent === 'Bravo'), null, { timeout: 5000 });
+    await p.waitForFunction(() => [...document.querySelectorAll('#outline-editor li > p')].filter((x) => !x.closest('li[data-journal]')).map((x) => x.textContent).join('|') === 'Alpha and more|One', null, { timeout: 5000 }).catch(() => {});
     assert.deepEqual(await lines(p), ['Alpha and more', 'One']);
   });
 
@@ -236,6 +241,8 @@ try {
   await check('on a phone, Peek beside opens it in a sheet over the page', async () => {
     await toToday(ph);
     await ph.tap('#outline-editor .ProseMirror');
+    await ph.evaluate(() => window.__outline.commands.focus('end'));
+    await ph.keyboard.press('Shift+Tab');
     await ph.keyboard.type('Kenji’s song');
     await ph.keyboard.press('Enter');
     await ph.keyboard.type('Grandpa on the roof');

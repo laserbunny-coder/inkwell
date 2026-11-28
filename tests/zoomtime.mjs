@@ -179,7 +179,7 @@ try {
     await p.evaluate((d) => window.__plan.intoDay(d), day);
     await at(p, 'today');
     assert.equal((await place(p)).day, day);
-    assert.match(await p.locator('.pl-top h1').first().innerText(), /Tomorrow|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday/);
+    assert.match(await p.locator('#plan-sheet .zm-title').first().innerText(), /Tomorrow|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday/);
     assert.ok((await p.locator('#plan-sheet .pl-task', { hasText: 'Sand the ladder' }).count()) >= 1, 'tomorrow’s line is there');
     await p.keyboard.press('-');
     await at(p, 'week');
