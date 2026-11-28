@@ -42,7 +42,8 @@ export const isCal = (tab) => CAL.has(tab);
 // Plan's own list and Pace went with the old layout (Nov 17 2026): they open Today and Week.
 export const tabFor = (tab) => (tab === 'when' || tab === 'plan' ? 'day' : ['now', 'day', 'year', ...CAL].includes(tab) ? tab : 'week');
 // Today's three faces on the zoom (Nov 2026): the list, the day's page, the hours.
-export const FACES = [['list', 'List', 'Today’s list, with the events of the day'], ['page', 'Page', 'Today’s page'], ['hours', 'Hours', 'Today by the hour']];
+// Page on the left, then the two task faces side by side (Nov 28 2026, his ask).
+export const FACES = [['page', 'Page', 'Today’s page'], ['list', 'List', 'Today’s list, with the events of the day'], ['hours', 'Hours', 'Today by the hour']];
 export function todayFace() { try { const f = localStorage.getItem('todayFace'); return FACES.some((x) => x[0] === f) ? f : 'list'; } catch { return 'list'; } }
 export function faceTo(face) { try { localStorage.setItem('todayFace', face); } catch { /* no storage here */ } }
 // Any day's face (Nov 26 2026): the list, the page and the hours of the day shown, not only today.

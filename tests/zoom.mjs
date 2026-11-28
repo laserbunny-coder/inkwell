@@ -140,7 +140,7 @@ try {
   await check('Today has three faces under its date, and comes back on the one used last', async () => {
     await p.keyboard.press('4');
     await at(p, 'today');
-    assert.deepEqual(await p.locator('.plan-home .zm-faces button').allInnerTexts(), ['List', 'Page', 'Hours']);
+    assert.deepEqual(await p.locator('.plan-home .zm-faces button').allInnerTexts(), ['Page', 'List', 'Hours']);
     assert.equal(await p.locator('.pl-switch').count(), 0, 'no old Now / Page / Plan / Calendar switch');
     await p.locator('.zm-faces [data-face="hours"]').click();
     await p.waitForFunction(() => history.state?.tab === 'calday');
